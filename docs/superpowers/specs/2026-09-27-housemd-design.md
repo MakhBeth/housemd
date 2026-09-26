@@ -77,11 +77,11 @@ Interfaccia piccola, implementata una volta con la File System Access API e una 
 
 ```ts
 interface WorkspaceFS {
-  list(): Promise<Entry[]>;                  // scansione ricorsiva
-  read(path: string): Promise<{ text: string; lastModified: number }>;
+  list(): Promise<Entry[]>;                  // scansione ricorsiva, con Version per ogni file
+  read(path: string): Promise<{ text: string; version: Version }>;
   readBlob(path: string): Promise<Blob>;     // immagini
-  write(path: string, data: string | Blob): Promise<{ lastModified: number }>;
-  stat(path: string): Promise<{ lastModified: number } | null>;
+  write(path: string, data: string | Blob): Promise<{ version: Version }>;
+  stat(path: string): Promise<Version | null>;
   mkdir(path: string): Promise<void>;
   rename(from: string, to: string): Promise<void>;
   remove(path: string): Promise<void>;
@@ -89,7 +89,11 @@ interface WorkspaceFS {
 ```
 
 - Percorsi sempre relativi alla radice, separati da `/`.
-- `rename` usa `FileSystemHandle.move()` se disponibile, altrimenti copia + elimina.
+- `Version = { lastModified: number; size: number }` (come `fileVersion()` di Pivella): due versioni sono uguali solo se coincidono entrambi i campi.
+- `rename` cambia solo il nome, restando nella stessa cartella padre (spostare file o cartelle altrove è fuori scope v1):
+  - **file**: `FileSystemFileHandle.prototype.move(nuovoNome)` se esiste (feature detection come in `pivella/src/lib/sync/fsaFileSystem.ts`), altrimenti copia nel nuovo nome + elimina l'originale;
+  - **cartella**: nessun `move()` affidabile per le directory, quindi copia ricorsiva nella nuova cartella, verifica che tutto sia stato copiato, poi `removeEntry(vecchia, { recursive: true })`. Se la copia fallisce a metà, la copia parziale viene eliminata e l'originale resta intatto;
+  - dopo la rinomina si aggiornano file aperto, buffer di emergenza e indice per tutti i percorsi coinvolti.
 - La scansione salta `.git`, `node_modules` e le cartelle che iniziano con `.`. Nell'albero compaiono solo i `.md` e le cartelle che (anche indirettamente) ne contengono, più le cartelle vuote (così una cartella appena creata dall'app resta visibile).
 - Handle della cartella salvato in IndexedDB; gestione dei permessi con `queryPermission` / `requestPermission` (riuso dell'approccio di `pivella/src/lib/utils/fileSystemSync.ts`).
 
@@ -152,7 +156,7 @@ CodeMirror 6 con:
 
 ### Apertura
 
-1. Prima volta: "Apri cartella" → `showDirectoryPicker({ mode: 'readwrite' })` → handle salvato in IndexedDB.
+1. Prima volta: "Apri cartella" → `showDirectoryPicker({ mode: 'readwrite' })` → handle salvato in IndexedDB insieme a un `workspaceId` casuale (UUID) generato in quel momento. Se si sceglie una cartella diversa, cambia anche il `workspaceId`.
 2. Volte successive: handle ritrovato; se il permesso è `prompt`, schermata "Riprendi accesso a *nome*" (Chrome richiede un gesto dell'utente).
 3. Scansione → albero → lettura dei `.md` → indice e lista dei titoli. Viene riaperto l'ultimo file aperto, se esiste ancora.
 
@@ -161,14 +165,14 @@ CodeMirror 6 con:
 - Salvataggio automatico dopo 1 s di inattività; salvataggio immediato cambiando file, con `Ctrl+S` e quando la finestra perde il focus (`visibilitychange` / `blur`).
 - Stato nella toolbar: *salvato* / *modifiche…* / *errore*.
 - Il file viene scritto esattamente come è nell'editor: il frontmatter non viene mai riscritto.
-- Dopo il salvataggio si memorizza il `lastModified` restituito.
+- Dopo il salvataggio si memorizzano la `Version` restituita e il testo scritto (ultimo contenuto noto su disco).
 
 ### Modifiche esterne
 
 Quando la finestra torna in primo piano:
 
-- nuova scansione dell'albero (file aggiunti o rimossi da fuori);
-- `stat` del file aperto: se `lastModified` è cambiato rispetto all'ultimo noto,
+- nuova scansione dell'albero con le `Version` di tutti i `.md`: i file aggiunti o con versione diversa vengono riletti e aggiornati nell'indice di ricerca e nella lista per l'autocompletamento dei wikilink; quelli spariti vengono rimossi;
+- per il file aperto, se la `Version` è diversa dall'ultima nota si rilegge il testo e lo si confronta con l'ultimo contenuto noto su disco: se è identico si aggiorna solo la versione, altrimenti
   - senza modifiche in sospeso → ricarica senza chiedere niente;
   - con modifiche in sospeso → barra "Il file è cambiato su disco" con **Ricarica** / **Sovrascrivi**; il salvataggio automatico si sospende finché non si sceglie.
 - Il file aperto è stato eliminato da fuori → avviso; il contenuto resta nell'editor e si può salvare di nuovo.
@@ -196,7 +200,7 @@ Quando la finestra torna in primo piano:
 
 ## Gestione errori
 
-- **Permesso revocato o cartella non più raggiungibile**: si torna alla schermata "Riprendi accesso". Il contenuto non salvato viene conservato in memoria e in un buffer di emergenza in IndexedDB (per percorso), e riproposto alla riapertura del file.
+- **Permesso revocato o cartella non più raggiungibile**: si torna alla schermata "Riprendi accesso". Il contenuto non salvato viene conservato in memoria e in un buffer di emergenza in IndexedDB, con chiave `workspaceId + percorso` (così file con lo stesso percorso in cartelle diverse non si confondono), e riproposto alla riapertura di quel file in quella cartella. Il buffer viene cancellato dopo un salvataggio riuscito.
 - **Scrittura fallita**: stato *errore* + toast; nuovo tentativo al salvataggio successivo; il buffer di emergenza viene aggiornato.
 - **Rinomina verso un nome esistente**: errore nel dialog, nessuna sovrascrittura.
 - **Browser non supportato**: schermata dedicata.
@@ -210,7 +214,9 @@ Logica pura con `tsx --test`, contro l'implementazione in memoria di `WorkspaceF
 - risoluzione dei percorsi delle immagini con e senza `linkPrefix`;
 - generazione di nomi immagine univoci;
 - indice di ricerca (costruzione, aggiornamento, rimozione);
-- decisione su modifiche esterne (ricarica / conflitto / file eliminato);
+- decisione su modifiche esterne (ricarica / conflitto / file eliminato / versione cambiata ma contenuto identico) e aggiornamento dell'indice per i file cambiati da fuori;
+- rinomina di file e cartelle, incluso il rollback se la copia ricorsiva fallisce;
+- chiavi del buffer di emergenza separate per `workspaceId`;
 - plugin markdown-it (wikilink, righe sorgente) e sopravvivenza degli attributi alla sanitizzazione (con DOMPurify in ambiente di test).
 
 UI: verifica manuale in Chrome su una copia della cartella del blog, con una checklist nel piano di implementazione.
