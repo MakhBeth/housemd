@@ -517,3 +517,95 @@ test('[minor] identical error toasts are not stacked', async () => {
   const errorToasts = ws.getState().toasts.filter((t) => /Salvataggio non riuscito/.test(t.message));
   assert.equal(errorToasts.length, 1);
 });
+
+// --- fix round 2: re-review of 36a1805 (see task-10-fix2.md) --------------------------
+
+test('[finding 4 round 2] a conflict is not lost after switching files twice, even across an app reload', async () => {
+  const { ops, buffers, scheduler, ws } = await setup({ 'a.md': 'A', 'b.md': 'B' });
+  await ws.openFile('a.md');
+  ws.edit('mio');
+  ops.setFile('a.md', 'loro');
+  await ws.checkExternal();
+  assert.equal(doc(ws).conflict, true);
+
+  await ws.openFile('b.md');
+  await ws.openFile('a.md');
+  assert.equal(doc(ws).conflict, true, 'il conflitto resta dopo il primo cambio di file');
+
+  // Un secondo giro: qui il round 1 perdeva il conflitto (la base del buffer veniva
+  // sovrascritta col testo esterno letto durante la prima riapertura).
+  await ws.openFile('b.md');
+  await ws.openFile('a.md');
+  assert.equal(doc(ws).conflict, true, 'il conflitto resta anche dopo il secondo cambio di file');
+
+  scheduler.fire();
+  await ws.flush();
+  assert.equal(await ops.textOf('a.md'), 'loro', 'niente sovrascrittura silenziosa del cambiamento esterno');
+
+  // La base corretta è quella persistita nel buffer di emergenza: deve sopravvivere anche a un
+  // "riavvio dell'app" (nuovo Workspace sugli stessi ops/buffers, senza stato in memoria).
+  const ws2 = new Workspace({
+    fs: createWorkspaceFS(ops),
+    workspaceId: 'ws-1',
+    name: 'test',
+    buffers,
+    scheduler: manualScheduler(),
+  });
+  await ws2.load();
+  await ws2.openFile('a.md');
+  assert.equal(ws2.getState().doc!.conflict, true, 'il conflitto sopravvive al riavvio');
+  assert.equal(ws2.getState().doc!.text, 'mio');
+
+  await ws2.resolveConflict('overwrite');
+  assert.equal(await ops.textOf('a.md'), 'mio');
+});
+
+test('[minor round 2] the autosave timer does not write the emergency buffer while suspended', async () => {
+  const { ops, buffers, scheduler, ws } = await setup({ 'old/a.md': 'alfa' });
+  await ws.openFile('old/a.md');
+  const originalRemove = ops.removeEntry.bind(ops);
+  ops.removeEntry = async (path, recursive) => {
+    if (path === 'old') {
+      ws.edit('nuovo');
+      scheduler.fire(); // il debounce scatta mentre la rinomina è sospesa
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      assert.equal(await buffers.load('ws-1', 'old/a.md'), null, 'niente buffer sul vecchio percorso');
+      assert.equal(await buffers.load('ws-1', 'new/a.md'), null, 'niente buffer nemmeno sul nuovo percorso');
+    }
+    return originalRemove(path, recursive);
+  };
+  await ws.rename('old', 'new');
+  await ws.flush();
+  assert.equal(await ops.textOf('new/a.md'), 'nuovo');
+});
+
+test('[minor round 2] rename always refreshes entries even if reindexing hits a real error, and keeps the old index entry until confirmed missing', async () => {
+  const { ws } = await setup({ 'old/a.md': 'alfa', 'old/b.md': 'beta' });
+  const fs = (ws as unknown as { deps: { fs: { read: (p: string) => Promise<{ text: string; version: unknown }> } } }).deps.fs;
+  const originalRead = fs.read.bind(fs);
+  fs.read = async (path: string) => {
+    if (path === 'new/b.md') throw new Error('EIO transitorio');
+    return originalRead(path);
+  };
+  await ws.rename('old', 'new');
+  fs.read = originalRead;
+
+  assert.deepEqual(ws.files().sort(), ['new/a.md', 'new/b.md'], 'refreshEntries gira comunque');
+  assert.equal(ws.search.search('alfa')[0]?.path, 'new/a.md');
+  assert.equal(ws.search.search('beta')[0]?.path, 'old/b.md', 'non confermato mancante: resta nel vecchio indice');
+  assert.match(ws.getState().toasts.at(-1)?.message ?? '', /EIO transitorio/);
+});
+
+test('[minor round 2] checkExternal is a no-op while a rename/remove is in progress', async () => {
+  const { ops, ws } = await setup({ 'old/a.md': 'alfa' });
+  await ws.openFile('old/a.md');
+  const originalRemove = ops.removeEntry.bind(ops);
+  ops.removeEntry = async (path, recursive) => {
+    if (path === 'old') await ws.checkExternal();
+    return originalRemove(path, recursive);
+  };
+  await ws.rename('old', 'new');
+  assert.equal(doc(ws).path, 'new/a.md');
+  assert.deepEqual(ws.files(), ['new/a.md']);
+  assert.equal(ws.getState().toasts.length, 0);
+});

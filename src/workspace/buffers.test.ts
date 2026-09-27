@@ -2,6 +2,7 @@ import 'fake-indexeddb/auto';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import { openDb, transactionDone } from '../lib/db';
 import { indexedDbBufferStore, memoryBufferStore, type BufferStore } from './buffers';
 
 let dbCount = 0;
@@ -34,3 +35,17 @@ for (const [name, make] of factories) {
     assert.deepEqual(await store.load('ws-2', 'old/a.md'), { text: 'altro', base: 'base-altro' }, 'solo il workspace indicato');
   });
 }
+
+test('indexedDB: a legacy plain-string buffer (formato precedente) is read as { text, base }', async () => {
+  const dbName = `buffers-${++dbCount}`;
+  // Scrive direttamente nel formato precedente (una stringa), come avrebbe fatto una versione
+  // di HouseMD antecedente all'introduzione della base del conflitto.
+  const db = await openDb(dbName);
+  const tx = db.transaction('buffers', 'readwrite');
+  tx.objectStore('buffers').put('bozza legacy', `ws-1\u0000a.md`);
+  await transactionDone(tx);
+  db.close();
+
+  const store = indexedDbBufferStore(dbName);
+  assert.deepEqual(await store.load('ws-1', 'a.md'), { text: 'bozza legacy', base: 'bozza legacy' });
+});

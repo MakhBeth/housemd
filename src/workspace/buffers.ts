@@ -25,14 +25,20 @@ function movedPath(path: string, from: string, to: string): string | null {
   return null;
 }
 
+/** Un buffer scritto dal formato precedente (semplice stringa) diventa `{ text, base: text }`. */
+function normalizeStored(value: BufferedText | string): BufferedText {
+  return typeof value === 'string' ? { text: value, base: value } : value;
+}
+
 export function memoryBufferStore(): BufferStore {
-  const entries = new Map<string, BufferedText>();
+  const entries = new Map<string, BufferedText | string>();
   return {
     async save(ws, path, text, base) {
       entries.set(bufferKey(ws, path), { text, base });
     },
     async load(ws, path) {
-      return entries.get(bufferKey(ws, path)) ?? null;
+      const value = entries.get(bufferKey(ws, path));
+      return value === undefined ? null : normalizeStored(value);
     },
     async clear(ws, path) {
       entries.delete(bufferKey(ws, path));
@@ -67,7 +73,10 @@ export function indexedDbBufferStore(dbName = DB_NAME): BufferStore {
   return {
     save: (ws, path, text, base) => withStore('readwrite', (s) => void s.put({ text, base }, bufferKey(ws, path))),
     load: (ws, path) =>
-      withStore('readonly', async (s) => ((await request(s.get(bufferKey(ws, path)))) as BufferedText | undefined) ?? null),
+      withStore('readonly', async (s) => {
+        const value = (await request(s.get(bufferKey(ws, path)))) as BufferedText | string | undefined;
+        return value === undefined ? null : normalizeStored(value);
+      }),
     clear: (ws, path) => withStore('readwrite', (s) => void s.delete(bufferKey(ws, path))),
     move: (ws, from, to) =>
       withStore('readwrite', async (s) => {

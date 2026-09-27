@@ -80,6 +80,13 @@ export class Workspace {
   /** Ultimo contenuto e versione noti su disco del file aperto. */
   private knownText = '';
   private knownVersion: Version | null = null;
+  /**
+   * Base da usare per il buffer di emergenza del file aperto: normalmente coincide con `knownText`,
+   * ma quando si sta ripristinando (o restando in) un conflitto resta quella originale da cui
+   * l'utente è partito, non il testo esterno che ha causato il conflitto — altrimenti, dopo un
+   * altro giro di apri/chiudi, il conflitto risulterebbe "risolto" da solo.
+   */
+  private bufferBase = '';
   private timer: unknown = null;
   private saving: Promise<void> | null = null;
   private toastSeq = 0;
@@ -152,7 +159,7 @@ export class Workspace {
     if (isAccessError(err)) {
       const doc = this.state.doc;
       if (doc && doc.saveState !== 'saved') {
-        await this.deps.buffers.save(this.deps.workspaceId, doc.path, doc.text, this.knownText).catch(() => undefined);
+        await this.deps.buffers.save(this.deps.workspaceId, doc.path, doc.text, this.bufferBase).catch(() => undefined);
       }
       this.set({ status: 'access-lost' });
       return;
@@ -210,6 +217,10 @@ export class Workspace {
       this.knownText = text;
       this.knownVersion = version;
       this.versions.set(path, version);
+      // Base di partenza per un eventuale buffer di emergenza: normalmente il disco appena letto;
+      // viene sostituita più sotto se si sta ripristinando un conflitto già in corso, per non
+      // perdere la base originale da cui l'utente era partito.
+      this.bufferBase = text;
       const buffered = await this.deps.buffers.load(this.deps.workspaceId, path);
 
       let docText = text;
@@ -227,6 +238,7 @@ export class Workspace {
           docText = buffered.text;
           saveState = 'dirty';
           conflict = buffered.base !== text;
+          if (conflict) this.bufferBase = buffered.base;
           restored = true;
         }
       }
@@ -263,11 +275,6 @@ export class Workspace {
     this.schedule();
   }
 
-  /** Autosalvataggio sospeso (rinomina/eliminazione in corso), conflitto irrisolto o accesso perso. */
-  private isPaused(): boolean {
-    return this.suspended > 0 || this.state.status === 'access-lost' || this.state.doc?.conflict === true;
-  }
-
   private schedule(): void {
     if (this.timer !== null) this.scheduler.clear(this.timer);
     this.timer = this.scheduler.set(() => {
@@ -276,9 +283,16 @@ export class Workspace {
     }, AUTOSAVE_MS);
   }
 
-  /** Scaduto il debounce: salva su disco, oppure, se l'autosalvataggio è in pausa, nel buffer di emergenza. */
+  /**
+   * Scaduto il debounce: salva su disco, oppure, se l'autosalvataggio è in pausa per un conflitto
+   * irrisolto o l'accesso perso, nel buffer di emergenza. Se invece è sospeso per una rinomina o
+   * un'eliminazione in corso, non scrive da nessuna parte: il percorso è in transizione (potrebbe
+   * essere quello vecchio o quello di un file già eliminato) e sarà rename()/remove() stesso a
+   * ripianificare il salvataggio a sospensione finita.
+   */
   private async onAutosaveTimer(): Promise<void> {
-    if (this.isPaused()) {
+    if (this.suspended > 0) return;
+    if (this.state.status === 'access-lost' || this.state.doc?.conflict) {
       await this.bufferCurrentDoc();
       return;
     }
@@ -288,7 +302,7 @@ export class Workspace {
   private async bufferCurrentDoc(): Promise<void> {
     const doc = this.state.doc;
     if (!doc || doc.saveState === 'saved') return;
-    await this.deps.buffers.save(this.deps.workspaceId, doc.path, doc.text, this.knownText).catch(() => undefined);
+    await this.deps.buffers.save(this.deps.workspaceId, doc.path, doc.text, this.bufferBase).catch(() => undefined);
   }
 
   async flush(): Promise<void> {
@@ -319,7 +333,7 @@ export class Workspace {
     }
     const doc = this.state.doc;
     if (doc && doc.saveState !== 'saved') {
-      await this.deps.buffers.save(this.deps.workspaceId, doc.path, doc.text, this.knownText).catch(() => undefined);
+      await this.deps.buffers.save(this.deps.workspaceId, doc.path, doc.text, this.bufferBase).catch(() => undefined);
     }
   }
 
@@ -331,7 +345,7 @@ export class Workspace {
     } catch (err) {
       const current = this.state.doc;
       const pending = current?.path === path ? current.text : text;
-      const base = current?.path === path ? this.knownText : text;
+      const base = current?.path === path ? this.bufferBase : text;
       await this.deps.buffers.save(this.deps.workspaceId, path, pending, base).catch(() => undefined);
       if (current?.path === path) this.setDoc({ saveState: 'error' });
       if (isAccessError(err)) {
@@ -344,6 +358,7 @@ export class Workspace {
     // La scrittura è riuscita: quel che segue è manutenzione best-effort e non deve far
     // sembrare fallito un salvataggio che in realtà è andato a buon fine.
     this.knownText = text;
+    this.bufferBase = text;
     this.knownVersion = version;
     this.versions.set(path, version);
     this.search.upsert(path, text);
@@ -368,6 +383,7 @@ export class Workspace {
 
   async checkExternal(): Promise<void> {
     if (this.state.status !== 'ready') return;
+    if (this.suspended > 0) return; // una rinomina/eliminazione sta riscrivendo l'albero
     if (this.saving) await this.saving;
     await this.run(async () => {
       const entries = await this.deps.fs.list();
@@ -429,6 +445,7 @@ export class Workspace {
             return;
           }
           this.knownText = decision.text;
+          this.bufferBase = decision.text;
           this.knownVersion = decision.version;
           this.versions.set(current.path, decision.version);
           this.search.upsert(current.path, decision.text);
@@ -456,6 +473,7 @@ export class Workspace {
     await this.run(async () => {
       const { text, version } = await this.deps.fs.read(doc.path);
       this.knownText = text;
+      this.bufferBase = text;
       this.knownVersion = version;
       this.versions.set(doc.path, version);
       this.search.upsert(doc.path, text);
@@ -497,40 +515,52 @@ export class Workspace {
   async rename(from: string, to: string): Promise<void> {
     await this.settle();
     this.suspended++;
-    await this.run(async () => {
-      await this.deps.fs.rename(from, to);
+    try {
+      await this.run(async () => {
+        await this.deps.fs.rename(from, to);
 
-      // Aggiorna SUBITO il file aperto: se un autosalvataggio scattasse durante la reindicizzazione
-      // che segue, deve scrivere al nuovo percorso invece di ricreare quello appena rinominato.
-      const openDoc = this.state.doc;
-      const docPath = openDoc ? movedPath(openDoc.path, from, to) : null;
-      if (docPath !== null) {
-        this.setDoc({ path: docPath });
-        this.knownVersion = await this.deps.fs.stat(docPath);
-      }
-
-      await this.deps.buffers.move(this.deps.workspaceId, from, to);
-      for (const path of [...this.versions.keys()]) {
-        const next = movedPath(path, from, to);
-        if (next === null) continue;
-        this.search.remove(path);
-        this.versions.delete(path);
-        try {
-          const { text, version } = await this.deps.fs.read(next);
-          this.search.upsert(next, text);
-          this.versions.set(next, version);
-        } catch (err) {
-          // Sparito durante la rinomina (es. cambiamento esterno concorrente): resta fuori
-          // dall'indice, il prossimo controllo delle modifiche esterne se ne accorgerà.
-          if (!(err instanceof FsNotFoundError)) throw err;
+        // Aggiorna SUBITO il file aperto: se un autosalvataggio scattasse durante la reindicizzazione
+        // che segue, deve scrivere al nuovo percorso invece di ricreare quello appena rinominato.
+        const openDoc = this.state.doc;
+        const docPath = openDoc ? movedPath(openDoc.path, from, to) : null;
+        if (docPath !== null) {
+          this.setDoc({ path: docPath });
+          this.knownVersion = await this.deps.fs.stat(docPath);
         }
-      }
-      await this.refreshEntries();
-      this.bumpIndex();
-    });
-    this.suspended--;
-    const current = this.state.doc;
-    if (current && current.saveState !== 'saved') this.schedule();
+
+        // refreshEntries()/bumpIndex() devono comunque girare anche se la reindicizzazione
+        // qui sotto incontra un errore (non solo un file mancante, che è tollerato).
+        try {
+          await this.deps.buffers.move(this.deps.workspaceId, from, to);
+          for (const path of [...this.versions.keys()]) {
+            const next = movedPath(path, from, to);
+            if (next === null) continue;
+            try {
+              // Non si tocca l'indice finché non sappiamo se il file è davvero raggiungibile al
+              // nuovo percorso: così un errore transitorio non fa perdere la voce a metà.
+              const { text, version } = await this.deps.fs.read(next);
+              this.search.remove(path);
+              this.versions.delete(path);
+              this.search.upsert(next, text);
+              this.versions.set(next, version);
+            } catch (err) {
+              // Sparito davvero durante la rinomina (es. cambiamento esterno concorrente): via
+              // anche dal vecchio indice. Qualunque altro errore invece resta a metà e risale.
+              if (!(err instanceof FsNotFoundError)) throw err;
+              this.search.remove(path);
+              this.versions.delete(path);
+            }
+          }
+        } finally {
+          await this.refreshEntries();
+          this.bumpIndex();
+        }
+      });
+    } finally {
+      this.suspended--;
+      const current = this.state.doc;
+      if (current && current.saveState !== 'saved') this.schedule();
+    }
   }
 
   async remove(path: string): Promise<void> {
@@ -545,23 +575,26 @@ export class Workspace {
       if (this.timer !== null) this.scheduler.clear(this.timer);
       this.timer = null;
     }
-    await this.run(async () => {
-      await this.deps.fs.remove(path);
-      if (closing) this.set({ doc: null });
-      for (const p of [...this.versions.keys()]) {
-        if (!inside(p, path)) continue;
-        this.search.remove(p);
-        this.versions.delete(p);
-        await this.deps.buffers.clear(this.deps.workspaceId, p);
+    try {
+      await this.run(async () => {
+        await this.deps.fs.remove(path);
+        if (closing) this.set({ doc: null });
+        for (const p of [...this.versions.keys()]) {
+          if (!inside(p, path)) continue;
+          this.search.remove(p);
+          this.versions.delete(p);
+          await this.deps.buffers.clear(this.deps.workspaceId, p);
+        }
+        await this.refreshEntries();
+        this.bumpIndex();
+      });
+    } finally {
+      if (closing) {
+        this.suspended--;
+        // Eliminazione fallita: il file resta aperto con le sue modifiche, riprendiamo a salvare.
+        const current = this.state.doc;
+        if (current && current.saveState !== 'saved') this.schedule();
       }
-      await this.refreshEntries();
-      this.bumpIndex();
-    });
-    if (closing) {
-      this.suspended--;
-      // Eliminazione fallita: il file resta aperto con le sue modifiche, riprendiamo a salvare.
-      const current = this.state.doc;
-      if (current && current.saveState !== 'saved') this.schedule();
     }
   }
 
