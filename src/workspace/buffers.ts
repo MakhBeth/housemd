@@ -1,9 +1,15 @@
 import { DB_NAME, openDb, request, transactionDone } from '../lib/db';
 
+/** Testo non salvato più la sua base: l'ultimo contenuto noto su disco quando il buffer è stato scritto. */
+export interface BufferedText {
+  text: string;
+  base: string;
+}
+
 /** Buffer di emergenza: testo non salvato, per workspace e percorso. */
 export interface BufferStore {
-  save(workspaceId: string, path: string, text: string): Promise<void>;
-  load(workspaceId: string, path: string): Promise<string | null>;
+  save(workspaceId: string, path: string, text: string, base: string): Promise<void>;
+  load(workspaceId: string, path: string): Promise<BufferedText | null>;
   clear(workspaceId: string, path: string): Promise<void>;
   /** Sposta i buffer di `from` e di tutto ciò che contiene (rinomina di file o cartelle). */
   move(workspaceId: string, from: string, to: string): Promise<void>;
@@ -20,10 +26,10 @@ function movedPath(path: string, from: string, to: string): string | null {
 }
 
 export function memoryBufferStore(): BufferStore {
-  const entries = new Map<string, string>();
+  const entries = new Map<string, BufferedText>();
   return {
-    async save(ws, path, text) {
-      entries.set(bufferKey(ws, path), text);
+    async save(ws, path, text, base) {
+      entries.set(bufferKey(ws, path), { text, base });
     },
     async load(ws, path) {
       return entries.get(bufferKey(ws, path)) ?? null;
@@ -33,12 +39,12 @@ export function memoryBufferStore(): BufferStore {
     },
     async move(ws, from, to) {
       const prefix = `${ws}${SEP}`;
-      for (const [key, text] of [...entries]) {
+      for (const [key, value] of [...entries]) {
         if (!key.startsWith(prefix)) continue;
         const next = movedPath(key.slice(prefix.length), from, to);
         if (next === null) continue;
         entries.delete(key);
-        entries.set(bufferKey(ws, next), text);
+        entries.set(bufferKey(ws, next), value);
       }
     },
   };
@@ -59,8 +65,9 @@ export function indexedDbBufferStore(dbName = DB_NAME): BufferStore {
   };
 
   return {
-    save: (ws, path, text) => withStore('readwrite', (s) => void s.put(text, bufferKey(ws, path))),
-    load: (ws, path) => withStore('readonly', async (s) => ((await request(s.get(bufferKey(ws, path)))) as string | undefined) ?? null),
+    save: (ws, path, text, base) => withStore('readwrite', (s) => void s.put({ text, base }, bufferKey(ws, path))),
+    load: (ws, path) =>
+      withStore('readonly', async (s) => ((await request(s.get(bufferKey(ws, path)))) as BufferedText | undefined) ?? null),
     clear: (ws, path) => withStore('readwrite', (s) => void s.delete(bufferKey(ws, path))),
     move: (ws, from, to) =>
       withStore('readwrite', async (s) => {
@@ -70,9 +77,9 @@ export function indexedDbBufferStore(dbName = DB_NAME): BufferStore {
         for (const key of keys) {
           const next = movedPath(key.slice(prefix.length), from, to);
           if (next === null) continue;
-          const text = await request(s.get(key));
+          const value = await request(s.get(key));
           s.delete(key);
-          s.put(text, bufferKey(ws, next));
+          s.put(value, bufferKey(ws, next));
         }
       }),
   };

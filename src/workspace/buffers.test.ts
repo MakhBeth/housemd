@@ -13,8 +13,8 @@ const factories: Array<[string, () => BufferStore]> = [
 for (const [name, make] of factories) {
   test(`${name}: save, load and clear per workspace and path`, async () => {
     const store = make();
-    await store.save('ws-1', 'a.md', 'bozza');
-    assert.equal(await store.load('ws-1', 'a.md'), 'bozza');
+    await store.save('ws-1', 'a.md', 'bozza', 'base');
+    assert.deepEqual(await store.load('ws-1', 'a.md'), { text: 'bozza', base: 'base' });
     assert.equal(await store.load('ws-2', 'a.md'), null, 'un altro workspace non vede il buffer');
     await store.clear('ws-1', 'a.md');
     assert.equal(await store.load('ws-1', 'a.md'), null);
@@ -22,15 +22,15 @@ for (const [name, make] of factories) {
 
   test(`${name}: move renames file buffers and everything inside a folder`, async () => {
     const store = make();
-    await store.save('ws-1', 'old/a.md', 'A');
-    await store.save('ws-1', 'old/sub/b.md', 'B');
-    await store.save('ws-1', 'older/c.md', 'C');
-    await store.save('ws-2', 'old/a.md', 'altro');
+    await store.save('ws-1', 'old/a.md', 'A', 'base-a');
+    await store.save('ws-1', 'old/sub/b.md', 'B', 'base-b');
+    await store.save('ws-1', 'older/c.md', 'C', 'base-c');
+    await store.save('ws-2', 'old/a.md', 'altro', 'base-altro');
     await store.move('ws-1', 'old', 'new');
-    assert.equal(await store.load('ws-1', 'new/a.md'), 'A');
-    assert.equal(await store.load('ws-1', 'new/sub/b.md'), 'B');
+    assert.deepEqual(await store.load('ws-1', 'new/a.md'), { text: 'A', base: 'base-a' });
+    assert.deepEqual(await store.load('ws-1', 'new/sub/b.md'), { text: 'B', base: 'base-b' });
     assert.equal(await store.load('ws-1', 'old/a.md'), null);
-    assert.equal(await store.load('ws-1', 'older/c.md'), 'C', 'solo il prefisso esatto');
-    assert.equal(await store.load('ws-2', 'old/a.md'), 'altro', 'solo il workspace indicato');
+    assert.deepEqual(await store.load('ws-1', 'older/c.md'), { text: 'C', base: 'base-c' }, 'solo il prefisso esatto');
+    assert.deepEqual(await store.load('ws-2', 'old/a.md'), { text: 'altro', base: 'base-altro' }, 'solo il workspace indicato');
   });
 }

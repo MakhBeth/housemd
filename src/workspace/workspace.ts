@@ -83,6 +83,11 @@ export class Workspace {
   private timer: unknown = null;
   private saving: Promise<void> | null = null;
   private toastSeq = 0;
+  /**
+   * Contatore di sospensione dell'autosalvataggio (rinomina/eliminazione in corso): mentre è > 0,
+   * `flush()` non scrive su disco, ma le modifiche continuano a essere segnalate come da salvare.
+   */
+  private suspended = 0;
 
   constructor(private readonly deps: WorkspaceDeps) {
     this.scheduler = deps.scheduler ?? realScheduler;
@@ -121,6 +126,8 @@ export class Workspace {
   }
 
   private toast(kind: Toast['kind'], message: string): void {
+    const last = this.state.toasts.at(-1);
+    if (last && last.kind === kind && last.message === message) return;
     this.set({ toasts: [...this.state.toasts, { id: ++this.toastSeq, kind, message }] });
   }
 
@@ -145,7 +152,7 @@ export class Workspace {
     if (isAccessError(err)) {
       const doc = this.state.doc;
       if (doc && doc.saveState !== 'saved') {
-        await this.deps.buffers.save(this.deps.workspaceId, doc.path, doc.text).catch(() => undefined);
+        await this.deps.buffers.save(this.deps.workspaceId, doc.path, doc.text, this.knownText).catch(() => undefined);
       }
       this.set({ status: 'access-lost' });
       return;
@@ -166,14 +173,28 @@ export class Workspace {
       });
       const { config, warning } = parseConfig(configText);
       if (warning) this.toast('info', warning);
+      const unreadable: string[] = [];
       for (const entry of entries) {
         if (entry.kind !== 'file') continue;
-        const { text, version } = await this.deps.fs.read(entry.path);
-        this.search.upsert(entry.path, text);
-        this.versions.set(entry.path, version);
+        try {
+          const { text, version } = await this.deps.fs.read(entry.path);
+          this.search.upsert(entry.path, text);
+          this.versions.set(entry.path, version);
+        } catch (err) {
+          // Un accesso revocato riguarda l'intera cartella: non ha senso continuare a leggere gli altri file.
+          if (isAccessError(err)) throw err;
+          unreadable.push(entry.path);
+        }
+      }
+      if (unreadable.length > 0) {
+        this.toast('info', `Impossibile leggere ${unreadable.length} file: ${unreadable.join(', ')}`);
       }
       this.set({ entries, config, status: 'ready', indexRevision: this.state.indexRevision + 1 });
     });
+    // Un errore nella scansione o nella config non deve lasciare l'app bloccata su "loading".
+    if (this.state.status === 'loading') {
+      this.set({ status: 'ready', entries: [], config: DEFAULT_CONFIG });
+    }
   }
 
   private async refreshEntries(): Promise<void> {
@@ -190,15 +211,33 @@ export class Workspace {
       this.knownVersion = version;
       this.versions.set(path, version);
       const buffered = await this.deps.buffers.load(this.deps.workspaceId, path);
-      const restored = buffered !== null && buffered !== text;
-      if (buffered !== null && !restored) await this.deps.buffers.clear(this.deps.workspaceId, path);
+
+      let docText = text;
+      let saveState: SaveState = 'saved';
+      let conflict = false;
+      let restored = false;
+      if (buffered !== null) {
+        if (buffered.text === text) {
+          // Il buffer coincide col disco: non c'è nulla da ripristinare, si può scartare.
+          await this.deps.buffers.clear(this.deps.workspaceId, path);
+        } else {
+          // Se il disco è ancora quello su cui si basava il buffer, è una semplice ripresa di
+          // modifiche non salvate. Altrimenti il disco è cambiato nel frattempo: è un conflitto,
+          // non va sovrascritto silenziosamente dall'autosalvataggio.
+          docText = buffered.text;
+          saveState = 'dirty';
+          conflict = buffered.base !== text;
+          restored = true;
+        }
+      }
+
       this.set({
         doc: {
           path,
-          text: restored ? buffered : text,
+          text: docText,
           eol: detectEol(text),
-          saveState: restored ? 'dirty' : 'saved',
-          conflict: false,
+          saveState,
+          conflict,
           deletedOnDisk: false,
           revision: (this.state.doc?.revision ?? 0) + 1,
         },
@@ -224,20 +263,39 @@ export class Workspace {
     this.schedule();
   }
 
+  /** Autosalvataggio sospeso (rinomina/eliminazione in corso), conflitto irrisolto o accesso perso. */
+  private isPaused(): boolean {
+    return this.suspended > 0 || this.state.status === 'access-lost' || this.state.doc?.conflict === true;
+  }
+
   private schedule(): void {
     if (this.timer !== null) this.scheduler.clear(this.timer);
-    this.timer = null;
-    if (this.state.doc?.conflict) return;
     this.timer = this.scheduler.set(() => {
       this.timer = null;
-      void this.flush();
+      void this.onAutosaveTimer();
     }, AUTOSAVE_MS);
+  }
+
+  /** Scaduto il debounce: salva su disco, oppure, se l'autosalvataggio è in pausa, nel buffer di emergenza. */
+  private async onAutosaveTimer(): Promise<void> {
+    if (this.isPaused()) {
+      await this.bufferCurrentDoc();
+      return;
+    }
+    await this.flush();
+  }
+
+  private async bufferCurrentDoc(): Promise<void> {
+    const doc = this.state.doc;
+    if (!doc || doc.saveState === 'saved') return;
+    await this.deps.buffers.save(this.deps.workspaceId, doc.path, doc.text, this.knownText).catch(() => undefined);
   }
 
   async flush(): Promise<void> {
     if (this.timer !== null) this.scheduler.clear(this.timer);
     this.timer = null;
-    if (this.saving) await this.saving;
+    while (this.saving) await this.saving;
+    if (this.suspended > 0) return;
     const doc = this.state.doc;
     if (!doc || doc.conflict || this.state.status === 'access-lost') return;
     if (doc.saveState !== 'dirty' && doc.saveState !== 'error') return;
@@ -261,39 +319,48 @@ export class Workspace {
     }
     const doc = this.state.doc;
     if (doc && doc.saveState !== 'saved') {
-      await this.deps.buffers.save(this.deps.workspaceId, doc.path, doc.text).catch(() => undefined);
+      await this.deps.buffers.save(this.deps.workspaceId, doc.path, doc.text, this.knownText).catch(() => undefined);
     }
   }
 
   private async writeDoc(path: string, text: string): Promise<void> {
     this.setDoc({ saveState: 'saving' });
+    let version: Version;
     try {
-      const { version } = await this.deps.fs.write(path, text);
-      this.knownText = text;
-      this.knownVersion = version;
-      this.versions.set(path, version);
-      this.search.upsert(path, text);
-      await this.deps.buffers.clear(this.deps.workspaceId, path);
-      if (!this.state.entries.some((e) => e.path === path)) await this.refreshEntries();
-      this.bumpIndex();
-      const current = this.state.doc;
-      if (current?.path !== path) return;
-      if (current.text === text) {
-        this.setDoc({ saveState: 'saved', deletedOnDisk: false });
-      } else {
-        this.setDoc({ saveState: 'dirty', deletedOnDisk: false });
-        this.schedule();
-      }
+      ({ version } = await this.deps.fs.write(path, text));
     } catch (err) {
       const current = this.state.doc;
       const pending = current?.path === path ? current.text : text;
-      await this.deps.buffers.save(this.deps.workspaceId, path, pending).catch(() => undefined);
+      const base = current?.path === path ? this.knownText : text;
+      await this.deps.buffers.save(this.deps.workspaceId, path, pending, base).catch(() => undefined);
       if (current?.path === path) this.setDoc({ saveState: 'error' });
       if (isAccessError(err)) {
         this.set({ status: 'access-lost' });
         return;
       }
       this.toast('error', `Salvataggio non riuscito: ${(err as Error).message}`);
+      return;
+    }
+    // La scrittura è riuscita: quel che segue è manutenzione best-effort e non deve far
+    // sembrare fallito un salvataggio che in realtà è andato a buon fine.
+    this.knownText = text;
+    this.knownVersion = version;
+    this.versions.set(path, version);
+    this.search.upsert(path, text);
+    await this.deps.buffers.clear(this.deps.workspaceId, path).catch(() => undefined);
+    try {
+      if (!this.state.entries.some((e) => e.path === path)) await this.refreshEntries();
+    } catch {
+      // La lista dei file si aggiornerà al prossimo giro: non invalida il salvataggio.
+    }
+    this.bumpIndex();
+    const current = this.state.doc;
+    if (current?.path !== path) return;
+    if (current.text === text) {
+      this.setDoc({ saveState: 'saved', deletedOnDisk: false });
+    } else {
+      this.setDoc({ saveState: 'dirty', deletedOnDisk: false });
+      this.schedule();
     }
   }
 
@@ -322,6 +389,10 @@ export class Workspace {
 
       const doc = this.state.doc;
       if (!doc) return;
+      // Istantanea presa PRIMA delle await di decideExternal: ci serve per accorgerci se, nel
+      // frattempo, l'utente ha continuato a scrivere o un salvataggio è partito/arrivato a destinazione.
+      const snapshotText = doc.text;
+      const snapshotVersion = this.knownVersion;
       const decision = await decideExternal({
         known: this.knownVersion,
         knownText: this.knownText,
@@ -329,27 +400,42 @@ export class Workspace {
         stat: () => this.deps.fs.stat(doc.path),
         read: () => this.deps.fs.read(doc.path),
       });
+
+      const current = this.state.doc;
+      if (!current || current.path !== doc.path) return; // il file aperto è cambiato durante il controllo
+      if (this.saving) return; // un salvataggio è partito nel frattempo: il prossimo controllo rivaluterà
+      if (this.knownVersion !== snapshotVersion) return; // idem, ma il salvataggio è già arrivato a destinazione
+
       switch (decision.kind) {
         case 'unchanged':
           return;
         case 'deleted':
-          if (!doc.deletedOnDisk) this.toast('info', `${doc.path} è stato eliminato fuori da HouseMD`);
-          this.setDoc({ deletedOnDisk: true, saveState: 'dirty' });
-          this.search.remove(doc.path);
-          this.versions.delete(doc.path);
+          if (!current.deletedOnDisk) this.toast('info', `${current.path} è stato eliminato fuori da HouseMD`);
+          // Solo una modifica dell'utente (dirty) deve poter ricreare il file: niente 'dirty' forzato qui.
+          this.setDoc({ deletedOnDisk: true });
+          this.search.remove(current.path);
+          this.versions.delete(current.path);
           return;
         case 'update-version':
           this.knownVersion = decision.version;
-          this.versions.set(doc.path, decision.version);
+          this.versions.set(current.path, decision.version);
           return;
-        case 'reload':
+        case 'reload': {
+          if (current.text !== snapshotText) {
+            // L'utente ha digitato durante il controllo: le sue battute non vanno buttate via.
+            if (this.timer !== null) this.scheduler.clear(this.timer);
+            this.timer = null;
+            this.setDoc({ conflict: true });
+            return;
+          }
           this.knownText = decision.text;
           this.knownVersion = decision.version;
-          this.versions.set(doc.path, decision.version);
-          this.search.upsert(doc.path, decision.text);
-          this.setDoc({ text: decision.text, eol: detectEol(decision.text), saveState: 'saved', deletedOnDisk: false, revision: doc.revision + 1 });
+          this.versions.set(current.path, decision.version);
+          this.search.upsert(current.path, decision.text);
+          this.setDoc({ text: decision.text, eol: detectEol(decision.text), saveState: 'saved', deletedOnDisk: false, revision: current.revision + 1 });
           this.bumpIndex();
           return;
+        }
         case 'conflict':
           if (this.timer !== null) this.scheduler.clear(this.timer);
           this.timer = null;
@@ -410,37 +496,54 @@ export class Workspace {
 
   async rename(from: string, to: string): Promise<void> {
     await this.settle();
+    this.suspended++;
     await this.run(async () => {
       await this.deps.fs.rename(from, to);
+
+      // Aggiorna SUBITO il file aperto: se un autosalvataggio scattasse durante la reindicizzazione
+      // che segue, deve scrivere al nuovo percorso invece di ricreare quello appena rinominato.
+      const openDoc = this.state.doc;
+      const docPath = openDoc ? movedPath(openDoc.path, from, to) : null;
+      if (docPath !== null) {
+        this.setDoc({ path: docPath });
+        this.knownVersion = await this.deps.fs.stat(docPath);
+      }
+
       await this.deps.buffers.move(this.deps.workspaceId, from, to);
       for (const path of [...this.versions.keys()]) {
         const next = movedPath(path, from, to);
         if (next === null) continue;
         this.search.remove(path);
         this.versions.delete(path);
-        const { text, version } = await this.deps.fs.read(next);
-        this.search.upsert(next, text);
-        this.versions.set(next, version);
-      }
-      const doc = this.state.doc;
-      const docPath = doc ? movedPath(doc.path, from, to) : null;
-      if (docPath !== null) {
-        this.knownVersion = this.versions.get(docPath) ?? (await this.deps.fs.stat(docPath));
-        this.setDoc({ path: docPath });
+        try {
+          const { text, version } = await this.deps.fs.read(next);
+          this.search.upsert(next, text);
+          this.versions.set(next, version);
+        } catch (err) {
+          // Sparito durante la rinomina (es. cambiamento esterno concorrente): resta fuori
+          // dall'indice, il prossimo controllo delle modifiche esterne se ne accorgerà.
+          if (!(err instanceof FsNotFoundError)) throw err;
+        }
       }
       await this.refreshEntries();
       this.bumpIndex();
     });
+    this.suspended--;
+    const current = this.state.doc;
+    if (current && current.saveState !== 'saved') this.schedule();
   }
 
   async remove(path: string): Promise<void> {
     const doc = this.state.doc;
     const closing = doc !== null && inside(doc.path, path);
     if (closing) {
-      // Niente salvataggi automatici mentre eliminiamo: riscriverebbero il file.
+      // Sospende l'autosalvataggio per tutta l'eliminazione, incluso il tempo speso ad aspettare
+      // un salvataggio già in corso: altrimenti potrebbe ripianificarsi e ricreare il file appena
+      // eliminato (vedi il timer ripulito solo DOPO aver aspettato, qui sotto).
+      this.suspended++;
+      if (this.saving) await this.saving;
       if (this.timer !== null) this.scheduler.clear(this.timer);
       this.timer = null;
-      if (this.saving) await this.saving;
     }
     await this.run(async () => {
       await this.deps.fs.remove(path);
@@ -454,9 +557,12 @@ export class Workspace {
       await this.refreshEntries();
       this.bumpIndex();
     });
-    // Eliminazione fallita: il file resta aperto con le sue modifiche, riprendiamo a salvare.
-    const current = this.state.doc;
-    if (closing && current && current.saveState !== 'saved') this.schedule();
+    if (closing) {
+      this.suspended--;
+      // Eliminazione fallita: il file resta aperto con le sue modifiche, riprendiamo a salvare.
+      const current = this.state.doc;
+      if (current && current.saveState !== 'saved') this.schedule();
+    }
   }
 
   async followWikiLink(target: string): Promise<void> {

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import { createWorkspaceFS } from '../fs/workspaceFS';
 import { memoryOps, type MemoryOpsOptions } from '../fs/testing/memoryOps';
+import { FsNotFoundError } from '../fs/types';
 import { memoryBufferStore } from './buffers';
 import { Workspace, type Scheduler } from './workspace';
 
@@ -118,7 +119,7 @@ test('a failed write keeps the text in the emergency buffer and retries on the n
   await ws.flush();
   assert.equal(doc(ws).saveState, 'error');
   assert.match(ws.getState().toasts.at(-1)?.message ?? '', /Salvataggio non riuscito/);
-  assert.equal(await buffers.load('ws-1', 'a.md'), 'bozza');
+  assert.equal((await buffers.load('ws-1', 'a.md'))?.text, 'bozza');
 
   failing = false;
   await ws.flush();
@@ -136,14 +137,14 @@ test('lost access switches to access-lost and keeps the text', async () => {
   ws.edit('importante');
   await ws.flush();
   assert.equal(ws.getState().status, 'access-lost');
-  assert.equal(await buffers.load('ws-1', 'a.md'), 'importante');
+  assert.equal((await buffers.load('ws-1', 'a.md'))?.text, 'importante');
   assert.equal(doc(ws).text, 'importante');
 });
 
 test('opening a file restores its emergency buffer, only for the same workspace', async () => {
   const { buffers, ws } = await setup({ 'a.md': 'disco', 'b.md': 'disco b' });
-  await buffers.save('ws-1', 'a.md', 'non salvato');
-  await buffers.save('ws-2', 'b.md', 'di un altra cartella');
+  await buffers.save('ws-1', 'a.md', 'non salvato', 'disco');
+  await buffers.save('ws-2', 'b.md', 'di un altra cartella', 'disco b');
   await ws.openFile('a.md');
   assert.equal(doc(ws).text, 'non salvato');
   assert.equal(doc(ws).saveState, 'dirty');
@@ -276,14 +277,14 @@ test('a file deleted outside the app is flagged and can be saved again', async (
 test('renaming the open file or its folder updates path, index and buffers', async () => {
   const { buffers, ws } = await setup({ 'old/a.md': 'alfa', 'old/b.md': 'beta' });
   await ws.openFile('old/a.md');
-  await buffers.save('ws-1', 'old/b.md', 'bozza b');
+  await buffers.save('ws-1', 'old/b.md', 'bozza b', 'beta');
   await ws.rename('old/a.md', 'old/z.md');
   assert.equal(doc(ws).path, 'old/z.md');
   await ws.rename('old', 'new');
   assert.equal(doc(ws).path, 'new/z.md');
   assert.deepEqual(ws.files(), ['new/b.md', 'new/z.md']);
   assert.equal(ws.search.search('alfa')[0]?.path, 'new/z.md');
-  assert.equal(await buffers.load('ws-1', 'new/b.md'), 'bozza b');
+  assert.equal((await buffers.load('ws-1', 'new/b.md'))?.text, 'bozza b');
 });
 
 test('removing the open file or its folder closes it', async () => {
@@ -324,4 +325,195 @@ test('saveImage stores pasted images with unique names and returns the link', as
   assert.equal(await ws.saveImage(img, 'Foto Mare.jpg'), '/images/foto-mare-1.jpg');
   assert.equal(await ws.saveImage(img, 'image.png'), '/images/incollata-2026-09-27-143205.jpg');
   assert.equal(await ops.textOf('static/images/foto-mare.jpg'), 'jpg');
+});
+
+// --- fix round 1: findings from the task review (see task-10-fix1.md) --------------------------
+
+test('[finding 1] autosave during a folder rename does not write to the old path', async () => {
+  const { ops, scheduler, ws } = await setup({ 'old/a.md': 'alfa' });
+  await ws.openFile('old/a.md');
+  const originalRemove = ops.removeEntry.bind(ops);
+  ops.removeEntry = async (path, recursive) => {
+    if (path === 'old') {
+      // Simula un'edit e lo scatto dell'autosalvataggio proprio mentre la cartella sta per sparire.
+      ws.edit('nuovo');
+      scheduler.fire();
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    return originalRemove(path, recursive);
+  };
+  await ws.rename('old', 'new');
+  await ws.flush();
+  assert.equal(doc(ws).path, 'new/a.md');
+  assert.equal(await ops.textOf('new/a.md'), 'nuovo');
+  assert.equal(await ops.textOf('old/a.md'), null);
+});
+
+test('[finding 2] a save that finishes during a removal does not resurrect the deleted file', async () => {
+  const { ops, scheduler, ws } = await setup({ 'n/a.md': 'alfa', 'b.md': 'b' });
+  await ws.openFile('n/a.md');
+  const originalWrite = ops.writeFile.bind(ops);
+  let release!: () => void;
+  const gate = new Promise<void>((r) => (release = r));
+  ops.writeFile = async (path, data) => {
+    await gate;
+    return originalWrite(path, data);
+  };
+  ws.edit('uno');
+  const saving = ws.flush();
+  ws.edit('due'); // arriva mentre il salvataggio di 'uno' è ancora in corso
+
+  const originalRemove = ops.removeEntry.bind(ops);
+  ops.removeEntry = async (path, recursive) => {
+    await originalRemove(path, recursive);
+    // Un eventuale autosalvataggio ripianificato dal completamento del salvataggio di 'uno'
+    // (mentre l'eliminazione era già in corso) non deve poter scattare qui e ricreare il file.
+    scheduler.fire();
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  };
+  const removing = ws.remove('n');
+  release();
+  await saving;
+  await removing;
+
+  assert.equal(ws.getState().doc, null);
+  assert.equal(await ops.textOf('n/a.md'), null);
+  assert.ok(!ws.files().includes('n/a.md'));
+  assert.equal(ws.search.search('due').length, 0);
+});
+
+test('[finding 3] a clean document deleted outside the app is not resurrected by switching files', async () => {
+  const { ops, ws } = await setup({ 'a.md': 'A', 'b.md': 'B' });
+  await ws.openFile('a.md');
+  await ops.removeEntry('a.md', false);
+  await ws.checkExternal();
+  assert.equal(doc(ws).deletedOnDisk, true);
+  assert.equal(doc(ws).saveState, 'saved');
+  await ws.openFile('b.md');
+  assert.equal(await ops.textOf('a.md'), null, 'niente resurrezione: non c-erano modifiche utente');
+  assert.ok(!ws.files().includes('a.md'));
+});
+
+test('[finding 4] an unresolved conflict is not lost by switching files and reopening', async () => {
+  const { ops, ws } = await setup({ 'a.md': 'A', 'b.md': 'B' });
+  await ws.openFile('a.md');
+  ws.edit('mio');
+  ops.setFile('a.md', 'loro');
+  await ws.checkExternal();
+  assert.equal(doc(ws).conflict, true);
+
+  await ws.openFile('b.md');
+  await ws.openFile('a.md');
+  assert.equal(doc(ws).conflict, true, 'il conflitto resta segnalato dopo la riapertura');
+  assert.equal(doc(ws).text, 'mio');
+
+  await ws.resolveConflict('overwrite');
+  assert.equal(await ops.textOf('a.md'), 'mio');
+  assert.equal(doc(ws).conflict, false);
+});
+
+test('[finding 5] edits typed during a conflict are buffered instead of lost', async () => {
+  const { ops, buffers, scheduler, ws } = await setup({ 'a.md': 'A' });
+  await ws.openFile('a.md');
+  ws.edit('mio');
+  ops.setFile('a.md', 'loro');
+  await ws.checkExternal();
+  assert.equal(doc(ws).conflict, true);
+
+  ws.edit('mio, molto lavoro');
+  assert.equal(scheduler.pending(), 1);
+  scheduler.fire();
+  assert.equal((await buffers.load('ws-1', 'a.md'))?.text, 'mio, molto lavoro');
+  assert.equal(await ops.textOf('a.md'), 'loro', 'niente scrittura su disco durante il conflitto');
+});
+
+test('[finding 6] an edit typed during checkExternal is not overwritten by a reload', async () => {
+  const { ops, ws } = await setup({ 'a.md': 'A' });
+  await ws.openFile('a.md');
+  ops.setFile('a.md', 'vim');
+  const fs = (ws as unknown as { deps: { fs: { stat: (p: string) => Promise<unknown> } } }).deps.fs;
+  const originalStat = fs.stat.bind(fs);
+  fs.stat = async (path: string) => {
+    const v = await originalStat(path);
+    ws.edit('digitato'); // l'utente scrive mentre il controllo delle modifiche esterne è in corso
+    return v;
+  };
+  await ws.checkExternal();
+  fs.stat = originalStat;
+  assert.equal(doc(ws).text, 'digitato');
+  assert.equal(doc(ws).conflict, true, 'diventa un conflitto invece di essere sovrascritto');
+});
+
+test('[finding 7] load finishes even if reading one file fails, with a warning toast', async () => {
+  const ops = memoryOps();
+  ops.setFile('a.md', 'A');
+  ops.setFile('b.md', 'B');
+  const fs = createWorkspaceFS(ops);
+  const originalRead = fs.read.bind(fs);
+  fs.read = async (path) => {
+    if (path === 'b.md') throw new Error('EIO');
+    return originalRead(path);
+  };
+  const ws = new Workspace({ fs, workspaceId: 'w', name: 't', buffers: memoryBufferStore(), scheduler: manualScheduler() });
+  await ws.load();
+  assert.equal(ws.getState().status, 'ready');
+  assert.match(ws.getState().toasts.at(-1)?.message ?? '', /Impossibile leggere/);
+  assert.equal(ws.search.search('A')[0]?.path, 'a.md');
+});
+
+test('[finding 7] load still becomes ready if listing the folder fails outright', async () => {
+  const ops = memoryOps();
+  ops.setFile('a.md', 'A');
+  const fs = createWorkspaceFS(ops);
+  fs.list = async () => {
+    throw new Error('EIO listing');
+  };
+  const ws = new Workspace({ fs, workspaceId: 'w', name: 't', buffers: memoryBufferStore(), scheduler: manualScheduler() });
+  await ws.load();
+  assert.equal(ws.getState().status, 'ready');
+  assert.deepEqual(ws.getState().entries, []);
+  assert.match(ws.getState().toasts.at(-1)?.message ?? '', /EIO listing/);
+});
+
+test('[finding 8] a rename updates the open file immediately even if reindexing another file fails', async () => {
+  const { ops, ws } = await setup({ 'old/a.md': 'alfa', 'old/b.md': 'beta' });
+  await ws.openFile('old/a.md');
+  const fs = (ws as unknown as { deps: { fs: { read: (p: string) => Promise<{ text: string; version: unknown }> } } }).deps.fs;
+  const originalRead = fs.read.bind(fs);
+  fs.read = async (path: string) => {
+    if (path === 'new/b.md') throw new FsNotFoundError(path);
+    return originalRead(path);
+  };
+  await ws.rename('old', 'new');
+  fs.read = originalRead;
+  assert.equal(doc(ws).path, 'new/a.md');
+  assert.deepEqual(ws.files().sort(), ['new/a.md', 'new/b.md']);
+  ws.edit('altro');
+  await ws.flush();
+  assert.equal(await ops.textOf('new/a.md'), 'altro');
+  assert.equal(await ops.textOf('old/a.md'), null);
+});
+
+test('[minor] a successful write is not reported as failed if a post-save cleanup step fails', async () => {
+  const { ops, buffers, ws } = await setup({ 'a.md': 'A' });
+  await ws.openFile('a.md');
+  buffers.clear = async () => {
+    throw new Error('boom');
+  };
+  ws.edit('nuovo');
+  await ws.flush();
+  assert.equal(await ops.textOf('a.md'), 'nuovo');
+  assert.equal(doc(ws).saveState, 'saved');
+  assert.ok(!ws.getState().toasts.some((t) => /Salvataggio non riuscito/.test(t.message)));
+});
+
+test('[minor] identical error toasts are not stacked', async () => {
+  const { ws } = await setup({ 'a.md': 'A' }, { failWrite: () => true });
+  await ws.openFile('a.md');
+  ws.edit('uno');
+  await ws.flush();
+  ws.edit('due');
+  await ws.flush();
+  const errorToasts = ws.getState().toasts.filter((t) => /Salvataggio non riuscito/.test(t.message));
+  assert.equal(errorToasts.length, 1);
 });
