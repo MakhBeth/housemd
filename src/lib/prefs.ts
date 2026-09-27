@@ -17,3 +17,8 @@ export function writePref(key: string, value: unknown): void {
     // storage non disponibile (finestra privata, dati bloccati): si continua senza
   }
 }
+
+/** Legge una preferenza passando il valore grezzo (undefined se manca) a un validatore che dà il default. */
+export function readValidPref<T>(key: string, parse: (raw: unknown) => T): T {
+  return parse(readPref<unknown>(key, undefined));
+}
