@@ -513,14 +513,22 @@ export class Workspace {
     }
     await this.run(async () => {
       const { text, version } = await this.deps.fs.read(doc.path);
+      // Durante la lettura l'utente può aver aperto un altro file, risolto il conflitto in altro
+      // modo o continuato a scrivere: in tutti questi casi il testo letto non va applicato,
+      // altrimenti finirebbe in un altro documento o cancellerebbe battute non salvate.
+      const current = this.state.doc;
+      if (!current || current.path !== doc.path || !current.conflict || current.text !== doc.text) return;
       this.knownText = text;
       this.bufferBase = text;
       this.knownVersion = version;
       this.versions.set(doc.path, version);
       this.search.upsert(doc.path, text);
-      await this.deps.buffers.clear(this.deps.workspaceId, doc.path);
-      this.setDoc({ text, eol: detectEol(text), saveState: 'saved', conflict: false, revision: doc.revision + 1 });
+      if (this.timer !== null) this.scheduler.clear(this.timer);
+      this.timer = null;
+      this.setDoc({ text, eol: detectEol(text), saveState: 'saved', conflict: false, revision: current.revision + 1 });
       this.bumpIndex();
+      // Il buffer si scarta solo DOPO aver applicato la ricarica (nessuna await in mezzo al controllo).
+      await this.deps.buffers.clear(this.deps.workspaceId, doc.path);
     });
   }
 

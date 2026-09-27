@@ -738,3 +738,52 @@ test('[codex F1] a conflict caused by typing during checkExternal also buffers t
   assert.equal(doc(ws).conflict, true);
   assert.deepEqual(await buffers.load('ws-1', 'a.md'), { text: 'digitato', base: 'A' });
 });
+
+test('[codex F2] a conflict reload finishing after switching files does not touch the new document', async () => {
+  const { ops, buffers, ws } = await setup({ 'a.md': 'A', 'b.md': 'B' });
+  await ws.openFile('a.md');
+  ws.edit('mio');
+  ops.setFile('a.md', 'loro');
+  await ws.checkExternal();
+  assert.equal(doc(ws).conflict, true);
+
+  const fs = (ws as unknown as { deps: { fs: { read: (p: string) => Promise<{ text: string; version: unknown }> } } }).deps.fs;
+  const originalRead = fs.read.bind(fs);
+  let release!: () => void;
+  const gate = new Promise<void>((r) => (release = r));
+  fs.read = async (path: string) => {
+    if (path === 'a.md') await gate;
+    return originalRead(path);
+  };
+  const reloading = ws.resolveConflict('reload');
+  await ws.openFile('b.md');
+  ws.edit('bozza di B');
+  release();
+  await reloading;
+  fs.read = originalRead;
+
+  assert.equal(doc(ws).path, 'b.md');
+  assert.equal(doc(ws).text, 'bozza di B', 'il testo di A non finisce in B');
+  assert.equal(doc(ws).saveState, 'dirty');
+  assert.equal((await buffers.load('ws-1', 'a.md'))?.text, 'mio', 'il conflitto di A resta nel suo buffer');
+});
+
+test('[codex F2] a conflict reload does not discard text typed while the disk read was pending', async () => {
+  const { ops, ws } = await setup({ 'a.md': 'A' });
+  await ws.openFile('a.md');
+  ws.edit('mio');
+  ops.setFile('a.md', 'loro');
+  await ws.checkExternal();
+
+  const fs = (ws as unknown as { deps: { fs: { read: (p: string) => Promise<{ text: string; version: unknown }> } } }).deps.fs;
+  const originalRead = fs.read.bind(fs);
+  fs.read = async (path: string) => {
+    const r = await originalRead(path);
+    ws.edit('mio, e ancora');
+    return r;
+  };
+  await ws.resolveConflict('reload');
+  fs.read = originalRead;
+  assert.equal(doc(ws).text, 'mio, e ancora');
+  assert.equal(doc(ws).conflict, true, 'resta in conflitto: l-utente può scegliere di nuovo');
+});
