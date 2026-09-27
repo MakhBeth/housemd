@@ -79,3 +79,11 @@ test('documentTitle prefers frontmatter, then first heading, then file name', ()
   assert.equal(documentTitle('n/x.md', 'intro\n\n# Il titolo #\n\n## Sotto'), 'Il titolo');
   assert.equal(documentTitle('n/Caffè al bar.md', 'solo testo'), 'Caffè al bar');
 });
+
+test('[codex F7] cyclic YAML values do not crash toCard', () => {
+  const { frontmatter } = splitFrontmatter('---\ntitle: T\nmeta: &self {ref: *self}\n---\ncorpo');
+  assert.equal(frontmatter?.error, null);
+  const card = toCard(frontmatter!.data!);
+  assert.equal(card.title, 'T');
+  assert.deepEqual(card.extra, [['meta', '[valore non rappresentabile]']]);
+});

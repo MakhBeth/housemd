@@ -56,7 +56,15 @@ function scalar(value: unknown): string | null {
 }
 
 function display(value: unknown): string {
-  return scalar(value) ?? JSON.stringify(value);
+  const text = scalar(value);
+  if (text !== null) return text;
+  try {
+    // YAML valido può contenere riferimenti ciclici (&ancora / *alias): JSON.stringify lancerebbe
+    // durante il render, mandando giù l'interfaccia.
+    return JSON.stringify(value);
+  } catch {
+    return '[valore non rappresentabile]';
+  }
 }
 
 export function toCard(data: Record<string, unknown>): FrontmatterCardData {
