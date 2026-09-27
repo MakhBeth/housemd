@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  basename, detectEol, dirname, isMarkdown, joinPath, normalizePath,
+  basename, detectEol, dirname, isMarkdown, joinPath, movedPath, normalizePath,
   relativePath, resolveRelative, splitPath, stripMd, withEol,
 } from './paths';
 
@@ -53,4 +53,11 @@ test('detectEol and withEol preserve CRLF', () => {
   assert.equal(detectEol('senza a capo'), '\n');
   assert.equal(withEol('a\nb\n', '\r\n'), 'a\r\nb\r\n');
   assert.equal(withEol('a\nb', '\n'), 'a\nb');
+});
+
+test('movedPath follows a rename of the file or of a folder, only on exact prefixes', () => {
+  assert.equal(movedPath('a.md', 'a.md', 'b.md'), 'b.md');
+  assert.equal(movedPath('old/sub/a.md', 'old', 'new'), 'new/sub/a.md');
+  assert.equal(movedPath('older/a.md', 'old', 'new'), null);
+  assert.equal(movedPath('x.md', 'old', 'new'), null);
 });

@@ -61,3 +61,10 @@ export function detectEol(text: string): Eol {
 export function withEol(textLf: string, eol: Eol): string {
   return eol === '\n' ? textLf : textLf.replace(/\r?\n/g, '\r\n');
 }
+
+/** Nuovo percorso dopo aver rinominato `from` in `to`, oppure null se `path` non è coinvolto. */
+export function movedPath(path: string, from: string, to: string): string | null {
+  if (path === from) return to;
+  if (path.startsWith(`${from}/`)) return to + path.slice(from.length);
+  return null;
+}
