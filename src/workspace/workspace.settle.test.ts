@@ -126,3 +126,73 @@ test('closeFile returns true and closes a document once it is secured', async ()
   assert.equal(ws.getState().doc, null);
   assert.equal((await buffers.load('ws-1', 'a.md'))?.text, 'bozza');
 });
+
+// --- review di fdaa4f6: settle() aspetta un salvataggio esplicito in corso -------------------------
+
+/** In `off`: "T1" si sta scrivendo (Ctrl+S, scrittura ferma su un cancello), poi l'utente scrive "T2" e lascia il documento. */
+async function leavingDuringExplicitSave(writeOk: boolean, leave: (ws: Workspace) => Promise<unknown>) {
+  const h = await harness({ 'a.md': 'A', 'b.md': 'B' }, off);
+  await h.ws.openFile('a.md');
+  const originalWrite = h.ops.writeFile.bind(h.ops);
+  const slow = gate();
+  h.ops.writeFile = async (path, data) => {
+    await slow.wait;
+    if (!writeOk) throw new Error('EIO');
+    return originalWrite(path, data);
+  };
+  h.ws.edit('T1');
+  const saving = h.ws.saveNow();
+  h.ws.edit('T2');
+  const leaving = leave(h.ws);
+  await tick();
+  slow.open();
+  const left = await leaving;
+  await saving;
+  h.ops.writeFile = originalWrite;
+  return { ...h, left };
+}
+
+for (const [name, leave] of [
+  ['switching file', (ws: Workspace) => ws.openFile('b.md')],
+  ['closeFile', (ws: Workspace) => ws.closeFile()],
+] as const) {
+  test(`${name} during an explicit save that succeeds keeps the newer text as a draft on the written text`, async () => {
+    const { ops, buffers, ws, left } = await leavingDuringExplicitSave(true, leave);
+    if (name === 'closeFile') assert.equal(left, true);
+    assert.equal(ws.getState().doc?.path ?? null, name === 'closeFile' ? null : 'b.md');
+    assert.equal(await ops.textOf('a.md'), 'T1');
+    assert.deepEqual(await buffers.load('ws-1', 'a.md'), { text: 'T2', base: 'T1' }, 'T2 non va perso');
+  });
+
+  test(`${name} during an explicit save that fails keeps the newer text as a draft`, async () => {
+    const { ops, buffers, ws, left } = await leavingDuringExplicitSave(false, leave);
+    if (name === 'closeFile') assert.equal(left, true);
+    assert.equal(ws.getState().doc?.path ?? null, name === 'closeFile' ? null : 'b.md');
+    assert.equal(await ops.textOf('a.md'), 'A');
+    assert.deepEqual(await buffers.load('ws-1', 'a.md'), { text: 'T2', base: 'A' }, 'T2 non va perso');
+  });
+}
+
+test('a buffer failure during a suspended scan shows a single toast when leaving the document', async () => {
+  const { ops, buffers, ws } = await harness({ 'a.md': 'A', 'b.md': 'B' });
+  await ws.openFile('a.md');
+  const originalReadDir = ops.readDir.bind(ops);
+  const slow = gate();
+  ops.readDir = async (dir) => {
+    await slow.wait;
+    return originalReadDir(dir);
+  };
+  const checking = ws.checkExternal();
+  await tick(); // scritture su disco sospese
+  buffers.save = async () => {
+    throw new Error('QuotaExceededError');
+  };
+  ws.edit('importante');
+  const before = ws.getState().toasts.length;
+  await ws.openFile('b.md');
+  assert.equal(ws.getState().doc?.path, 'a.md');
+  assert.deepEqual(ws.getState().toasts.slice(before).map((t) => t.code), ['draftNotPersisted']);
+  slow.open();
+  await checking;
+  ops.readDir = originalReadDir;
+});

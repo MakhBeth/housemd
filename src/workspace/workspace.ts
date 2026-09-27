@@ -523,9 +523,15 @@ export class Workspace {
    */
   async settle(): Promise<SettleResult> {
     for (let attempt = 0; attempt < MAX_SETTLE_ATTEMPTS; attempt++) {
+      // Un salvataggio già in corso (anche esplicito, in `off`) va lasciato finire prima di decidere:
+      // altrimenti, finendo a documento già lasciato, scarterebbe o sovrascriverebbe la bozza più nuova.
+      while (this.saving) await this.saving;
       const doc = this.state.doc;
       if (!doc || doc.saveState === 'saved') return 'durable';
-      const toDisk = autosaveAllows(this.state.autosave.mode, 'switch') && !doc.conflict && this.state.status !== 'access-lost';
+      // Scritture su disco sospese (controllo esterno, "Salva tutto"): flush() andrebbe comunque nel
+      // buffer, con un suo toast; si passa direttamente al buffer qui sotto (un solo toast se fallisce).
+      const toDisk =
+        autosaveAllows(this.state.autosave.mode, 'switch') && !doc.conflict && this.state.status !== 'access-lost' && this.suspended === 0;
       if (toDisk) {
         await this.flush();
         const after = this.state.doc;
@@ -559,10 +565,15 @@ export class Workspace {
       ({ version } = await this.deps.fs.write(path, text));
     } catch (err) {
       const current = this.state.doc;
-      const pending = current?.path === path ? current.text : text;
-      const base = current?.path === path ? this.bufferBase : text;
-      await this.saveBuffer(path, pending, base).catch(() => undefined);
-      if (current?.path === path) this.setDoc({ saveState: 'error' });
+      if (current?.path === path) {
+        await this.saveBuffer(path, current.text, this.bufferBase).catch(() => undefined);
+        this.setDoc({ saveState: 'error' });
+      } else {
+        // Documento lasciato durante la scrittura: la bozza messa lì da settle() è più nuova (o uguale)
+        // del testo che si stava scrivendo e non va sovrascritta. Solo se manca si salva questo.
+        const draft = await this.deps.buffers.load(this.deps.workspaceId, path).catch(() => null);
+        if (draft === null) await this.saveBuffer(path, text, text).catch(() => undefined);
+      }
       if (isAccessError(err)) {
         this.set({ status: 'access-lost' });
         return;
@@ -579,8 +590,15 @@ export class Workspace {
     this.search.upsert(path, text);
     // Il buffer si scarta solo se non ci sono battute più nuove di quelle appena scritte: in `off` un
     // checkpoint arrivato durante la scrittura contiene testo che su disco non c'è ancora.
-    const newer = this.state.doc?.path === path && this.state.doc.text !== text;
-    if (!newer) {
+    const open = this.state.doc?.path === path;
+    const newer = open && this.state.doc!.text !== text;
+    if (!open) {
+      // Documento lasciato durante la scrittura: la bozza lasciata da settle() può contenere battute
+      // più nuove. Si scarta solo se coincide con quanto scritto, altrimenti la si riferisce al disco.
+      const left = await this.deps.buffers.load(this.deps.workspaceId, path).catch(() => null);
+      if (left === null || left.text === text) await this.clearBuffer(path).catch(() => undefined);
+      else await this.saveBuffer(path, left.text, text).catch(() => undefined);
+    } else if (!newer) {
       await this.clearBuffer(path).catch(() => undefined);
     } else {
       // Il checkpoint più nuovo resta, ma va riferito a ciò che ORA c'è su disco: con la vecchia base,
