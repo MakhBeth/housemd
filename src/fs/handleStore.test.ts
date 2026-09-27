@@ -43,18 +43,27 @@ test('[codex F8] switching folders A -> B -> A keeps the original workspaceId of
   assert.equal(await findKnownWorkspaceId(picked('c'), db), null);
 });
 
-test('[codex F8] the known folders list keeps only the 20 most recent, one entry per workspaceId', async () => {
+test('[codex F8 round 2] known folders are never evicted: the first of 25 is still found', async () => {
   const db = 'hs-5';
-  await saveWorkspace({ name: 'f0' }, db);
-  for (let i = 1; i <= 20; i++) await saveWorkspace({ name: `f${i}` }, db);
-  assert.equal(await findKnownWorkspaceId(picked('f0'), db), null, 'la più vecchia esce dalla lista');
-  assert.ok(await findKnownWorkspaceId(picked('f1'), db));
+  const first = await saveWorkspace({ name: 'f0' }, db);
+  for (let i = 1; i < 25; i++) await saveWorkspace({ name: `f${i}` }, db);
+  assert.equal(await findKnownWorkspaceId(picked('f0'), db), first.workspaceId);
 
-  // Riselezionare la stessa cartella con lo stesso id non duplica la voce.
+  // Riselezionare la stessa cartella con lo stesso id non la duplica né cambia id.
   const again = await saveWorkspace({ name: 'f5' }, db, (await findKnownWorkspaceId(picked('f5'), db))!);
-  await saveWorkspace({ name: 'f21' }, db);
   assert.equal(await findKnownWorkspaceId(picked('f5'), db), again.workspaceId);
-  assert.ok(await findKnownWorkspaceId(picked('f2'), db), 'f5 ripetuta non ha spinto fuori f2');
+});
+
+test('[codex F8 round 2] a pre-list `current` folder is migrated into the known list on the next save', async () => {
+  const db = 'hs-7';
+  const conn = await openDb(db);
+  const tx = conn.transaction('workspace', 'readwrite');
+  tx.objectStore('workspace').put({ handle: { name: 'vecchia' }, workspaceId: 'id-vecchio' }, 'current');
+  await transactionDone(tx);
+  conn.close();
+
+  await saveWorkspace({ name: 'nuova' }, db);
+  assert.equal(await findKnownWorkspaceId(picked('vecchia'), db), 'id-vecchio');
 });
 
 test('[codex F8] a database from before the known list still finds the current folder', async () => {

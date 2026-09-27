@@ -7,9 +7,11 @@ export interface StoredWorkspace<H = FileSystemDirectoryHandle> {
 }
 
 const KEY = 'current';
-/** Cartelle aperte di recente (la più recente per prima), per ritrovarne il workspaceId. */
+/**
+ * Tutte le cartelle aperte in passato (la più recente per prima), per ritrovarne il workspaceId.
+ * Nessun limite: le voci sono minuscole e scartarne una renderebbe orfane le sue bozze.
+ */
 const KNOWN_KEY = 'known';
-const MAX_KNOWN = 20;
 
 /** `workspaceId` esplicito: usato per tenere lo stesso id quando si riseleziona la stessa cartella. */
 export async function saveWorkspace<H>(handle: H, dbName = DB_NAME, workspaceId: string = crypto.randomUUID()): Promise<StoredWorkspace<H>> {
@@ -17,16 +19,23 @@ export async function saveWorkspace<H>(handle: H, dbName = DB_NAME, workspaceId:
   const db = await openDb(dbName);
   const tx = db.transaction('workspace', 'readwrite');
   const store = tx.objectStore('workspace');
+  const [knownList, previous] = (await Promise.all([request(store.get(KNOWN_KEY)), request(store.get(KEY))])) as [
+    StoredWorkspace<H>[] | undefined,
+    StoredWorkspace<H> | undefined,
+  ];
+  // Chi arriva da una versione precedente ha solo `current`: la si porta nella lista prima di
+  // sovrascriverla, altrimenti la sua identità (e le sue bozze) andrebbero perse.
+  const known = knownList ?? [];
+  if (previous && !known.some((k) => k.workspaceId === previous.workspaceId)) known.push(previous);
   store.put(stored, KEY);
-  const known = ((await request(store.get(KNOWN_KEY))) as StoredWorkspace<H>[] | undefined) ?? [];
-  store.put([stored, ...known.filter((k) => k.workspaceId !== workspaceId)].slice(0, MAX_KNOWN), KNOWN_KEY);
+  store.put([stored, ...known.filter((k) => k.workspaceId !== workspaceId)], KNOWN_KEY);
   await transactionDone(tx);
   db.close();
   return stored;
 }
 
 /**
- * workspaceId di una cartella già aperta in passato (fra le ultime MAX_KNOWN), oppure null: così
+ * workspaceId di una cartella già aperta in passato, oppure null: così
  * passando A → B → A i buffer di emergenza e l'ultimo file aperto di A restano raggiungibili.
  */
 export async function findKnownWorkspaceId<H extends { isSameEntry(other: H): Promise<boolean> }>(
