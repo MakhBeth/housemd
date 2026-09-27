@@ -2,14 +2,15 @@ import { DB_NAME, openDb, request, transactionDone } from '../lib/db';
 
 export interface StoredWorkspace<H = FileSystemDirectoryHandle> {
   handle: H;
-  /** Identità della cartella scelta: cambia ogni volta che si sceglie una cartella. */
+  /** Identità della cartella scelta: cambia quando si sceglie una cartella diversa. */
   workspaceId: string;
 }
 
 const KEY = 'current';
 
-export async function saveWorkspace<H>(handle: H, dbName = DB_NAME): Promise<StoredWorkspace<H>> {
-  const stored: StoredWorkspace<H> = { handle, workspaceId: crypto.randomUUID() };
+/** `workspaceId` esplicito: usato per tenere lo stesso id quando si riseleziona la stessa cartella. */
+export async function saveWorkspace<H>(handle: H, dbName = DB_NAME, workspaceId: string = crypto.randomUUID()): Promise<StoredWorkspace<H>> {
+  const stored: StoredWorkspace<H> = { handle, workspaceId };
   const db = await openDb(dbName);
   const tx = db.transaction('workspace', 'readwrite');
   tx.objectStore('workspace').put(stored, KEY);

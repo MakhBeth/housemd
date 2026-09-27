@@ -16,6 +16,13 @@ test('saveWorkspace stores the handle with a fresh workspaceId', async () => {
   assert.deepEqual((await loadWorkspace<{ name: string }>(db))?.handle, { name: 'note' });
 });
 
+test('saveWorkspace keeps an explicit workspaceId instead of generating one', async () => {
+  const db = 'hs-3';
+  const stored = await saveWorkspace({ name: 'blog' }, db, 'keep-me');
+  assert.equal(stored.workspaceId, 'keep-me');
+  assert.equal((await loadWorkspace(db))?.workspaceId, 'keep-me');
+});
+
 test('clearWorkspace forgets the folder', async () => {
   const db = 'hs-2';
   await saveWorkspace({ name: 'blog' }, db);

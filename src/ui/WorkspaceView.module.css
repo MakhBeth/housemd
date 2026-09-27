@@ -192,3 +192,8 @@
 .accessDialog::backdrop {
   background: rgb(0 0 0 / 0.45);
 }
+
+.accessError {
+  color: var(--c-danger);
+  font-weight: 600;
+}

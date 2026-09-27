@@ -149,10 +149,14 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }
     const up = () => {
       target.removeEventListener('pointermove', move);
       target.removeEventListener('pointerup', up);
+      target.removeEventListener('pointercancel', up);
+      target.removeEventListener('lostpointercapture', up);
       writePref('sidebarWidth', width);
     };
     target.addEventListener('pointermove', move);
     target.addEventListener('pointerup', up);
+    target.addEventListener('pointercancel', up);
+    target.addEventListener('lostpointercapture', up);
   };
 
   const onResizeKey = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -230,7 +234,11 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }
               </button>
             ))}
           </div>
-          <span className={styles.saveState} data-state={doc?.saveState ?? 'none'} aria-live="polite">
+          <span
+            className={styles.saveState}
+            data-state={doc?.saveState ?? 'none'}
+            role={doc?.saveState === 'error' ? 'alert' : undefined}
+          >
             {doc ? SAVE_LABEL[doc.saveState] : ''}
           </span>
         </header>
@@ -346,7 +354,9 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }
         <AccessLostDialog
           folderName={state.name}
           onResume={async () => {
-            if (await requestAccess(handle)) await workspace.resume();
+            const granted = await requestAccess(handle);
+            if (granted) await workspace.resume();
+            return granted;
           }}
         />
       )}
@@ -356,21 +366,54 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }
   );
 }
 
+/** Nessun modo per l'utente di chiudere il dialog: niente Esc, niente clic sul backdrop. */
+const noDismiss = { closedby: 'none' } as Record<string, string>;
+
 /** Dialog bloccante: l'accesso va ripreso con un clic (Chrome richiede un gesto dell'utente). */
-function AccessLostDialog({ folderName, onResume }: { folderName: string; onResume: () => void }) {
+function AccessLostDialog({ folderName, onResume }: { folderName: string; onResume: () => Promise<boolean> }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const mounted = useRef(true);
+  const [error, setError] = useState<string | null>(null);
+
   useEffect(() => {
+    mounted.current = true;
     const dialog = ref.current!;
     dialog.showModal();
-    return () => dialog.close();
+    return () => {
+      mounted.current = false;
+      dialog.close();
+    };
   }, []);
+
+  const resume = async () => {
+    setError(null);
+    try {
+      const granted = await onResume();
+      if (!granted) setError('Accesso non concesso. Riprova.');
+    } catch {
+      setError('Accesso non concesso. Riprova.');
+    }
+  };
+
   return (
-    <dialog ref={ref} className={styles.accessDialog} onCancel={(e) => e.preventDefault()} aria-labelledby="access-title">
+    <dialog
+      ref={ref}
+      className={styles.accessDialog}
+      {...noDismiss}
+      onCancel={(e) => e.preventDefault()}
+      onClose={() => {
+        // closedby="none" dovrebbe già impedire ogni chiusura non voluta; questo è solo un
+        // ripiego, mentre il componente resta montato, contro un'eventuale chiusura sfuggita.
+        if (mounted.current) ref.current?.showModal();
+      }}
+      aria-labelledby="access-title"
+    >
       <h2 id="access-title">Accesso alla cartella perso</h2>
       <p>
         Il browser non permette più di modificare “{folderName}”. Le modifiche non salvate sono al sicuro in questo browser.
       </p>
-      <button className={styles.primary} onClick={onResume}>
+      {error && <p className={styles.accessError}>{error}</p>}
+      <button className={styles.primary} onClick={resume}>
         Riprendi accesso
       </button>
     </dialog>

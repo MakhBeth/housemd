@@ -63,10 +63,17 @@ export default function App() {
       const handle = await pickFolder();
       if (!handle) return;
       if (screen.kind === 'open') {
-        await screen.workspace.flush();
+        // closeFile() esegue settle(): eventuali modifiche non salvate (conflitto, autosalvataggio
+        // sospeso…) finiscono comunque nel buffer di emergenza prima di chiudere lo workspace.
+        await screen.workspace.closeFile();
         screen.workspace.dispose();
       }
-      const stored = await saveWorkspace(handle);
+      // Se è la stessa cartella già aperta in precedenza, si mantiene lo stesso workspaceId:
+      // altrimenti buffer di emergenza e "ultimo file aperto" salvati per quella cartella
+      // resterebbero orfani, agganciati a un id ormai abbandonato.
+      const previous = await loadWorkspace().catch(() => null);
+      const workspaceId = previous && (await handle.isSameEntry(previous.handle)) ? previous.workspaceId : undefined;
+      const stored = await saveWorkspace(handle, undefined, workspaceId);
       setScreen({ kind: 'open', stored, workspace: await openWorkspace(stored) });
     } catch (err) {
       setScreen({ kind: 'start', error: `Impossibile aprire la cartella: ${(err as Error).message}` });

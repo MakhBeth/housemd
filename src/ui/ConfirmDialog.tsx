@@ -24,7 +24,17 @@ export function ConfirmDialog({ title, message, confirmLabel, onConfirm, onCance
   }, []);
 
   return (
-    <dialog ref={ref} className={styles.dialog} {...lightDismiss} onClose={onCancel} aria-labelledby="confirm-dialog-title">
+    <dialog
+      ref={ref}
+      className={styles.dialog}
+      {...lightDismiss}
+      onClose={() => {
+        // In React StrictMode l'effetto viene rimontato: la chiusura "fantasma" della prima
+        // esecuzione arriva quando il dialog è già stato riaperto dalla seconda.
+        if (!ref.current?.open) onCancel();
+      }}
+      aria-labelledby="confirm-dialog-title"
+    >
       <h2 id="confirm-dialog-title" className={styles.title}>
         {title}
       </h2>

@@ -43,7 +43,11 @@ export const SearchPanel = forwardRef<HTMLInputElement, Props>(function SearchPa
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === 'Enter' && results[0]) onOpen(results[0].path, results[0].terms);
+          // Invio non aspetta il debounce: cerca subito sulla query corrente.
+          if (e.key === 'Enter') {
+            const first = index.search(query)[0];
+            if (first) onOpen(first.path, first.terms);
+          }
           if (e.key === 'Escape') setQuery('');
         }}
       />

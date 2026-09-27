@@ -49,7 +49,17 @@ export function NameDialog({ title, kind, initial, confirmLabel, validate, onSub
   };
 
   return (
-    <dialog ref={ref} className={styles.dialog} {...lightDismiss} onClose={onCancel} aria-labelledby="name-dialog-title">
+    <dialog
+      ref={ref}
+      className={styles.dialog}
+      {...lightDismiss}
+      onClose={() => {
+        // In React StrictMode l'effetto viene rimontato: la chiusura "fantasma" della prima
+        // esecuzione arriva quando il dialog è già stato riaperto dalla seconda.
+        if (!ref.current?.open) onCancel();
+      }}
+      aria-labelledby="name-dialog-title"
+    >
       <form onSubmit={submit}>
         <h2 id="name-dialog-title" className={styles.title}>
           {title}
