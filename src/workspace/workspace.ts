@@ -627,7 +627,14 @@ export class Workspace {
     try {
       await this.run(async () => {
         await this.deps.fs.remove(path);
-        if (closing) this.set({ doc: null });
+        // Si chiude il documento aperto ADESSO, non quello catturato all'inizio: durante l'attesa
+        // l'utente può aver aperto (e modificato) un altro file, che non va toccato.
+        const current = this.state.doc;
+        if (current && inside(current.path, path)) {
+          if (this.timer !== null) this.scheduler.clear(this.timer);
+          this.timer = null;
+          this.set({ doc: null });
+        }
         for (const p of [...this.versions.keys()]) {
           if (!inside(p, path)) continue;
           this.search.remove(p);

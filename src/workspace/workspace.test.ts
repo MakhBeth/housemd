@@ -787,3 +787,27 @@ test('[codex F2] a conflict reload does not discard text typed while the disk re
   assert.equal(doc(ws).text, 'mio, e ancora');
   assert.equal(doc(ws).conflict, true, 'resta in conflitto: l-utente può scegliere di nuovo');
 });
+
+test('[codex F3] completing a removal does not close a different document opened meanwhile', async () => {
+  const { ops, scheduler, ws } = await setup({ 'n/a.md': 'alfa', 'b.md': 'beta' });
+  await ws.openFile('n/a.md');
+  const originalRemove = ops.removeEntry.bind(ops);
+  let release!: () => void;
+  const gate = new Promise<void>((r) => (release = r));
+  ops.removeEntry = async (path, recursive) => {
+    await gate;
+    return originalRemove(path, recursive);
+  };
+  const removing = ws.remove('n');
+  await ws.openFile('b.md');
+  ws.edit('beta modificato');
+  release();
+  await removing;
+
+  assert.equal(doc(ws).path, 'b.md');
+  assert.equal(doc(ws).text, 'beta modificato');
+  assert.equal(await ops.textOf('n/a.md'), null);
+  scheduler.fire();
+  await ws.flush();
+  assert.equal(await ops.textOf('b.md'), 'beta modificato');
+});
