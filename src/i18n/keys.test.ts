@@ -7,6 +7,7 @@ import { THEME_PREFS } from '../theme/theme';
 import { TOAST_CODES } from '../workspace/toasts';
 import { UNSUPPORTED_REASONS } from '../fs/access';
 import { AUTOSAVE_MODES } from '../workspace/autosave';
+import { SNAPSHOT_REASONS } from '../history/historyStore';
 
 const keys = new Set(Object.keys(en));
 
@@ -32,4 +33,8 @@ test('every theme preference has its switcher tooltip and settings label', () =>
 
 test('every autosave mode has its settings label', () => {
   for (const mode of AUTOSAVE_MODES) assert.ok(keys.has(`settings.autosave.${mode}`), `manca settings.autosave.${mode}`);
+});
+
+test('every snapshot reason has its label in en.json', () => {
+  for (const reason of SNAPSHOT_REASONS) assert.ok(keys.has(`history.reason.${reason}`), `manca history.reason.${reason}`);
 });

@@ -16,6 +16,8 @@ import {
 } from './autosave';
 import { decideExternal, diffScan } from './external';
 import { errorDetail, sameToast, type Toast, type ToastCode, type ToastParams } from './toasts';
+import type { HistoryStore, Snapshot, SnapshotReason } from '../history/historyStore';
+import { shouldSnapshot } from '../history/policy';
 
 export type SaveState = 'saved' | 'dirty' | 'saving' | 'error';
 
@@ -35,6 +37,8 @@ export interface OpenDoc {
   deletedOnDisk: boolean;
   /** Aumenta quando il testo cambia da fuori dall'editor (apertura, ricarica). */
   revision: number;
+  /** Ripristino dalla cronologia da applicare nell'editor come transazione (annullabile con Ctrl+Z). */
+  restore: { seq: number; textLf: string } | null;
 }
 
 export type { Toast } from './toasts';
@@ -72,6 +76,8 @@ export interface WorkspaceDeps {
   scheduler?: Scheduler;
   now?: () => Date;
   autosave?: AutosaveSettings;
+  /** Cronologia locale; senza, niente snapshot (i test v1 non la passano). */
+  history?: HistoryStore;
 }
 
 /** Nuovo percorso dopo aver rinominato `from` in `to`, oppure null se `path` non è coinvolto. */
@@ -122,6 +128,12 @@ export class Workspace {
   private checkpointDeadline: unknown = null;
   /** Coda seriale delle operazioni su file e documento (vedi runExclusive). */
   private queue: Promise<unknown> = Promise.resolve();
+  /** Scritture della cronologia in fila: fire-and-forget per chi le lancia, in ordine tra loro. */
+  private historyChain: Promise<void> = Promise.resolve();
+  private historyErrorShown = false;
+  /** Aumenta a ogni cambio di testo o di documento: invalida ripristini e sovrascritture partiti prima. */
+  private generation = 0;
+  private restoreSeq = 0;
 
   constructor(private readonly deps: WorkspaceDeps) {
     this.scheduler = deps.scheduler ?? realScheduler;
@@ -149,6 +161,11 @@ export class Workspace {
   };
 
   private set(patch: Partial<WorkspaceState>): void {
+    if ('doc' in patch) {
+      const previous = this.state.doc;
+      const next = patch.doc ?? null;
+      if (previous?.path !== next?.path || previous?.text !== next?.text) this.generation++;
+    }
     this.state = { ...this.state, ...patch };
     for (const listener of this.listeners) listener();
   }
@@ -255,6 +272,10 @@ export class Workspace {
     return this.runExclusive(() => this.doSaveAll());
   }
 
+  restoreVersion(id: number): Promise<void> {
+    return this.runExclusive(() => this.doRestoreVersion(id));
+  }
+
   // --- caricamento ------------------------------------------------------------
 
   async load(): Promise<void> {
@@ -345,6 +366,7 @@ export class Workspace {
             conflict: false,
             deletedOnDisk: true,
             revision: (this.state.doc?.revision ?? 0) + 1,
+            restore: null,
           },
         });
         this.toast('info', 'restoredDraftDeleted', { path });
@@ -380,6 +402,7 @@ export class Workspace {
           conflict,
           deletedOnDisk: false,
           revision: (this.state.doc?.revision ?? 0) + 1,
+          restore: null,
         },
       });
       if (draft !== null) {
@@ -436,7 +459,8 @@ export class Workspace {
     if (!doc) return;
     const text = withEol(textLf, doc.eol);
     if (text === doc.text) return;
-    this.setDoc({ text, saveState: 'dirty' });
+    // Una modifica vera rende il comando di ripristino ormai vecchio: non va più riapplicato.
+    this.setDoc({ text, saveState: 'dirty', restore: null });
     this.schedule('timer');
   }
 
@@ -619,6 +643,7 @@ export class Workspace {
       const { version } = await this.deps.fs.write(path, draft.text);
       this.versions.set(path, version);
       this.search.upsert(path, draft.text);
+      this.snapshot(path, draft.text, 'save');
       // La bozza si cancella solo se nel frattempo nessuno l'ha riscritta.
       const current = await this.deps.buffers.load(this.deps.workspaceId, path);
       if (current && current.text === draft.text && current.base === draft.base) await this.clearBuffer(path);
@@ -734,6 +759,7 @@ export class Workspace {
     }
     this.versions.set(path, version);
     this.search.upsert(path, text);
+    this.snapshot(path, text, 'save');
     // Il buffer si scarta solo se non ci sono battute più nuove di quelle appena scritte: in `off` un
     // checkpoint arrivato durante la scrittura contiene testo che su disco non c'è ancora.
     const newer = open && this.state.doc!.text !== text;
@@ -868,6 +894,8 @@ export class Workspace {
             await this.bufferCurrentDoc();
             return;
           }
+          // Il testo che la ricarica sta per sostituire (catturato ora, scritto senza attendere).
+          this.snapshot(current.path, current.text, 'before-reload');
           this.knownText = decision.text;
           this.bufferBase = decision.text;
           this.knownVersion = decision.version;
@@ -892,8 +920,7 @@ export class Workspace {
     const doc = this.state.doc;
     if (!doc?.conflict) return;
     if (choice === 'overwrite') {
-      this.setDoc({ conflict: false, saveState: 'dirty' });
-      await this.flush();
+      await this.run(() => this.overwrite(doc.path));
       return;
     }
     await this.run(async () => {
@@ -903,6 +930,7 @@ export class Workspace {
       // altrimenti finirebbe in un altro documento o cancellerebbe battute non salvate.
       const current = this.state.doc;
       if (!current || current.path !== doc.path || !current.conflict || current.text !== doc.text) return;
+      this.snapshot(doc.path, current.text, 'before-reload');
       this.knownText = text;
       this.bufferBase = text;
       this.knownVersion = version;
@@ -915,6 +943,122 @@ export class Workspace {
       // Il buffer si scarta solo DOPO aver applicato la ricarica (nessuna await in mezzo al controllo).
       await this.clearBuffer(doc.path);
     });
+  }
+
+  /**
+   * "Sovrascrivi": il testo su disco che sta per andare perso si legge (await) mentre il conflitto è
+   * ancora attivo, quindi con l'autosalvataggio fermo. Dopo la lettura si rivalida percorso e
+   * generation: se l'utente ha scritto o il documento è cambiato, si annulla e il conflitto resta.
+   * Solo allora, senza altri await: snapshot before-overwrite (fire-and-forget), fine del conflitto e
+   * scrittura.
+   */
+  private async overwrite(path: string): Promise<void> {
+    const generation = this.generation;
+    let diskText: string | null = null;
+    if (this.deps.history) {
+      try {
+        diskText = (await this.deps.fs.read(path)).text;
+      } catch (err) {
+        if (!(err instanceof FsNotFoundError)) throw err; // file sparito: niente da mettere da parte
+      }
+      const current = this.state.doc;
+      if (!current || current.path !== path || !current.conflict || this.generation !== generation) return;
+    }
+    if (diskText !== null) this.snapshot(path, diskText, 'before-overwrite');
+    this.setDoc({ conflict: false, saveState: 'dirty' });
+    await this.flush();
+  }
+
+  /**
+   * Ripristina una versione della cronologia nel documento aperto come una modifica dell'utente
+   * (segue la modalità di autosave; nell'editor è una transazione, quindi annullabile con Ctrl+Z).
+   */
+  private async doRestoreVersion(id: number): Promise<void> {
+    const history = this.deps.history;
+    const doc = this.state.doc;
+    if (!history || !doc) return;
+    const path = doc.path;
+    const generation = this.generation;
+    let version: Snapshot | null;
+    try {
+      version = await history.get(id);
+    } catch (err) {
+      this.historyError(err);
+      return;
+    }
+    const current = this.state.doc;
+    if (
+      !version ||
+      version.workspaceId !== this.deps.workspaceId ||
+      version.path !== path ||
+      !current ||
+      current.path !== path ||
+      this.generation !== generation
+    ) {
+      this.toast('info', 'restoreCancelled');
+      return;
+    }
+    // Da qui niente await: snapshot del testo corrente (fire-and-forget) e sostituzione.
+    this.snapshot(path, current.text, 'before-restore');
+    const textLf = version.text.replace(/\r\n/g, '\n');
+    this.edit(textLf);
+    this.setDoc({ restore: { seq: ++this.restoreSeq, textLf } });
+  }
+
+  // --- cronologia locale ------------------------------------------------------------
+
+  /**
+   * Snapshot nella cronologia senza attesa: il testo è catturato adesso, la scrittura parte in fila
+   * alle precedenti e un suo errore non blocca mai salvataggi, digitazione o cambi di file.
+   */
+  private snapshot(path: string, text: string, reason: SnapshotReason): void {
+    const history = this.deps.history;
+    if (!history) return;
+    const workspaceId = this.deps.workspaceId;
+    const now = this.now().getTime();
+    this.historyChain = this.historyChain.then(async () => {
+      try {
+        const recent = await history.list(workspaceId, path);
+        if (!shouldSnapshot(recent, { text, reason }, now)) return;
+        await history.add({ workspaceId, path, savedAt: now, text, reason });
+        // Subito dopo l'aggiunta, con lo stesso `now`: lo snapshot appena scritto è sempre il più fresco.
+        await history.prune(workspaceId, path, now);
+      } catch (err) {
+        this.historyError(err);
+      }
+    });
+  }
+
+  private moveHistory(from: string, to: string): void {
+    const history = this.deps.history;
+    if (!history) return;
+    const workspaceId = this.deps.workspaceId;
+    this.historyChain = this.historyChain.then(() => history.move(workspaceId, from, to).catch((err) => this.historyError(err)));
+  }
+
+  /** Al massimo un toast: la cronologia è un di più, non deve disturbare a ogni salvataggio. */
+  private historyError(err: unknown): void {
+    if (this.historyErrorShown) return;
+    this.historyErrorShown = true;
+    this.toast('info', 'historyFailed', { detail: errorDetail(err) });
+  }
+
+  /** Si risolve quando le scritture della cronologia già lanciate sono finite. */
+  historyIdle(): Promise<void> {
+    return this.historyChain;
+  }
+
+  /** Versioni di un file, dalla più recente (vuoto senza cronologia o se non è leggibile). */
+  async listHistory(path: string): Promise<Snapshot[]> {
+    const history = this.deps.history;
+    if (!history) return [];
+    await this.historyChain;
+    try {
+      return await history.list(this.deps.workspaceId, path);
+    } catch (err) {
+      this.historyError(err);
+      return [];
+    }
   }
 
   async resume(): Promise<void> {
@@ -958,6 +1102,7 @@ export class Workspace {
       while (this.saving) await this.saving;
       await this.run(async () => {
         await this.deps.fs.rename(from, to);
+        this.moveHistory(from, to);
 
         // Aggiorna SUBITO il file aperto: se un autosalvataggio scattasse durante la reindicizzazione
         // che segue, deve scrivere al nuovo percorso invece di ricreare quello appena rinominato.

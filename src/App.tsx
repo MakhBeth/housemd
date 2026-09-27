@@ -11,6 +11,7 @@ import { readValidPref } from './lib/prefs';
 import { Notice } from './ui/Notice';
 import { StartScreen } from './ui/StartScreen';
 import { WorkspaceView } from './ui/WorkspaceView';
+import { indexedDbHistoryStore } from './history/historyStore';
 import { indexedDbBufferStore } from './workspace/buffers';
 import { parseAutosave } from './workspace/autosave';
 import { Workspace } from './workspace/workspace';
@@ -23,6 +24,7 @@ type Screen =
   | { kind: 'open'; stored: StoredWorkspace; workspace: Workspace };
 
 const buffers = indexedDbBufferStore();
+const history = indexedDbHistoryStore();
 
 async function openWorkspace(stored: StoredWorkspace): Promise<Workspace> {
   const workspace = new Workspace({
@@ -30,6 +32,7 @@ async function openWorkspace(stored: StoredWorkspace): Promise<Workspace> {
     workspaceId: stored.workspaceId,
     name: stored.handle.name,
     buffers,
+    history,
     autosave: readValidPref('autosave', parseAutosave),
   });
   await workspace.load();

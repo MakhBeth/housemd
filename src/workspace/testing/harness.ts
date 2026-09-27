@@ -1,6 +1,7 @@
 import { createWorkspaceFS } from '../../fs/workspaceFS';
 import { memoryOps, type MemoryOps, type MemoryOpsOptions } from '../../fs/testing/memoryOps';
 import type { WorkspaceFS } from '../../fs/types';
+import type { HistoryStore } from '../../history/historyStore';
 import type { AutosaveSettings } from '../autosave';
 import { memoryBufferStore, type BufferStore } from '../buffers';
 import { Workspace, type Scheduler } from '../workspace';
@@ -60,6 +61,7 @@ export interface HarnessOptions {
   now?: () => Date;
   /** Buffer di emergenza già popolato prima di load(). */
   buffers?: BufferStore;
+  history?: HistoryStore;
 }
 
 export interface Harness {
@@ -68,6 +70,7 @@ export interface Harness {
   buffers: BufferStore;
   scheduler: ClockScheduler;
   ws: Workspace;
+  history: HistoryStore | null;
 }
 
 export async function harness(files: Record<string, string>, options: HarnessOptions = {}): Promise<Harness> {
@@ -83,8 +86,9 @@ export async function harness(files: Record<string, string>, options: HarnessOpt
     buffers,
     scheduler,
     autosave: options.autosave,
+    history: options.history,
     now: options.now ?? (() => new Date(2026, 8, 27, 14, 32, 5)),
   });
   await ws.load();
-  return { ops, fs, buffers, scheduler, ws };
+  return { ops, fs, buffers, scheduler, ws, history: options.history ?? null };
 }
