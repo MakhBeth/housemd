@@ -862,3 +862,42 @@ test('[codex F5] edits typed during checkExternal are saved once the check is ov
   assert.equal(await ops.textOf('a.md'), 'scritto durante il controllo');
   assert.equal(doc(ws).saveState, 'saved');
 });
+
+test('[codex F9] a buffered draft is recovered even if the file was deleted from disk', async () => {
+  const { ops, buffers, ws } = await setup({ 'b.md': 'B' });
+  await buffers.save('ws-1', 'a.md', 'bozza salvata', 'originale');
+  assert.equal(await ws.hasDraft('a.md'), true);
+  assert.equal(await ws.hasDraft('b.md'), false);
+
+  await ws.openFile('a.md');
+  assert.equal(doc(ws).path, 'a.md');
+  assert.equal(doc(ws).text, 'bozza salvata');
+  assert.equal(doc(ws).deletedOnDisk, true);
+  assert.equal(doc(ws).saveState, 'dirty');
+  assert.equal(doc(ws).conflict, false);
+  assert.match(ws.getState().toasts.at(-1)?.message ?? '', /Ripristinate/);
+
+  await ws.saveNow(); // l'utente salva: il file viene ricreato
+  assert.equal(await ops.textOf('a.md'), 'bozza salvata');
+  assert.equal(doc(ws).deletedOnDisk, false);
+  assert.equal(doc(ws).saveState, 'saved');
+  assert.equal(await buffers.load('ws-1', 'a.md'), null);
+});
+
+test('[codex F9] opening a missing file without a draft still reports it as not found', async () => {
+  const { ws } = await setup({ 'b.md': 'B' });
+  await ws.openFile('b.md');
+  await ws.openFile('a.md');
+  assert.equal(doc(ws).path, 'b.md');
+  assert.match(ws.getState().toasts.at(-1)?.message ?? '', /a\.md/);
+});
+
+test('[codex F9] a recovered draft of a deleted file is saved (re-creating the file) when switching to another file', async () => {
+  const { ops, buffers, ws } = await setup({ 'b.md': 'B' });
+  await buffers.save('ws-1', 'a.md', 'bozza', 'originale');
+  await ws.openFile('a.md');
+  ws.edit('bozza, continuata');
+  await ws.openFile('b.md');
+  // Passando a b.md la bozza (dirty) viene salvata e ricrea il file: nessun testo perso.
+  assert.equal(await ops.textOf('a.md'), 'bozza, continuata');
+});

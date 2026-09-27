@@ -217,13 +217,46 @@ export class Workspace {
     if (already && already.path === path && !already.deletedOnDisk && !already.conflict) return;
     await this.settle();
     await this.run(async () => {
-      const { text, version } = await this.deps.fs.read(path);
+      let disk: { text: string; version: Version } | null;
+      try {
+        disk = await this.deps.fs.read(path);
+      } catch (err) {
+        if (!(err instanceof FsNotFoundError)) throw err;
+        disk = null;
+      }
       const buffered = await this.deps.buffers.load(this.deps.workspaceId, path);
+      // File sparito dal disco e nessuna bozza da recuperare: resta un semplice "non trovato".
+      if (disk === null && buffered === null) throw new FsNotFoundError(path);
 
       // L'utente potrebbe aver continuato a scrivere sul vecchio file aperto durante le due await
       // qui sopra: settle() prima di rimpiazzare il documento, altrimenti quelle battute si perdono
       // senza essere né salvate né bufferizzate.
       if (this.state.doc && this.state.doc.saveState !== 'saved') await this.settle();
+
+      if (disk === null) {
+        // Il file è stato eliminato ma c'è una bozza nel buffer di emergenza: la si apre come
+        // documento eliminato su disco e da salvare, così salvando si ricrea il file. La base resta
+        // quella del buffer, per non perderla se la bozza torna nel buffer prima di essere salvata.
+        const draft = buffered!;
+        this.knownText = '';
+        this.knownVersion = null;
+        this.versions.delete(path);
+        this.bufferBase = draft.base;
+        this.set({
+          doc: {
+            path,
+            text: draft.text,
+            eol: detectEol(draft.text),
+            saveState: 'dirty',
+            conflict: false,
+            deletedOnDisk: true,
+            revision: (this.state.doc?.revision ?? 0) + 1,
+          },
+        });
+        this.toast('info', `Ripristinate le modifiche non salvate di ${path} (il file non esiste più su disco)`);
+        return;
+      }
+      const { text, version } = disk;
 
       this.knownText = text;
       this.knownVersion = version;
@@ -269,6 +302,11 @@ export class Workspace {
         this.schedule();
       }
     });
+  }
+
+  /** Esiste una bozza nel buffer di emergenza per `path`? (anche se il file non è più su disco) */
+  async hasDraft(path: string): Promise<boolean> {
+    return (await this.deps.buffers.load(this.deps.workspaceId, path).catch(() => null)) !== null;
   }
 
   async closeFile(): Promise<void> {

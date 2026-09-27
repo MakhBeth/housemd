@@ -82,8 +82,19 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }
     if (reopened.current || state.status !== 'ready') return;
     reopened.current = true;
     const last = readPref<string | null>(`lastFile:${workspaceId}`, null);
-    if (last && files.includes(last)) openFile(last);
-  }, [state.status, files, openFile, workspaceId]);
+    if (!last) return;
+    if (files.includes(last)) {
+      openFile(last);
+      return;
+    }
+    // Il file non c'è più su disco, ma se ha una bozza nel buffer di emergenza lo si riapre lo
+    // stesso: è l'unica strada per recuperarla, visto che non compare nell'albero dei file. Niente
+    // cleanup che annulli la promessa (reopened.current impedirebbe di riprovare): basta non
+    // scavalcare un file che l'utente ha già aperto nel frattempo.
+    void workspace.hasDraft(last).then((has) => {
+      if (has && !workspace.getState().doc) openFile(last);
+    });
+  }, [state.status, files, openFile, workspace, workspaceId]);
 
   useEffect(() => {
     if (doc) writePref(`lastFile:${workspaceId}`, doc.path);
