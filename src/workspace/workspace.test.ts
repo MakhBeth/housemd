@@ -748,7 +748,7 @@ test('[codex F1] a conflict caused by typing during checkExternal also buffers t
   assert.deepEqual(await buffers.load('ws-1', 'a.md'), { text: 'digitato', base: 'A' });
 });
 
-test('[codex F2] a conflict reload finishing after switching files does not touch the new document', async () => {
+test('[codex F2 → v1.1 coda] a file switch requested during a conflict reload runs after it', async () => {
   const { ops, buffers, ws } = await setup({ 'a.md': 'A', 'b.md': 'B' });
   await ws.openFile('a.md');
   ws.edit('mio');
@@ -765,16 +765,16 @@ test('[codex F2] a conflict reload finishing after switching files does not touc
     return originalRead(path);
   };
   const reloading = ws.resolveConflict('reload');
-  await ws.openFile('b.md');
-  ws.edit('bozza di B');
+  const opening = ws.openFile('b.md'); // in coda: parte solo a ricarica finita
   release();
   await reloading;
+  await opening;
   fs.read = originalRead;
 
   assert.equal(doc(ws).path, 'b.md');
-  assert.equal(doc(ws).text, 'bozza di B', 'il testo di A non finisce in B');
-  assert.equal(doc(ws).saveState, 'dirty');
-  assert.equal((await buffers.load('ws-1', 'a.md'))?.text, 'mio', 'il conflitto di A resta nel suo buffer');
+  assert.equal(doc(ws).text, 'B', 'il testo di A non finisce in B');
+  assert.equal(await ops.textOf('a.md'), 'loro', 'la ricarica non scrive su disco');
+  assert.equal(await buffers.load('ws-1', 'a.md'), null, 'ricaricato dal disco: la bozza di A è scartata');
 });
 
 test('[codex F2] a conflict reload does not discard text typed while the disk read was pending', async () => {
@@ -797,7 +797,7 @@ test('[codex F2] a conflict reload does not discard text typed while the disk re
   assert.equal(doc(ws).conflict, true, 'resta in conflitto: l-utente può scegliere di nuovo');
 });
 
-test('[codex F3] completing a removal does not close a different document opened meanwhile', async () => {
+test('[codex F3 → v1.1 coda] a file opened during a removal is opened after it and is not closed', async () => {
   const { ops, scheduler, ws } = await setup({ 'n/a.md': 'alfa', 'b.md': 'beta' });
   await ws.openFile('n/a.md');
   const originalRemove = ops.removeEntry.bind(ops);
@@ -808,10 +808,11 @@ test('[codex F3] completing a removal does not close a different document opened
     return originalRemove(path, recursive);
   };
   const removing = ws.remove('n');
-  await ws.openFile('b.md');
-  ws.edit('beta modificato');
+  const opening = ws.openFile('b.md'); // in coda dietro l'eliminazione
   release();
   await removing;
+  await opening;
+  ws.edit('beta modificato');
 
   assert.equal(doc(ws).path, 'b.md');
   assert.equal(doc(ws).text, 'beta modificato');

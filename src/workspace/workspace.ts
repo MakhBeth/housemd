@@ -120,6 +120,8 @@ export class Workspace {
   /** Checkpoint del buffer di emergenza (modalità senza salvataggio a tempo): debounce e attesa massima. */
   private checkpointTimer: unknown = null;
   private checkpointDeadline: unknown = null;
+  /** Coda seriale delle operazioni su file e documento (vedi runExclusive). */
+  private queue: Promise<unknown> = Promise.resolve();
 
   constructor(private readonly deps: WorkspaceDeps) {
     this.scheduler = deps.scheduler ?? realScheduler;
@@ -202,6 +204,57 @@ export class Workspace {
     else this.toast('error', 'operationFailed', { detail: errorDetail(err) });
   }
 
+  /**
+   * Coda seriale: le operazioni che toccano file o cambiano documento girano una alla volta,
+   * nell'ordine di chiamata, e ognuna parte solo dopo il salvataggio del documento già in corso.
+   * Così "Salva tutto" non scrive su un percorso che una rinomina/eliminazione sta spostando, e
+   * viceversa. Un'operazione in coda non deve MAI chiamarne un'altra pubblica in coda (aspetterebbe
+   * sé stessa): usa le versioni interne `do…`.
+   */
+  private runExclusive<T>(operation: () => Promise<T>): Promise<T> {
+    const run = async () => {
+      while (this.saving) await this.saving;
+      return operation();
+    };
+    const result = this.queue.then(run, run);
+    this.queue = result.catch(() => undefined);
+    return result;
+  }
+
+  // --- operazioni in coda ---------------------------------------------------------
+
+  openFile(path: string): Promise<void> {
+    return this.runExclusive(() => this.doOpenFile(path));
+  }
+
+  closeFile(): Promise<boolean> {
+    return this.runExclusive(() => this.doCloseFile());
+  }
+
+  createFile(path: string, text = ''): Promise<void> {
+    return this.runExclusive(() => this.doCreateFile(path, text));
+  }
+
+  createFolder(path: string): Promise<void> {
+    return this.runExclusive(() => this.doCreateFolder(path));
+  }
+
+  rename(from: string, to: string): Promise<void> {
+    return this.runExclusive(() => this.doRename(from, to));
+  }
+
+  remove(path: string): Promise<void> {
+    return this.runExclusive(() => this.doRemove(path));
+  }
+
+  resolveConflict(choice: 'reload' | 'overwrite'): Promise<void> {
+    return this.runExclusive(() => this.doResolveConflict(choice));
+  }
+
+  saveAll(): Promise<void> {
+    return this.runExclusive(() => this.doSaveAll());
+  }
+
   // --- caricamento ------------------------------------------------------------
 
   async load(): Promise<void> {
@@ -248,7 +301,7 @@ export class Workspace {
 
   // --- file aperto --------------------------------------------------------------
 
-  async openFile(path: string): Promise<void> {
+  private async doOpenFile(path: string): Promise<void> {
     const already = this.state.doc;
     if (already && already.path === path && !already.deletedOnDisk && !already.conflict) return;
     if ((await this.settle()) === 'failed') return;
@@ -372,7 +425,7 @@ export class Workspace {
   }
 
   /** Chiude il documento dopo averlo messo al sicuro; `false` (e documento ancora aperto) se non si può. */
-  async closeFile(): Promise<boolean> {
+  private async doCloseFile(): Promise<boolean> {
     if ((await this.settle()) === 'failed') return false;
     this.set({ doc: null });
     return true;
@@ -488,6 +541,94 @@ export class Workspace {
     await this.flush();
   }
 
+  /**
+   * "Salva tutto": prima il documento aperto dal testo in memoria (con flush, come Ctrl+S tranne che
+   * non ricrea mai un file eliminato su disco: base e versione aggiornate, battute arrivate durante la
+   * scrittura restano dirty),
+   * poi le bozze degli altri file, con l'autosalvataggio sospeso. Una bozza si scrive solo se il disco
+   * coincide ancora con la sua base; altrimenti resta dov'è (è un conflitto da aprire a mano).
+   */
+  private async doSaveAll(): Promise<void> {
+    while (this.checking) await this.checking;
+    /** Modifiche che dopo "Salva tutto" restano non salvate su disco (documento aperto compreso). */
+    let left = 0;
+    const open = this.state.doc;
+    if (open?.deletedOnDisk) {
+      // File eliminato su disco: "Salva tutto" non lo ricrea MAI (né subito né con un salvataggio a
+      // tempo), come per le bozze orfane non aperte. Se ha modifiche restano nel buffer; lo ricrea
+      // solo Ctrl+S (saveNow), esplicitamente. Documento pulito: nulla da salvare.
+      if (open.saveState !== 'saved') {
+        await this.bufferCurrentDoc();
+        left++;
+      }
+    } else if (open) {
+      // flush e non saveNow: saveNow ricreerebbe un file eliminato fuori da HouseMD.
+      await this.flush();
+      const after = this.state.doc;
+      // Scrittura non riuscita (errore, conflitto, accesso perso): il testo è al sicuro nel buffer
+      // ma non su disco. Battute arrivate durante la scrittura, invece, non sono un fallimento.
+      if (after && (after.saveState === 'error' || after.conflict || this.state.status === 'access-lost')) left++;
+    }
+    const openPath = this.state.doc?.path ?? null;
+    let paths: string[];
+    try {
+      paths = (await this.draftPaths()).filter((path) => path !== openPath);
+    } catch (err) {
+      this.toast('error', 'bufferFailed', { detail: errorDetail(err) });
+      return;
+    }
+    let written = 0;
+    let processed = 0;
+    this.suspended++;
+    try {
+      await this.run(async () => {
+        for (const path of paths) {
+          const outcome = await this.saveDraft(path);
+          processed++;
+          if (outcome === 'saved') written++;
+          else if (outcome === 'skipped') left++;
+        }
+      });
+    } finally {
+      this.suspended--;
+      const current = this.state.doc;
+      // Riprende l'autosave sospeso, ma mai per un documento eliminato su disco: sarebbe "Salva tutto"
+      // a ricrearlo, un secondo dopo.
+      if (current && current.saveState !== 'saved' && !current.deletedOnDisk) this.schedule('afterWrite');
+    }
+    // Ciclo interrotto (accesso perso, gestito da run()): le bozze non elaborate restano tutte.
+    left += paths.length - processed;
+    if (written > 0) this.bumpIndex();
+    if (left > 0) this.toast('info', 'saveAllSkipped', { count: left });
+    else if (!this.state.doc || this.state.doc.saveState === 'saved') this.toast('info', 'saveAllDone');
+  }
+
+  /** Scrive la bozza di un file non aperto se il disco coincide ancora con la sua base. */
+  private async saveDraft(path: string): Promise<'saved' | 'skipped' | 'none'> {
+    try {
+      const draft = await this.deps.buffers.load(this.deps.workspaceId, path);
+      if (!draft) return 'none';
+      let disk: string | null = null;
+      try {
+        disk = (await this.deps.fs.read(path)).text;
+      } catch (err) {
+        if (!(err instanceof FsNotFoundError)) throw err;
+      }
+      // File cambiato su disco o eliminato: la bozza resta da risolvere aprendo il file.
+      if (disk !== draft.base) return 'skipped';
+      const { version } = await this.deps.fs.write(path, draft.text);
+      this.versions.set(path, version);
+      this.search.upsert(path, draft.text);
+      // La bozza si cancella solo se nel frattempo nessuno l'ha riscritta.
+      const current = await this.deps.buffers.load(this.deps.workspaceId, path);
+      if (current && current.text === draft.text && current.base === draft.base) await this.clearBuffer(path);
+      return 'saved';
+    } catch (err) {
+      if (isAccessError(err)) throw err; // accesso perso: lo gestisce run()
+      return 'skipped';
+    }
+  }
+
   async flush(): Promise<void> {
     if (this.timer !== null) this.scheduler.clear(this.timer);
     this.timer = null;
@@ -583,14 +724,18 @@ export class Workspace {
     }
     // La scrittura è riuscita: quel che segue è manutenzione best-effort e non deve far
     // sembrare fallito un salvataggio che in realtà è andato a buon fine.
-    this.knownText = text;
-    this.bufferBase = text;
-    this.knownVersion = version;
+    const open = this.state.doc?.path === path;
+    if (open) {
+      // Testo, base e versione noti sono quelli del documento APERTO: se nel frattempo se n'è aperto
+      // un altro (es. Ctrl+S durante l'ultimo settle() di un cambio file) non vanno toccati.
+      this.knownText = text;
+      this.bufferBase = text;
+      this.knownVersion = version;
+    }
     this.versions.set(path, version);
     this.search.upsert(path, text);
     // Il buffer si scarta solo se non ci sono battute più nuove di quelle appena scritte: in `off` un
     // checkpoint arrivato durante la scrittura contiene testo che su disco non c'è ancora.
-    const open = this.state.doc?.path === path;
     const newer = open && this.state.doc!.text !== text;
     if (!open) {
       // Documento lasciato durante la scrittura: la bozza lasciata da settle() può contenere battute
@@ -743,7 +888,7 @@ export class Workspace {
     });
   }
 
-  async resolveConflict(choice: 'reload' | 'overwrite'): Promise<void> {
+  private async doResolveConflict(choice: 'reload' | 'overwrite'): Promise<void> {
     const doc = this.state.doc;
     if (!doc?.conflict) return;
     if (choice === 'overwrite') {
@@ -781,7 +926,7 @@ export class Workspace {
 
   // --- operazioni sui file ------------------------------------------------------
 
-  async createFile(path: string, text = ''): Promise<void> {
+  private async doCreateFile(path: string, text: string): Promise<void> {
     let created = false;
     await this.run(async () => {
       if (await this.deps.fs.stat(path)) throw new FsExistsError(path);
@@ -792,22 +937,25 @@ export class Workspace {
       this.bumpIndex();
       created = true;
     });
-    if (created) await this.openFile(path);
+    if (created) await this.doOpenFile(path);
   }
 
-  async createFolder(path: string): Promise<void> {
+  private async doCreateFolder(path: string): Promise<void> {
     await this.run(async () => {
       await this.deps.fs.mkdir(path);
       await this.refreshEntries();
     });
   }
 
-  async rename(from: string, to: string): Promise<void> {
+  private async doRename(from: string, to: string): Promise<void> {
     // L'esito non conta: con la rinomina il documento resta aperto (cambia solo percorso).
     await this.settle();
     this.suspended++;
     this.moving++;
+    // Un salvataggio partito mentre settle() scriveva il buffer (es. Ctrl+S) finisce prima di spostare
+    // il file: altrimenti scriverebbe al vecchio percorso, ricreandolo, a rinomina fatta.
     try {
+      while (this.saving) await this.saving;
       await this.run(async () => {
         await this.deps.fs.rename(from, to);
 
@@ -857,7 +1005,7 @@ export class Workspace {
     }
   }
 
-  async remove(path: string): Promise<void> {
+  private async doRemove(path: string): Promise<void> {
     const doc = this.state.doc;
     const closing = doc !== null && inside(doc.path, path);
     if (closing) {
