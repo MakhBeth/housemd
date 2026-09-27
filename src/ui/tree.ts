@@ -8,9 +8,9 @@ export interface TreeNode {
   children: TreeNode[];
 }
 
-const collator = new Intl.Collator('it', { numeric: true, sensitivity: 'base' });
-
-export function buildTree(entries: Entry[]): TreeNode[] {
+/** `locale`: lingua dell'interfaccia, per ordinare i nomi con le sue regole (undefined = quella del browser). */
+export function buildTree(entries: Entry[], locale?: string): TreeNode[] {
+  const collator = new Intl.Collator(locale, { numeric: true, sensitivity: 'base' });
   const root: TreeNode = { name: '', path: '', kind: 'directory', children: [] };
   const dirs = new Map<string, TreeNode>([['', root]]);
   const ensureDir = (path: string): TreeNode => {

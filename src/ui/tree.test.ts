@@ -32,3 +32,12 @@ test('ancestorsOf lists the folders containing a path', () => {
   assert.deepEqual(ancestorsOf('a/b/c.md'), ['a', 'a/b']);
   assert.deepEqual(ancestorsOf('c.md'), []);
 });
+
+test('buildTree sorts names with the collation of the given UI locale', () => {
+  const entries: Entry[] = [
+    { kind: 'file', path: 'zeta.md', version: v },
+    { kind: 'file', path: 'ärmel.md', version: v },
+  ];
+  assert.deepEqual(buildTree(entries, 'de').map((n) => n.name), ['ärmel.md', 'zeta.md']);
+  assert.deepEqual(buildTree(entries, 'sv').map((n) => n.name), ['zeta.md', 'ärmel.md'], 'in svedese ä viene dopo z');
+});

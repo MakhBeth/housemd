@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, 
 
 import { Editor, type EditorHandle } from '../editor/Editor';
 import { requestAccess } from '../fs/access';
-import { useT } from '../i18n/I18nProvider';
+import { useI18n, useT } from '../i18n/I18nProvider';
 import type { MessageKey } from '../i18n/messages';
 import { dirname, joinPath } from '../lib/paths';
 import { readPref, writePref } from '../lib/prefs';
@@ -59,7 +59,7 @@ interface Props {
 const NO_TERMS: string[] = [];
 
 export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }: Props) {
-  const t = useT();
+  const { t, locale } = useI18n();
   const state = useWorkspaceState(workspace);
   const doc = state.doc;
   const [mode, setMode] = useState<Mode>(() => readPref<Mode>('mode', 'split'));
@@ -80,7 +80,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }
   const reopened = useRef(false);
   const [orphans, setOrphans] = useState<string[]>([]);
 
-  const tree = useMemo(() => buildTree(state.entries), [state.entries]);
+  const tree = useMemo(() => buildTree(state.entries, locale), [state.entries, locale]);
   const files = useMemo(() => state.entries.filter((e) => e.kind === 'file').map((e) => e.path), [state.entries]);
   const getDocs = useCallback(() => workspace.search.titles(), [workspace]);
   const readBlob = useCallback((path: string) => workspace.readBlob(path), [workspace]);
