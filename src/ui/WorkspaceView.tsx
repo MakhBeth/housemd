@@ -149,6 +149,9 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }
     const onBlur = () => void workspace.blur();
     const onVisibility = () => (document.visibilityState === 'visible' ? onFocus() : onBlur());
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      // Reload protetto dell'aggiornamento PWA: beginUpdate ha già reso tutto durevole, quindi
+      // niente "Esci dal sito?" (annullarlo lascerebbe l'app bloccata in sola lettura).
+      if (workspace.getState().updating) return;
       const { doc: current, drafts: pending } = workspace.getState();
       if ((current && current.saveState !== 'saved') || pending.length > 0) {
         void workspace.blur();

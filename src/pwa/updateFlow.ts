@@ -14,6 +14,12 @@ export interface UpdateHost {
 /** Dopo SKIP_WAITING, attesa massima dell'evento `controlling` prima di restituire il documento. */
 export const UPDATE_TIMEOUT_MS = 10_000;
 
+/**
+ * Dopo host.reload(), attesa oltre la quale la pagina è evidentemente ancora viva (il reload è stato
+ * annullato, es. dal dialogo "Esci dal sito?"): si restituisce il documento.
+ */
+export const RELOAD_TIMEOUT_MS = 3_000;
+
 export interface UpdateState {
   /** C'è una nuova versione in attesa: toast persistente con "Aggiorna". */
   available: boolean;
@@ -72,6 +78,14 @@ export function createUpdateFlow(host: UpdateHost, updateSW: () => Promise<void>
     if ((await secure()) === 'durable') {
       try {
         host.reload();
+        // Se la pagina è ancora viva dopo RELOAD_TIMEOUT_MS il reload non è avvenuto: senza questa
+        // guardia il documento resterebbe in sola lettura con "Aggiorna" disabilitato.
+        cancelTimeout = host.setTimer(() => {
+          cancelTimeout = null;
+          reloading = false;
+          host.cancel();
+          set({ busy: false, available: true });
+        }, RELOAD_TIMEOUT_MS);
         return;
       } catch {
         // reload non riuscito: si restituisce il documento come sotto.

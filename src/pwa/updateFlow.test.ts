@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import type { SettleResult } from '../workspace/workspace';
-import { createUpdateFlow, UPDATE_TIMEOUT_MS, type UpdateHost } from './updateFlow';
+import { createUpdateFlow, RELOAD_TIMEOUT_MS, UPDATE_TIMEOUT_MS, type UpdateHost } from './updateFlow';
 
 /** Timer finto: `fire()` fa scattare i timer ancora attivi. */
 function fakeTimer() {
@@ -161,7 +161,11 @@ test('a controlling event in time clears the timeout', async () => {
   });
   await flow.apply();
   await flow.needReload();
-  assert.equal(timer.pending.size, 0);
+  assert.deepEqual(
+    [...timer.pending.values()].map((t) => t.ms),
+    [RELOAD_TIMEOUT_MS],
+    'resta solo la guardia del reload, non il timeout di controlling',
+  );
   assert.deepEqual(calls, ['prepare', 'updateSW', 'prepare', 'reload']);
 });
 
@@ -186,4 +190,18 @@ test('a rejecting prepare counts as failed and resets the flow', async () => {
   };
   await flow.apply(); // non bloccato da un `reloading` rimasto a true
   assert.deepEqual(calls.slice(-2), ['prepare', 'reload']);
+});
+
+test('if the page survives the reload, the document is given back after a short timeout', async () => {
+  const { host, calls, timer } = fakeHost('durable');
+  const flow = createUpdateFlow(host, async () => undefined);
+  await flow.needReload();
+  assert.deepEqual(calls, ['prepare', 'reload']);
+  assert.deepEqual([...timer.pending.values()].map((t) => t.ms), [RELOAD_TIMEOUT_MS]);
+  assert.equal(flow.getState().busy, true, 'in sola lettura mentre la pagina si ricarica');
+  timer.fire(); // la pagina è ancora viva: il reload è stato annullato (es. "Esci dal sito?")
+  assert.deepEqual(calls, ['prepare', 'reload', 'cancel']);
+  assert.deepEqual(flow.getState(), { available: true, busy: false }, 'il toast resta per riprovare');
+  await flow.apply(); // non bloccato da un `reloading` rimasto a true
+  assert.deepEqual(calls, ['prepare', 'reload', 'cancel', 'prepare', 'reload']);
 });
