@@ -19,6 +19,11 @@ import { errorDetail, sameToast, type Toast, type ToastCode, type ToastParams } 
 
 export type SaveState = 'saved' | 'dirty' | 'saving' | 'error';
 
+/** Esito di settle(): `failed` = il documento non è al sicuro e non va lasciato. */
+export type SettleResult = 'durable' | 'failed';
+
+const MAX_SETTLE_ATTEMPTS = 3;
+
 export interface OpenDoc {
   path: string;
   /** Testo corrente, con le fine riga del file. */
@@ -165,6 +170,11 @@ export class Workspace {
     this.set({ toasts: this.state.toasts.filter((t) => t.id !== id) });
   }
 
+  /** Errore nello scegliere o aprire un'altra cartella: si resta qui, con un toast. */
+  reportFolderError(detail: string): void {
+    this.toast('error', 'openFolderFailed', { detail });
+  }
+
   files(): string[] {
     return this.state.entries.filter((e) => e.kind === 'file').map((e) => e.path);
   }
@@ -241,7 +251,7 @@ export class Workspace {
   async openFile(path: string): Promise<void> {
     const already = this.state.doc;
     if (already && already.path === path && !already.deletedOnDisk && !already.conflict) return;
-    await this.settle();
+    if ((await this.settle()) === 'failed') return;
     await this.run(async () => {
       let disk: { text: string; version: Version } | null;
       try {
@@ -250,29 +260,34 @@ export class Workspace {
         if (!(err instanceof FsNotFoundError)) throw err;
         disk = null;
       }
-      const buffered = await this.deps.buffers.load(this.deps.workspaceId, path);
+      let draft = await this.deps.buffers.load(this.deps.workspaceId, path);
       // File sparito dal disco e nessuna bozza da recuperare: resta un semplice "non trovato".
-      if (disk === null && buffered === null) throw new FsNotFoundError(path);
+      if (disk === null && draft === null) throw new FsNotFoundError(path);
+      if (disk !== null && draft !== null && draft.text === disk.text) {
+        // La bozza coincide col disco: non c'è nulla da ripristinare. Si scarta ADESSO, prima
+        // dell'ultimo settle, così dopo non resta nessuna attesa.
+        await this.clearBuffer(path);
+        draft = null;
+      }
 
-      // L'utente potrebbe aver continuato a scrivere sul vecchio file aperto durante le due await
-      // qui sopra: settle() prima di rimpiazzare il documento, altrimenti quelle battute si perdono
-      // senza essere né salvate né bufferizzate.
-      if (this.state.doc && this.state.doc.saveState !== 'saved') await this.settle();
+      // L'utente può aver continuato a scrivere sul vecchio documento durante le await qui sopra:
+      // lo si mette al sicuro adesso. Da qui alla sostituzione del documento niente più await.
+      if ((await this.settle()) === 'failed') return;
 
       if (disk === null) {
         // Il file è stato eliminato ma c'è una bozza nel buffer di emergenza: la si apre come
         // documento eliminato su disco e da salvare, così salvando si ricrea il file. La base resta
         // quella del buffer, per non perderla se la bozza torna nel buffer prima di essere salvata.
-        const draft = buffered!;
+        const orphan = draft!;
         this.knownText = '';
         this.knownVersion = null;
         this.versions.delete(path);
-        this.bufferBase = draft.base;
+        this.bufferBase = orphan.base;
         this.set({
           doc: {
             path,
-            text: draft.text,
-            eol: detectEol(draft.text),
+            text: orphan.text,
+            eol: detectEol(orphan.text),
             saveState: 'dirty',
             conflict: false,
             deletedOnDisk: true,
@@ -287,29 +302,20 @@ export class Workspace {
       this.knownText = text;
       this.knownVersion = version;
       this.versions.set(path, version);
-      // Base di partenza per un eventuale buffer di emergenza: normalmente il disco appena letto;
-      // viene sostituita più sotto se si sta ripristinando un conflitto già in corso, per non
-      // perdere la base originale da cui l'utente era partito.
+      // Base per un eventuale buffer di emergenza: normalmente il disco appena letto; resta quella
+      // originale se si sta ripristinando un conflitto già in corso.
       this.bufferBase = text;
 
       let docText = text;
       let saveState: SaveState = 'saved';
       let conflict = false;
-      let restored = false;
-      if (buffered !== null) {
-        if (buffered.text === text) {
-          // Il buffer coincide col disco: non c'è nulla da ripristinare, si può scartare.
-          await this.clearBuffer(path);
-        } else {
-          // Se il disco è ancora quello su cui si basava il buffer, è una semplice ripresa di
-          // modifiche non salvate. Altrimenti il disco è cambiato nel frattempo: è un conflitto,
-          // non va sovrascritto silenziosamente dall'autosalvataggio.
-          docText = buffered.text;
-          saveState = 'dirty';
-          conflict = buffered.base !== text;
-          if (conflict) this.bufferBase = buffered.base;
-          restored = true;
-        }
+      if (draft !== null) {
+        // Se il disco è ancora quello su cui si basava la bozza, è una semplice ripresa di
+        // modifiche non salvate; altrimenti il disco è cambiato nel frattempo: è un conflitto.
+        docText = draft.text;
+        saveState = 'dirty';
+        conflict = draft.base !== text;
+        if (conflict) this.bufferBase = draft.base;
       }
 
       this.set({
@@ -323,7 +329,7 @@ export class Workspace {
           revision: (this.state.doc?.revision ?? 0) + 1,
         },
       });
-      if (restored) {
+      if (draft !== null) {
         this.toast('info', 'restoredDraft', { path });
         this.schedule('restoredDraft');
       }
@@ -365,9 +371,11 @@ export class Workspace {
     else await this.checkpoint();
   }
 
-  async closeFile(): Promise<void> {
-    await this.settle();
+  /** Chiude il documento dopo averlo messo al sicuro; `false` (e documento ancora aperto) se non si può. */
+  async closeFile(): Promise<boolean> {
+    if ((await this.settle()) === 'failed') return false;
     this.set({ doc: null });
+    return true;
   }
 
   edit(textLf: string): void {
@@ -507,24 +515,41 @@ export class Workspace {
   }
 
   /**
-   * Prima di lasciare il file aperto: se la modalità lo consente salva su disco finché non restano
-   * modifiche (anche quelle arrivate durante un salvataggio); altrimenti, o se non si riesce, il
-   * testo finisce nel buffer di emergenza con la sua base.
+   * Mette al sicuro il documento aperto prima di lasciarlo (cambio file, chiusura, cambio cartella,
+   * ricarica per aggiornamento): su disco se la modalità lo consente, altrimenti — o se la scrittura
+   * non riesce — nel buffer di emergenza con la sua base. `durable` = testo su disco o nel buffer e
+   * nessuna modifica arrivata nel frattempo. `failed` (buffer non scrivibile, oppure modifiche che non
+   * si fermano dopo 3 tentativi) = chi chiama NON deve lasciare il documento.
    */
-  private async settle(): Promise<void> {
-    if (autosaveAllows(this.state.autosave.mode, 'switch')) {
-      for (let attempt = 0; attempt < 3; attempt++) {
-        const doc = this.state.doc;
-        if (!doc || doc.saveState === 'saved' || doc.conflict || this.state.status === 'access-lost') break;
+  async settle(): Promise<SettleResult> {
+    for (let attempt = 0; attempt < MAX_SETTLE_ATTEMPTS; attempt++) {
+      const doc = this.state.doc;
+      if (!doc || doc.saveState === 'saved') return 'durable';
+      const toDisk = autosaveAllows(this.state.autosave.mode, 'switch') && !doc.conflict && this.state.status !== 'access-lost';
+      if (toDisk) {
         await this.flush();
-        if (this.state.doc?.saveState === 'error') break;
+        const after = this.state.doc;
+        if (!after || after.saveState === 'saved') return 'durable';
+        // Battute arrivate durante la scrittura: si riprova a scriverle.
+        if (after.saveState === 'dirty' && after.text !== doc.text) continue;
+        // Scrittura fallita (o sospesa): si passa al buffer.
       }
-    }
-    const doc = this.state.doc;
-    if (doc && doc.saveState !== 'saved') {
+      const current = this.state.doc;
+      if (!current) return 'durable';
+      const text = current.text;
       this.clearCheckpoint();
-      await this.saveBuffer(doc.path, doc.text, this.bufferBase).catch(() => undefined);
+      try {
+        await this.saveBuffer(current.path, text, this.bufferBase);
+      } catch {
+        this.toast('error', 'draftNotPersisted');
+        return 'failed';
+      }
+      const after = this.state.doc;
+      if (!after || (after.path === current.path && after.text === text)) return 'durable';
+      // Modifiche arrivate mentre il buffer si scriveva: si ripete.
     }
+    this.toast('error', 'draftNotPersisted');
+    return 'failed';
   }
 
   private async writeDoc(path: string, text: string): Promise<void> {
@@ -760,6 +785,7 @@ export class Workspace {
   }
 
   async rename(from: string, to: string): Promise<void> {
+    // L'esito non conta: con la rinomina il documento resta aperto (cambia solo percorso).
     await this.settle();
     this.suspended++;
     this.moving++;

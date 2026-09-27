@@ -4,10 +4,10 @@ import { hasAccess, isSupported, pickFolder, requestAccess, unsupportedReason } 
 import { fsaOps } from './fs/fsaOps';
 import { findKnownWorkspaceId, loadWorkspace, saveWorkspace, type StoredWorkspace } from './fs/handleStore';
 import { createWorkspaceFS } from './fs/workspaceFS';
+import { switchFolder } from './app/switchFolder';
 import { StartScreen } from './ui/StartScreen';
 import { WorkspaceView } from './ui/WorkspaceView';
 import { indexedDbBufferStore } from './workspace/buffers';
-import { errorDetail } from './workspace/toasts';
 import { Workspace } from './workspace/workspace';
 
 type Screen =
@@ -66,25 +66,35 @@ export default function App() {
   }, []);
 
   const choose = useCallback(async () => {
-    try {
-      const handle = await pickFolder();
-      if (!handle) return;
-      if (screen.kind === 'open') {
-        // closeFile() esegue settle(): eventuali modifiche non salvate (conflitto, autosalvataggio
-        // sospeso…) finiscono comunque nel buffer di emergenza prima di chiudere lo workspace.
-        await screen.workspace.closeFile();
-        screen.workspace.dispose();
-      }
-      // Se è una cartella già aperta in passato (non solo l'ultima: anche A → B → A), si mantiene
-      // lo stesso workspaceId: altrimenti buffer di emergenza e "ultimo file aperto" salvati per
-      // quella cartella resterebbero orfani, agganciati a un id ormai abbandonato.
-      const workspaceId = (await findKnownWorkspaceId(handle).catch(() => null)) ?? undefined;
-      const stored = await saveWorkspace(handle, undefined, workspaceId);
-      const workspace = await openWorkspace(stored);
-      setOpenCount((c) => c + 1);
-      setScreen({ kind: 'open', stored, workspace });
-    } catch (err) {
-      setScreen({ kind: 'start', error: errorDetail(err) });
+    const current = screen.kind === 'open' ? screen.workspace : null;
+    const result = await switchFolder({
+      pick: pickFolder,
+      current,
+      open: async (handle: FileSystemDirectoryHandle) => {
+        // Se è una cartella già aperta in passato (non solo l'ultima: anche A → B → A), si mantiene
+        // lo stesso workspaceId: altrimenti buffer di emergenza e "ultimo file aperto" salvati per
+        // quella cartella resterebbero orfani, agganciati a un id ormai abbandonato.
+        const workspaceId = (await findKnownWorkspaceId(handle).catch(() => null)) ?? undefined;
+        const stored = await saveWorkspace(handle, undefined, workspaceId);
+        return { stored, workspace: await openWorkspace(stored) };
+      },
+      // La cartella vecchia non si è potuta lasciare (modifiche arrivate durante l'apertura e non
+      // messe al sicuro): si resta lì e quella nuova, già caricata, si butta.
+      discard: ({ workspace }) => workspace.dispose(),
+    });
+    switch (result.kind) {
+      case 'opened':
+        setOpenCount((c) => c + 1);
+        setScreen({ kind: 'open', ...result.value });
+        break;
+      case 'error':
+        // Con una cartella aperta si resta lì e l'errore compare come toast; dall'avvio, come prima.
+        if (current) current.reportFolderError(result.detail);
+        else setScreen({ kind: 'start', error: result.detail });
+        break;
+      case 'cancelled':
+      case 'blocked':
+        break;
     }
   }, [screen]);
 
