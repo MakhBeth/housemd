@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { hasAccess, isSupported, pickFolder, requestAccess, unsupportedMessage } from './fs/access';
 import { fsaOps } from './fs/fsaOps';
-import { loadWorkspace, saveWorkspace, type StoredWorkspace } from './fs/handleStore';
+import { findKnownWorkspaceId, loadWorkspace, saveWorkspace, type StoredWorkspace } from './fs/handleStore';
 import { createWorkspaceFS } from './fs/workspaceFS';
 import { StartScreen } from './ui/StartScreen';
 import { WorkspaceView } from './ui/WorkspaceView';
@@ -74,11 +74,10 @@ export default function App() {
         await screen.workspace.closeFile();
         screen.workspace.dispose();
       }
-      // Se è la stessa cartella già aperta in precedenza, si mantiene lo stesso workspaceId:
-      // altrimenti buffer di emergenza e "ultimo file aperto" salvati per quella cartella
-      // resterebbero orfani, agganciati a un id ormai abbandonato.
-      const previous = await loadWorkspace().catch(() => null);
-      const workspaceId = previous && (await handle.isSameEntry(previous.handle)) ? previous.workspaceId : undefined;
+      // Se è una cartella già aperta in passato (non solo l'ultima: anche A → B → A), si mantiene
+      // lo stesso workspaceId: altrimenti buffer di emergenza e "ultimo file aperto" salvati per
+      // quella cartella resterebbero orfani, agganciati a un id ormai abbandonato.
+      const workspaceId = (await findKnownWorkspaceId(handle).catch(() => null)) ?? undefined;
       const stored = await saveWorkspace(handle, undefined, workspaceId);
       const workspace = await openWorkspace(stored);
       setOpenCount((c) => c + 1);

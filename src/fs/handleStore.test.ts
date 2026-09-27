@@ -2,7 +2,8 @@ import 'fake-indexeddb/auto';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { clearWorkspace, loadWorkspace, saveWorkspace } from './handleStore';
+import { openDb, transactionDone } from '../lib/db';
+import { clearWorkspace, findKnownWorkspaceId, loadWorkspace, saveWorkspace } from './handleStore';
 
 test('saveWorkspace stores the handle with a fresh workspaceId', async () => {
   const db = 'hs-1';
@@ -28,4 +29,40 @@ test('clearWorkspace forgets the folder', async () => {
   await saveWorkspace({ name: 'blog' }, db);
   await clearWorkspace(db);
   assert.equal(await loadWorkspace(db), null);
+});
+
+/** Handle finto: isSameEntry confronta il nome, come farebbe il browser con la stessa cartella. */
+const picked = (name: string) => ({ name, isSameEntry: async (other: { name: string }) => other.name === name });
+
+test('[codex F8] switching folders A -> B -> A keeps the original workspaceId of A', async () => {
+  const db = 'hs-4';
+  assert.equal(await findKnownWorkspaceId(picked('a'), db), null);
+  const a = await saveWorkspace({ name: 'a' }, db);
+  await saveWorkspace({ name: 'b' }, db);
+  assert.equal(await findKnownWorkspaceId(picked('a'), db), a.workspaceId);
+  assert.equal(await findKnownWorkspaceId(picked('c'), db), null);
+});
+
+test('[codex F8] the known folders list keeps only the 20 most recent, one entry per workspaceId', async () => {
+  const db = 'hs-5';
+  await saveWorkspace({ name: 'f0' }, db);
+  for (let i = 1; i <= 20; i++) await saveWorkspace({ name: `f${i}` }, db);
+  assert.equal(await findKnownWorkspaceId(picked('f0'), db), null, 'la più vecchia esce dalla lista');
+  assert.ok(await findKnownWorkspaceId(picked('f1'), db));
+
+  // Riselezionare la stessa cartella con lo stesso id non duplica la voce.
+  const again = await saveWorkspace({ name: 'f5' }, db, (await findKnownWorkspaceId(picked('f5'), db))!);
+  await saveWorkspace({ name: 'f21' }, db);
+  assert.equal(await findKnownWorkspaceId(picked('f5'), db), again.workspaceId);
+  assert.ok(await findKnownWorkspaceId(picked('f2'), db), 'f5 ripetuta non ha spinto fuori f2');
+});
+
+test('[codex F8] a database from before the known list still finds the current folder', async () => {
+  const db = 'hs-6';
+  const conn = await openDb(db);
+  const tx = conn.transaction('workspace', 'readwrite');
+  tx.objectStore('workspace').put({ handle: { name: 'vecchia' }, workspaceId: 'id-vecchio' }, 'current');
+  await transactionDone(tx);
+  conn.close();
+  assert.equal(await findKnownWorkspaceId(picked('vecchia'), db), 'id-vecchio');
 });
