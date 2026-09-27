@@ -99,6 +99,12 @@ Rifinire HouseMD dopo il primo collaudo: identità visiva (logo, icone, font, te
 - Chiusura della pagina con bozze o documento `dirty`: `beforeunload` con `preventDefault()` (avviso nativo del browser).
 - Test: per ogni modalità — salvataggio a tempo solo in `afterDelay`; al cambio file scrittura su disco in `afterDelay`/`onFocusChange` e solo bozza in `off`; buffer scritto durante la digitazione in `off`/`onFocusChange`; `saveAll` scrive le bozze valide e salta quelle in conflitto; `drafts` aggiornato.
 
+### Coda seriale delle operazioni
+
+- Tutte le operazioni del `Workspace` che toccano file o cambiano documento — `saveAll`, `rename`, `remove`, `createFile`, `createFolder`, `openFile`, `closeFile`, `resolveConflict`, `restoreVersion` — passano da una coda seriale (`runExclusive`, una promise-chain): una sola alla volta, nell'ordine di chiamata. Salvataggi del documento aperto (`flush`) e `checkExternal` restano governati da `saving`/sospensione come oggi, e le operazioni in coda attendono il salvataggio in corso.
+- Così un `saveAll` non può scrivere su un percorso che una rinomina/eliminazione sta spostando, e viceversa.
+- Test: `saveAll` con scrittura rallentata + `rename`/`remove` chiamati durante (eseguiti dopo, nessun file ricreato al vecchio percorso); ordine di esecuzione rispettato.
+
 ### Garanzie quando si lascia un documento
 
 - `settle()` restituisce un esito: `durable` (testo scritto su disco o nel buffer, e nessuna modifica arrivata nel frattempo) oppure `failed`. Gli errori di scrittura del buffer (quota, IndexedDB non disponibile) **non** vengono più ignorati.
@@ -114,7 +120,7 @@ Rifinire HouseMD dopo il primo collaudo: identità visiva (logo, icone, font, te
 ## 4. Local History
 
 - Nuovo object store IndexedDB `history` nel database `HouseMD` (versione del DB 1 → 2, con upgrade che crea lo store senza toccare gli altri), chiave autoincrement, indice `byFile` su `[workspaceId, path, savedAt]`.
-- Convivenza tra versioni: `openDb` gestisce `onblocked` (un'altra scheda tiene aperta la versione vecchia: si aspetta, e dopo 3 s toast `reloadOtherTabs`) e registra `onversionchange` su ogni connessione (chiude subito la connessione). Se una scheda vecchia riceve `VersionError` aprendo il DB, la scrittura del buffer fallisce e, grazie alle garanzie di `settle()`, il documento non viene lasciato; la scheda vecchia riceve comunque il toast di aggiornamento della PWA. Nota: v1 non è mai stata pubblicata, quindi il caso reale è solo il browser di sviluppo.
+- Convivenza tra versioni: `openDb` gestisce `onblocked` (un'altra scheda tiene aperta la versione vecchia: si aspetta, e dopo 3 s toast `reloadOtherTabs`) e registra `onversionchange` su ogni connessione (chiude subito la connessione). Il codice v1 già in esecuzione in una scheda vecchia non ha le nuove garanzie: se riceve `VersionError` la sua scrittura del buffer fallisce in silenzio. v1 non è mai stata pubblicata, quindi il caso reale è solo il browser di sviluppo: nel collaudo, **salvare e chiudere le schede v1 prima di aprire v1.1**. Le versioni successive (≥ v1.1) gestiscono il caso tramite le garanzie di `settle()` e il flusso di aggiornamento della PWA.
 - Test: migrazione v1 → v2 con buffer e cartelle già presenti (restano intatti), `openDb` con versione più alta già presente.
 - Record: `{ workspaceId, path, savedAt: number, text: string, reason: 'save' | 'before-reload' | 'before-overwrite' | 'before-restore' }`.
 - `src/history/policy.ts` (puro):
@@ -128,6 +134,7 @@ Rifinire HouseMD dopo il primo collaudo: identità visiva (logo, icone, font, te
   - prima di un ripristino → snapshot `before-restore` del testo corrente;
   - rinomina di file/cartelle → `history.move`; eliminazione → la cronologia resta.
   - Errori della cronologia non bloccano mai il salvataggio (catturati, al massimo un toast).
+  - "Sovrascrivi" in un conflitto: il testo su disco da salvare come `before-overwrite` va letto (await). La lettura avviene **mentre il conflitto è ancora attivo** (autosave fermo); dopo la lettura si rivalida percorso e `generation` del documento: se sono cambiati si annulla; altrimenti, in modo sincrono, snapshot `before-overwrite` (fire-and-forget), fine del conflitto e scrittura. Test con lettura dal disco rallentata + digitazione/cambio file durante.
   - **Nessun await della cronologia nei percorsi che cambiano il documento.** Lo snapshot `before-*` cattura il testo in modo sincrono e la sua scrittura in IndexedDB parte senza essere attesa (fire-and-forget con `catch`), così le verifiche esistenti (identità del documento, testo cambiato nel frattempo, sospensione) restano senza await tra controllo e sostituzione del testo.
   - `restoreVersion(id)`: legge la versione (await), poi **rivalida** che il documento aperto sia ancora lo stesso percorso e che la sua `generation` (contatore incrementato a ogni cambio di testo o di documento) sia quella al momento della richiesta; altrimenti annulla con un toast. Solo dopo, in modo sincrono, snapshot `before-restore` e sostituzione.
   - Test con store lento: digitazione e cambio file durante uno snapshot o durante `restoreVersion`.
@@ -141,9 +148,9 @@ Rifinire HouseMD dopo il primo collaudo: identità visiva (logo, icone, font, te
 - Ciclo di aggiornamento protetto (non si usa il reload automatico del plugin):
   1. "Aggiorna" → il `Workspace` entra nello stato `updating`: `edit()` è ignorato e l'editor diventa di sola lettura;
   2. `settle()`; se `failed` → si esce da `updating`, toast `draftNotPersisted`, nessun aggiornamento;
-  3. se `durable` → `updateSW(false)` (invia `SKIP_WAITING` senza ricaricare).
-  4. **In ogni scheda** (anche quelle dove nessuno ha cliccato) l'evento `controllerchange` di `navigator.serviceWorker` esegue lo stesso ciclo: `updating` → `settle()` → `location.reload()` solo se `durable`; altrimenti resta sulla versione vecchia con il toast.
-- Test del ciclo con un finto service worker/`settle` (logica in un modulo puro `src/pwa/updateFlow.ts`).
+  3. se `durable` → `updateSW()` (invia `SKIP_WAITING`).
+  4. Il plugin (`virtual:pwa-register`, `registerSW`) di suo ricarica la pagina all'evento `controlling` **a meno che** non si passi `onNeedReload`: lo passiamo sempre, così nessun reload automatico avviene. `onNeedReload` scatta **in ogni scheda** (anche quelle dove nessuno ha cliccato) ed esegue lo stesso ciclo: `updating` → `settle()` → `location.reload()` solo se `durable`; altrimenti resta sulla versione vecchia con il toast.
+- La logica sta in un modulo puro `src/pwa/updateFlow.ts`; un piccolo adattatore `src/pwa/registerUpdates.ts` collega `registerSW({ onNeedRefresh, onNeedReload })` al flusso. Test del flusso con `settle`/reload finti e test dell'adattatore con un finto `registerSW` che verifica che `onNeedReload` sia sempre passato e instradato nel flusso protetto.
 - Manifest: `id: '/'`, `start_url: '/'`, `scope: '/'`, `display: 'standalone'`, nome e descrizione, icone 192 e 512 `any` più una 512 `maskable` separata (con margine di sicurezza, generata da un SVG dedicato), `theme_color`/`background_color` coerenti.
 - Precache: JS, CSS, HTML, SVG (icone pixel), PNG, `woff2` (font), chunk delle lingue.
 - Collaudo: icona "Installa" in Chrome, app installata che parte offline, toast di aggiornamento dopo un nuovo build.
