@@ -339,3 +339,59 @@ test('drafts lists buffered paths: loaded at start, added by checkpoints, remove
   await ws.saveNow();
   assert.deepEqual(ws.getState().drafts, ['b.md']);
 });
+
+// --- review di 4f66a66 ---------------------------------------------------------------------------
+
+for (const mode of ['afterDelay', 'onFocusChange'] as const) {
+  test(`blur() during a stuck external scan puts the text in the buffer in ${mode}`, async () => {
+    const { ops, buffers, ws } = await harness({ 'a.md': 'A' }, autosave(mode));
+    await ws.openFile('a.md');
+    const originalReadDir = ops.readDir.bind(ops);
+    const slow = gate();
+    ops.readDir = async (dir) => {
+      await slow.wait;
+      return originalReadDir(dir);
+    };
+    const checking = ws.checkExternal();
+    await tick(); // scritture su disco sospese
+    ws.edit('nuovo');
+    await ws.blur();
+    assert.deepEqual(await buffers.load('ws-1', 'a.md'), { text: 'nuovo', base: 'A' }, 'il blur mette al sicuro il testo');
+    assert.equal(await ops.textOf('a.md'), 'A', 'niente disco durante la scansione');
+    slow.open();
+    await checking;
+    ops.readDir = originalReadDir;
+  });
+}
+
+test('undoing back to the written text while the rebased checkpoint is being saved drops the draft', async () => {
+  const { ops, buffers, scheduler, ws } = await harness({ 'a.md': 'A' }, autosave('off'));
+  await ws.openFile('a.md');
+  const originalWrite = ops.writeFile.bind(ops);
+  const slowWrite = gate();
+  ops.writeFile = async (path, data) => {
+    await slowWrite.wait;
+    return originalWrite(path, data);
+  };
+  ws.edit('uno');
+  const saving = ws.saveNow();
+  ws.edit('due');
+  scheduler.advance(1000); // checkpoint { due, base A } durante la scrittura di "uno"
+  await tick();
+  const originalSave = buffers.save.bind(buffers);
+  const slowSave = gate();
+  buffers.save = async (id, path, text, base) => {
+    await slowSave.wait;
+    return originalSave(id, path, text, base);
+  };
+  slowWrite.open();
+  await tick(); // la scrittura è finita, il checkpoint riferito a "uno" si sta salvando
+  ws.edit('uno'); // Ctrl+Z: di nuovo il testo appena scritto
+  slowSave.open();
+  await saving;
+  ops.writeFile = originalWrite;
+  buffers.save = originalSave;
+  assert.equal(doc(ws).saveState, 'saved');
+  assert.equal(await buffers.load('ws-1', 'a.md'), null, 'niente bozza vecchia');
+  assert.deepEqual(ws.getState().drafts, []);
+});

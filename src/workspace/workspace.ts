@@ -484,7 +484,13 @@ export class Workspace {
     if (this.timer !== null) this.scheduler.clear(this.timer);
     this.timer = null;
     while (this.saving) await this.saving;
-    if (this.suspended > 0) return;
+    if (this.suspended > 0) {
+      // Scritture su disco sospese (controllo esterno, "Salva tutto"): il timer è appena stato
+      // cancellato, quindi il testo va nel buffer. Non durante rinomina/eliminazione (`moving`): il
+      // percorso è in transizione e sarà rename()/remove() a ripianificare.
+      if (this.moving === 0) await this.bufferCurrentDoc();
+      return;
+    }
     const doc = this.state.doc;
     if (!doc) return;
     if (doc.conflict || this.state.status === 'access-lost') {
@@ -563,6 +569,9 @@ export class Workspace {
           await this.clearBuffer(path).catch(() => undefined);
         } else {
           await this.saveBuffer(path, latest.text, text).catch(() => undefined);
+          // Stesso caso, ma l'annullamento è arrivato durante la scrittura del buffer riferito.
+          const after = this.state.doc;
+          if (after?.path === path && after.text === text) await this.clearBuffer(path).catch(() => undefined);
         }
       }
     }
