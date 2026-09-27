@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 
+import type { Locale } from '../i18n/i18n';
+import { useI18n } from '../i18n/I18nProvider';
 import { toCard, type Frontmatter } from './frontmatter';
 import styles from './Preview.module.css';
 
@@ -8,15 +10,16 @@ interface Props {
   resolveImage: (src: string) => Promise<string | null>;
 }
 
-function formatDate(value: string): string {
+function formatCardDate(value: string, locale: Locale): string {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
   const date = new Date(`${value}T00:00:00`);
   return Number.isNaN(date.getTime())
     ? value
-    : date.toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' });
+    : date.toLocaleDateString(locale, { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
 export function FrontmatterCard({ frontmatter, resolveImage }: Props) {
+  const { t, locale } = useI18n();
   const card = frontmatter.data ? toCard(frontmatter.data) : null;
   const image = card?.image ?? null;
   const [imageUrl, setImageUrl] = useState<string | null>(null);
@@ -33,7 +36,7 @@ export function FrontmatterCard({ frontmatter, resolveImage }: Props) {
   if (frontmatter.error) {
     return (
       <div className={styles.cardError} role="note">
-        Frontmatter non valido: {frontmatter.error}
+        {t('preview.frontmatterInvalid', { detail: frontmatter.error })}
       </div>
     );
   }
@@ -45,7 +48,7 @@ export function FrontmatterCard({ frontmatter, resolveImage }: Props) {
       {card.title && <p className={styles.cardTitle}>{card.title}</p>}
       {(card.date || card.tags.length > 0) && (
         <p className={styles.cardMeta}>
-          {card.date && <time dateTime={card.date}>{formatDate(card.date)}</time>}
+          {card.date && <time dateTime={card.date}>{formatCardDate(card.date, locale)}</time>}
           {card.tags.map((tag) => (
             <span key={tag} className={styles.tag}>
               {tag}

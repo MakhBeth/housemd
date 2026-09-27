@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 
+import { useT } from '../i18n/I18nProvider';
 import styles from './Dialog.module.css';
 
 interface Props {
@@ -13,6 +14,7 @@ interface Props {
 const lightDismiss = { closedby: 'any' } as Record<string, string>;
 
 export function ConfirmDialog({ title, message, confirmLabel, onConfirm, onCancel }: Props) {
+  const t = useT();
   const ref = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
@@ -41,7 +43,7 @@ export function ConfirmDialog({ title, message, confirmLabel, onConfirm, onCance
       <p className={styles.message}>{message}</p>
       <div className={styles.actions}>
         <button type="button" className={styles.secondary} autoFocus onClick={() => ref.current?.close()}>
-          Annulla
+          {t('dialog.cancel')}
         </button>
         <button type="button" className={styles.danger} onClick={onConfirm}>
           {confirmLabel}

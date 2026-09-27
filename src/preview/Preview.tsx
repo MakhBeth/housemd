@@ -5,6 +5,7 @@ import {
 
 import type { HouseConfig } from '../config/config';
 import { resolveImageSrc } from '../config/images';
+import { useT } from '../i18n/I18nProvider';
 import { isMarkdown, normalizePath, resolveRelative } from '../lib/paths';
 import { FrontmatterCard } from './FrontmatterCard';
 import { splitFrontmatter, toCard, type SplitDocument } from './frontmatter';
@@ -36,6 +37,7 @@ const EXTERNAL = /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i;
 
 export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(props, ref) {
   const { text, path, files, config, readBlob, highlight, onTopLine, onOpenWiki, onOpenPath } = props;
+  const t = useT();
   const scrollRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const anchors = useRef<Anchor[] | null>(null);
@@ -90,7 +92,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
             img.src = url;
           } else {
             img.classList.add(styles.missingImage);
-            img.title = `Immagine non trovata: ${local}`;
+            img.title = t('preview.imageMissing', { path: local });
           }
         });
       }
@@ -107,7 +109,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     return () => {
       cancelled = true;
     };
-  }, [doc, files, config, cache, highlight]);
+  }, [doc, files, config, cache, highlight, t]);
 
   // Le posizioni cambiano con il ridimensionamento e il caricamento delle immagini.
   useEffect(() => {

@@ -1,3 +1,5 @@
+import { useT } from '../i18n/I18nProvider';
+import { Icon } from './Icon';
 import styles from './WorkspaceView.module.css';
 
 interface Props {
@@ -6,11 +8,13 @@ interface Props {
 }
 
 export function ConflictBar({ onReload, onOverwrite }: Props) {
+  const t = useT();
   return (
     <div className={styles.conflict} role="alert">
-      <span>Il file è cambiato su disco mentre avevi modifiche non salvate.</span>
-      <button onClick={onReload}>Ricarica dal disco</button>
-      <button onClick={onOverwrite}>Sovrascrivi con le mie modifiche</button>
+      <Icon name="warning" />
+      <span>{t('conflict.message')}</span>
+      <button onClick={onReload}>{t('conflict.reload')}</button>
+      <button onClick={onOverwrite}>{t('conflict.overwrite')}</button>
     </div>
   );
 }

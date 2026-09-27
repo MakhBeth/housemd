@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
 
+import { useT } from '../i18n/I18nProvider';
 import { Icon } from './Icon';
 import { ancestorsOf, type TreeNode } from './tree';
 import styles from './FileTree.module.css';
@@ -13,11 +14,12 @@ interface Props {
   onAction: (action: TreeAction, node: TreeNode | null) => void;
 }
 
-/** Menu = gruppo di pulsanti in un popover ancorato al pulsante "⋯" (niente role="menu"). */
+/** Menu = gruppo di pulsanti in un popover ancorato al pulsante delle azioni (niente role="menu"). */
 const autoPopover = { popover: 'auto' } as Record<string, string>;
 const ANCHOR = '--housemd-tree-menu';
 
 export function FileTree({ nodes, openPath, onOpen, onAction }: Props) {
+  const t = useT();
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [menuNode, setMenuNode] = useState<TreeNode | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -62,7 +64,8 @@ export function FileTree({ nodes, openPath, onOpen, onAction }: Props) {
     <button
       data-menu-trigger
       className={styles.menuButton}
-      aria-label={`Azioni per ${node.name}`}
+      aria-label={t('tree.actions', { name: node.name })}
+      title={t('tree.actions', { name: node.name })}
       onClick={(event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -80,10 +83,12 @@ export function FileTree({ nodes, openPath, onOpen, onAction }: Props) {
           {node.kind === 'directory' ? (
             <details open={expanded.has(node.path)} onToggle={(e) => toggle(node.path, e.currentTarget.open)}>
               <summary className={styles.row} onContextMenu={onContextMenu(node)}>
+                <Icon name={expanded.has(node.path) ? 'folderOpen' : 'folderClosed'} size={16} />
+                <Icon name="folder" size={16} />
                 <span className={styles.name}>{node.name}</span>
                 {menuButton(node)}
               </summary>
-              {node.children.length > 0 ? renderNodes(node.children) : <p className={styles.emptyDir}>Cartella vuota</p>}
+              {node.children.length > 0 ? renderNodes(node.children) : <p className={styles.emptyDir}>{t('tree.emptyFolder')}</p>}
             </details>
           ) : (
             <div className={styles.row} data-active={node.path === openPath} onContextMenu={onContextMenu(node)}>
@@ -92,7 +97,8 @@ export function FileTree({ nodes, openPath, onOpen, onAction }: Props) {
                 aria-current={node.path === openPath ? 'page' : undefined}
                 onClick={() => onOpen(node.path)}
               >
-                {node.name}
+                <Icon name="file" size={16} />
+                <span className={styles.name}>{node.name}</span>
               </button>
               {menuButton(node)}
             </div>
@@ -103,18 +109,18 @@ export function FileTree({ nodes, openPath, onOpen, onAction }: Props) {
   );
 
   return (
-    <nav className={styles.tree} aria-label="File della cartella">
-      {nodes.length > 0 ? renderNodes(nodes) : <p className={styles.emptyDir}>Nessun file markdown</p>}
+    <nav className={styles.tree} aria-label={t('tree.label')}>
+      {nodes.length > 0 ? renderNodes(nodes) : <p className={styles.emptyDir}>{t('tree.noFiles')}</p>}
       <div ref={menuRef} {...autoPopover} className={styles.menu}>
         {menuNode?.kind === 'directory' && (
           <>
-            <button onClick={() => act('new-file')}>Nuovo file</button>
-            <button onClick={() => act('new-folder')}>Nuova cartella</button>
+            <button onClick={() => act('new-file')}>{t('file.new')}</button>
+            <button onClick={() => act('new-folder')}>{t('folder.new')}</button>
           </>
         )}
-        <button onClick={() => act('rename')}>Rinomina</button>
+        <button onClick={() => act('rename')}>{t('tree.rename')}</button>
         <button className={styles.danger} onClick={() => act('delete')}>
-          Elimina
+          {t('tree.delete')}
         </button>
       </div>
     </nav>

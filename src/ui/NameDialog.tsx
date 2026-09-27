@@ -9,7 +9,7 @@ interface Props {
   kind: 'file' | 'directory';
   initial: string;
   confirmLabel: string;
-  /** Controllo aggiuntivo (es. nome già esistente): messaggio d'errore oppure null. */
+  /** Controllo aggiuntivo (es. nome già esistente): messaggio d'errore già tradotto oppure null. */
   validate: (name: string) => string | null;
   onSubmit: (name: string) => void;
   onCancel: () => void;
@@ -86,7 +86,7 @@ export function NameDialog({ title, kind, initial, confirmLabel, validate, onSub
         )}
         <div className={styles.actions}>
           <button type="button" className={styles.secondary} onClick={() => ref.current?.close()}>
-            Annulla
+            {t('dialog.cancel')}
           </button>
           <button type="submit" className={styles.primary}>
             {confirmLabel}

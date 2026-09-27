@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import en from './locales/en.json';
 import { NAME_ERRORS } from '../ui/names';
 import { TOAST_CODES } from '../workspace/toasts';
+import { UNSUPPORTED_REASONS } from '../fs/access';
 
 const keys = new Set(Object.keys(en));
 
@@ -14,4 +15,8 @@ test('every toast code has a message in en.json', () => {
 test('every name validation error has a message in en.json', () => {
   for (const code of NAME_ERRORS) assert.ok(keys.has(`name.error.${code}`), `manca name.error.${code}`);
   assert.ok(keys.has('name.error.taken'));
+});
+
+test('every unsupported-browser reason has a message in en.json', () => {
+  for (const reason of UNSUPPORTED_REASONS) assert.ok(keys.has(`unsupported.${reason}`), `manca unsupported.${reason}`);
 });

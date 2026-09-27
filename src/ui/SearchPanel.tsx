@@ -1,7 +1,9 @@
 import { forwardRef, useEffect, useState, type ReactNode } from 'react';
 
+import { useT } from '../i18n/I18nProvider';
 import { findMatches } from '../search/fold';
 import type { SearchIndex, SearchResult } from '../search/searchIndex';
+import { Icon } from './Icon';
 import styles from './SearchPanel.module.css';
 
 interface Props {
@@ -24,6 +26,7 @@ function Highlighted({ text, terms }: { text: string; terms: string[] }) {
 }
 
 export const SearchPanel = forwardRef<HTMLInputElement, Props>(function SearchPanel({ index, indexRevision, onOpen }, ref) {
+  const t = useT();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
 
@@ -34,12 +37,13 @@ export const SearchPanel = forwardRef<HTMLInputElement, Props>(function SearchPa
 
   return (
     <div className={styles.search} role="search">
+      <Icon name="search" size={16} className={styles.searchIcon} />
       <input
         ref={ref}
         type="search"
         className={styles.input}
-        placeholder="Cerca (Ctrl+K)"
-        aria-label="Cerca nei file"
+        placeholder={t('search.placeholder')}
+        aria-label={t('search.label')}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         onKeyDown={(e) => {
@@ -52,8 +56,8 @@ export const SearchPanel = forwardRef<HTMLInputElement, Props>(function SearchPa
         }}
       />
       {query.trim() && (
-        <ul className={styles.results} aria-label="Risultati della ricerca">
-          {results.length === 0 && <li className={styles.none}>Nessun risultato</li>}
+        <ul className={styles.results} aria-label={t('search.results')}>
+          {results.length === 0 && <li className={styles.none}>{t('search.none')}</li>}
           {results.map((r) => (
             <li key={r.path}>
               <button className={styles.result} onClick={() => onOpen(r.path, r.terms)}>

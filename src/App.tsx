@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 
-import { hasAccess, isSupported, pickFolder, requestAccess, unsupportedMessage } from './fs/access';
+import { hasAccess, isSupported, pickFolder, requestAccess, unsupportedReason } from './fs/access';
 import { fsaOps } from './fs/fsaOps';
 import { findKnownWorkspaceId, loadWorkspace, saveWorkspace, type StoredWorkspace } from './fs/handleStore';
 import { createWorkspaceFS } from './fs/workspaceFS';
 import { StartScreen } from './ui/StartScreen';
 import { WorkspaceView } from './ui/WorkspaceView';
 import { indexedDbBufferStore } from './workspace/buffers';
+import { errorDetail } from './workspace/toasts';
 import { Workspace } from './workspace/workspace';
 
 type Screen =
@@ -83,7 +84,7 @@ export default function App() {
       setOpenCount((c) => c + 1);
       setScreen({ kind: 'open', stored, workspace });
     } catch (err) {
-      setScreen({ kind: 'start', error: `Impossibile aprire la cartella: ${(err as Error).message}` });
+      setScreen({ kind: 'start', error: errorDetail(err) });
     }
   }, [screen]);
 
@@ -99,9 +100,9 @@ export default function App() {
     case 'boot':
       return null;
     case 'unsupported':
-      return <StartScreen mode="unsupported" message={unsupportedMessage(navigator.userAgent)} />;
+      return <StartScreen mode="unsupported" reason={unsupportedReason(navigator.userAgent)} />;
     case 'start':
-      return <StartScreen mode="start" message={screen.error} onPick={choose} />;
+      return <StartScreen mode="start" error={screen.error} onPick={choose} />;
     case 'resume':
       return <StartScreen mode="resume" folderName={screen.stored.handle.name} onResume={resume} onPick={choose} />;
     case 'open':

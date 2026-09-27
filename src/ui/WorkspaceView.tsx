@@ -2,10 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, 
 
 import { Editor, type EditorHandle } from '../editor/Editor';
 import { requestAccess } from '../fs/access';
+import { useT } from '../i18n/I18nProvider';
+import type { MessageKey } from '../i18n/messages';
 import { dirname, joinPath } from '../lib/paths';
 import { readPref, writePref } from '../lib/prefs';
 import { Preview, type PreviewHandle } from '../preview/Preview';
-import type { Workspace } from '../workspace/workspace';
+import type { SaveState, Workspace } from '../workspace/workspace';
 import { ConfirmDialog } from './ConfirmDialog';
 import { ConflictBar } from './ConflictBar';
 import { FileTree, type TreeAction } from './FileTree';
@@ -20,13 +22,18 @@ import styles from './WorkspaceView.module.css';
 
 type Mode = 'editor' | 'split' | 'preview';
 
-const MODES: Array<{ id: Mode; label: string }> = [
-  { id: 'editor', label: 'Editor' },
-  { id: 'split', label: 'Split' },
-  { id: 'preview', label: 'Anteprima' },
+const MODES: Array<{ id: Mode; label: MessageKey }> = [
+  { id: 'editor', label: 'mode.editor' },
+  { id: 'split', label: 'mode.split' },
+  { id: 'preview', label: 'mode.preview' },
 ];
 
-const SAVE_LABEL = { saved: 'Salvato', dirty: 'Modifiche…', saving: 'Salvataggio…', error: 'Errore di salvataggio' } as const;
+const SAVE_LABEL: Record<SaveState, MessageKey> = {
+  saved: 'save.saved',
+  dirty: 'save.dirty',
+  saving: 'save.saving',
+  error: 'save.error',
+};
 
 const MIN_SIDEBAR = 180;
 const MAX_SIDEBAR = 480;
@@ -47,6 +54,7 @@ interface Props {
 const NO_TERMS: string[] = [];
 
 export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }: Props) {
+  const t = useT();
   const state = useWorkspaceState(workspace);
   const doc = state.doc;
   const [mode, setMode] = useState<Mode>(() => readPref<Mode>('mode', 'split'));
@@ -204,7 +212,8 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }
   };
 
   const exists = (path: string) => state.entries.some((e) => e.path.toLowerCase() === path.toLowerCase());
-  const taken = 'Esiste già un elemento con questo nome';
+  const taken = t('name.error.taken');
+  const sidebarLabel = sidebarOpen ? t('sidebar.hide') : t('sidebar.show');
 
   return (
     <div
@@ -215,26 +224,26 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }
         <>
           <aside className={styles.sidebar}>
             <div className={styles.sidebarHeader}>
-              <button className={styles.folder} onClick={onChangeFolder} title="Apri un'altra cartella">
+              <button className={styles.folder} onClick={onChangeFolder} title={t('sidebar.changeFolder')}>
                 {state.name}
               </button>
-              <button className={styles.iconButton} onClick={() => onTreeAction('new-file', null)} aria-label="Nuovo file" title="Nuovo file">
+              <button className={styles.iconButton} onClick={() => onTreeAction('new-file', null)} aria-label={t('file.new')} title={t('file.new')}>
                 <Icon name="newFile" />
               </button>
-              <button className={styles.iconButton} onClick={() => onTreeAction('new-folder', null)} aria-label="Nuova cartella" title="Nuova cartella">
+              <button className={styles.iconButton} onClick={() => onTreeAction('new-folder', null)} aria-label={t('folder.new')} title={t('folder.new')}>
                 <Icon name="newFolder" />
               </button>
             </div>
             <SearchPanel ref={searchRef} index={workspace.search} indexRevision={state.indexRevision} onOpen={openFile} />
             {orphans.length > 0 && (
-              <section className={styles.orphans} aria-label="Bozze senza file">
-                <h2 className={styles.orphansTitle}>Bozze senza file</h2>
+              <section className={styles.orphans} aria-label={t('orphans.title')}>
+                <h2 className={styles.orphansTitle}>{t('orphans.title')}</h2>
                 {orphans.map((path) => (
                   <button
                     key={path}
                     className={styles.orphan}
                     aria-current={doc?.path === path ? 'true' : undefined}
-                    title={`Recupera la bozza di ${path}`}
+                    title={t('orphans.recover', { path })}
                     onClick={() => openFile(path)}
                   >
                     {path}
@@ -248,7 +257,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }
             className={styles.resizer}
             role="separator"
             aria-orientation="vertical"
-            aria-label="Larghezza della barra laterale"
+            aria-label={t('sidebar.resize')}
             aria-valuenow={sidebarWidth}
             aria-valuemin={MIN_SIDEBAR}
             aria-valuemax={MAX_SIDEBAR}
@@ -261,19 +270,14 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }
 
       <main className={styles.main}>
         <header className={styles.toolbar}>
-          <button
-            className={styles.iconButton}
-            onClick={toggleSidebar}
-            aria-pressed={sidebarOpen}
-            aria-label={sidebarOpen ? 'Nascondi barra laterale' : 'Mostra barra laterale'}
-          >
+          <button className={styles.iconButton} onClick={toggleSidebar} aria-pressed={sidebarOpen} aria-label={sidebarLabel} title={sidebarLabel}>
             <Icon name={sidebarOpen ? 'sidebarClose' : 'sidebarOpen'} />
           </button>
-          <span className={styles.path}>{doc?.path ?? 'Nessun file aperto'}</span>
-          <div className={styles.modes} role="group" aria-label="Modalità di visualizzazione">
+          <span className={styles.path}>{doc?.path ?? t('toolbar.noFile')}</span>
+          <div className={styles.modes} role="group" aria-label={t('toolbar.modes')}>
             {MODES.map((m) => (
               <button key={m.id} className={styles.mode} aria-pressed={mode === m.id} onClick={() => changeMode(m.id)}>
-                {m.label}
+                {t(m.label)}
               </button>
             ))}
           </div>
@@ -283,7 +287,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }
             aria-live={doc?.saveState === 'error' ? 'assertive' : 'polite'}
             role={doc?.saveState === 'error' ? 'alert' : undefined}
           >
-            {doc ? (doc.deletedOnDisk ? 'Eliminato su disco' : SAVE_LABEL[doc.saveState]) : ''}
+            {doc ? (doc.deletedOnDisk ? t('save.deleted') : t(SAVE_LABEL[doc.saveState])) : ''}
           </span>
         </header>
 
@@ -297,7 +301,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }
         {doc ? (
           <div className={styles.panes} data-mode={mode}>
             {mode !== 'preview' && (
-              <section className={styles.pane} aria-label="Editor">
+              <section className={styles.pane} aria-label={t('pane.editor')}>
                 <Editor
                   ref={editorRef}
                   text={doc.text}
@@ -312,7 +316,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }
               </section>
             )}
             {mode !== 'editor' && (
-              <section className={styles.pane} aria-label="Anteprima">
+              <section className={styles.pane} aria-label={t('pane.preview')}>
                 <Preview
                   ref={previewRef}
                   text={doc.text}
@@ -335,9 +339,9 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }
           </div>
         ) : (
           <div className={styles.empty}>
-            <p>Scegli un file dalla barra laterale oppure creane uno nuovo.</p>
+            <p>{t('empty.hint')}</p>
             <button className={styles.primary} onClick={() => onTreeAction('new-file', null)}>
-              Nuovo file
+              {t('file.new')}
             </button>
           </div>
         )}
@@ -345,10 +349,10 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }
 
       {dialog && (dialog.kind === 'new-file' || dialog.kind === 'new-folder') && (
         <NameDialog
-          title={dialog.kind === 'new-file' ? 'Nuovo file' : 'Nuova cartella'}
+          title={dialog.kind === 'new-file' ? t('file.new') : t('folder.new')}
           kind={dialog.kind === 'new-file' ? 'file' : 'directory'}
           initial=""
-          confirmLabel="Crea"
+          confirmLabel={t('dialog.create')}
           validate={(name) => (exists(joinPath(dialog.dir, name)) ? taken : null)}
           onSubmit={(name) => {
             const path = joinPath(dialog.dir, name);
@@ -360,10 +364,10 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }
       )}
       {dialog?.kind === 'rename' && (
         <NameDialog
-          title={`Rinomina ${dialog.node.name}`}
+          title={t('dialog.rename.title', { name: dialog.node.name })}
           kind={dialog.node.kind}
           initial={dialog.node.name}
-          confirmLabel="Rinomina"
+          confirmLabel={t('dialog.rename.confirm')}
           validate={(name) => {
             const to = joinPath(dirname(dialog.node.path), name);
             const paths = state.entries.map((e) => e.path);
@@ -379,13 +383,9 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }
       )}
       {dialog?.kind === 'delete' && (
         <ConfirmDialog
-          title={`Eliminare ${dialog.node.name}?`}
-          message={
-            dialog.node.kind === 'directory'
-              ? 'La cartella e tutto il suo contenuto verranno eliminati dal disco.'
-              : 'Il file verrà eliminato dal disco.'
-          }
-          confirmLabel="Elimina"
+          title={t('dialog.delete.title', { name: dialog.node.name })}
+          message={dialog.node.kind === 'directory' ? t('dialog.delete.folder') : t('dialog.delete.file')}
+          confirmLabel={t('dialog.delete.confirm')}
           onConfirm={() => {
             const path = dialog.node.path;
             setDialog(null);
@@ -416,9 +416,10 @@ const noDismiss = { closedby: 'none' } as Record<string, string>;
 
 /** Dialog bloccante: l'accesso va ripreso con un clic (Chrome richiede un gesto dell'utente). */
 function AccessLostDialog({ folderName, onResume }: { folderName: string; onResume: () => Promise<boolean> }) {
+  const t = useT();
   const ref = useRef<HTMLDialogElement>(null);
   const mounted = useRef(true);
-  const [error, setError] = useState<string | null>(null);
+  const [denied, setDenied] = useState(false);
 
   useEffect(() => {
     mounted.current = true;
@@ -431,12 +432,12 @@ function AccessLostDialog({ folderName, onResume }: { folderName: string; onResu
   }, []);
 
   const resume = async () => {
-    setError(null);
+    setDenied(false);
     try {
       const granted = await onResume();
-      if (!granted) setError('Accesso non concesso. Riprova.');
+      if (!granted) setDenied(true);
     } catch {
-      setError('Accesso non concesso. Riprova.');
+      setDenied(true);
     }
   };
 
@@ -455,13 +456,11 @@ function AccessLostDialog({ folderName, onResume }: { folderName: string; onResu
       }}
       aria-labelledby="access-title"
     >
-      <h2 id="access-title">Accesso alla cartella perso</h2>
-      <p>
-        Il browser non permette più di modificare “{folderName}”. Le modifiche non salvate sono al sicuro in questo browser.
-      </p>
-      {error && <p className={styles.accessError}>{error}</p>}
+      <h2 id="access-title">{t('access.title')}</h2>
+      <p>{t('access.body', { folder: folderName })}</p>
+      {denied && <p className={styles.accessError}>{t('access.denied')}</p>}
       <button className={styles.primary} onClick={resume}>
-        Riprendi accesso
+        {t('access.resume')}
       </button>
     </dialog>
   );
