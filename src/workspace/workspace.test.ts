@@ -901,3 +901,17 @@ test('[codex F9] a recovered draft of a deleted file is saved (re-creating the f
   // Passando a b.md la bozza (dirty) viene salvata e ricrea il file: nessun testo perso.
   assert.equal(await ops.textOf('a.md'), 'bozza, continuata');
 });
+
+test('[codex F9 round 2] orphanDrafts lists buffered paths that are no longer on disk, sorted', async () => {
+  const { buffers, ws } = await setup({ 'b.md': 'B' });
+  assert.deepEqual(await ws.orphanDrafts(), []);
+  await buffers.save('ws-1', 'z.md', 'bozza z', 'z');
+  await buffers.save('ws-1', 'n/a.md', 'bozza a', 'a');
+  await buffers.save('ws-1', 'b.md', 'bozza b', 'B'); // il file esiste: non è orfana
+  await buffers.save('ws-2', 'c.md', 'altra cartella', 'c');
+  assert.deepEqual(await ws.orphanDrafts(), ['n/a.md', 'z.md']);
+
+  await ws.openFile('z.md'); // la si recupera e la si salva: il file torna su disco
+  await ws.saveNow();
+  assert.deepEqual(await ws.orphanDrafts(), ['n/a.md']);
+});

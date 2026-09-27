@@ -309,6 +309,13 @@ export class Workspace {
     return (await this.deps.buffers.load(this.deps.workspaceId, path).catch(() => null)) !== null;
   }
 
+  /** Bozze nel buffer di emergenza di file che non esistono più su disco, in ordine. */
+  async orphanDrafts(): Promise<string[]> {
+    const onDisk = new Set(this.files());
+    const paths = await this.deps.buffers.list(this.deps.workspaceId).catch(() => [] as string[]);
+    return paths.filter((p) => !onDisk.has(p)).sort();
+  }
+
   async closeFile(): Promise<void> {
     await this.settle();
     this.set({ doc: null });

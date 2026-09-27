@@ -197,3 +197,36 @@
   color: var(--c-danger);
   font-weight: 600;
 }
+
+.orphans {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--c-border);
+  background: var(--c-warning-bg);
+}
+
+.orphansTitle {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--c-muted);
+}
+
+.orphan {
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  padding: 3px 6px;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.orphan:hover,
+.orphan[aria-current='true'] {
+  background: var(--c-accent-soft);
+}

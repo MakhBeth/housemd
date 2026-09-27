@@ -34,6 +34,18 @@ for (const [name, make] of factories) {
     assert.deepEqual(await store.load('ws-1', 'older/c.md'), { text: 'C', base: 'base-c' }, 'solo il prefisso esatto');
     assert.deepEqual(await store.load('ws-2', 'old/a.md'), { text: 'altro', base: 'base-altro' }, 'solo il workspace indicato');
   });
+
+  test(`${name}: [codex F9 round 2] list returns the buffered paths of one workspace only`, async () => {
+    const store = make();
+    assert.deepEqual(await store.list('ws-1'), []);
+    await store.save('ws-1', 'b.md', 'B', 'b');
+    await store.save('ws-1', 'n/a.md', 'A', 'a');
+    await store.save('ws-10', 'x.md', 'altro prefisso', 'x');
+    await store.save('ws-2', 'y.md', 'altro workspace', 'y');
+    assert.deepEqual((await store.list('ws-1')).sort(), ['b.md', 'n/a.md']);
+    await store.clear('ws-1', 'b.md');
+    assert.deepEqual(await store.list('ws-1'), ['n/a.md']);
+  });
 }
 
 test('indexedDB: a legacy plain-string buffer (formato precedente) is read as { text, base }', async () => {

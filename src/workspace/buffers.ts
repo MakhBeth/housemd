@@ -13,6 +13,8 @@ export interface BufferStore {
   clear(workspaceId: string, path: string): Promise<void>;
   /** Sposta i buffer di `from` e di tutto ciò che contiene (rinomina di file o cartelle). */
   move(workspaceId: string, from: string, to: string): Promise<void>;
+  /** Percorsi che hanno un buffer in questo workspace (anche di file non più su disco). */
+  list(workspaceId: string): Promise<string[]>;
 }
 
 const SEP = '\u0000';
@@ -53,6 +55,10 @@ export function memoryBufferStore(): BufferStore {
         entries.set(bufferKey(ws, next), value);
       }
     },
+    async list(ws) {
+      const prefix = `${ws}${SEP}`;
+      return [...entries.keys()].filter((key) => key.startsWith(prefix)).map((key) => key.slice(prefix.length));
+    },
   };
 }
 
@@ -90,6 +96,13 @@ export function indexedDbBufferStore(dbName = DB_NAME): BufferStore {
           s.delete(key);
           s.put(value, bufferKey(ws, next));
         }
+      }),
+    list: (ws) =>
+      withStore('readonly', async (s) => {
+        const prefix = `${ws}${SEP}`;
+        const range = IDBKeyRange.bound(prefix, `${prefix}\uffff`);
+        const keys = (await request(s.getAllKeys(range))) as string[];
+        return keys.map((key) => key.slice(prefix.length));
       }),
   };
 }

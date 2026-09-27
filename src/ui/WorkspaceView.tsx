@@ -57,6 +57,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }
   const previewRef = useRef<PreviewHandle>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const reopened = useRef(false);
+  const [orphans, setOrphans] = useState<string[]>([]);
 
   const tree = useMemo(() => buildTree(state.entries), [state.entries]);
   const files = useMemo(() => state.entries.filter((e) => e.kind === 'file').map((e) => e.path), [state.entries]);
@@ -76,6 +77,19 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }
     },
     [workspace],
   );
+
+  // Bozze nel buffer di emergenza di file spariti dal disco: senza questa lista non avrebbero
+  // modo di essere ritrovate, visto che non compaiono nell'albero dei file.
+  useEffect(() => {
+    if (state.status !== 'ready') return;
+    let alive = true;
+    void workspace.orphanDrafts().then((paths) => {
+      if (alive) setOrphans(paths);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [workspace, state.status, state.indexRevision, state.entries]);
 
   // Riapre l'ultimo file della cartella.
   useEffect(() => {
@@ -211,6 +225,22 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }
               </button>
             </div>
             <SearchPanel ref={searchRef} index={workspace.search} indexRevision={state.indexRevision} onOpen={openFile} />
+            {orphans.length > 0 && (
+              <section className={styles.orphans} aria-label="Bozze senza file">
+                <h2 className={styles.orphansTitle}>Bozze senza file</h2>
+                {orphans.map((path) => (
+                  <button
+                    key={path}
+                    className={styles.orphan}
+                    aria-current={doc?.path === path ? 'true' : undefined}
+                    title={`Recupera la bozza di ${path}`}
+                    onClick={() => openFile(path)}
+                  >
+                    {path}
+                  </button>
+                ))}
+              </section>
+            )}
             <FileTree nodes={tree} openPath={doc?.path ?? null} onOpen={(path) => openFile(path)} onAction={onTreeAction} />
           </aside>
           <div
