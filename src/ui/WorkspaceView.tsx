@@ -358,6 +358,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }
                   text={doc.text}
                   resetKey={`${doc.path}#${doc.revision}`}
                   restore={doc.restore}
+                  readOnly={state.updating}
                   getDocs={getDocs}
                   onChange={(text) => workspace.edit(text)}
                   onImage={(file) => workspace.saveImage(file, file.name)}

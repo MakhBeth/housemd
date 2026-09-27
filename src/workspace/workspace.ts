@@ -56,6 +56,8 @@ export interface WorkspaceState {
   autosave: AutosaveSettings;
   /** Percorsi con una bozza nel buffer di emergenza (anche di file non aperti), in ordine. */
   drafts: string[];
+  /** Aggiornamento dell'app in corso: modifiche ignorate, editor in sola lettura. */
+  updating: boolean;
 }
 
 export interface Scheduler {
@@ -148,6 +150,7 @@ export class Workspace {
       indexRevision: 0,
       autosave: parseAutosave(deps.autosave ?? DEFAULT_AUTOSAVE),
       drafts: [],
+      updating: false,
     };
   }
 
@@ -274,6 +277,20 @@ export class Workspace {
 
   restoreVersion(id: number): Promise<void> {
     return this.runExclusive(() => this.doRestoreVersion(id));
+  }
+
+  /**
+   * Aggiornamento dell'app: da subito le modifiche sono ignorate (editor in sola lettura), poi — in
+   * coda, dopo l'operazione in corso — il documento si mette al sicuro. `failed`: chi chiama deve
+   * chiamare endUpdate() e non ricaricare.
+   */
+  beginUpdate(): Promise<SettleResult> {
+    this.set({ updating: true });
+    return this.runExclusive(() => this.settle());
+  }
+
+  endUpdate(): void {
+    if (this.state.updating) this.set({ updating: false });
   }
 
   // --- caricamento ------------------------------------------------------------
@@ -456,7 +473,7 @@ export class Workspace {
 
   edit(textLf: string): void {
     const doc = this.state.doc;
-    if (!doc) return;
+    if (!doc || this.state.updating) return;
     const text = withEol(textLf, doc.eol);
     if (text === doc.text) return;
     // Una modifica vera rende il comando di ripristino ormai vecchio: non va più riapplicato.

@@ -8,8 +8,11 @@ import { switchFolder } from './app/switchFolder';
 import { useT } from './i18n/I18nProvider';
 import { onDbBlocked } from './lib/db';
 import { readValidPref } from './lib/prefs';
+import type { UpdateFlow } from './pwa/updateFlow';
+import { setUpdateWorkspace } from './pwa/updateHost';
 import { Notice } from './ui/Notice';
 import { StartScreen } from './ui/StartScreen';
+import { UpdateNotice } from './ui/UpdateNotice';
 import { WorkspaceView } from './ui/WorkspaceView';
 import { indexedDbHistoryStore } from './history/historyStore';
 import { indexedDbBufferStore } from './workspace/buffers';
@@ -39,7 +42,7 @@ async function openWorkspace(stored: StoredWorkspace): Promise<Workspace> {
   return workspace;
 }
 
-export default function App() {
+export default function App({ updates }: { updates: UpdateFlow }) {
   const t = useT();
   const [dbBlocked, setDbBlocked] = useState(false);
   useEffect(() => onDbBlocked(() => setDbBlocked(true)), []);
@@ -49,6 +52,11 @@ export default function App() {
   // STESSA cartella (stesso workspaceId) forzi comunque lo smontaggio/rimontaggio del componente,
   // invece di lasciarne leaked lo stato interno (es. `reopened`).
   const [openCount, setOpenCount] = useState(0);
+
+  // Il flusso di aggiornamento mette al sicuro il documento del Workspace aperto prima del reload.
+  useEffect(() => {
+    setUpdateWorkspace(screen.kind === 'open' ? screen.workspace : null);
+  }, [screen]);
 
   useEffect(() => {
     if (!isSupported()) {
@@ -148,6 +156,7 @@ export default function App() {
   return (
     <>
       {content}
+      <UpdateNotice flow={updates} />
       {dbBlocked && (
         <Notice
           placement="top"

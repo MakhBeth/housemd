@@ -1,6 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, type MutableRefObject } from 'react';
 import { basicSetup } from 'codemirror';
-import { EditorState } from '@codemirror/state';
+import { Compartment, EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { markdown } from '@codemirror/lang-markdown';
 import { autocompletion } from '@codemirror/autocomplete';
@@ -29,6 +29,8 @@ export interface EditorProps {
   onTopLine: (line: number) => void;
   /** Ripristino dalla cronologia: sostituisce il testo con una transazione, quindi annullabile con Ctrl+Z. */
   restore?: RestoreCommand | null;
+  /** Sola lettura (aggiornamento dell'app in corso). */
+  readOnly?: boolean;
 }
 
 type Callbacks = MutableRefObject<EditorProps>;
@@ -61,6 +63,9 @@ const highlight = HighlightStyle.define([
   { tag: [tags.processingInstruction, tags.meta, tags.contentSeparator], color: 'var(--c-muted)' },
 ]);
 
+const editable = new Compartment();
+const readOnlyExtensions = (readOnly: boolean) => [EditorState.readOnly.of(readOnly), EditorView.editable.of(!readOnly)];
+
 function insertImages(view: EditorView, files: File[], pos: number, callbacks: Callbacks): void {
   // insertImageLinks legge il resetKey subito (al momento dell'incolla/trascinamento) e dopo ogni
   // salvataggio lo riconfronta: se l'editor è passato a un altro documento, non lo tocca.
@@ -82,6 +87,7 @@ function createState(text: string, callbacks: Callbacks): EditorState {
       syntaxHighlighting(highlight),
       EditorView.lineWrapping,
       theme,
+      editable.of(readOnlyExtensions(callbacks.current.readOnly ?? false)),
       autocompletion({ override: [wikiCompletionSource(() => callbacks.current.getDocs())] }),
       EditorView.updateListener.of((update) => {
         if (update.docChanged) callbacks.current.onChange(update.state.doc.toString());
@@ -149,6 +155,10 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
     if (view.state.doc.toString() === restore.textLf) return;
     view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: restore.textLf }, userEvent: 'input.restore' });
   }, [props.restore?.seq]);
+
+  useEffect(() => {
+    viewRef.current?.dispatch({ effects: editable.reconfigure(readOnlyExtensions(props.readOnly ?? false)) });
+  }, [props.readOnly]);
 
   useImperativeHandle(
     ref,
