@@ -26,3 +26,13 @@ test('every file in locales/ is a supported locale', () => {
   assert.deepEqual(files.map((f) => f.slice(0, -5)).filter((l) => !isLocale(l)), []);
   assert.equal(files.length, SUPPORTED_LOCALES.length);
 });
+
+test('the non-reference locales are real translations, not copies of en.json', () => {
+  for (const locale of SUPPORTED_LOCALES.filter((l) => l !== 'en' && l !== 'it')) {
+    const messages = read(locale) as Record<string, string>;
+    const keys = Object.keys(en);
+    const copied = keys.filter((key) => messages[key] === en[key]);
+    // Alcune voci restano identiche per natura (HouseMD, Editor, Split…): mai più di un quinto.
+    assert.ok(copied.length / keys.length < 0.2, `${locale}: ${copied.length} valori identici all'inglese`);
+  }
+});
