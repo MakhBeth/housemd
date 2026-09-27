@@ -18,12 +18,26 @@ const LOADERS: Record<Exclude<Locale, 'en'>, () => Promise<{ default: Messages }
   ja: () => import('./locales/ja.json'),
 };
 
-export async function loadMessages(locale: Locale): Promise<Messages> {
-  if (locale === 'en') return EN_MESSAGES;
+export interface LoadedMessages {
+  locale: Locale;
+  messages: Messages;
+}
+
+/** Carica un chunk di lingua, ricadendo su EN_MESSAGES (e sulla lingua `en`) se il loader fallisce. */
+export async function loadWithFallback(
+  locale: Exclude<Locale, 'en'>,
+  loader: () => Promise<{ default: Messages }>,
+): Promise<LoadedMessages> {
   try {
-    return (await LOADERS[locale]()).default;
+    return { locale, messages: (await loader()).default };
   } catch {
     // chunk non raggiungibile (offline senza precache): meglio l'inglese che una pagina vuota
-    return EN_MESSAGES;
+    return { locale: 'en', messages: EN_MESSAGES };
   }
+}
+
+/** La lingua restituita è quella effettivamente caricata: `en` se il chunk richiesto è fallito. */
+export async function loadMessages(locale: Locale): Promise<LoadedMessages> {
+  if (locale === 'en') return { locale: 'en', messages: EN_MESSAGES };
+  return loadWithFallback(locale, LOADERS[locale]);
 }

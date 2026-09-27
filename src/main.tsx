@@ -12,9 +12,9 @@ import { I18nProvider } from './i18n/I18nProvider';
 import { loadMessages } from './i18n/messages';
 import { readValidPref } from './lib/prefs';
 
-const locale = readValidPref('locale', parseLocale) ?? detectLocale(navigator.languages);
+const requestedLocale = readValidPref('locale', parseLocale) ?? detectLocale(navigator.languages);
 
-void loadMessages(locale).then((messages) => {
+void loadMessages(requestedLocale).then(({ locale, messages }) => {
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
       <I18nProvider initialLocale={locale} initialMessages={messages}>

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { detectLocale, formatDate, formatRelative, parseLocale, placeholders, translate } from './i18n';
-import { EN_MESSAGES, loadMessages } from './messages';
+import { EN_MESSAGES, loadMessages, loadWithFallback } from './messages';
 
 test('detectLocale matches on the language prefix, case-insensitively', () => {
   assert.equal(detectLocale(['pt-BR', 'en']), 'pt');
@@ -48,7 +48,13 @@ test('formatRelative says today/yesterday with the time, otherwise a short date'
 });
 
 test('loadMessages returns English synchronously available and loads the others', async () => {
-  assert.equal(await loadMessages('en'), EN_MESSAGES);
-  const it = await loadMessages('it');
-  assert.equal(it['start.openFolder'], 'Apri cartella');
+  assert.deepEqual(await loadMessages('en'), { locale: 'en', messages: EN_MESSAGES });
+  const { locale, messages } = await loadMessages('it');
+  assert.equal(locale, 'it');
+  assert.equal(messages['start.openFolder'], 'Apri cartella');
+});
+
+test('loadMessages falls back to English (locale included) if the chunk fails to load', async () => {
+  const failing = () => Promise.reject(new Error('chunk non raggiungibile'));
+  assert.deepEqual(await loadWithFallback('de', failing), { locale: 'en', messages: EN_MESSAGES });
 });

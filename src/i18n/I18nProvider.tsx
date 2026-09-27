@@ -28,10 +28,12 @@ export function I18nProvider({ initialLocale, initialMessages, children }: Props
   }, [state.locale]);
 
   const setLocale = useCallback((locale: Locale) => {
-    writePref('locale', locale);
     const id = ++request.current;
-    void loadMessages(locale).then((messages) => {
-      if (id === request.current) setState({ locale, messages });
+    void loadMessages(locale).then(({ locale: loaded, messages }) => {
+      if (id !== request.current) return;
+      // Se il chunk richiesto è fallito, `loaded` è 'en': non si salva la scelta fallita.
+      writePref('locale', loaded);
+      setState({ locale: loaded, messages });
     });
   }, []);
 
