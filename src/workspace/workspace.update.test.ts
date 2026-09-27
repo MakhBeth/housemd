@@ -68,3 +68,37 @@ test('a restore still loading when the update begins is cancelled', async () => 
   assert.equal(doc(ws).restore, null);
   assert.equal(ws.getState().toasts.at(-1)?.code, 'restoreCancelled');
 });
+
+test('updateReady turns true only once the document is durable, and endUpdate resets it', async () => {
+  const { buffers, ws } = await harness({ 'a.md': 'A' }, off);
+  await ws.openFile('a.md');
+  ws.edit('mio');
+  const originalSave = buffers.save.bind(buffers);
+  const slow = gate();
+  buffers.save = async (id, path, text, base) => {
+    await slow.wait;
+    return originalSave(id, path, text, base);
+  };
+  assert.equal(ws.getState().updateReady, false);
+  const updating = ws.beginUpdate();
+  await tick();
+  assert.equal(ws.getState().updating, true);
+  assert.equal(ws.getState().updateReady, false, 'il testo non è ancora né su disco né nel buffer');
+  slow.open();
+  assert.equal(await updating, 'durable');
+  assert.equal(ws.getState().updateReady, true);
+  ws.endUpdate();
+  assert.equal(ws.getState().updateReady, false);
+  assert.equal(ws.getState().updating, false);
+});
+
+test('updateReady stays false when the document cannot be secured', async () => {
+  const { buffers, ws } = await harness({ 'a.md': 'A' }, off);
+  await ws.openFile('a.md');
+  buffers.save = async () => {
+    throw new Error('QuotaExceededError');
+  };
+  ws.edit('importante');
+  assert.equal(await ws.beginUpdate(), 'failed');
+  assert.equal(ws.getState().updateReady, false);
+});

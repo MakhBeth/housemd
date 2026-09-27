@@ -58,6 +58,11 @@ export interface WorkspaceState {
   drafts: string[];
   /** Aggiornamento dell'app in corso: modifiche ignorate, editor in sola lettura. */
   updating: boolean;
+  /**
+   * Aggiornamento pronto: beginUpdate() ha reso durevole il documento (disco o buffer). Solo allora il
+   * reload può saltare l'avviso di uscita; prima il testo potrebbe esistere solo in memoria.
+   */
+  updateReady: boolean;
 }
 
 export interface Scheduler {
@@ -151,6 +156,7 @@ export class Workspace {
       autosave: parseAutosave(deps.autosave ?? DEFAULT_AUTOSAVE),
       drafts: [],
       updating: false,
+      updateReady: false,
     };
   }
 
@@ -285,12 +291,16 @@ export class Workspace {
    * chiamare endUpdate() e non ricaricare.
    */
   beginUpdate(): Promise<SettleResult> {
-    this.set({ updating: true });
-    return this.runExclusive(() => this.settle());
+    this.set({ updating: true, updateReady: false });
+    return this.runExclusive(async () => {
+      const result = await this.settle();
+      if (result === 'durable' && this.state.updating) this.set({ updateReady: true });
+      return result;
+    });
   }
 
   endUpdate(): void {
-    if (this.state.updating) this.set({ updating: false });
+    if (this.state.updating || this.state.updateReady) this.set({ updating: false, updateReady: false });
   }
 
   // --- caricamento ------------------------------------------------------------
