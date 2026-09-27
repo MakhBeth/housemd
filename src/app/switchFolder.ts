@@ -64,3 +64,26 @@ export async function switchFolder<H, T>(deps: {
   deps.persist?.(value);
   return { kind: 'opened', value };
 }
+
+/**
+ * Un cambio cartella alla volta: ognuno cattura lo workspace aperto all'inizio, quindi due cambi
+ * sovrapposti (A→B e A→C) farebbero sparire C senza metterlo al sicuro. Mentre uno è in corso,
+ * `run()` ignora le nuove richieste (risultato null) senza avviarle.
+ */
+export function switchGuard(): { readonly active: boolean; run<T>(task: () => Promise<T>): Promise<T | null> } {
+  let active = false;
+  return {
+    get active() {
+      return active;
+    },
+    async run(task) {
+      if (active) return null;
+      active = true;
+      try {
+        return await task();
+      } finally {
+        active = false;
+      }
+    },
+  };
+}

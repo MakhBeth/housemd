@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { hasAccess, isSupported, pickFolder, requestAccess, unsupportedReason } from './fs/access';
 import { fsaOps } from './fs/fsaOps';
 import { findKnownWorkspaceId, loadWorkspace, saveWorkspace, type StoredWorkspace } from './fs/handleStore';
 import { createWorkspaceFS } from './fs/workspaceFS';
-import { switchFolder } from './app/switchFolder';
+import { switchFolder, switchGuard } from './app/switchFolder';
 import { useT } from './i18n/I18nProvider';
 import { onDbBlocked } from './lib/db';
 import { readValidPref } from './lib/prefs';
@@ -52,6 +52,19 @@ export default function App({ updates }: { updates: UpdateFlow }) {
   // STESSA cartella (stesso workspaceId) forzi comunque lo smontaggio/rimontaggio del componente,
   // invece di lasciarne leaked lo stato interno (es. `reopened`).
   const [openCount, setOpenCount] = useState(0);
+  // Un cambio cartella (o ripresa dell'accesso) alla volta: ognuno cattura lo workspace aperto
+  // all'inizio, e uno sovrapposto sostituirebbe senza metterlo al sicuro quello aperto dall'altro.
+  const guard = useRef(switchGuard());
+  const [switching, setSwitching] = useState(false);
+  const exclusive = useCallback(async (task: () => Promise<void>) => {
+    if (guard.current.active) return;
+    setSwitching(true);
+    try {
+      await guard.current.run(task);
+    } finally {
+      setSwitching(false);
+    }
+  }, []);
 
   // Il flusso di aggiornamento mette al sicuro il documento del Workspace aperto prima del reload.
   useEffect(() => {
@@ -86,7 +99,7 @@ export default function App({ updates }: { updates: UpdateFlow }) {
     };
   }, []);
 
-  const choose = useCallback(async () => {
+  const choose = useCallback(() => exclusive(async () => {
     const current = screen.kind === 'open' ? screen.workspace : null;
     const result = await switchFolder({
       pick: pickFolder,
@@ -122,15 +135,15 @@ export default function App({ updates }: { updates: UpdateFlow }) {
       case 'blocked':
         break;
     }
-  }, [screen]);
+  }), [screen, exclusive]);
 
-  const resume = useCallback(async () => {
+  const resume = useCallback(() => exclusive(async () => {
     if (screen.kind !== 'resume') return;
     if (!(await requestAccess(screen.stored.handle))) return;
     const workspace = await openWorkspace(screen.stored);
     setOpenCount((c) => c + 1);
     setScreen({ kind: 'open', stored: screen.stored, workspace });
-  }, [screen]);
+  }), [screen, exclusive]);
 
   let content: ReactNode = null;
   switch (screen.kind) {
@@ -140,10 +153,10 @@ export default function App({ updates }: { updates: UpdateFlow }) {
       content = <StartScreen mode="unsupported" reason={unsupportedReason(navigator.userAgent)} />;
       break;
     case 'start':
-      content = <StartScreen mode="start" error={screen.error} onPick={choose} />;
+      content = <StartScreen mode="start" error={screen.error} onPick={choose} busy={switching} />;
       break;
     case 'resume':
-      content = <StartScreen mode="resume" folderName={screen.stored.handle.name} onResume={resume} onPick={choose} />;
+      content = <StartScreen mode="resume" folderName={screen.stored.handle.name} onResume={resume} onPick={choose} busy={switching} />;
       break;
     case 'open':
       content = (
@@ -153,6 +166,7 @@ export default function App({ updates }: { updates: UpdateFlow }) {
           workspaceId={screen.stored.workspaceId}
           handle={screen.stored.handle}
           onChangeFolder={choose}
+          switchingFolder={switching}
         />
       );
       break;

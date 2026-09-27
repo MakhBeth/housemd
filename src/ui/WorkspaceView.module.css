@@ -33,9 +33,15 @@
   white-space: nowrap;
 }
 
-.folder:hover,
+.folder:hover:not(:disabled),
 .iconButton:hover {
   background: var(--c-accent-soft);
+}
+
+/* Cambio cartella in corso. */
+.folder:disabled {
+  opacity: 0.6;
+  cursor: progress;
 }
 
 .iconButton {

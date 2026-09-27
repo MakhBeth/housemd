@@ -11,9 +11,11 @@ interface Props {
   folderName?: string;
   onPick?: () => void;
   onResume?: () => void;
+  /** Apertura di una cartella in corso: i pulsanti restano disattivati finché non finisce. */
+  busy?: boolean;
 }
 
-export function StartScreen({ mode, reason, error, folderName, onPick, onResume }: Props) {
+export function StartScreen({ mode, reason, error, folderName, onPick, onResume, busy = false }: Props) {
   const t = useT();
   const message =
     mode === 'unsupported'
@@ -31,16 +33,16 @@ export function StartScreen({ mode, reason, error, folderName, onPick, onResume 
         <p className={styles.tagline}>{t('start.tagline')}</p>
         {message && <p className={styles.message}>{message}</p>}
         {mode === 'start' && (
-          <button className={styles.primary} onClick={onPick}>
+          <button className={styles.primary} onClick={onPick} disabled={busy}>
             {t('start.openFolder')}
           </button>
         )}
         {mode === 'resume' && (
           <>
-            <button className={styles.primary} onClick={onResume}>
+            <button className={styles.primary} onClick={onResume} disabled={busy}>
               {t('start.resume', { folder: folderName ?? '' })}
             </button>
-            <button className={styles.secondary} onClick={onPick}>
+            <button className={styles.secondary} onClick={onPick} disabled={busy}>
               {t('start.openOther')}
             </button>
           </>

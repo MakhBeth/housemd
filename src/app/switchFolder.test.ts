@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { gate, harness, tick } from '../workspace/testing/harness';
-import { switchFolder } from './switchFolder';
+import { switchFolder, switchGuard } from './switchFolder';
 
 function fakeWorkspace(secured: boolean) {
   const calls: string[] = [];
@@ -201,3 +201,36 @@ async function switchingFromWithPersist() {
   assert.deepEqual(persisted, []);
   return { result, discarded };
 }
+
+test('switchGuard ignores a folder switch requested while another is in progress', async () => {
+  const guard = switchGuard();
+  const slow = gate();
+  const started: string[] = [];
+  assert.equal(guard.active, false);
+  const first = guard.run(async () => {
+    started.push('A→B');
+    await slow.wait;
+    return 'B';
+  });
+  assert.equal(guard.active, true);
+  const second = await guard.run(async () => {
+    started.push('A→C');
+    return 'C';
+  });
+  assert.equal(second, null, 'il secondo cambio non parte: resta solo quello in corso');
+  slow.open();
+  assert.equal(await first, 'B');
+  assert.deepEqual(started, ['A→B']);
+  assert.equal(guard.active, false);
+  assert.equal(await guard.run(async () => 'D'), 'D', 'finito il cambio se ne può avviare un altro');
+});
+
+test('switchGuard is released when the switch throws', async () => {
+  const guard = switchGuard();
+  await assert.rejects(
+    guard.run(async () => {
+      throw new Error('EIO');
+    }),
+  );
+  assert.equal(guard.active, false);
+});

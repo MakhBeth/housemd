@@ -64,3 +64,9 @@
   background: transparent;
   border: 1px solid var(--c-border);
 }
+
+.primary:disabled,
+.secondary:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}

@@ -54,11 +54,13 @@ interface Props {
   workspaceId: string;
   handle: FileSystemDirectoryHandle;
   onChangeFolder: () => void;
+  /** Cambio cartella in corso: il pulsante della cartella resta disattivato finché non finisce. */
+  switchingFolder?: boolean;
 }
 
 const NO_TERMS: string[] = [];
 
-export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }: Props) {
+export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, switchingFolder = false }: Props) {
   const { t, locale } = useI18n();
   const state = useWorkspaceState(workspace);
   const doc = state.doc;
@@ -264,7 +266,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }
               <button className={styles.iconButton} onClick={() => setSidebar(false)} aria-label={t('sidebar.hide')} title={t('sidebar.hide')}>
                 <Icon name="sidebarClose" />
               </button>
-              <button className={styles.folder} onClick={onChangeFolder} title={t('sidebar.changeFolder')}>
+              <button className={styles.folder} onClick={onChangeFolder} disabled={switchingFolder} title={t('sidebar.changeFolder')}>
                 {state.name}
               </button>
               <button className={styles.iconButton} onClick={() => onTreeAction('new-file', null)} aria-label={t('file.new')} title={t('file.new')}>
