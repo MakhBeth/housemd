@@ -25,6 +25,13 @@ export function HistoryPanel({ workspace, path, currentText, onClose }: Props) {
   const [versions, setVersions] = useState<Snapshot[] | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
 
+  // Cambio di file: la lista del file precedente non deve restare visibile mentre arriva quella
+  // nuova (torna allo stato di caricamento finché listHistory non risponde per il nuovo path).
+  useEffect(() => {
+    setVersions(null);
+    setSelected(null);
+  }, [path]);
+
   useEffect(() => {
     let alive = true;
     void workspace.listHistory(path).then((list) => {
@@ -34,8 +41,6 @@ export function HistoryPanel({ workspace, path, currentText, onClose }: Props) {
       alive = false;
     };
   }, [workspace, path, indexRevision]);
-
-  useEffect(() => setSelected(null), [path]);
 
   const version = versions?.find((v) => v.id === selected) ?? null;
   const rows = useMemo(() => (version ? diffRows(currentText, version.text) : []), [version, currentText]);
@@ -50,15 +55,19 @@ export function HistoryPanel({ workspace, path, currentText, onClose }: Props) {
         </button>
       </header>
       {versions !== null && versions.length === 0 && <p className={styles.note}>{t('history.empty')}</p>}
-      <ul className={styles.list}>
-        {versions?.map((v) => (
-          <li key={v.id}>
-            <button className={styles.version} aria-pressed={v.id === selected} onClick={() => setSelected(v.id)}>
-              <span>{formatRelative(locale, new Date(v.savedAt), now)}</span>
-              <span className={styles.reason}>{t(`history.reason.${v.reason}`)}</span>
-            </button>
-          </li>
-        ))}
+      <ul className={styles.list} aria-busy={versions === null}>
+        {versions === null ? (
+          <li className={styles.note}>{t('history.loading')}</li>
+        ) : (
+          versions.map((v) => (
+            <li key={v.id}>
+              <button className={styles.version} aria-pressed={v.id === selected} onClick={() => setSelected(v.id)}>
+                <span>{formatRelative(locale, new Date(v.savedAt), now)}</span>
+                <span className={styles.reason}>{t(`history.reason.${v.reason}`)}</span>
+              </button>
+            </li>
+          ))
+        )}
       </ul>
       <section className={styles.diff}>
         {!version ? (

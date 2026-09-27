@@ -85,6 +85,7 @@
   "settings.close": "Close",
   "history.title": "History of {path}",
   "history.close": "Close history",
+  "history.loading": "Loading history…",
   "history.empty": "No saved versions of this file yet.",
   "history.pick": "Pick a version to see what changed.",
   "history.identical": "Same as the current text.",

@@ -85,6 +85,7 @@
   "settings.close": "Chiudi",
   "history.title": "Cronologia di {path}",
   "history.close": "Chiudi cronologia",
+  "history.loading": "Caricamento della cronologia…",
   "history.empty": "Ancora nessuna versione salvata di questo file.",
   "history.pick": "Scegli una versione per vedere le differenze.",
   "history.identical": "Uguale al testo attuale.",

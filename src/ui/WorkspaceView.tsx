@@ -369,7 +369,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }
             )}
             {historyOpen ? (
               <section className={styles.pane} aria-label={t('toolbar.history')}>
-                <HistoryPanel workspace={workspace} path={doc.path} currentText={doc.text} onClose={() => setHistoryOpen(false)} />
+                <HistoryPanel key={doc.path} workspace={workspace} path={doc.path} currentText={doc.text} onClose={() => setHistoryOpen(false)} />
               </section>
             ) : (
               mode !== 'editor' && (
