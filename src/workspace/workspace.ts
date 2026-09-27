@@ -1200,6 +1200,9 @@ export class Workspace {
           this.versions.delete(p);
           await this.clearBuffer(p);
         }
+        // Anche le bozze di file già spariti dal disco (non più in `versions`, es. un documento
+        // deletedOnDisk): altrimenti resterebbero orfane dentro una cartella che non esiste più.
+        for (const p of this.state.drafts.filter((d) => inside(d, path))) await this.clearBuffer(p);
         await this.refreshEntries();
         this.bumpIndex();
       });

@@ -5,6 +5,7 @@ import { createWorkspaceFS } from '../fs/workspaceFS';
 import { memoryOps, type MemoryOpsOptions } from '../fs/testing/memoryOps';
 import { FsNotFoundError } from '../fs/types';
 import { memoryBufferStore } from './buffers';
+import { harness } from './testing/harness';
 import { Workspace, type Scheduler } from './workspace';
 
 function manualScheduler() {
@@ -189,6 +190,18 @@ test('a failed removal keeps the open file and its unsaved text', async () => {
   assert.equal(ws.getState().toasts.at(-1)?.code, 'operationFailed');
   assert.match(String(ws.getState().toasts.at(-1)?.params?.detail), /EBUSY/);
   assert.equal(scheduler.pending(), 1, 'il salvataggio automatico riprende');
+});
+
+test('removing a folder also clears drafts of files inside it that are gone from disk', async () => {
+  const buffers = memoryBufferStore();
+  await buffers.save('ws-1', 'n/sparito.md', 'bozza', 'base');
+  await buffers.save('ws-1', 'altro.md', 'resta', 'base');
+  const { ws } = await harness({ 'n/a.md': 'alfa', 'altro.md': 'A' }, { buffers });
+  assert.deepEqual(ws.getState().drafts, ['altro.md', 'n/sparito.md']);
+  await ws.remove('n');
+  assert.equal(await buffers.load('ws-1', 'n/sparito.md'), null);
+  assert.deepEqual(ws.getState().drafts, ['altro.md']);
+  assert.deepEqual(await buffers.load('ws-1', 'altro.md'), { text: 'resta', base: 'base' });
 });
 
 test('opening another file saves the current one first', async () => {
