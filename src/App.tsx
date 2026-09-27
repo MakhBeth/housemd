@@ -1,11 +1,14 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 
 import { hasAccess, isSupported, pickFolder, requestAccess, unsupportedReason } from './fs/access';
 import { fsaOps } from './fs/fsaOps';
 import { findKnownWorkspaceId, loadWorkspace, saveWorkspace, type StoredWorkspace } from './fs/handleStore';
 import { createWorkspaceFS } from './fs/workspaceFS';
 import { switchFolder } from './app/switchFolder';
+import { useT } from './i18n/I18nProvider';
+import { onDbBlocked } from './lib/db';
 import { readValidPref } from './lib/prefs';
+import { Notice } from './ui/Notice';
 import { StartScreen } from './ui/StartScreen';
 import { WorkspaceView } from './ui/WorkspaceView';
 import { indexedDbBufferStore } from './workspace/buffers';
@@ -34,6 +37,10 @@ async function openWorkspace(stored: StoredWorkspace): Promise<Workspace> {
 }
 
 export default function App() {
+  const t = useT();
+  const [dbBlocked, setDbBlocked] = useState(false);
+  useEffect(() => onDbBlocked(() => setDbBlocked(true)), []);
+
   const [screen, setScreen] = useState<Screen>({ kind: 'boot' });
   // Incrementato a ogni apertura riuscita: entra nella key di WorkspaceView così che riaprire la
   // STESSA cartella (stesso workspaceId) forzi comunque lo smontaggio/rimontaggio del componente,
@@ -109,17 +116,21 @@ export default function App() {
     setScreen({ kind: 'open', stored: screen.stored, workspace });
   }, [screen]);
 
+  let content: ReactNode = null;
   switch (screen.kind) {
     case 'boot':
-      return null;
+      break;
     case 'unsupported':
-      return <StartScreen mode="unsupported" reason={unsupportedReason(navigator.userAgent)} />;
+      content = <StartScreen mode="unsupported" reason={unsupportedReason(navigator.userAgent)} />;
+      break;
     case 'start':
-      return <StartScreen mode="start" error={screen.error} onPick={choose} />;
+      content = <StartScreen mode="start" error={screen.error} onPick={choose} />;
+      break;
     case 'resume':
-      return <StartScreen mode="resume" folderName={screen.stored.handle.name} onResume={resume} onPick={choose} />;
+      content = <StartScreen mode="resume" folderName={screen.stored.handle.name} onResume={resume} onPick={choose} />;
+      break;
     case 'open':
-      return (
+      content = (
         <WorkspaceView
           key={`${screen.stored.workspaceId}:${openCount}`}
           workspace={screen.workspace}
@@ -128,5 +139,20 @@ export default function App() {
           onChangeFolder={choose}
         />
       );
+      break;
   }
+
+  return (
+    <>
+      {content}
+      {dbBlocked && (
+        <Notice
+          placement="top"
+          message={t('toast.reloadOtherTabs')}
+          dismissLabel={t('toast.close')}
+          onDismiss={() => setDbBlocked(false)}
+        />
+      )}
+    </>
+  );
 }
