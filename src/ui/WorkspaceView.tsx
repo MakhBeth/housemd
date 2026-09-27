@@ -101,7 +101,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }
   const openFile = useCallback(
     (path: string, terms: string[] = NO_TERMS) => {
       setHighlight(terms);
-      void workspace.openFile(path);
+      return workspace.openFile(path);
     },
     [workspace],
   );
@@ -126,7 +126,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }
     const last = readPref<string | null>(`lastFile:${workspaceId}`, null);
     if (!last) return;
     if (files.includes(last)) {
-      openFile(last);
+      void openFile(last);
       return;
     }
     // Il file non c'è più su disco, ma se ha una bozza nel buffer di emergenza lo si riapre lo
@@ -134,7 +134,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }
     // cleanup che annulli la promessa (reopened.current impedirebbe di riprovare): basta non
     // scavalcare un file che l'utente ha già aperto nel frattempo.
     void workspace.hasDraft(last).then((has) => {
-      if (has && !workspace.getState().doc) openFile(last);
+      if (has && !workspace.getState().doc) void openFile(last);
     });
   }, [state.status, files, openFile, workspace, workspaceId]);
 
@@ -231,8 +231,11 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }
   const onTreeAction = (action: TreeAction, node: TreeNode | null) => {
     if (action === 'history') {
       if (node) {
-        openFile(node.path);
-        setHistoryOpen(true);
+        // La cronologia si apre solo se il file richiesto è davvero quello aperto: l'apertura può
+        // fallire o essere scavalcata da un'altra, e il pannello mostrerebbe il documento sbagliato.
+        void openFile(node.path).then(() => {
+          if (workspace.getState().doc?.path === node.path) setHistoryOpen(true);
+        });
       }
       return;
     }
