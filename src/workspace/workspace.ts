@@ -421,7 +421,21 @@ export class Workspace {
   private async doCheckExternal(): Promise<void> {
     if (this.state.status !== 'ready') return;
     if (this.suspended > 0) return; // una rinomina/eliminazione sta riscrivendo l'albero
-    if (this.saving) await this.saving;
+    while (this.saving) await this.saving;
+    // Per tutto il controllo l'autosalvataggio resta sospeso: un salvataggio partito durante la
+    // scansione scriverebbe sopra il cambiamento esterno e aggiornerebbe la versione nota prima del
+    // confronto, facendo sparire il conflitto. Le battute restano 'dirty' e si salvano alla fine.
+    this.suspended++;
+    try {
+      await this.scanExternal();
+    } finally {
+      this.suspended--;
+      const current = this.state.doc;
+      if (current && current.saveState !== 'saved') this.schedule();
+    }
+  }
+
+  private async scanExternal(): Promise<void> {
     await this.run(async () => {
       const entries = await this.deps.fs.list();
       const { changed, removed } = diffScan(this.versions, entries);

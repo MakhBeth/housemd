@@ -691,8 +691,11 @@ test('[codex F1] entering a conflict writes the unsaved text to the emergency bu
   ops.setFile('a.md', 'loro');
   await ws.checkExternal();
   assert.equal(doc(ws).conflict, true);
-  assert.equal(scheduler.pending(), 0, 'niente timer: il buffer deve essere già stato scritto');
+  // Il buffer è già scritto senza far scattare alcun timer.
   assert.deepEqual(await buffers.load('ws-1', 'a.md'), { text: 'mio', base: 'A' });
+  scheduler.fire();
+  await ws.flush();
+  assert.equal(await ops.textOf('a.md'), 'loro');
 });
 
 test('[codex F1] flush() during a conflict buffers the text instead of just cancelling the timer', async () => {
@@ -810,4 +813,52 @@ test('[codex F3] completing a removal does not close a different document opened
   scheduler.fire();
   await ws.flush();
   assert.equal(await ops.textOf('b.md'), 'beta modificato');
+});
+
+test('[codex F5] autosave firing during the checkExternal scan does not overwrite the external change', async () => {
+  const { ops, buffers, scheduler, ws } = await setup({ 'a.md': 'A' });
+  await ws.openFile('a.md');
+  ws.edit('mio');
+  ops.setFile('a.md', 'loro'); // cambiamento esterno, con l'autosalvataggio ancora in attesa
+  const originalReadDir = ops.readDir.bind(ops);
+  let fired = false;
+  ops.readDir = async (dir) => {
+    if (!fired) {
+      fired = true;
+      scheduler.fire(); // il debounce scade proprio durante la scansione
+      await ws.flush(); // e anche un blur arriva nel mezzo
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    return originalReadDir(dir);
+  };
+  await ws.checkExternal();
+  ops.readDir = originalReadDir;
+
+  assert.equal(await ops.textOf('a.md'), 'loro', 'il cambiamento esterno non viene sovrascritto');
+  assert.equal(doc(ws).conflict, true);
+  assert.equal(doc(ws).text, 'mio');
+  assert.equal((await buffers.load('ws-1', 'a.md'))?.text, 'mio');
+});
+
+test('[codex F5] edits typed during checkExternal are saved once the check is over', async () => {
+  const { ops, scheduler, ws } = await setup({ 'a.md': 'A' });
+  await ws.openFile('a.md');
+  const originalReadDir = ops.readDir.bind(ops);
+  let fired = false;
+  ops.readDir = async (dir) => {
+    if (!fired) {
+      fired = true;
+      ws.edit('scritto durante il controllo');
+      scheduler.fire();
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    return originalReadDir(dir);
+  };
+  await ws.checkExternal();
+  ops.readDir = originalReadDir;
+  assert.equal(scheduler.pending(), 1, 'il salvataggio viene ripianificato a controllo finito');
+  scheduler.fire();
+  await ws.flush();
+  assert.equal(await ops.textOf('a.md'), 'scritto durante il controllo');
+  assert.equal(doc(ws).saveState, 'saved');
 });
