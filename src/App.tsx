@@ -31,6 +31,10 @@ async function openWorkspace(stored: StoredWorkspace): Promise<Workspace> {
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>({ kind: 'boot' });
+  // Incrementato a ogni apertura riuscita: entra nella key di WorkspaceView così che riaprire la
+  // STESSA cartella (stesso workspaceId) forzi comunque lo smontaggio/rimontaggio del componente,
+  // invece di lasciarne leaked lo stato interno (es. `reopened`).
+  const [openCount, setOpenCount] = useState(0);
 
   useEffect(() => {
     if (!isSupported()) {
@@ -50,8 +54,10 @@ export default function App() {
         return;
       }
       const workspace = await openWorkspace(stored);
-      if (alive) setScreen({ kind: 'open', stored, workspace });
-      else workspace.dispose();
+      if (alive) {
+        setOpenCount((c) => c + 1);
+        setScreen({ kind: 'open', stored, workspace });
+      } else workspace.dispose();
     })();
     return () => {
       alive = false;
@@ -74,7 +80,9 @@ export default function App() {
       const previous = await loadWorkspace().catch(() => null);
       const workspaceId = previous && (await handle.isSameEntry(previous.handle)) ? previous.workspaceId : undefined;
       const stored = await saveWorkspace(handle, undefined, workspaceId);
-      setScreen({ kind: 'open', stored, workspace: await openWorkspace(stored) });
+      const workspace = await openWorkspace(stored);
+      setOpenCount((c) => c + 1);
+      setScreen({ kind: 'open', stored, workspace });
     } catch (err) {
       setScreen({ kind: 'start', error: `Impossibile aprire la cartella: ${(err as Error).message}` });
     }
@@ -83,7 +91,9 @@ export default function App() {
   const resume = useCallback(async () => {
     if (screen.kind !== 'resume') return;
     if (!(await requestAccess(screen.stored.handle))) return;
-    setScreen({ kind: 'open', stored: screen.stored, workspace: await openWorkspace(screen.stored) });
+    const workspace = await openWorkspace(screen.stored);
+    setOpenCount((c) => c + 1);
+    setScreen({ kind: 'open', stored: screen.stored, workspace });
   }, [screen]);
 
   switch (screen.kind) {
@@ -98,7 +108,7 @@ export default function App() {
     case 'open':
       return (
         <WorkspaceView
-          key={screen.stored.workspaceId}
+          key={`${screen.stored.workspaceId}:${openCount}`}
           workspace={screen.workspace}
           workspaceId={screen.stored.workspaceId}
           handle={screen.stored.handle}
