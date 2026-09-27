@@ -196,3 +196,49 @@ test('a buffer failure during a suspended scan shows a single toast when leaving
   await checking;
   ops.readDir = originalReadDir;
 });
+
+for (const [name, prepare] of [
+  [
+    'conflicted',
+    async (h: Awaited<ReturnType<typeof harness>>) => {
+      h.ws.edit('mio');
+      h.ops.setFile('a.md', 'loro');
+      await h.ws.checkExternal();
+      assert.equal(doc(h.ws).conflict, true);
+    },
+  ],
+  [
+    'deleted on disk',
+    async (h: Awaited<ReturnType<typeof harness>>) => {
+      h.ws.edit('mio');
+      await h.ws.blur();
+      h.ops.files.delete('a.md');
+      await h.ws.checkExternal();
+      assert.equal(doc(h.ws).deletedOnDisk, true);
+    },
+  ],
+] as const) {
+  test(`reopening the ${name} open document keeps the live text instead of a stale draft`, async () => {
+    const h = await harness({ 'a.md': 'A' }, off);
+    const { buffers, ws } = h;
+    await ws.openFile('a.md');
+    await prepare(h);
+    const originalLoad = buffers.load.bind(buffers);
+    const slow = gate();
+    buffers.load = async (id, path) => {
+      await slow.wait;
+      return originalLoad(id, path);
+    };
+    const revision = doc(ws).revision;
+    const reopening = ws.openFile('a.md');
+    await tick(); // lettura della bozza in corso (se ci fosse)
+    ws.edit('più nuovo');
+    slow.open();
+    await reopening;
+    buffers.load = originalLoad;
+    assert.equal(doc(ws).text, 'più nuovo', 'il testo digitato durante la riapertura resta');
+    assert.equal(doc(ws).revision, revision, 'l’editor non viene reimpostato');
+    await ws.blur();
+    assert.equal((await buffers.load('ws-1', 'a.md'))?.text, 'più nuovo', 'il buffer non torna al testo vecchio');
+  });
+}

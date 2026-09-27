@@ -340,8 +340,10 @@ export class Workspace {
   // --- file aperto --------------------------------------------------------------
 
   private async doOpenFile(path: string): Promise<void> {
-    const already = this.state.doc;
-    if (already && already.path === path && !already.deletedOnDisk && !already.conflict) return;
+    // Il file è già quello aperto: niente da rileggere, in qualunque stato (anche in conflitto o
+    // eliminato su disco, dove barra del conflitto e stato "eliminato" offrono già le azioni). Una
+    // rilettura installerebbe la bozza letta prima delle battute arrivate nel frattempo.
+    if (this.state.doc?.path === path) return;
     if ((await this.settle()) === 'failed') return;
     await this.run(async () => {
       let disk: { text: string; version: Version } | null;
