@@ -8,7 +8,7 @@ import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { tags } from '@lezer/highlight';
 
 import type { DocTitle } from '../search/searchIndex';
-import { imageFiles, imageMarkdown } from './images';
+import { imageFiles, insertImageLinks } from './images';
 import { wikiCompletionSource } from './wikiCompletion';
 import styles from './Editor.module.css';
 
@@ -59,17 +59,15 @@ const highlight = HighlightStyle.define([
 ]);
 
 function insertImages(view: EditorView, files: File[], pos: number, callbacks: Callbacks): void {
-  void (async () => {
-    let at = pos;
-    for (const file of files) {
-      const link = await callbacks.current.onImage(file);
-      if (!link) continue;
-      at = Math.min(at, view.state.doc.length);
-      const insert = `${imageMarkdown(link)}\n`;
+  // insertImageLinks legge il resetKey subito (al momento dell'incolla/trascinamento) e dopo ogni
+  // salvataggio lo riconfronta: se l'editor è passato a un altro documento, non lo tocca.
+  void insertImageLinks(files, pos, (file) => callbacks.current.onImage(file), {
+    key: () => callbacks.current.resetKey,
+    length: () => view.state.doc.length,
+    insert(at, insert) {
       view.dispatch({ changes: { from: at, insert }, selection: { anchor: at + insert.length } });
-      at += insert.length;
-    }
-  })();
+    },
+  });
 }
 
 function createState(text: string, callbacks: Callbacks): EditorState {
