@@ -20,31 +20,40 @@ export function sanitizeWith(purify: Purifier, html: string): string {
 
 interface SanitizerLike {
   removeElement(name: string): void;
+  allowAttribute(name: string): void;
+  allowElement(element: string | { name: string; attributes?: string[] }): void;
 }
 
+type SanitizerCtor = new () => SanitizerLike;
 type MaybeSetHTML = Element & { setHTML?: (html: string, options?: { sanitizer: SanitizerLike }) => void };
 
 /**
- * Un'istanza di Sanitizer creata una sola volta e riusata: parte dalla configurazione PREDEFINITA
- * (l'allowlist sicura di setHTML) e toglie in più <style>/<form>. Un dizionario `{ removeElements }`
- * da solo sarebbe invece una BLOCKLIST per la spec Sanitizer: tutto il resto (<meta http-equiv>,
- * <base href>, <link rel=stylesheet>, controlli di form…) passerebbe, più permissivo del default
- * e del fallback DOMPurify.
+ * Sanitizer creato una sola volta (per costruttore) e riusato. Parte dalla configurazione
+ * PREDEFINITA (allowlist sicura) e: toglie <style>/<form>; permette `class` (marcatori di riga
+ * `hmd-l-N` per lo scroll sincronizzato, `wikilink`/`missing`, `language-*`) e <img> con i soli
+ * attributi innocui, più <details>/<summary>. Il default di Chrome toglie class e <img>: senza
+ * queste aggiunte lo scroll non si abbina e le immagini spariscono. Gli handler (onerror…) e gli URL
+ * javascript: nei link restano esclusi dalla baseline sicura.
+ * Un dizionario `{ removeElements }` da solo sarebbe invece una BLOCKLIST: mai usarlo.
  */
-let sanitizerInstance: SanitizerLike | null = null;
+let cached: { ctor: SanitizerCtor; sanitizer: SanitizerLike } | null = null;
 
 function getSanitizer(): SanitizerLike | null {
-  const SanitizerCtor = (globalThis as { Sanitizer?: new () => SanitizerLike }).Sanitizer;
-  if (!SanitizerCtor) return null;
-  if (sanitizerInstance) return sanitizerInstance;
+  const ctor = (globalThis as { Sanitizer?: SanitizerCtor }).Sanitizer;
+  if (!ctor) return null;
+  if (cached?.ctor === ctor) return cached.sanitizer;
   try {
-    const s = new SanitizerCtor();
+    const s = new ctor();
     s.removeElement('style');
     s.removeElement('form');
-    sanitizerInstance = s;
-    return sanitizerInstance;
+    s.allowAttribute('class');
+    s.allowElement({ name: 'img', attributes: ['src', 'alt', 'title', 'width', 'height'] });
+    s.allowElement('details');
+    s.allowElement('summary');
+    cached = { ctor, sanitizer: s };
+    return s;
   } catch {
-    // Costruzione o removeElement falliti: niente sanitizer custom, si resta sul default sicuro.
+    // API diversa da quella attesa: si passa a DOMPurify (vedi setSafeHTML).
     return null;
   }
 }
@@ -53,12 +62,13 @@ let purifier: Promise<Purifier> | null = null;
 
 export async function setSafeHTML(el: Element, html: string): Promise<void> {
   const target = el as MaybeSetHTML;
-  if (typeof target.setHTML === 'function') {
-    const sanitizer = getSanitizer();
-    if (sanitizer) target.setHTML(html, { sanitizer });
-    else target.setHTML(html); // configurazione predefinita: già l'allowlist sicura
+  const sanitizer = typeof target.setHTML === 'function' ? getSanitizer() : null;
+  if (sanitizer) {
+    target.setHTML!(html, { sanitizer });
     return;
   }
+  // Senza un Sanitizer configurabile non si usa setHTML() nudo: la sua configurazione predefinita
+  // toglierebbe classi e immagini. DOMPurify (PURIFY_CONFIG) le lascia e rimuove il resto.
   purifier ??= import('dompurify').then((m) => m.default as unknown as Purifier);
   let purify: Purifier;
   try {

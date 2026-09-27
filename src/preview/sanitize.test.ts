@@ -37,11 +37,17 @@ test('scripts, event handlers, javascript: URLs and styles are removed', () => {
   assert.match(clean, /<img src="x.png">/);
 });
 
-test('[final fix2 6a] with a Sanitizer global, setHTML gets a sanitizer instance with style/form removed', async () => {
-  const removed: string[] = [];
+test('with a Sanitizer global, setHTML gets a sanitizer built from the default config plus class, img, details', async () => {
+  const calls: string[] = [];
   class FakeSanitizer {
     removeElement(name: string) {
-      removed.push(name);
+      calls.push(`remove ${name}`);
+    }
+    allowAttribute(name: string) {
+      calls.push(`attr ${name}`);
+    }
+    allowElement(el: string | { name: string; attributes?: string[] }) {
+      calls.push(typeof el === 'string' ? `el ${el}` : `el ${el.name}[${(el.attributes ?? []).join(',')}]`);
     }
   }
   const g = globalThis as { Sanitizer?: unknown };
@@ -56,25 +62,36 @@ test('[final fix2 6a] with a Sanitizer global, setHTML gets a sanitizer instance
     } as unknown as Element;
     await setSafeHTML(el, '<p>x</p>');
     assert.ok(received?.sanitizer instanceof FakeSanitizer, 'passa un istanza di Sanitizer, non un dizionario');
-    assert.deepEqual(removed, ['style', 'form']);
+    // Il default di Chrome toglie class (marcatori di riga per lo scroll, wikilink) e <img>.
+    assert.deepEqual(calls, [
+      'remove style',
+      'remove form',
+      'attr class',
+      'el img[src,alt,title,width,height]',
+      'el details',
+      'el summary',
+    ]);
   } finally {
     g.Sanitizer = previous;
   }
 });
 
-test('[final fix2 6b] without a Sanitizer global, setHTML is called with the default config (no options)', async () => {
+test('without a Sanitizer global, setHTML is not used (its default would drop classes and images): DOMPurify is', async () => {
   const g = globalThis as { Sanitizer?: unknown };
   const previous = g.Sanitizer;
   delete g.Sanitizer;
   try {
-    let receivedArgs: unknown[] = [];
+    let setHTMLCalled = false;
     const el = {
-      setHTML(...args: unknown[]) {
-        receivedArgs = args;
+      innerHTML: '',
+      setHTML() {
+        setHTMLCalled = true;
       },
     } as unknown as Element;
-    await setSafeHTML(el, '<p>x</p>');
-    assert.deepEqual(receivedArgs, ['<p>x</p>'], 'nessun secondo argomento: resta l’allowlist predefinita e sicura');
+    // In Node DOMPurify non ha una window (niente sanitize): qui conta solo che il percorso non sia
+    // setHTML() nudo. Il comportamento di DOMPurify è coperto da `sanitizeWith` con jsdom qui sopra.
+    await setSafeHTML(el, '<p class="hmd-l-0">x</p>').catch(() => undefined);
+    assert.equal(setHTMLCalled, false);
   } finally {
     if (previous !== undefined) g.Sanitizer = previous;
   }
