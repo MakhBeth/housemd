@@ -681,3 +681,60 @@ test('[minor round 2] checkExternal is a no-op while a rename/remove is in progr
   assert.deepEqual(ws.files(), ['new/a.md']);
   assert.equal(ws.getState().toasts.length, 0);
 });
+
+// --- codex review (gpt-6-astra), see codex-fix1.md --------------------------
+
+test('[codex F1] entering a conflict writes the unsaved text to the emergency buffer', async () => {
+  const { ops, buffers, scheduler, ws } = await setup({ 'a.md': 'A' });
+  await ws.openFile('a.md');
+  ws.edit('mio');
+  ops.setFile('a.md', 'loro');
+  await ws.checkExternal();
+  assert.equal(doc(ws).conflict, true);
+  assert.equal(scheduler.pending(), 0, 'niente timer: il buffer deve essere già stato scritto');
+  assert.deepEqual(await buffers.load('ws-1', 'a.md'), { text: 'mio', base: 'A' });
+});
+
+test('[codex F1] flush() during a conflict buffers the text instead of just cancelling the timer', async () => {
+  const { ops, buffers, scheduler, ws } = await setup({ 'a.md': 'A' });
+  await ws.openFile('a.md');
+  ws.edit('mio');
+  ops.setFile('a.md', 'loro');
+  await ws.checkExternal();
+  ws.edit('mio, ancora');
+  await ws.flush(); // es. la finestra perde il focus prima che scatti il debounce
+  assert.equal(scheduler.pending(), 0);
+  assert.equal((await buffers.load('ws-1', 'a.md'))?.text, 'mio, ancora');
+  assert.equal(await ops.textOf('a.md'), 'loro');
+});
+
+test('[codex F1] flush() with access lost buffers the text instead of just cancelling the timer', async () => {
+  const { ops, buffers, ws } = await setup({ 'a.md': 'A' });
+  await ws.openFile('a.md');
+  ops.writeFile = async () => {
+    throw Object.assign(new Error('denied'), { name: 'NotAllowedError' });
+  };
+  ws.edit('uno');
+  await ws.flush();
+  assert.equal(ws.getState().status, 'access-lost');
+  ws.edit('uno e due');
+  await ws.flush();
+  assert.equal((await buffers.load('ws-1', 'a.md'))?.text, 'uno e due');
+});
+
+test('[codex F1] a conflict caused by typing during checkExternal also buffers the text', async () => {
+  const { ops, buffers, ws } = await setup({ 'a.md': 'A' });
+  await ws.openFile('a.md');
+  ops.setFile('a.md', 'vim');
+  const fs = (ws as unknown as { deps: { fs: { stat: (p: string) => Promise<unknown> } } }).deps.fs;
+  const originalStat = fs.stat.bind(fs);
+  fs.stat = async (path: string) => {
+    const v = await originalStat(path);
+    ws.edit('digitato');
+    return v;
+  };
+  await ws.checkExternal();
+  fs.stat = originalStat;
+  assert.equal(doc(ws).conflict, true);
+  assert.deepEqual(await buffers.load('ws-1', 'a.md'), { text: 'digitato', base: 'A' });
+});

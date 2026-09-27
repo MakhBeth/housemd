@@ -334,7 +334,13 @@ export class Workspace {
     while (this.saving) await this.saving;
     if (this.suspended > 0) return;
     const doc = this.state.doc;
-    if (!doc || doc.conflict || this.state.status === 'access-lost') return;
+    if (!doc) return;
+    if (doc.conflict || this.state.status === 'access-lost') {
+      // Su disco non si può scrivere, ma il timer è appena stato cancellato: senza questo buffer le
+      // modifiche fatte dall'ultimo salvataggio del buffer resterebbero solo in memoria.
+      await this.bufferCurrentDoc();
+      return;
+    }
     if (doc.saveState !== 'dirty' && doc.saveState !== 'error') return;
     this.saving = this.writeDoc(doc.path, doc.text).finally(() => {
       this.saving = null;
@@ -473,6 +479,8 @@ export class Workspace {
             if (this.timer !== null) this.scheduler.clear(this.timer);
             this.timer = null;
             this.setDoc({ conflict: true });
+            // Il timer appena cancellato non scriverà più nulla: il testo va messo al sicuro subito.
+            await this.bufferCurrentDoc();
             return;
           }
           this.knownText = decision.text;
@@ -488,6 +496,8 @@ export class Workspace {
           if (this.timer !== null) this.scheduler.clear(this.timer);
           this.timer = null;
           this.setDoc({ conflict: true });
+          // Il timer appena cancellato non scriverà più nulla: il testo va messo al sicuro subito.
+          await this.bufferCurrentDoc();
           return;
       }
     });
