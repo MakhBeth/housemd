@@ -10,6 +10,7 @@ import { ConfirmDialog } from './ConfirmDialog';
 import { ConflictBar } from './ConflictBar';
 import { FileTree, type TreeAction } from './FileTree';
 import { NameDialog } from './NameDialog';
+import { renameTaken } from './names';
 import { SearchPanel } from './SearchPanel';
 import { Toasts } from './Toasts';
 import { buildTree, type TreeNode } from './tree';
@@ -323,7 +324,8 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }
           confirmLabel="Rinomina"
           validate={(name) => {
             const to = joinPath(dirname(dialog.node.path), name);
-            return to.toLowerCase() !== dialog.node.path.toLowerCase() && exists(to) ? taken : null;
+            const paths = state.entries.map((e) => e.path);
+            return renameTaken(dialog.node.path, to, paths) ? taken : null;
           }}
           onSubmit={(name) => {
             const to = joinPath(dirname(dialog.node.path), name);

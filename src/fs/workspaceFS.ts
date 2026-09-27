@@ -150,6 +150,11 @@ export function createWorkspaceFS(ops: FsOps): WorkspaceFS {
       if (!caseOnly && (await ops.exists(to))) throw new FsExistsError(to);
 
       if (caseOnly) {
+        // Su un file system case-sensitive "a.md" e "A.md" possono essere due file distinti: se la
+        // cartella elenca un elemento con ESATTAMENTE il nome di destinazione, rinominare lo
+        // sovrascriverebbe. Su un file system case-insensitive l'elenco riporta solo il nome reale.
+        const siblings = (await ops.readDir(dirname(from))) ?? [];
+        if (siblings.some((entry) => entry.name === basename(to))) throw new FsExistsError(to);
         // Su file system case-insensitive "to" risulta già esistente: passa da un nome temporaneo.
         const tmp = joinPath(dirname(from), `.housemd-rename-${Date.now()}-${basename(from)}`);
         if (kind === 'file') {

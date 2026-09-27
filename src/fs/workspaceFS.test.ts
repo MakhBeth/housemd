@@ -110,6 +110,22 @@ test('case-only rename works on case-insensitive file systems', async () => {
   assert.equal(await ops.textOf('notes/Nota.md'), 'N');
 });
 
+test('[codex F4] case-only rename refuses a distinct file with that exact name on case-sensitive file systems', async () => {
+  const { ops, fs } = setup();
+  ops.setFile('notes/a.md', 'minuscolo');
+  ops.setFile('notes/A.md', 'maiuscolo');
+  await assert.rejects(fs.rename('notes/a.md', 'notes/A.md'), FsExistsError);
+  assert.equal(await ops.textOf('notes/a.md'), 'minuscolo');
+  assert.equal(await ops.textOf('notes/A.md'), 'maiuscolo');
+});
+
+test('[codex F4] case-only rename still works on case-sensitive file systems when the target does not exist', async () => {
+  const { ops, fs } = setup();
+  ops.setFile('notes/a.md', 'A');
+  await fs.rename('notes/a.md', 'notes/A.md');
+  assert.deepEqual([...ops.files.keys()], ['notes/A.md']);
+});
+
 test('rename directory copies recursively and removes the original', async () => {
   const { ops, fs } = setup();
   ops.setFile('old/a.md', 'A');
