@@ -23,6 +23,11 @@ export async function switchFolder<H, T>(deps: {
   open(handle: H): Promise<T>;
   /** Elimina la cartella appena aperta se alla fine non si può lasciare quella vecchia. */
   discard?(value: T): void;
+  /**
+   * Salva la cartella nuova come "corrente" (riaperta all'avvio): solo a cambio riuscito, così un
+   * cambio bloccato o fallito non fa riaprire al prossimo avvio una cartella mai davvero aperta.
+   */
+  persist?(value: T): void;
 }): Promise<FolderSwitch<T>> {
   let handle: H | null;
   try {
@@ -56,5 +61,6 @@ export async function switchFolder<H, T>(deps: {
     return { kind: 'error', detail: errorDetail(err) };
   }
   deps.current?.dispose();
+  deps.persist?.(value);
   return { kind: 'opened', value };
 }

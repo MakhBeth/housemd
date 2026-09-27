@@ -138,3 +138,66 @@ test('from the start screen (no workspace) a picker error is just reported', asy
   });
   assert.deepEqual(result, { kind: 'error', detail: 'x' });
 });
+
+test('the new folder is persisted as current only when the switch succeeds', async () => {
+  const persisted: string[] = [];
+  const persist = (value: string) => {
+    persisted.push(value);
+  };
+
+  const blocked = fakeWorkspace(false);
+  await switchFolder({ pick: async () => 'handle', current: blocked.current, open: async () => 'nuova', persist });
+  const failing = fakeWorkspace(true);
+  await switchFolder({
+    pick: async () => 'handle',
+    current: failing.current,
+    open: async () => {
+      throw new Error('EIO');
+    },
+    persist,
+  });
+  await switchFolder({ pick: async () => null, current: fakeWorkspace(true).current, open: async () => 'nuova', persist });
+  assert.deepEqual(persisted, [], 'bloccato, errore o annullato: la cartella corrente salvata resta quella vecchia');
+
+  const ok = fakeWorkspace(true);
+  const result = await switchFolder({
+    pick: async () => 'handle',
+    current: ok.current,
+    open: async () => 'nuova',
+    persist: (value) => {
+      ok.calls.push(`persist ${value}`);
+      persist(value);
+    },
+  });
+  assert.deepEqual(result, { kind: 'opened', value: 'nuova' });
+  assert.deepEqual(persisted, ['nuova']);
+  assert.deepEqual(ok.calls, ['closeFile', 'closeFile', 'dispose', 'persist nuova']);
+});
+
+test('a late block after opening does not persist the discarded folder', async () => {
+  const { result, discarded } = await switchingFromWithPersist();
+  assert.deepEqual(result.kind, 'blocked');
+  assert.deepEqual(discarded, ['nuova']);
+});
+
+async function switchingFromWithPersist() {
+  let closes = 0;
+  const persisted: string[] = [];
+  const discarded: string[] = [];
+  const result = await switchFolder({
+    pick: async () => 'handle',
+    current: {
+      closeFile: async () => ++closes === 1, // la seconda messa al sicuro fallisce
+      dispose: () => undefined,
+    },
+    open: async () => 'nuova',
+    discard: (value) => {
+      discarded.push(value);
+    },
+    persist: (value) => {
+      persisted.push(value);
+    },
+  });
+  assert.deepEqual(persisted, []);
+  return { result, discarded };
+}

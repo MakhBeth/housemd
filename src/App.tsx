@@ -95,9 +95,14 @@ export default function App({ updates }: { updates: UpdateFlow }) {
         // Se è una cartella già aperta in passato (non solo l'ultima: anche A → B → A), si mantiene
         // lo stesso workspaceId: altrimenti buffer di emergenza e "ultimo file aperto" salvati per
         // quella cartella resterebbero orfani, agganciati a un id ormai abbandonato.
-        const workspaceId = (await findKnownWorkspaceId(handle).catch(() => null)) ?? undefined;
-        const stored = await saveWorkspace(handle, undefined, workspaceId);
+        const workspaceId = (await findKnownWorkspaceId(handle).catch(() => null)) ?? crypto.randomUUID();
+        const stored: StoredWorkspace = { handle, workspaceId };
         return { stored, workspace: await openWorkspace(stored) };
+      },
+      // Diventa la cartella corrente salvata solo a cambio riuscito. Se il salvataggio fallisce la
+      // cartella resta comunque aperta: al prossimo avvio si riaprirà la precedente.
+      persist: ({ stored }) => {
+        void saveWorkspace(stored.handle, undefined, stored.workspaceId).catch(() => undefined);
       },
       // La cartella vecchia non si è potuta lasciare (modifiche arrivate durante l'apertura e non
       // messe al sicuro): si resta lì e quella nuova, già caricata, si butta.
