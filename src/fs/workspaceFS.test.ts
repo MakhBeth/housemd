@@ -82,6 +82,17 @@ test('rename file falls back to copy + remove without moveFile', async () => {
   assert.equal(await ops.textOf('n/a.md'), null);
 });
 
+test('[final fix 1] rename falls back to copy + remove when moveFile is rejected (e.g. NotAllowedError)', async () => {
+  const { ops, fs } = setup({ withMove: true });
+  ops.setFile('n/a.md', 'A');
+  ops.moveFile = async () => {
+    throw Object.assign(new Error('x'), { name: 'NotAllowedError' });
+  };
+  await fs.rename('n/a.md', 'n/b.md');
+  assert.equal(await ops.textOf('n/b.md'), 'A');
+  assert.equal(await ops.textOf('n/a.md'), null);
+});
+
 test('rename refuses existing targets and other parent folders', async () => {
   const { ops, fs } = setup();
   ops.setFile('a.md', 'A');

@@ -79,8 +79,15 @@ export function createWorkspaceFS(ops: FsOps): WorkspaceFS {
 
   async function renameFile(from: string, to: string): Promise<void> {
     if (ops.moveFile) {
-      await ops.moveFile(from, basename(to));
-      return;
+      try {
+        await ops.moveFile(from, basename(to));
+        return;
+      } catch (err) {
+        // 'move' in FileSystemFileHandle.prototype può essere vero pur non funzionando (es.
+        // NotAllowedError su file locali in Chrome): si ripiega su copia + rimozione. Se il file
+        // risulta proprio sparito, invece, non ha senso ritentare: si propaga subito.
+        if ((err as { name?: string } | null)?.name === 'NotFoundError') throw err;
+      }
     }
     const file = await ops.readFile(from);
     if (!file) throw new FsNotFoundError(from);
