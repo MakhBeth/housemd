@@ -45,7 +45,9 @@
   width: 30px;
   height: 30px;
   cursor: pointer;
-  font-size: 16px;
+  display: inline-grid;
+  place-items: center;
+  color: var(--c-text);
 }
 
 .resizer {

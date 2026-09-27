@@ -14,9 +14,9 @@
   --c-highlight: light-dark(#fde68a, #854d0e);
   --c-code-bg: light-dark(#f4f2ee, #25252c);
 
-  --font-ui: system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-mono: ui-monospace, 'JetBrains Mono', 'Fira Code', monospace;
-  --font-prose: Charter, 'Iowan Old Style', Georgia, serif;
+  --font-ui: 'Space Grotesk', system-ui, sans-serif;
+  --font-prose: 'Space Grotesk', system-ui, sans-serif;
+  --font-mono: 'Space Mono', ui-monospace, monospace;
 
   accent-color: var(--c-accent);
   scrollbar-color: var(--c-border) transparent;
@@ -55,4 +55,17 @@ button {
 ::highlight(housemd-search) {
   background-color: var(--c-highlight);
   color: inherit;
+}
+
+.icon {
+  display: inline-block;
+  flex: none;
+  width: var(--icon-size, 20px);
+  height: var(--icon-size, 20px);
+  background-color: currentColor;
+  mask-repeat: no-repeat;
+  mask-position: center;
+  mask-size: 100% 100%;
+  image-rendering: pixelated;
+  vertical-align: middle;
 }

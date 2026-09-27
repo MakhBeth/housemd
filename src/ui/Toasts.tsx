@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 
 import type { Toast } from '../workspace/workspace';
+import { Icon } from './Icon';
 import styles from './Toasts.module.css';
 
 interface Props {
@@ -35,7 +36,7 @@ export function Toasts({ toasts, onDismiss }: Props) {
         <div key={toast.id} className={styles.toast} data-kind={toast.kind} role={toast.kind === 'error' ? 'alert' : 'status'}>
           <p>{toast.message}</p>
           <button aria-label="Chiudi" onClick={() => onDismiss(toast.id)}>
-            ×
+            <Icon name="close" size={16} />
           </button>
         </div>
       ))}

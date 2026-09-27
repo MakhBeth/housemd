@@ -9,6 +9,7 @@ import type { Workspace } from '../workspace/workspace';
 import { ConfirmDialog } from './ConfirmDialog';
 import { ConflictBar } from './ConflictBar';
 import { FileTree, type TreeAction } from './FileTree';
+import { Icon } from './Icon';
 import { NameDialog } from './NameDialog';
 import { renameTaken } from './names';
 import { SearchPanel } from './SearchPanel';
@@ -218,10 +219,10 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }
                 {state.name}
               </button>
               <button className={styles.iconButton} onClick={() => onTreeAction('new-file', null)} aria-label="Nuovo file" title="Nuovo file">
-                +
+                <Icon name="newFile" />
               </button>
               <button className={styles.iconButton} onClick={() => onTreeAction('new-folder', null)} aria-label="Nuova cartella" title="Nuova cartella">
-                ⊞
+                <Icon name="newFolder" />
               </button>
             </div>
             <SearchPanel ref={searchRef} index={workspace.search} indexRevision={state.indexRevision} onOpen={openFile} />
@@ -266,7 +267,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }
             aria-pressed={sidebarOpen}
             aria-label={sidebarOpen ? 'Nascondi barra laterale' : 'Mostra barra laterale'}
           >
-            ☰
+            <Icon name={sidebarOpen ? 'sidebarClose' : 'sidebarOpen'} />
           </button>
           <span className={styles.path}>{doc?.path ?? 'Nessun file aperto'}</span>
           <div className={styles.modes} role="group" aria-label="Modalità di visualizzazione">

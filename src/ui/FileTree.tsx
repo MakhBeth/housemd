@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
 
+import { Icon } from './Icon';
 import { ancestorsOf, type TreeNode } from './tree';
 import styles from './FileTree.module.css';
 
@@ -68,7 +69,7 @@ export function FileTree({ nodes, openPath, onOpen, onAction }: Props) {
         openMenu(node, event.currentTarget);
       }}
     >
-      ⋯
+      <Icon name="more" size={16} />
     </button>
   );
 
