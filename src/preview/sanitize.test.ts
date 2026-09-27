@@ -4,7 +4,7 @@ import { JSDOM } from 'jsdom';
 import createDOMPurify from 'dompurify';
 
 import { renderMarkdown } from './render';
-import { sanitizeWith, type Purifier } from './sanitize';
+import { sanitizeWith, setSafeHTML, type Purifier } from './sanitize';
 
 const purify = createDOMPurify(new JSDOM('').window as unknown as Window & typeof globalThis) as unknown as Purifier;
 const ctx = { currentPath: 'a.md', files: ['a.md', 'idea.md'], lineOffset: 0 };
@@ -35,4 +35,15 @@ test('scripts, event handlers, javascript: URLs and styles are removed', () => {
   assert.doesNotMatch(clean, /<style/i);
   assert.doesNotMatch(clean, /<iframe/i);
   assert.match(clean, /<img src="x.png">/);
+});
+
+test('[final fix 6] setSafeHTML passes an explicit config to setHTML, removing style and form too', async () => {
+  let received: unknown;
+  const el = {
+    setHTML(_html: string, options?: unknown) {
+      received = options;
+    },
+  } as unknown as Element;
+  await setSafeHTML(el, '<p>x</p><style>y</style><form></form>');
+  assert.deepEqual(received, { sanitizer: { removeElements: ['style', 'form'] } });
 });

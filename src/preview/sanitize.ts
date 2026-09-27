@@ -18,16 +18,32 @@ export function sanitizeWith(purify: Purifier, html: string): string {
   return purify.sanitize(html, PURIFY_CONFIG);
 }
 
-type MaybeSetHTML = Element & { setHTML?: (html: string) => void };
+interface SetHTMLOptions {
+  sanitizer: { removeElements: string[] };
+}
+
+type MaybeSetHTML = Element & { setHTML?: (html: string, options?: SetHTMLOptions) => void };
+
+/** Configurazione esplicita per la Sanitizer API: di default lascerebbe passare <style> e <form>. */
+const SET_HTML_OPTIONS: SetHTMLOptions = { sanitizer: { removeElements: ['style', 'form'] } };
 
 let purifier: Promise<Purifier> | null = null;
 
 export async function setSafeHTML(el: Element, html: string): Promise<void> {
   const target = el as MaybeSetHTML;
   if (typeof target.setHTML === 'function') {
-    target.setHTML(html);
+    target.setHTML(html, SET_HTML_OPTIONS);
     return;
   }
   purifier ??= import('dompurify').then((m) => m.default as unknown as Purifier);
-  el.innerHTML = sanitizeWith(await purifier, html);
+  let purify: Purifier;
+  try {
+    purify = await purifier;
+  } catch (err) {
+    // L'import dinamico è fallito: non tenere in cache una promise rifiutata, altrimenti ogni
+    // chiamata successiva fallirebbe subito senza più ritentare il caricamento.
+    purifier = null;
+    throw err;
+  }
+  el.innerHTML = sanitizeWith(purify, html);
 }
