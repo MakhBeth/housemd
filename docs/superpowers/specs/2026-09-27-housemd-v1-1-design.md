@@ -82,15 +82,29 @@ Rifinire HouseMD dopo il primo collaudo: identità visiva (logo, icone, font, te
 ### Comportamento
 
 - `Workspace.setAutosave({ mode, delayMs })`; il valore corrente sta in `WorkspaceState.autosave`.
-- In `onFocusChange` e `off`, `edit()` non programma scritture su disco ma programma la scrittura del **buffer di emergenza** (debounce 1000 ms), come oggi in conflitto: una chiusura improvvisa non perde testo.
+- In `onFocusChange` e `off`, `edit()` non programma scritture su disco ma programma la scrittura del **buffer di emergenza** con debounce 1000 ms **e attesa massima 5000 ms** (checkpoint: durante una digitazione continua il buffer viene comunque scritto almeno ogni 5 s). Finestra di perdita in caso di crash: al massimo gli ultimi ~5 s di digitazione.
 - Cambio file:
   - `afterDelay`/`onFocusChange`: `settle()` come oggi (scrive su disco).
   - `off`: `settle()` non scrive su disco; mette il testo nel buffer (con la sua base) e cambia file. Riaprendo il file, la bozza viene ripristinata con la logica esistente (`dirty` se la base coincide col disco, conflitto altrimenti).
 - Blur della finestra: `WorkspaceView` chiama `flush()` solo in `afterDelay`/`onFocusChange`; in `off` bufferizza soltanto.
+- **Un'unica politica per tutte le scritture automatiche.** Funzione pura `autosaveAllows(mode, trigger)` con `trigger` ∈ `timer | blur | switch | resume | restoredDraft | afterRename | afterWrite | afterExternal`. Ogni punto del `Workspace` che oggi chiama `schedule()`/`flush()` in automatico (compresi `resume()` dopo aver riottenuto l'accesso, ripristino di una bozza, fine rinomina/eliminazione, fine scrittura con testo cambiato, `checkExternal`) passa da questa funzione; se non è consentito, bufferizza soltanto. Le operazioni esplicite (`saveNow`, `saveAll`, "Sovrascrivi" in un conflitto) non passano dalla politica.
+- `setAutosave()` annulla il timer pendente e riprogramma secondo la nuova modalità (es. passando a `off` con un salvataggio a tempo in attesa, il salvataggio non avviene e il testo va nel buffer).
+- Test: tabella di `autosaveAllows`; `resume()` in `off` non scrive; cambio modalità con timer pendente.
 - File con bozza: `Workspace.draftPaths()` (da `BufferStore.list`) → `WorkspaceState.drafts: string[]`, aggiornato quando un buffer viene scritto o cancellato. L'albero mostra l'icona "file con bozza" (pallino) su quei file; la toolbar mostra "Non salvato" col pallino quando il file aperto è `dirty`.
-- `saveAll()` (`Ctrl/Cmd+Alt+S` e voce nelle impostazioni/toolbar): per ogni bozza — se la base coincide con il disco scrive il file e cancella la bozza; altrimenti la lascia (conflitto) e alla fine mostra un toast `saveAllSkipped` con il numero.
+- `saveAll()` (`Ctrl/Cmd+Alt+S` e voce nelle impostazioni/toolbar):
+  1. prima il documento aperto, dal **testo in memoria** (non dal buffer), con lo stesso percorso di `saveNow()`/`writeDoc()` e le sue invarianti (base/versione aggiornate, modifiche arrivate durante la scrittura restano `dirty`);
+  2. poi le altre bozze (percorsi diversi dal documento aperto), sotto sospensione dell'autosave: legge il disco, se coincide con la base scrive il testo della bozza e cancella la bozza **solo se nel frattempo non è cambiata**; altrimenti la lascia (conflitto);
+  3. toast `saveAllSkipped` con il numero delle bozze lasciate.
+  Test: invocazione prima del debounce (il testo in memoria vince), modifiche durante il salvataggio, bozza in conflitto saltata.
 - Chiusura della pagina con bozze o documento `dirty`: `beforeunload` con `preventDefault()` (avviso nativo del browser).
 - Test: per ogni modalità — salvataggio a tempo solo in `afterDelay`; al cambio file scrittura su disco in `afterDelay`/`onFocusChange` e solo bozza in `off`; buffer scritto durante la digitazione in `off`/`onFocusChange`; `saveAll` scrive le bozze valide e salta quelle in conflitto; `drafts` aggiornato.
+
+### Garanzie quando si lascia un documento
+
+- `settle()` restituisce un esito: `durable` (testo scritto su disco o nel buffer, e nessuna modifica arrivata nel frattempo) oppure `failed`. Gli errori di scrittura del buffer (quota, IndexedDB non disponibile) **non** vengono più ignorati.
+- Se durante la persistenza arrivano nuove modifiche, `settle()` ripete (massimo 3 volte); se non si stabilizza, `failed`.
+- Con esito `failed` il cambio file, la chiusura, il cambio cartella, la ricarica per aggiornamento **non avvengono**: il documento resta aperto e compare il toast `draftNotPersisted` ("Impossibile mettere al sicuro le modifiche: salva il file o copia il testo").
+- Test: errore del buffer durante il cambio file (il documento resta aperto), modifiche concorrenti durante `settle`, cambio cartella bloccato.
 
 ### Impostazioni
 
@@ -100,6 +114,8 @@ Rifinire HouseMD dopo il primo collaudo: identità visiva (logo, icone, font, te
 ## 4. Local History
 
 - Nuovo object store IndexedDB `history` nel database `HouseMD` (versione del DB 1 → 2, con upgrade che crea lo store senza toccare gli altri), chiave autoincrement, indice `byFile` su `[workspaceId, path, savedAt]`.
+- Convivenza tra versioni: `openDb` gestisce `onblocked` (un'altra scheda tiene aperta la versione vecchia: si aspetta, e dopo 3 s toast `reloadOtherTabs`) e registra `onversionchange` su ogni connessione (chiude subito la connessione). Se una scheda vecchia riceve `VersionError` aprendo il DB, la scrittura del buffer fallisce e, grazie alle garanzie di `settle()`, il documento non viene lasciato; la scheda vecchia riceve comunque il toast di aggiornamento della PWA. Nota: v1 non è mai stata pubblicata, quindi il caso reale è solo il browser di sviluppo.
+- Test: migrazione v1 → v2 con buffer e cartelle già presenti (restano intatti), `openDb` con versione più alta già presente.
 - Record: `{ workspaceId, path, savedAt: number, text: string, reason: 'save' | 'before-reload' | 'before-overwrite' | 'before-restore' }`.
 - `src/history/policy.ts` (puro):
   - `shouldSnapshot(last, candidate, now)`: no se il testo è uguale all'ultimo snapshot; per `save` no se l'ultimo `save` è più recente di 5 minuti; sempre sì per i `before-*`.
@@ -112,13 +128,22 @@ Rifinire HouseMD dopo il primo collaudo: identità visiva (logo, icone, font, te
   - prima di un ripristino → snapshot `before-restore` del testo corrente;
   - rinomina di file/cartelle → `history.move`; eliminazione → la cronologia resta.
   - Errori della cronologia non bloccano mai il salvataggio (catturati, al massimo un toast).
+  - **Nessun await della cronologia nei percorsi che cambiano il documento.** Lo snapshot `before-*` cattura il testo in modo sincrono e la sua scrittura in IndexedDB parte senza essere attesa (fire-and-forget con `catch`), così le verifiche esistenti (identità del documento, testo cambiato nel frattempo, sospensione) restano senza await tra controllo e sostituzione del testo.
+  - `restoreVersion(id)`: legge la versione (await), poi **rivalida** che il documento aperto sia ancora lo stesso percorso e che la sua `generation` (contatore incrementato a ogni cambio di testo o di documento) sia quella al momento della richiesta; altrimenti annulla con un toast. Solo dopo, in modo sincrono, snapshot `before-restore` e sostituzione.
+  - Test con store lento: digitazione e cambio file durante uno snapshot o durante `restoreVersion`.
 - Ripristino: `Workspace.restoreVersion(id)` sostituisce il testo del documento aperto come una modifica utente (`edit`), quindi è annullabile con `Ctrl+Z` e segue la modalità autosave. Nell'editor il ripristino passa da una transazione CodeMirror (non da `resetKey`), per mantenere la cronologia di annullamento.
 - Interfaccia `src/ui/HistoryPanel.tsx`: aperto dalla voce "Cronologia" del menu ⋯ e dall'icona nella toolbar; si sovrappone al riquadro dell'anteprima (in modalità solo editor occupa la metà destra). Lista versioni con `formatRelative` e motivo tradotto; selezionando una versione mostra il diff a righe rispetto al testo corrente (libreria `diff`, `diffLines`), righe aggiunte/tolte colorate e renderizzate come testo (mai HTML); pulsante "Ripristina".
 - Test: `policy` (throttle, dedup, pruning), `historyStore` (memoria + IndexedDB con fake-indexeddb, `move`), `Workspace` (snapshot nei quattro momenti, rinomina, errore della cronologia non blocca il salvataggio, `restoreVersion`).
 
 ## 5. PWA
 
-- `registerType: 'prompt'`: all'arrivo di un nuovo service worker compare un toast persistente `newVersion` con pulsante "Aggiorna" → `settle()` del documento aperto, poi `updateSW(true)`.
+- `registerType: 'prompt'`: all'arrivo di un nuovo service worker compare un toast persistente `newVersion` con pulsante "Aggiorna".
+- Ciclo di aggiornamento protetto (non si usa il reload automatico del plugin):
+  1. "Aggiorna" → il `Workspace` entra nello stato `updating`: `edit()` è ignorato e l'editor diventa di sola lettura;
+  2. `settle()`; se `failed` → si esce da `updating`, toast `draftNotPersisted`, nessun aggiornamento;
+  3. se `durable` → `updateSW(false)` (invia `SKIP_WAITING` senza ricaricare).
+  4. **In ogni scheda** (anche quelle dove nessuno ha cliccato) l'evento `controllerchange` di `navigator.serviceWorker` esegue lo stesso ciclo: `updating` → `settle()` → `location.reload()` solo se `durable`; altrimenti resta sulla versione vecchia con il toast.
+- Test del ciclo con un finto service worker/`settle` (logica in un modulo puro `src/pwa/updateFlow.ts`).
 - Manifest: `id: '/'`, `start_url: '/'`, `scope: '/'`, `display: 'standalone'`, nome e descrizione, icone 192 e 512 `any` più una 512 `maskable` separata (con margine di sicurezza, generata da un SVG dedicato), `theme_color`/`background_color` coerenti.
 - Precache: JS, CSS, HTML, SVG (icone pixel), PNG, `woff2` (font), chunk delle lingue.
 - Collaudo: icona "Installa" in Chrome, app installata che parte offline, toast di aggiornamento dopo un nuovo build.
