@@ -37,13 +37,45 @@ test('scripts, event handlers, javascript: URLs and styles are removed', () => {
   assert.match(clean, /<img src="x.png">/);
 });
 
-test('[final fix 6] setSafeHTML passes an explicit config to setHTML, removing style and form too', async () => {
-  let received: unknown;
-  const el = {
-    setHTML(_html: string, options?: unknown) {
-      received = options;
-    },
-  } as unknown as Element;
-  await setSafeHTML(el, '<p>x</p><style>y</style><form></form>');
-  assert.deepEqual(received, { sanitizer: { removeElements: ['style', 'form'] } });
+test('[final fix2 6a] with a Sanitizer global, setHTML gets a sanitizer instance with style/form removed', async () => {
+  const removed: string[] = [];
+  class FakeSanitizer {
+    removeElement(name: string) {
+      removed.push(name);
+    }
+  }
+  const g = globalThis as { Sanitizer?: unknown };
+  const previous = g.Sanitizer;
+  g.Sanitizer = FakeSanitizer;
+  try {
+    let received: { sanitizer?: unknown } | undefined;
+    const el = {
+      setHTML(_html: string, options?: { sanitizer?: unknown }) {
+        received = options;
+      },
+    } as unknown as Element;
+    await setSafeHTML(el, '<p>x</p>');
+    assert.ok(received?.sanitizer instanceof FakeSanitizer, 'passa un istanza di Sanitizer, non un dizionario');
+    assert.deepEqual(removed, ['style', 'form']);
+  } finally {
+    g.Sanitizer = previous;
+  }
+});
+
+test('[final fix2 6b] without a Sanitizer global, setHTML is called with the default config (no options)', async () => {
+  const g = globalThis as { Sanitizer?: unknown };
+  const previous = g.Sanitizer;
+  delete g.Sanitizer;
+  try {
+    let receivedArgs: unknown[] = [];
+    const el = {
+      setHTML(...args: unknown[]) {
+        receivedArgs = args;
+      },
+    } as unknown as Element;
+    await setSafeHTML(el, '<p>x</p>');
+    assert.deepEqual(receivedArgs, ['<p>x</p>'], 'nessun secondo argomento: resta l’allowlist predefinita e sicura');
+  } finally {
+    if (previous !== undefined) g.Sanitizer = previous;
+  }
 });

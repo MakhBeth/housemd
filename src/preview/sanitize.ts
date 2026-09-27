@@ -18,21 +18,45 @@ export function sanitizeWith(purify: Purifier, html: string): string {
   return purify.sanitize(html, PURIFY_CONFIG);
 }
 
-interface SetHTMLOptions {
-  sanitizer: { removeElements: string[] };
+interface SanitizerLike {
+  removeElement(name: string): void;
 }
 
-type MaybeSetHTML = Element & { setHTML?: (html: string, options?: SetHTMLOptions) => void };
+type MaybeSetHTML = Element & { setHTML?: (html: string, options?: { sanitizer: SanitizerLike }) => void };
 
-/** Configurazione esplicita per la Sanitizer API: di default lascerebbe passare <style> e <form>. */
-const SET_HTML_OPTIONS: SetHTMLOptions = { sanitizer: { removeElements: ['style', 'form'] } };
+/**
+ * Un'istanza di Sanitizer creata una sola volta e riusata: parte dalla configurazione PREDEFINITA
+ * (l'allowlist sicura di setHTML) e toglie in più <style>/<form>. Un dizionario `{ removeElements }`
+ * da solo sarebbe invece una BLOCKLIST per la spec Sanitizer: tutto il resto (<meta http-equiv>,
+ * <base href>, <link rel=stylesheet>, controlli di form…) passerebbe, più permissivo del default
+ * e del fallback DOMPurify.
+ */
+let sanitizerInstance: SanitizerLike | null = null;
+
+function getSanitizer(): SanitizerLike | null {
+  const SanitizerCtor = (globalThis as { Sanitizer?: new () => SanitizerLike }).Sanitizer;
+  if (!SanitizerCtor) return null;
+  if (sanitizerInstance) return sanitizerInstance;
+  try {
+    const s = new SanitizerCtor();
+    s.removeElement('style');
+    s.removeElement('form');
+    sanitizerInstance = s;
+    return sanitizerInstance;
+  } catch {
+    // Costruzione o removeElement falliti: niente sanitizer custom, si resta sul default sicuro.
+    return null;
+  }
+}
 
 let purifier: Promise<Purifier> | null = null;
 
 export async function setSafeHTML(el: Element, html: string): Promise<void> {
   const target = el as MaybeSetHTML;
   if (typeof target.setHTML === 'function') {
-    target.setHTML(html, SET_HTML_OPTIONS);
+    const sanitizer = getSanitizer();
+    if (sanitizer) target.setHTML(html, { sanitizer });
+    else target.setHTML(html); // configurazione predefinita: già l'allowlist sicura
     return;
   }
   purifier ??= import('dompurify').then((m) => m.default as unknown as Purifier);

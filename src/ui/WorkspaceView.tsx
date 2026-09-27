@@ -237,7 +237,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }
           <span
             className={styles.saveState}
             data-state={doc?.saveState ?? 'none'}
-            aria-live="polite"
+            aria-live={doc?.saveState === 'error' ? 'assertive' : 'polite'}
             role={doc?.saveState === 'error' ? 'alert' : undefined}
           >
             {doc ? (doc.deletedOnDisk ? 'Eliminato su disco' : SAVE_LABEL[doc.saveState]) : ''}
