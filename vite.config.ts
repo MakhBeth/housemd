@@ -18,7 +18,7 @@ export default defineConfig({
         description: 'Editor markdown nel browser per le tue cartelle locali',
         lang: 'it',
         theme_color: '#0f766e',
-        background_color: '#0f766e',
+        background_color: '#16161a',
         display: 'standalone',
         scope: '/',
         start_url: '/',

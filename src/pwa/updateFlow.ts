@@ -7,7 +7,12 @@ export interface UpdateHost {
   /** L'aggiornamento non procede: si torna a modificare (Workspace.endUpdate). */
   cancel(): void;
   reload(): void;
+  /** Timer annullabile (in App: window.setTimeout); restituisce la funzione che lo annulla. */
+  setTimer(callback: () => void, ms: number): () => void;
 }
+
+/** Dopo SKIP_WAITING, attesa massima dell'evento `controlling` prima di restituire il documento. */
+export const UPDATE_TIMEOUT_MS = 10_000;
 
 export interface UpdateState {
   /** C'è una nuova versione in attesa: toast persistente con "Aggiorna". */
@@ -42,14 +47,35 @@ export function createUpdateFlow(host: UpdateHost, updateSW: () => Promise<void>
    * altro evento arriverà. Resta solo da ricaricare, sempre dopo aver messo al sicuro il documento.
    */
   let activated = false;
+  /** Annulla l'attesa di `controlling` dopo un apply riuscito (null se non si sta aspettando). */
+  let cancelTimeout: (() => void) | null = null;
+
+  const stopTimeout = () => {
+    cancelTimeout?.();
+    cancelTimeout = null;
+  };
+
+  /** prepare() che non rifiuta mai: un errore inatteso vale come documento non al sicuro. */
+  const secure = async (): Promise<SettleResult> => {
+    try {
+      return await host.prepare();
+    } catch {
+      return 'failed';
+    }
+  };
 
   const guardedReload = async () => {
     if (reloading) return;
     reloading = true;
+    stopTimeout();
     set({ busy: true });
-    if ((await host.prepare()) === 'durable') {
-      host.reload();
-      return;
+    if ((await secure()) === 'durable') {
+      try {
+        host.reload();
+        return;
+      } catch {
+        // reload non riuscito: si restituisce il documento come sotto.
+      }
     }
     reloading = false;
     host.cancel();
@@ -77,14 +103,23 @@ export function createUpdateFlow(host: UpdateHost, updateSW: () => Promise<void>
         return;
       }
       set({ busy: true });
-      if ((await host.prepare()) === 'failed') {
+      if ((await secure()) === 'failed') {
         host.cancel();
         set({ busy: false });
         return;
       }
       try {
         await updateSW();
-        // Si resta "busy" (sola lettura) finché needReload non ricarica la pagina.
+        // Si resta "busy" (sola lettura) finché needReload non ricarica la pagina; se `controlling`
+        // non arriva (worker sparito, SKIP_WAITING perso) si restituisce il documento, toast compreso.
+        if (!activated && !reloading) {
+          cancelTimeout = host.setTimer(() => {
+            cancelTimeout = null;
+            if (activated || reloading) return;
+            host.cancel();
+            set({ busy: false });
+          }, UPDATE_TIMEOUT_MS);
+        }
       } catch {
         host.cancel();
         set({ busy: false });

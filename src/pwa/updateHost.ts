@@ -12,4 +12,8 @@ export const updateHost: UpdateHost = {
   prepare: () => (active ? active.beginUpdate() : Promise.resolve<SettleResult>('durable')),
   cancel: () => active?.endUpdate(),
   reload: () => window.location.reload(),
+  setTimer(callback, ms) {
+    const id = window.setTimeout(callback, ms);
+    return () => window.clearTimeout(id);
+  },
 };

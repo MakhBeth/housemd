@@ -1010,7 +1010,10 @@ export class Workspace {
       version.path !== path ||
       !current ||
       current.path !== path ||
-      this.generation !== generation
+      this.generation !== generation ||
+      // Aggiornamento dell'app iniziato nel frattempo: edit() sarebbe ignorato, ma l'editor mostrerebbe
+      // comunque il testo del ripristino, che il modello non ha.
+      this.state.updating
     ) {
       this.toast('info', 'restoreCancelled');
       return;

@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { harness } from './testing/harness';
+import { memoryHistoryStore } from '../history/historyStore';
+import { gate, harness, tick } from './testing/harness';
 import type { Workspace } from './workspace';
 
 const doc = (ws: Workspace) => ws.getState().doc!;
@@ -40,4 +41,30 @@ test('when the document cannot be secured, endUpdate gives editing back', async 
   assert.equal(ws.getState().updating, false);
   ws.edit('ancora');
   assert.equal(doc(ws).text, 'ancora');
+});
+
+test('a restore still loading when the update begins is cancelled', async () => {
+  const history = memoryHistoryStore();
+  const { ws } = await harness({ 'a.md': 'A' }, { history });
+  await ws.openFile('a.md');
+  ws.edit('v1');
+  await ws.flush();
+  await ws.historyIdle();
+  const [v1] = await history.list('ws-1', 'a.md');
+  ws.edit('v2');
+  const originalGet = history.get;
+  const slow = gate();
+  history.get = async (id: number) => {
+    await slow.wait;
+    return originalGet(id);
+  };
+  const restoring = ws.restoreVersion(v1.id);
+  await tick();
+  const updating = ws.beginUpdate();
+  slow.open();
+  await restoring;
+  assert.equal(await updating, 'durable');
+  assert.equal(doc(ws).text, 'v2', 'l’editor è in sola lettura: niente testo che il modello non ha');
+  assert.equal(doc(ws).restore, null);
+  assert.equal(ws.getState().toasts.at(-1)?.code, 'restoreCancelled');
 });

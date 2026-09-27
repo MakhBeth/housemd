@@ -15,6 +15,7 @@ function setup(result: SettleResult) {
     };
   };
   const host: UpdateHost = {
+    setTimer: () => () => undefined,
     prepare: async () => {
       calls.push('prepare');
       return result;
