@@ -59,7 +59,8 @@ test('load lists entries, builds the search index and is ready', async () => {
 test('a broken .housemd.json shows a non-blocking warning', async () => {
   const { ws } = await setup({ '.housemd.json': '{ rotto', 'a.md': 'A' });
   assert.equal(ws.getState().status, 'ready');
-  assert.match(ws.getState().toasts[0]?.message ?? '', /\.housemd\.json/);
+  assert.equal(ws.getState().toasts[0]?.code, 'configInvalidJson');
+  assert.equal(ws.getState().toasts[0]?.params?.file, '.housemd.json');
 });
 
 test('edits are saved automatically after the debounce', async () => {
@@ -118,7 +119,7 @@ test('a failed write keeps the text in the emergency buffer and retries on the n
   ws.edit('bozza');
   await ws.flush();
   assert.equal(doc(ws).saveState, 'error');
-  assert.match(ws.getState().toasts.at(-1)?.message ?? '', /Salvataggio non riuscito/);
+  assert.equal(ws.getState().toasts.at(-1)?.code, 'saveFailed');
   assert.equal((await buffers.load('ws-1', 'a.md'))?.text, 'bozza');
 
   failing = false;
@@ -148,7 +149,7 @@ test('opening a file restores its emergency buffer, only for the same workspace'
   await ws.openFile('a.md');
   assert.equal(doc(ws).text, 'non salvato');
   assert.equal(doc(ws).saveState, 'dirty');
-  assert.match(ws.getState().toasts.at(-1)?.message ?? '', /Ripristinate/);
+  assert.equal(ws.getState().toasts.at(-1)?.code, 'restoredDraft');
   await ws.openFile('b.md');
   assert.equal(doc(ws).text, 'disco b');
 });
@@ -185,7 +186,8 @@ test('a failed removal keeps the open file and its unsaved text', async () => {
   await ws.remove('n');
   assert.equal(doc(ws).path, 'n/a.md');
   assert.equal(doc(ws).text, 'modificato');
-  assert.match(ws.getState().toasts.at(-1)?.message ?? '', /EBUSY/);
+  assert.equal(ws.getState().toasts.at(-1)?.code, 'operationFailed');
+  assert.match(String(ws.getState().toasts.at(-1)?.params?.detail), /EBUSY/);
   assert.equal(scheduler.pending(), 1, 'il salvataggio automatico riprende');
 });
 
@@ -303,7 +305,8 @@ test('createFile creates and opens; existing names are refused', async () => {
   assert.equal(doc(ws).path, 'notes/nuova.md');
   assert.ok(ws.files().includes('notes/nuova.md'));
   await ws.createFile('a.md');
-  assert.match(ws.getState().toasts.at(-1)?.message ?? '', /Esiste già/);
+  assert.equal(ws.getState().toasts.at(-1)?.code, 'alreadyExists');
+  assert.equal(ws.getState().toasts.at(-1)?.params?.path, 'a.md');
 });
 
 test('followWikiLink opens existing notes and creates missing ones next to the current file', async () => {
@@ -457,7 +460,8 @@ test('[finding 7] load finishes even if reading one file fails, with a warning t
   const ws = new Workspace({ fs, workspaceId: 'w', name: 't', buffers: memoryBufferStore(), scheduler: manualScheduler() });
   await ws.load();
   assert.equal(ws.getState().status, 'ready');
-  assert.match(ws.getState().toasts.at(-1)?.message ?? '', /Impossibile leggere/);
+  assert.equal(ws.getState().toasts.at(-1)?.code, 'unreadableFiles');
+  assert.deepEqual(ws.getState().toasts.at(-1)?.params, { count: 1, paths: 'b.md' });
   assert.equal(ws.search.search('A')[0]?.path, 'a.md');
 });
 
@@ -472,7 +476,8 @@ test('[finding 7] load still becomes ready if listing the folder fails outright'
   await ws.load();
   assert.equal(ws.getState().status, 'ready');
   assert.deepEqual(ws.getState().entries, []);
-  assert.match(ws.getState().toasts.at(-1)?.message ?? '', /EIO listing/);
+  assert.equal(ws.getState().toasts.at(-1)?.code, 'operationFailed');
+  assert.match(String(ws.getState().toasts.at(-1)?.params?.detail), /EIO listing/);
 });
 
 test('[finding 8] a rename updates the open file immediately even if reindexing another file fails', async () => {
@@ -504,7 +509,7 @@ test('[minor] a successful write is not reported as failed if a post-save cleanu
   await ws.flush();
   assert.equal(await ops.textOf('a.md'), 'nuovo');
   assert.equal(doc(ws).saveState, 'saved');
-  assert.ok(!ws.getState().toasts.some((t) => /Salvataggio non riuscito/.test(t.message)));
+  assert.ok(!ws.getState().toasts.some((t) => t.code === 'saveFailed'));
 });
 
 test('[minor] identical error toasts are not stacked', async () => {
@@ -514,7 +519,7 @@ test('[minor] identical error toasts are not stacked', async () => {
   await ws.flush();
   ws.edit('due');
   await ws.flush();
-  const errorToasts = ws.getState().toasts.filter((t) => /Salvataggio non riuscito/.test(t.message));
+  const errorToasts = ws.getState().toasts.filter((t) => t.code === 'saveFailed');
   assert.equal(errorToasts.length, 1);
 });
 
@@ -593,7 +598,8 @@ test('[minor round 2] rename always refreshes entries even if reindexing hits a 
   assert.deepEqual(ws.files().sort(), ['new/a.md', 'new/b.md'], 'refreshEntries gira comunque');
   assert.equal(ws.search.search('alfa')[0]?.path, 'new/a.md');
   assert.equal(ws.search.search('beta')[0]?.path, 'old/b.md', 'non confermato mancante: resta nel vecchio indice');
-  assert.match(ws.getState().toasts.at(-1)?.message ?? '', /EIO transitorio/);
+  assert.equal(ws.getState().toasts.at(-1)?.code, 'operationFailed');
+  assert.match(String(ws.getState().toasts.at(-1)?.params?.detail), /EIO transitorio/);
 });
 
 test('[final fix 5] opening the already-open file (clean, no conflict) is a no-op', async () => {
@@ -875,7 +881,7 @@ test('[codex F9] a buffered draft is recovered even if the file was deleted from
   assert.equal(doc(ws).deletedOnDisk, true);
   assert.equal(doc(ws).saveState, 'dirty');
   assert.equal(doc(ws).conflict, false);
-  assert.match(ws.getState().toasts.at(-1)?.message ?? '', /Ripristinate/);
+  assert.equal(ws.getState().toasts.at(-1)?.code, 'restoredDraftDeleted');
 
   await ws.saveNow(); // l'utente salva: il file viene ricreato
   assert.equal(await ops.textOf('a.md'), 'bozza salvata');
@@ -889,7 +895,8 @@ test('[codex F9] opening a missing file without a draft still reports it as not 
   await ws.openFile('b.md');
   await ws.openFile('a.md');
   assert.equal(doc(ws).path, 'b.md');
-  assert.match(ws.getState().toasts.at(-1)?.message ?? '', /a\.md/);
+  assert.equal(ws.getState().toasts.at(-1)?.code, 'notFound');
+  assert.equal(ws.getState().toasts.at(-1)?.params?.path, 'a.md');
 });
 
 test('[codex F9] a recovered draft of a deleted file is saved (re-creating the file) when switching to another file', async () => {

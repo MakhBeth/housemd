@@ -1,9 +1,12 @@
+export const NAME_ERRORS = ['empty', 'slash', 'dot'] as const;
+export type NameError = (typeof NAME_ERRORS)[number];
+
 /** Valida il nome scelto nel dialog; ai file senza estensione aggiunge ".md". */
-export function validateName(name: string, kind: 'file' | 'directory'): { name: string } | { error: string } {
+export function validateName(name: string, kind: 'file' | 'directory'): { name: string } | { error: NameError } {
   const trimmed = name.trim();
-  if (!trimmed) return { error: 'Il nome non può essere vuoto' };
-  if (/[/\\]/.test(trimmed)) return { error: 'Il nome non può contenere / o \\' };
-  if (trimmed.startsWith('.')) return { error: 'Il nome non può iniziare con un punto' };
+  if (!trimmed) return { error: 'empty' };
+  if (/[/\\]/.test(trimmed)) return { error: 'slash' };
+  if (trimmed.startsWith('.')) return { error: 'dot' };
   return { name: kind === 'file' && !/\.md$/i.test(trimmed) ? `${trimmed}.md` : trimmed };
 }
 

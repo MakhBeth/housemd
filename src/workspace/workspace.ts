@@ -6,6 +6,7 @@ import { SearchIndex } from '../search/searchIndex';
 import { newNotePath, resolveWikiLink } from '../wikilinks/wikilinks';
 import type { BufferStore } from './buffers';
 import { decideExternal, diffScan } from './external';
+import { errorDetail, sameToast, type Toast, type ToastCode, type ToastParams } from './toasts';
 
 export type SaveState = 'saved' | 'dirty' | 'saving' | 'error';
 
@@ -22,11 +23,7 @@ export interface OpenDoc {
   revision: number;
 }
 
-export interface Toast {
-  id: number;
-  kind: 'error' | 'info';
-  message: string;
-}
+export type { Toast } from './toasts';
 
 export interface WorkspaceState {
   status: 'loading' | 'ready' | 'access-lost';
@@ -134,10 +131,11 @@ export class Workspace {
     this.set({ indexRevision: this.state.indexRevision + 1 });
   }
 
-  private toast(kind: Toast['kind'], message: string): void {
+  private toast(kind: Toast['kind'], code: ToastCode, params?: ToastParams): void {
+    const next = { kind, code, params };
     const last = this.state.toasts.at(-1);
-    if (last && last.kind === kind && last.message === message) return;
-    this.set({ toasts: [...this.state.toasts, { id: ++this.toastSeq, kind, message }] });
+    if (last && sameToast(last, next)) return;
+    this.set({ toasts: [...this.state.toasts, { id: ++this.toastSeq, ...next }] });
   }
 
   dismissToast(id: number): void {
@@ -166,8 +164,9 @@ export class Workspace {
       this.set({ status: 'access-lost' });
       return;
     }
-    const message = err instanceof FsExistsError ? err.message : `Operazione non riuscita: ${(err as Error).message}`;
-    this.toast('error', message);
+    if (err instanceof FsExistsError) this.toast('error', 'alreadyExists', { path: err.path });
+    else if (err instanceof FsNotFoundError) this.toast('error', 'notFound', { path: err.path });
+    else this.toast('error', 'operationFailed', { detail: errorDetail(err) });
   }
 
   // --- caricamento ------------------------------------------------------------
@@ -180,8 +179,11 @@ export class Workspace {
         if (err instanceof FsNotFoundError) return null;
         throw err;
       });
-      const { config, warning } = parseConfig(configText);
-      if (warning) this.toast('info', warning);
+      const { config, problems } = parseConfig(configText);
+      for (const problem of problems) {
+        if (problem.code === 'invalidJson') this.toast('info', 'configInvalidJson', { file: CONFIG_FILE, detail: problem.detail });
+        else this.toast('info', problem.code === 'invalidSaveTo' ? 'configInvalidSaveTo' : 'configInvalidLinkPrefix', { file: CONFIG_FILE });
+      }
       const unreadable: string[] = [];
       for (const entry of entries) {
         if (entry.kind !== 'file') continue;
@@ -196,7 +198,7 @@ export class Workspace {
         }
       }
       if (unreadable.length > 0) {
-        this.toast('info', `Impossibile leggere ${unreadable.length} file: ${unreadable.join(', ')}`);
+        this.toast('info', 'unreadableFiles', { count: unreadable.length, paths: unreadable.join(', ') });
       }
       this.set({ entries, config, status: 'ready', indexRevision: this.state.indexRevision + 1 });
     });
@@ -253,7 +255,7 @@ export class Workspace {
             revision: (this.state.doc?.revision ?? 0) + 1,
           },
         });
-        this.toast('info', `Ripristinate le modifiche non salvate di ${path} (il file non esiste più su disco)`);
+        this.toast('info', 'restoredDraftDeleted', { path });
         return;
       }
       const { text, version } = disk;
@@ -298,7 +300,7 @@ export class Workspace {
         },
       });
       if (restored) {
-        this.toast('info', `Ripristinate le modifiche non salvate di ${path}`);
+        this.toast('info', 'restoredDraft', { path });
         this.schedule();
       }
     });
@@ -426,7 +428,7 @@ export class Workspace {
         this.set({ status: 'access-lost' });
         return;
       }
-      this.toast('error', `Salvataggio non riuscito: ${(err as Error).message}`);
+      this.toast('error', 'saveFailed', { detail: errorDetail(err) });
       return;
     }
     // La scrittura è riuscita: quel che segue è manutenzione best-effort e non deve far
@@ -522,7 +524,7 @@ export class Workspace {
         case 'unchanged':
           return;
         case 'deleted':
-          if (!current.deletedOnDisk) this.toast('info', `${current.path} è stato eliminato fuori da HouseMD`);
+          if (!current.deletedOnDisk) this.toast('info', 'deletedOutside', { path: current.path });
           // Solo una modifica dell'utente (dirty) deve poter ricreare il file: niente 'dirty' forzato qui.
           this.setDoc({ deletedOnDisk: true });
           this.search.remove(current.path);

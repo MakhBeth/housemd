@@ -39,14 +39,14 @@ export interface WorkspaceFS {
 }
 
 export class FsNotFoundError extends Error {
-  constructor(path: string) {
+  constructor(readonly path: string) {
     super(`Non trovato: ${path}`);
     this.name = 'FsNotFoundError';
   }
 }
 
 export class FsExistsError extends Error {
-  constructor(path: string) {
+  constructor(readonly path: string) {
     super(`Esiste già: ${path}`);
     this.name = 'FsExistsError';
   }

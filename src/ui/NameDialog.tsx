@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 
+import { useT } from '../i18n/I18nProvider';
 import { validateName } from './names';
 import styles from './Dialog.module.css';
 
@@ -18,6 +19,7 @@ interface Props {
 const lightDismiss = { closedby: 'any' } as Record<string, string>;
 
 export function NameDialog({ title, kind, initial, confirmLabel, validate, onSubmit, onCancel }: Props) {
+  const t = useT();
   const ref = useRef<HTMLDialogElement>(null);
   const [value, setValue] = useState(initial);
   const [error, setError] = useState<string | null>(null);
@@ -37,7 +39,7 @@ export function NameDialog({ title, kind, initial, confirmLabel, validate, onSub
     event.preventDefault();
     const result = validateName(value, kind);
     if ('error' in result) {
-      setError(result.error);
+      setError(t(`name.error.${result.error}`));
       return;
     }
     const problem = validate(result.name);

@@ -13,21 +13,23 @@ export interface HouseConfig {
 
 export const DEFAULT_CONFIG: HouseConfig = { images: { saveTo: 'assets', linkPrefix: null } };
 
-export function parseConfig(text: string | null): { config: HouseConfig; warning: string | null } {
-  if (text === null) return { config: DEFAULT_CONFIG, warning: null };
+export type ConfigProblem = { code: 'invalidJson'; detail: string } | { code: 'invalidSaveTo' } | { code: 'invalidLinkPrefix' };
+
+export function parseConfig(text: string | null): { config: HouseConfig; problems: ConfigProblem[] } {
+  if (text === null) return { config: DEFAULT_CONFIG, problems: [] };
   let raw: unknown;
   try {
     raw = JSON.parse(text);
   } catch (err) {
-    return { config: DEFAULT_CONFIG, warning: `${CONFIG_FILE} non valido: ${(err as Error).message}` };
+    return { config: DEFAULT_CONFIG, problems: [{ code: 'invalidJson', detail: (err as Error).message }] };
   }
-  const problems: string[] = [];
+  const problems: ConfigProblem[] = [];
   const images = (raw as { images?: Record<string, unknown> } | null)?.images ?? {};
 
   let saveTo = DEFAULT_CONFIG.images.saveTo;
   if (images.saveTo !== undefined) {
     if (typeof images.saveTo === 'string' && normalizePath(images.saveTo) !== '') saveTo = normalizePath(images.saveTo);
-    else problems.push('images.saveTo deve essere un percorso');
+    else problems.push({ code: 'invalidSaveTo' });
   }
 
   let linkPrefix = DEFAULT_CONFIG.images.linkPrefix;
@@ -35,12 +37,9 @@ export function parseConfig(text: string | null): { config: HouseConfig; warning
     if (typeof images.linkPrefix === 'string' && images.linkPrefix.startsWith('/')) {
       linkPrefix = `/${normalizePath(images.linkPrefix)}`;
     } else {
-      problems.push('images.linkPrefix deve iniziare con "/"');
+      problems.push({ code: 'invalidLinkPrefix' });
     }
   }
 
-  return {
-    config: { images: { saveTo, linkPrefix } },
-    warning: problems.length > 0 ? `${CONFIG_FILE}: ${problems.join('; ')}` : null,
-  };
+  return { config: { images: { saveTo, linkPrefix } }, problems };
 }

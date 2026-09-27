@@ -28,3 +28,10 @@ test('[codex F4] renameTaken: a case-only rename is refused only if an entry wit
   assert.equal(renameTaken('n/a.md', 'n/b.md', ['n/a.md', 'n/B.md']), true);
   assert.equal(renameTaken('n/a.md', 'n/c.md', ['n/a.md', 'n/B.md']), false);
 });
+
+test('validateName returns error codes that the UI translates', () => {
+  assert.deepEqual(validateName('   ', 'file'), { error: 'empty' });
+  assert.deepEqual(validateName('a/b', 'file'), { error: 'slash' });
+  assert.deepEqual(validateName('a\\b', 'directory'), { error: 'slash' });
+  assert.deepEqual(validateName('.nascosto', 'file'), { error: 'dot' });
+});
