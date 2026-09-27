@@ -3,6 +3,12 @@ import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig({
+  build: {
+    // Solo Chromium recente (CLAUDE.md). Con il target predefinito il minificatore CSS trasforma
+    // light-dark() in un polyfill basato su prefers-color-scheme, che ignora la proprietà
+    // color-scheme usata dallo switcher del tema (src/theme/applyTheme.ts). Chrome 123 = light-dark().
+    cssTarget: 'chrome123',
+  },
   plugins: [
     react(),
     VitePWA({
