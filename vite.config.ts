@@ -17,7 +17,8 @@ export default defineConfig({
         short_name: 'HouseMD',
         description: 'Editor markdown nel browser per le tue cartelle locali',
         lang: 'it',
-        theme_color: '#0f766e',
+        // Come background_color e il colore scuro di <meta theme-color> a runtime (src/theme/theme.ts).
+        theme_color: '#16161a',
         background_color: '#16161a',
         display: 'standalone',
         scope: '/',
