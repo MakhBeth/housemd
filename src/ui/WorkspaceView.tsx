@@ -404,7 +404,9 @@ function AccessLostDialog({ folderName, onResume }: { folderName: string; onResu
       onClose={() => {
         // closedby="none" dovrebbe già impedire ogni chiusura non voluta; questo è solo un
         // ripiego, mentre il componente resta montato, contro un'eventuale chiusura sfuggita.
-        if (mounted.current) ref.current?.showModal();
+        // Come in NameDialog/ConfirmDialog, si ignora l'evento "fantasma" di StrictMode: se il
+        // dialog risulta già riaperto, chiamare di nuovo showModal() lancerebbe InvalidStateError.
+        if (mounted.current && !ref.current?.open) ref.current?.showModal();
       }}
       aria-labelledby="access-title"
     >
