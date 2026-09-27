@@ -13,12 +13,14 @@ interface Props {
   workspace: Workspace;
   path: string;
   currentText: string;
+  /** "Ripristina": deve arrivare all'editor come transazione (vedi WorkspaceView). */
+  onRestore: (id: number) => void;
   onClose: () => void;
 }
 
 const MARK = { added: '+ ', removed: '− ', same: '  ' } as const;
 
-export function HistoryPanel({ workspace, path, currentText, onClose }: Props) {
+export function HistoryPanel({ workspace, path, currentText, onRestore, onClose }: Props) {
   const { t, locale } = useI18n();
   // indexRevision aumenta a ogni salvataggio: la lista si aggiorna con lo snapshot appena scritto.
   const { indexRevision } = useWorkspaceState(workspace);
@@ -86,7 +88,7 @@ export function HistoryPanel({ workspace, path, currentText, onClose }: Props) {
                 </span>
               ))}
             </pre>
-            <button className={styles.restore} onClick={() => void workspace.restoreVersion(version.id)}>
+            <button className={styles.restore} onClick={() => onRestore(version.id)}>
               {t('history.restore')}
             </button>
           </>

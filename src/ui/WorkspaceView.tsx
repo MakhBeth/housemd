@@ -72,6 +72,8 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
   const [theme, setTheme] = useTheme();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  /** Ripristino chiesto in modalità anteprima: parte appena l'editor è montato. */
+  const [queuedRestore, setQueuedRestore] = useState<{ id: number; path: string } | null>(null);
   const hasDoc = doc !== null;
   useEffect(() => {
     if (!hasDoc) setHistoryOpen(false);
@@ -99,6 +101,29 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
     setMode(next);
     writePref('mode', next);
   }, []);
+
+  // Il ripristino deve passare dall'editor come transazione (annullabile con Ctrl+Z): in sola
+  // anteprima l'editor non c'è, quindi si passa alla vista affiancata e si ripristina solo dopo.
+  const restoreVersion = useCallback(
+    (id: number) => {
+      const path = workspace.getState().doc?.path;
+      if (!path) return;
+      if (mode !== 'preview') {
+        void workspace.restoreVersion(id);
+        return;
+      }
+      setQueuedRestore({ id, path });
+      changeMode('split');
+    },
+    [workspace, mode, changeMode],
+  );
+
+  useEffect(() => {
+    if (!queuedRestore || mode === 'preview' || !editorRef.current) return;
+    setQueuedRestore(null);
+    // Nel frattempo si è passati a un altro file: quella versione non riguarda più il documento.
+    if (doc?.path === queuedRestore.path) void workspace.restoreVersion(queuedRestore.id);
+  }, [queuedRestore, mode, doc?.path, workspace]);
 
   const openFile = useCallback(
     (path: string, terms: string[] = NO_TERMS) => {
@@ -379,7 +404,14 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
             )}
             {historyOpen ? (
               <section className={styles.pane} aria-label={t('toolbar.history')}>
-                <HistoryPanel key={doc.path} workspace={workspace} path={doc.path} currentText={doc.text} onClose={() => setHistoryOpen(false)} />
+                <HistoryPanel
+                  key={doc.path}
+                  workspace={workspace}
+                  path={doc.path}
+                  currentText={doc.text}
+                  onRestore={restoreVersion}
+                  onClose={() => setHistoryOpen(false)}
+                />
               </section>
             ) : (
               mode !== 'editor' && (
