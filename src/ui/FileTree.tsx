@@ -10,6 +10,8 @@ export type TreeAction = 'new-file' | 'new-folder' | 'rename' | 'delete';
 interface Props {
   nodes: TreeNode[];
   openPath: string | null;
+  /** File con una bozza nel buffer di emergenza: mostrano il pallino. */
+  drafts: ReadonlySet<string>;
   onOpen: (path: string) => void;
   onAction: (action: TreeAction, node: TreeNode | null) => void;
 }
@@ -18,7 +20,7 @@ interface Props {
 const autoPopover = { popover: 'auto' } as Record<string, string>;
 const ANCHOR = '--housemd-tree-menu';
 
-export function FileTree({ nodes, openPath, onOpen, onAction }: Props) {
+export function FileTree({ nodes, openPath, drafts, onOpen, onAction }: Props) {
   const t = useT();
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [menuNode, setMenuNode] = useState<TreeNode | null>(null);
@@ -99,6 +101,11 @@ export function FileTree({ nodes, openPath, onOpen, onAction }: Props) {
               >
                 <Icon name="file" size={16} />
                 <span className={styles.name}>{node.name}</span>
+                {drafts.has(node.path) && (
+                  <span className={styles.draft} role="img" aria-label={t('tree.draft')} title={t('tree.draft')}>
+                    <Icon name="draft" size={10} />
+                  </span>
+                )}
               </button>
               {menuButton(node)}
             </div>

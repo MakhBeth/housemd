@@ -5,9 +5,11 @@ import { fsaOps } from './fs/fsaOps';
 import { findKnownWorkspaceId, loadWorkspace, saveWorkspace, type StoredWorkspace } from './fs/handleStore';
 import { createWorkspaceFS } from './fs/workspaceFS';
 import { switchFolder } from './app/switchFolder';
+import { readValidPref } from './lib/prefs';
 import { StartScreen } from './ui/StartScreen';
 import { WorkspaceView } from './ui/WorkspaceView';
 import { indexedDbBufferStore } from './workspace/buffers';
+import { parseAutosave } from './workspace/autosave';
 import { Workspace } from './workspace/workspace';
 
 type Screen =
@@ -25,6 +27,7 @@ async function openWorkspace(stored: StoredWorkspace): Promise<Workspace> {
     workspaceId: stored.workspaceId,
     name: stored.handle.name,
     buffers,
+    autosave: readValidPref('autosave', parseAutosave),
   });
   await workspace.load();
   return workspace;

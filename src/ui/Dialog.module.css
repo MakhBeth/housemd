@@ -69,3 +69,30 @@
   background: transparent;
   border: 1px solid var(--c-border);
 }
+
+.field {
+  display: grid;
+  gap: 4px;
+  margin: 12px 0 0;
+}
+
+.group {
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  margin: 16px 0 0;
+  padding: 8px 12px 12px;
+  display: grid;
+  gap: 6px;
+}
+
+.group legend {
+  padding: 0 4px;
+  font-weight: 600;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}

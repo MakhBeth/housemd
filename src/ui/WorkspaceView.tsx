@@ -16,6 +16,8 @@ import { Icon } from './Icon';
 import { NameDialog } from './NameDialog';
 import { renameTaken } from './names';
 import { SearchPanel } from './SearchPanel';
+import { SettingsDialog } from './SettingsDialog';
+import { shortcutFor } from './shortcuts';
 import { ThemeSwitcher } from './ThemeSwitcher';
 import { Toasts } from './Toasts';
 import { buildTree, type TreeNode } from './tree';
@@ -65,6 +67,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }
   const [dialog, setDialog] = useState<DialogState>(null);
   const [highlight, setHighlight] = useState<string[]>(NO_TERMS);
   const [theme, setTheme] = useTheme();
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const editorRef = useRef<EditorHandle>(null);
   const previewRef = useRef<PreviewHandle>(null);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -76,6 +79,13 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }
   const getDocs = useCallback(() => workspace.search.titles(), [workspace]);
   const readBlob = useCallback((path: string) => workspace.readBlob(path), [workspace]);
   const dismissToast = useCallback((id: number) => workspace.dismissToast(id), [workspace]);
+
+  const drafts = useMemo(() => new Set(state.drafts), [state.drafts]);
+
+  const setSidebar = useCallback((open: boolean) => {
+    setSidebarOpen(open);
+    writePref('sidebarOpen', open);
+  }, []);
 
   const changeMode = useCallback((next: Mode) => {
     setMode(next);
@@ -101,7 +111,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }
     return () => {
       alive = false;
     };
-  }, [workspace, state.status, state.indexRevision, state.entries]);
+  }, [workspace, state.status, state.indexRevision, state.entries, state.drafts]);
 
   // Riapre l'ultimo file della cartella.
   useEffect(() => {
@@ -126,15 +136,16 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }
     if (doc) writePref(`lastFile:${workspaceId}`, doc.path);
   }, [doc?.path, workspaceId]);
 
-  // Finestra in primo piano → controlla le modifiche esterne; in secondo piano → salva.
+  // Finestra in primo piano → controlla le modifiche esterne; in secondo piano → salva o mette nel
+  // buffer secondo la modalità di autosave (Workspace.blur).
   useEffect(() => {
     const onFocus = () => void workspace.checkExternal();
-    const onBlur = () => void workspace.flush();
+    const onBlur = () => void workspace.blur();
     const onVisibility = () => (document.visibilityState === 'visible' ? onFocus() : onBlur());
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
-      const current = workspace.getState().doc;
-      if (current && current.saveState !== 'saved') {
-        void workspace.flush();
+      const { doc: current, drafts: pending } = workspace.getState();
+      if ((current && current.saveState !== 'saved') || pending.length > 0) {
+        void workspace.blur();
         event.preventDefault();
       }
     };
@@ -150,31 +161,34 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }
     };
   }, [workspace]);
 
-  // Scorciatoie: Ctrl+S salva, Ctrl+K cerca, Ctrl+\ cambia modalità.
+  // Scorciatoie globali: vedi src/ui/shortcuts.ts.
   useEffect(() => {
     const onKey = (event: globalThis.KeyboardEvent) => {
-      if (!(event.ctrlKey || event.metaKey)) return;
-      if (event.key === 's') {
-        event.preventDefault();
-        void workspace.saveNow();
-      } else if (event.key === 'k') {
-        event.preventDefault();
-        setSidebarOpen(true);
-        requestAnimationFrame(() => searchRef.current?.focus());
-      } else if (event.key === '\\') {
-        event.preventDefault();
-        const next = MODES[(MODES.findIndex((m) => m.id === mode) + 1) % MODES.length].id;
-        changeMode(next);
+      const shortcut = shortcutFor(event);
+      if (!shortcut) return;
+      event.preventDefault();
+      switch (shortcut) {
+        case 'save':
+          void workspace.saveNow();
+          break;
+        case 'saveAll':
+          void workspace.saveAll();
+          break;
+        case 'search':
+          setSidebar(true);
+          requestAnimationFrame(() => searchRef.current?.focus());
+          break;
+        case 'toggleSidebar':
+          setSidebar(!sidebarOpen);
+          break;
+        case 'cycleMode':
+          changeMode(MODES[(MODES.findIndex((m) => m.id === mode) + 1) % MODES.length].id);
+          break;
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [workspace, mode, changeMode]);
-
-  const toggleSidebar = () => {
-    setSidebarOpen(!sidebarOpen);
-    writePref('sidebarOpen', !sidebarOpen);
-  };
+  }, [workspace, mode, changeMode, setSidebar, sidebarOpen]);
 
   const onResizeStart = (event: PointerEvent<HTMLDivElement>) => {
     const target = event.currentTarget;
@@ -227,6 +241,9 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }
         <>
           <aside className={styles.sidebar}>
             <div className={styles.sidebarHeader}>
+              <button className={styles.iconButton} onClick={() => setSidebar(false)} aria-label={t('sidebar.hide')} title={t('sidebar.hide')}>
+                <Icon name="sidebarClose" />
+              </button>
               <button className={styles.folder} onClick={onChangeFolder} title={t('sidebar.changeFolder')}>
                 {state.name}
               </button>
@@ -254,7 +271,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }
                 ))}
               </section>
             )}
-            <FileTree nodes={tree} openPath={doc?.path ?? null} onOpen={(path) => openFile(path)} onAction={onTreeAction} />
+            <FileTree nodes={tree} openPath={doc?.path ?? null} drafts={drafts} onOpen={(path) => openFile(path)} onAction={onTreeAction} />
           </aside>
           <div
             className={styles.resizer}
@@ -273,7 +290,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }
 
       <main className={styles.main}>
         <header className={styles.toolbar}>
-          <button className={styles.iconButton} onClick={toggleSidebar} aria-pressed={sidebarOpen} aria-label={sidebarLabel} title={sidebarLabel}>
+          <button className={styles.iconButton} onClick={() => setSidebar(!sidebarOpen)} aria-pressed={sidebarOpen} aria-label={sidebarLabel} title={sidebarLabel}>
             <Icon name={sidebarOpen ? 'sidebarClose' : 'sidebarOpen'} />
           </button>
           <span className={styles.path}>{doc?.path ?? t('toolbar.noFile')}</span>
@@ -290,9 +307,16 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }
             aria-live={doc?.saveState === 'error' ? 'assertive' : 'polite'}
             role={doc?.saveState === 'error' ? 'alert' : undefined}
           >
+            {doc?.saveState === 'dirty' && !doc.deletedOnDisk && <Icon name="draft" size={10} />}
             {doc ? (doc.deletedOnDisk ? t('save.deleted') : t(SAVE_LABEL[doc.saveState])) : ''}
           </span>
+          <button className={styles.iconButton} onClick={() => void workspace.saveAll()} aria-label={t('toolbar.saveAll')} title={t('toolbar.saveAll')}>
+            <Icon name="save" />
+          </button>
           <ThemeSwitcher theme={theme} onChange={setTheme} className={styles.iconButton} />
+          <button className={styles.iconButton} onClick={() => setSettingsOpen(true)} aria-label={t('toolbar.settings')} title={t('toolbar.settings')}>
+            <Icon name="settings" />
+          </button>
         </header>
 
         {doc?.conflict && (
@@ -396,6 +420,20 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }
             void workspace.remove(path);
           }}
           onCancel={() => setDialog(null)}
+        />
+      )}
+
+      {settingsOpen && (
+        <SettingsDialog
+          theme={theme}
+          onTheme={setTheme}
+          autosave={state.autosave}
+          onAutosave={(next) => {
+            writePref('autosave', next);
+            workspace.setAutosave(next);
+          }}
+          onSaveAll={() => void workspace.saveAll()}
+          onClose={() => setSettingsOpen(false)}
         />
       )}
 

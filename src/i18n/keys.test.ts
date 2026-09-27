@@ -6,6 +6,7 @@ import { NAME_ERRORS } from '../ui/names';
 import { THEME_PREFS } from '../theme/theme';
 import { TOAST_CODES } from '../workspace/toasts';
 import { UNSUPPORTED_REASONS } from '../fs/access';
+import { AUTOSAVE_MODES } from '../workspace/autosave';
 
 const keys = new Set(Object.keys(en));
 
@@ -27,4 +28,8 @@ test('every theme preference has its switcher tooltip and settings label', () =>
     assert.ok(keys.has(`theme.${pref}`), `manca theme.${pref}`);
     assert.ok(keys.has(`theme.option.${pref}`), `manca theme.option.${pref}`);
   }
+});
+
+test('every autosave mode has its settings label', () => {
+  for (const mode of AUTOSAVE_MODES) assert.ok(keys.has(`settings.autosave.${mode}`), `manca settings.autosave.${mode}`);
 });

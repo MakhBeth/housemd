@@ -117,3 +117,8 @@ summary.row::-webkit-details-marker {
 .menu .danger {
   color: var(--c-danger);
 }
+
+.draft {
+  display: inline-grid;
+  color: var(--c-accent);
+}

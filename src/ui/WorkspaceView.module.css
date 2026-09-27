@@ -110,7 +110,10 @@
 
 .saveState {
   min-width: 11ch;
-  text-align: right;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
   font-size: 13px;
   color: var(--c-muted);
 }
@@ -118,6 +121,10 @@
 .saveState[data-state='error'] {
   color: var(--c-danger);
   font-weight: 600;
+}
+
+.saveState :global(.icon) {
+  color: var(--c-accent);
 }
 
 .conflict {
