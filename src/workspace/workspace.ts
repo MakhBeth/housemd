@@ -95,6 +95,8 @@ export class Workspace {
    * `flush()` non scrive su disco, ma le modifiche continuano a essere segnalate come da salvare.
    */
   private suspended = 0;
+  /** checkExternal() in corso: le chiamate concorrenti (focus + visibilitychange) si accodano invece di rifare la scansione. */
+  private checking: Promise<void> | null = null;
 
   constructor(private readonly deps: WorkspaceDeps) {
     this.scheduler = deps.scheduler ?? realScheduler;
@@ -211,9 +213,18 @@ export class Workspace {
   // --- file aperto --------------------------------------------------------------
 
   async openFile(path: string): Promise<void> {
+    const already = this.state.doc;
+    if (already && already.path === path && !already.deletedOnDisk && !already.conflict) return;
     await this.settle();
     await this.run(async () => {
       const { text, version } = await this.deps.fs.read(path);
+      const buffered = await this.deps.buffers.load(this.deps.workspaceId, path);
+
+      // L'utente potrebbe aver continuato a scrivere sul vecchio file aperto durante le due await
+      // qui sopra: settle() prima di rimpiazzare il documento, altrimenti quelle battute si perdono
+      // senza essere né salvate né bufferizzate.
+      if (this.state.doc && this.state.doc.saveState !== 'saved') await this.settle();
+
       this.knownText = text;
       this.knownVersion = version;
       this.versions.set(path, version);
@@ -221,7 +232,6 @@ export class Workspace {
       // viene sostituita più sotto se si sta ripristinando un conflitto già in corso, per non
       // perdere la base originale da cui l'utente era partito.
       this.bufferBase = text;
-      const buffered = await this.deps.buffers.load(this.deps.workspaceId, path);
 
       let docText = text;
       let saveState: SaveState = 'saved';
@@ -305,6 +315,19 @@ export class Workspace {
     await this.deps.buffers.save(this.deps.workspaceId, doc.path, doc.text, this.bufferBase).catch(() => undefined);
   }
 
+  /**
+   * Forza il salvataggio, anche quando il documento è 'saved' ma il file è stato eliminato fuori
+   * da HouseMD (in quel caso `flush()` da solo sarebbe un no-op): usato da Ctrl+S per poter
+   * ricreare il file.
+   */
+  async saveNow(): Promise<void> {
+    const doc = this.state.doc;
+    if (doc?.deletedOnDisk && doc.saveState === 'saved') {
+      this.setDoc({ saveState: 'dirty' });
+    }
+    await this.flush();
+  }
+
   async flush(): Promise<void> {
     if (this.timer !== null) this.scheduler.clear(this.timer);
     this.timer = null;
@@ -381,7 +404,15 @@ export class Workspace {
 
   // --- modifiche esterne --------------------------------------------------------
 
-  async checkExternal(): Promise<void> {
+  checkExternal(): Promise<void> {
+    if (this.checking) return this.checking;
+    this.checking = this.doCheckExternal().finally(() => {
+      this.checking = null;
+    });
+    return this.checking;
+  }
+
+  private async doCheckExternal(): Promise<void> {
     if (this.state.status !== 'ready') return;
     if (this.suspended > 0) return; // una rinomina/eliminazione sta riscrivendo l'albero
     if (this.saving) await this.saving;

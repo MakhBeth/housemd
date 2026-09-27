@@ -596,6 +596,78 @@ test('[minor round 2] rename always refreshes entries even if reindexing hits a 
   assert.match(ws.getState().toasts.at(-1)?.message ?? '', /EIO transitorio/);
 });
 
+test('[final fix 5] opening the already-open file (clean, no conflict) is a no-op', async () => {
+  const { ws } = await setup({ 'a.md': 'A' });
+  await ws.openFile('a.md');
+  const revision = doc(ws).revision;
+  ws.edit('mio');
+  const fs = (ws as unknown as { deps: { fs: { read: (p: string) => Promise<unknown> } } }).deps.fs;
+  const originalRead = fs.read.bind(fs);
+  let reads = 0;
+  fs.read = async (p: string) => {
+    reads++;
+    return originalRead(p);
+  };
+  await ws.openFile('a.md');
+  assert.equal(reads, 0, 'nessuna rilettura');
+  assert.equal(doc(ws).revision, revision, 'nessun avanzamento di revisione');
+  assert.equal(doc(ws).text, 'mio', 'le modifiche non salvate restano');
+});
+
+// --- final fix wave (see final-fix.md) --------------------------
+
+test('[final fix 4] keystrokes on the old file during the read for the new one are not dropped', async () => {
+  const { ops, ws } = await setup({ 'a.md': 'A', 'b.md': 'B' });
+  await ws.openFile('a.md');
+  const fs = (ws as unknown as { deps: { fs: { read: (p: string) => Promise<{ text: string; version: unknown }> } } }).deps.fs;
+  const originalRead = fs.read.bind(fs);
+  let release!: () => void;
+  const gate = new Promise<void>((r) => (release = r));
+  fs.read = async (path: string) => {
+    if (path === 'b.md') await gate;
+    return originalRead(path);
+  };
+  const opening = ws.openFile('b.md');
+  ws.edit('a modificato'); // arriva mentre si legge il nuovo file, col vecchio ancora aperto
+  release();
+  await opening;
+  assert.equal(await ops.textOf('a.md'), 'a modificato', 'la battuta sul vecchio file non va persa');
+  assert.equal(doc(ws).path, 'b.md');
+  assert.equal(doc(ws).saveState, 'saved');
+});
+
+test('[final fix 2] saveNow() re-creates a document deleted outside the app', async () => {
+  const { ops, ws } = await setup({ 'a.md': 'A' });
+  await ws.openFile('a.md');
+  await ops.removeEntry('a.md', false);
+  await ws.checkExternal();
+  assert.equal(doc(ws).deletedOnDisk, true);
+  assert.equal(doc(ws).saveState, 'saved');
+  await ws.saveNow();
+  assert.equal(await ops.textOf('a.md'), 'A');
+  assert.equal(doc(ws).deletedOnDisk, false);
+  assert.equal(doc(ws).saveState, 'saved');
+  assert.ok(ws.files().includes('a.md'));
+});
+
+test('[final fix 3] two concurrent checkExternal() calls are serialized: the scan runs only once', async () => {
+  const { ops, ws } = await setup({ 'a.md': 'A' });
+  await ws.openFile('a.md');
+  const revision = doc(ws).revision;
+  ops.setFile('a.md', 'A da vim');
+  const fs = (ws as unknown as { deps: { fs: { list: () => Promise<unknown> } } }).deps.fs;
+  const originalList = fs.list.bind(fs);
+  let calls = 0;
+  fs.list = async () => {
+    calls++;
+    return originalList();
+  };
+  await Promise.all([ws.checkExternal(), ws.checkExternal()]);
+  assert.equal(calls, 1, 'la seconda chiamata concorrente riusa la scansione già in corso, non ne avvia una seconda');
+  assert.equal(doc(ws).text, 'A da vim');
+  assert.equal(doc(ws).revision, revision + 1, 'una sola ricarica, non due');
+});
+
 test('[minor round 2] checkExternal is a no-op while a rename/remove is in progress', async () => {
   const { ops, ws } = await setup({ 'old/a.md': 'alfa' });
   await ws.openFile('old/a.md');

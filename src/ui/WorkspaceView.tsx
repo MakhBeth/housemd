@@ -118,7 +118,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }
       if (!(event.ctrlKey || event.metaKey)) return;
       if (event.key === 's') {
         event.preventDefault();
-        void workspace.flush();
+        void workspace.saveNow();
       } else if (event.key === 'k') {
         event.preventDefault();
         setSidebarOpen(true);
@@ -237,9 +237,10 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }
           <span
             className={styles.saveState}
             data-state={doc?.saveState ?? 'none'}
+            aria-live="polite"
             role={doc?.saveState === 'error' ? 'alert' : undefined}
           >
-            {doc ? SAVE_LABEL[doc.saveState] : ''}
+            {doc ? (doc.deletedOnDisk ? 'Eliminato su disco' : SAVE_LABEL[doc.saveState]) : ''}
           </span>
         </header>
 
