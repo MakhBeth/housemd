@@ -6,21 +6,31 @@
 }
 
 .panel {
-  max-width: 440px;
+  max-width: 520px;
   display: flex;
   flex-direction: column;
   gap: 16px;
   text-align: center;
 }
 
+/* 65 colonne di braille: la dimensione segue la larghezza disponibile, senza andare a capo. */
 .logo {
-  font-size: 44px;
-  margin: 0;
-  letter-spacing: -0.02em;
+  margin: 0 auto;
+  font-family: var(--font-mono);
+  line-height: 1;
+  font-size: clamp(4px, calc((min(100vw, 520px) - 48px) / 40), 10px);
+  white-space: pre;
+  overflow: hidden;
+  color: var(--c-text);
 }
 
-.logo span {
-  color: var(--c-accent);
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .tagline {

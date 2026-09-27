@@ -1,4 +1,5 @@
 import styles from './StartScreen.module.css';
+import { LOGO } from './logo';
 
 interface Props {
   mode: 'unsupported' | 'start' | 'resume';
@@ -12,9 +13,10 @@ export function StartScreen({ mode, message, folderName, onPick, onResume }: Pro
   return (
     <main className={styles.start}>
       <div className={styles.panel}>
-        <h1 className={styles.logo}>
-          House<span>MD</span>
-        </h1>
+        <h1 className={styles.visuallyHidden}>HouseMD</h1>
+        <pre className={styles.logo} aria-hidden="true">
+          {LOGO}
+        </pre>
         <p className={styles.tagline}>
           Scrivi markdown nel browser, direttamente sui tuoi file. Niente server: la cartella resta sul tuo computer.
         </p>
