@@ -5,7 +5,7 @@ import { Icon } from './Icon';
 import { ancestorsOf, type TreeNode } from './tree';
 import styles from './FileTree.module.css';
 
-export type TreeAction = 'new-file' | 'new-folder' | 'rename' | 'delete';
+export type TreeAction = 'new-file' | 'new-folder' | 'rename' | 'delete' | 'history';
 
 interface Props {
   nodes: TreeNode[];
@@ -125,6 +125,7 @@ export function FileTree({ nodes, openPath, drafts, onOpen, onAction }: Props) {
             <button onClick={() => act('new-folder')}>{t('folder.new')}</button>
           </>
         )}
+        {menuNode?.kind === 'file' && <button onClick={() => act('history')}>{t('tree.history')}</button>}
         <button onClick={() => act('rename')}>{t('tree.rename')}</button>
         <button className={styles.danger} onClick={() => act('delete')}>
           {t('tree.delete')}

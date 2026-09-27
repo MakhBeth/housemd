@@ -9,6 +9,7 @@ import { tags } from '@lezer/highlight';
 
 import type { DocTitle } from '../search/searchIndex';
 import { imageFiles, insertImageLinks } from './images';
+import { initialRestoreSeq, pendingRestore, type RestoreCommand } from './restoreCommand';
 import { wikiCompletionSource } from './wikiCompletion';
 import styles from './Editor.module.css';
 
@@ -26,6 +27,8 @@ export interface EditorProps {
   onImage: (file: File) => Promise<string | null>;
   /** Riga (0-based, frazionaria) in cima alla vista, per lo scroll sincronizzato. */
   onTopLine: (line: number) => void;
+  /** Ripristino dalla cronologia: sostituisce il testo con una transazione, quindi annullabile con Ctrl+Z. */
+  restore?: RestoreCommand | null;
 }
 
 type Callbacks = MutableRefObject<EditorProps>;
@@ -110,6 +113,8 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
   const callbacks = useRef(props);
   callbacks.current = props;
   const suppressUntil = useRef(0);
+  // Ultimo ripristino applicato; quello già presente al montaggio conta come applicato.
+  const appliedRestore = useRef(initialRestoreSeq(props.restore));
 
   useEffect(() => {
     const view = new EditorView({ parent: hostRef.current! });
@@ -134,6 +139,16 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
   useEffect(() => {
     viewRef.current?.setState(createState(props.text, callbacks));
   }, [props.resetKey]);
+
+  // Non passa da resetKey: la sostituzione deve restare nella cronologia di annullamento. Una volta sola.
+  useEffect(() => {
+    const view = viewRef.current;
+    const restore = pendingRestore(appliedRestore.current, props.restore);
+    if (!view || !restore) return;
+    appliedRestore.current = restore.seq;
+    if (view.state.doc.toString() === restore.textLf) return;
+    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: restore.textLf }, userEvent: 'input.restore' });
+  }, [props.restore?.seq]);
 
   useImperativeHandle(
     ref,

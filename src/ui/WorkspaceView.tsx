@@ -12,6 +12,7 @@ import type { SaveState, Workspace } from '../workspace/workspace';
 import { ConfirmDialog } from './ConfirmDialog';
 import { ConflictBar } from './ConflictBar';
 import { FileTree, type TreeAction } from './FileTree';
+import { HistoryPanel } from './HistoryPanel';
 import { Icon } from './Icon';
 import { NameDialog } from './NameDialog';
 import { renameTaken } from './names';
@@ -68,6 +69,11 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }
   const [highlight, setHighlight] = useState<string[]>(NO_TERMS);
   const [theme, setTheme] = useTheme();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const hasDoc = doc !== null;
+  useEffect(() => {
+    if (!hasDoc) setHistoryOpen(false);
+  }, [hasDoc]);
   const editorRef = useRef<EditorHandle>(null);
   const previewRef = useRef<PreviewHandle>(null);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -220,6 +226,13 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }
   };
 
   const onTreeAction = (action: TreeAction, node: TreeNode | null) => {
+    if (action === 'history') {
+      if (node) {
+        openFile(node.path);
+        setHistoryOpen(true);
+      }
+      return;
+    }
     if (action === 'new-file' || action === 'new-folder') {
       const dir = node ? (node.kind === 'directory' ? node.path : dirname(node.path)) : '';
       setDialog({ kind: action, dir });
@@ -310,6 +323,16 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }
             {doc?.saveState === 'dirty' && !doc.deletedOnDisk && <Icon name="draft" size={10} />}
             {doc ? (doc.deletedOnDisk ? t('save.deleted') : t(SAVE_LABEL[doc.saveState])) : ''}
           </span>
+          <button
+            className={styles.iconButton}
+            onClick={() => setHistoryOpen(!historyOpen)}
+            aria-pressed={historyOpen}
+            disabled={!doc}
+            aria-label={t('toolbar.history')}
+            title={t('toolbar.history')}
+          >
+            <Icon name="history" />
+          </button>
           <button className={styles.iconButton} onClick={() => void workspace.saveAll()} aria-label={t('toolbar.saveAll')} title={t('toolbar.saveAll')}>
             <Icon name="save" />
           </button>
@@ -327,13 +350,14 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }
         )}
 
         {doc ? (
-          <div className={styles.panes} data-mode={mode}>
+          <div className={styles.panes} data-mode={historyOpen && mode === 'editor' ? 'split' : mode}>
             {mode !== 'preview' && (
               <section className={styles.pane} aria-label={t('pane.editor')}>
                 <Editor
                   ref={editorRef}
                   text={doc.text}
                   resetKey={`${doc.path}#${doc.revision}`}
+                  restore={doc.restore}
                   getDocs={getDocs}
                   onChange={(text) => workspace.edit(text)}
                   onImage={(file) => workspace.saveImage(file, file.name)}
@@ -343,26 +367,32 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }
                 />
               </section>
             )}
-            {mode !== 'editor' && (
-              <section className={styles.pane} aria-label={t('pane.preview')}>
-                <Preview
-                  ref={previewRef}
-                  text={doc.text}
-                  path={doc.path}
-                  files={files}
-                  config={state.config}
-                  readBlob={readBlob}
-                  highlight={highlight}
-                  onTopLine={(line) => {
-                    if (mode === 'split') editorRef.current?.scrollToLine(line);
-                  }}
-                  onOpenWiki={(target) => {
-                    setHighlight(NO_TERMS);
-                    void workspace.followWikiLink(target);
-                  }}
-                  onOpenPath={(path) => openFile(path)}
-                />
+            {historyOpen ? (
+              <section className={styles.pane} aria-label={t('toolbar.history')}>
+                <HistoryPanel workspace={workspace} path={doc.path} currentText={doc.text} onClose={() => setHistoryOpen(false)} />
               </section>
+            ) : (
+              mode !== 'editor' && (
+                <section className={styles.pane} aria-label={t('pane.preview')}>
+                  <Preview
+                    ref={previewRef}
+                    text={doc.text}
+                    path={doc.path}
+                    files={files}
+                    config={state.config}
+                    readBlob={readBlob}
+                    highlight={highlight}
+                    onTopLine={(line) => {
+                      if (mode === 'split') editorRef.current?.scrollToLine(line);
+                    }}
+                    onOpenWiki={(target) => {
+                      setHighlight(NO_TERMS);
+                      void workspace.followWikiLink(target);
+                    }}
+                    onOpenPath={(path) => openFile(path)}
+                  />
+                </section>
+              )
             )}
           </div>
         ) : (
