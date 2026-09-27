@@ -5,6 +5,15 @@ import { detectEol, withEol, type Eol } from '../lib/paths';
 import { SearchIndex } from '../search/searchIndex';
 import { newNotePath, resolveWikiLink } from '../wikilinks/wikilinks';
 import type { BufferStore } from './buffers';
+import {
+  autosaveAllows,
+  CHECKPOINT_DEBOUNCE_MS,
+  CHECKPOINT_MAX_WAIT_MS,
+  DEFAULT_AUTOSAVE,
+  parseAutosave,
+  type AutosaveSettings,
+  type AutosaveTrigger,
+} from './autosave';
 import { decideExternal, diffScan } from './external';
 import { errorDetail, sameToast, type Toast, type ToastCode, type ToastParams } from './toasts';
 
@@ -34,6 +43,10 @@ export interface WorkspaceState {
   toasts: Toast[];
   /** Aumenta a ogni modifica dell'indice di ricerca / lista dei file. */
   indexRevision: number;
+  /** Modalità di salvataggio automatico corrente. */
+  autosave: AutosaveSettings;
+  /** Percorsi con una bozza nel buffer di emergenza (anche di file non aperti), in ordine. */
+  drafts: string[];
 }
 
 export interface Scheduler {
@@ -46,8 +59,6 @@ export const realScheduler: Scheduler = {
   clear: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
 };
 
-export const AUTOSAVE_MS = 1000;
-
 export interface WorkspaceDeps {
   fs: WorkspaceFS;
   workspaceId: string;
@@ -55,6 +66,7 @@ export interface WorkspaceDeps {
   buffers: BufferStore;
   scheduler?: Scheduler;
   now?: () => Date;
+  autosave?: AutosaveSettings;
 }
 
 /** Nuovo percorso dopo aver rinominato `from` in `to`, oppure null se `path` non è coinvolto. */
@@ -94,6 +106,15 @@ export class Workspace {
   private suspended = 0;
   /** checkExternal() in corso: le chiamate concorrenti (focus + visibilitychange) si accodano invece di rifare la scansione. */
   private checking: Promise<void> | null = null;
+  /**
+   * Rinomina/eliminazione del documento in corso (> 0): il suo percorso è in transizione, quindi né
+   * disco né buffer. Distinto da `suspended`, che ferma solo le scritture su disco (controllo esterno,
+   * "Salva tutto") mentre il buffer di emergenza continua a ricevere i checkpoint.
+   */
+  private moving = 0;
+  /** Checkpoint del buffer di emergenza (modalità senza salvataggio a tempo): debounce e attesa massima. */
+  private checkpointTimer: unknown = null;
+  private checkpointDeadline: unknown = null;
 
   constructor(private readonly deps: WorkspaceDeps) {
     this.scheduler = deps.scheduler ?? realScheduler;
@@ -106,6 +127,8 @@ export class Workspace {
       doc: null,
       toasts: [],
       indexRevision: 0,
+      autosave: parseAutosave(deps.autosave ?? DEFAULT_AUTOSAVE),
+      drafts: [],
     };
   }
 
@@ -159,7 +182,7 @@ export class Workspace {
     if (isAccessError(err)) {
       const doc = this.state.doc;
       if (doc && doc.saveState !== 'saved') {
-        await this.deps.buffers.save(this.deps.workspaceId, doc.path, doc.text, this.bufferBase).catch(() => undefined);
+        await this.saveBuffer(doc.path, doc.text, this.bufferBase).catch(() => undefined);
       }
       this.set({ status: 'access-lost' });
       return;
@@ -200,7 +223,8 @@ export class Workspace {
       if (unreadable.length > 0) {
         this.toast('info', 'unreadableFiles', { count: unreadable.length, paths: unreadable.join(', ') });
       }
-      this.set({ entries, config, status: 'ready', indexRevision: this.state.indexRevision + 1 });
+      const drafts = await this.deps.buffers.list(this.deps.workspaceId).catch(() => [] as string[]);
+      this.set({ entries, config, drafts: [...drafts].sort(), status: 'ready', indexRevision: this.state.indexRevision + 1 });
     });
     // Un errore nella scansione o nella config non deve lasciare l'app bloccata su "loading".
     if (this.state.status === 'loading') {
@@ -275,7 +299,7 @@ export class Workspace {
       if (buffered !== null) {
         if (buffered.text === text) {
           // Il buffer coincide col disco: non c'è nulla da ripristinare, si può scartare.
-          await this.deps.buffers.clear(this.deps.workspaceId, path);
+          await this.clearBuffer(path);
         } else {
           // Se il disco è ancora quello su cui si basava il buffer, è una semplice ripresa di
           // modifiche non salvate. Altrimenti il disco è cambiato nel frattempo: è un conflitto,
@@ -301,7 +325,7 @@ export class Workspace {
       });
       if (restored) {
         this.toast('info', 'restoredDraft', { path });
-        this.schedule();
+        this.schedule('restoredDraft');
       }
     });
   }
@@ -318,6 +342,29 @@ export class Workspace {
     return paths.filter((p) => !onDisk.has(p)).sort();
   }
 
+  /** Percorsi con una bozza nel buffer di emergenza (anche di file non più su disco). */
+  async draftPaths(): Promise<string[]> {
+    return [...(await this.deps.buffers.list(this.deps.workspaceId))].sort();
+  }
+
+  /** Cambia modalità: il timer pendente si annulla e si riprogramma secondo la nuova modalità. */
+  setAutosave(settings: AutosaveSettings): void {
+    this.set({ autosave: parseAutosave(settings) });
+    this.clearSaveTimer();
+    this.clearCheckpoint();
+    const doc = this.state.doc;
+    if (doc && doc.saveState !== 'saved') this.schedule('timer');
+  }
+
+  /**
+   * La finestra perde il focus, la pagina viene nascosta o chiusa: salva su disco se la modalità lo
+   * consente, altrimenti mette il testo nel buffer di emergenza.
+   */
+  async blur(): Promise<void> {
+    if (autosaveAllows(this.state.autosave.mode, 'blur')) await this.flush();
+    else await this.checkpoint();
+  }
+
   async closeFile(): Promise<void> {
     await this.settle();
     this.set({ doc: null });
@@ -329,27 +376,65 @@ export class Workspace {
     const text = withEol(textLf, doc.eol);
     if (text === doc.text) return;
     this.setDoc({ text, saveState: 'dirty' });
-    this.schedule();
-  }
-
-  private schedule(): void {
-    if (this.timer !== null) this.scheduler.clear(this.timer);
-    this.timer = this.scheduler.set(() => {
-      this.timer = null;
-      void this.onAutosaveTimer();
-    }, AUTOSAVE_MS);
+    this.schedule('timer');
   }
 
   /**
-   * Scaduto il debounce: salva su disco, oppure, se l'autosalvataggio è in pausa per un conflitto
-   * irrisolto o l'accesso perso, nel buffer di emergenza. Se invece è sospeso per una rinomina o
-   * un'eliminazione in corso, non scrive da nessuna parte: il percorso è in transizione (potrebbe
-   * essere quello vecchio o quello di un file già eliminato) e sarà rename()/remove() stesso a
-   * ripianificare il salvataggio a sospensione finita.
+   * Unico punto delle scritture automatiche: se la modalità consente il trigger si programma il
+   * salvataggio su disco, altrimenti solo il checkpoint del buffer di emergenza.
+   */
+  private schedule(trigger: AutosaveTrigger): void {
+    if (autosaveAllows(this.state.autosave.mode, trigger)) this.scheduleSave();
+    else this.scheduleCheckpoint();
+  }
+
+  private scheduleSave(): void {
+    this.clearSaveTimer();
+    this.timer = this.scheduler.set(() => {
+      this.timer = null;
+      void this.onAutosaveTimer();
+    }, this.state.autosave.delayMs);
+  }
+
+  private clearSaveTimer(): void {
+    if (this.timer !== null) this.scheduler.clear(this.timer);
+    this.timer = null;
+  }
+
+  /** Debounce di 1 s, ma al più 5 s dalla prima modifica non ancora messa al sicuro. */
+  private scheduleCheckpoint(): void {
+    if (this.checkpointTimer !== null) this.scheduler.clear(this.checkpointTimer);
+    this.checkpointTimer = this.scheduler.set(() => void this.checkpoint(), CHECKPOINT_DEBOUNCE_MS);
+    if (this.checkpointDeadline === null) {
+      this.checkpointDeadline = this.scheduler.set(() => void this.checkpoint(), CHECKPOINT_MAX_WAIT_MS);
+    }
+  }
+
+  private clearCheckpoint(): void {
+    if (this.checkpointTimer !== null) this.scheduler.clear(this.checkpointTimer);
+    if (this.checkpointDeadline !== null) this.scheduler.clear(this.checkpointDeadline);
+    this.checkpointTimer = null;
+    this.checkpointDeadline = null;
+  }
+
+  /** Checkpoint: il testo non salvato va nel buffer di emergenza (mai su disco). */
+  private async checkpoint(): Promise<void> {
+    this.clearCheckpoint();
+    // Rinomina/eliminazione in corso: il percorso è in transizione; chi l'ha avviata ripianifica alla
+    // fine. Durante un controllo esterno o "Salva tutto" (solo le scritture su disco sono sospese) il
+    // percorso è stabile e il checkpoint si scrive: l'attesa massima di 5 s vale sempre.
+    if (this.moving > 0) return;
+    await this.bufferCurrentDoc();
+  }
+
+  /**
+   * Scaduto il debounce. Rinomina/eliminazione in corso: niente, il percorso è in transizione e sarà
+   * rename()/remove() a ripianificare. Scritture su disco sospese (controllo esterno, "Salva tutto"),
+   * conflitto irrisolto o accesso perso: il testo va nel buffer di emergenza. Altrimenti su disco.
    */
   private async onAutosaveTimer(): Promise<void> {
-    if (this.suspended > 0) return;
-    if (this.state.status === 'access-lost' || this.state.doc?.conflict) {
+    if (this.moving > 0) return;
+    if (this.suspended > 0 || this.state.status === 'access-lost' || this.state.doc?.conflict) {
       await this.bufferCurrentDoc();
       return;
     }
@@ -359,7 +444,27 @@ export class Workspace {
   private async bufferCurrentDoc(): Promise<void> {
     const doc = this.state.doc;
     if (!doc || doc.saveState === 'saved') return;
-    await this.deps.buffers.save(this.deps.workspaceId, doc.path, doc.text, this.bufferBase).catch(() => undefined);
+    try {
+      await this.saveBuffer(doc.path, doc.text, this.bufferBase);
+    } catch (err) {
+      this.toast('error', 'bufferFailed', { detail: errorDetail(err) });
+    }
+  }
+
+  /** Scrive il buffer di emergenza e tiene aggiornato `drafts`. Gli errori risalgono a chi chiama. */
+  private async saveBuffer(path: string, text: string, base: string): Promise<void> {
+    await this.deps.buffers.save(this.deps.workspaceId, path, text, base);
+    if (!this.state.drafts.includes(path)) this.set({ drafts: [...this.state.drafts, path].sort() });
+  }
+
+  private async clearBuffer(path: string): Promise<void> {
+    await this.deps.buffers.clear(this.deps.workspaceId, path);
+    if (this.state.drafts.includes(path)) this.set({ drafts: this.state.drafts.filter((p) => p !== path) });
+  }
+
+  private async refreshDrafts(): Promise<void> {
+    const paths = await this.draftPaths().catch(() => null);
+    if (paths) this.set({ drafts: paths });
   }
 
   /**
@@ -396,20 +501,23 @@ export class Workspace {
   }
 
   /**
-   * Prima di lasciare il file aperto: salva finché non restano modifiche (anche quelle arrivate
-   * durante un salvataggio). Se non si riesce (errore, conflitto, accesso perso), il testo finisce
-   * nel buffer di emergenza, così non va mai perso.
+   * Prima di lasciare il file aperto: se la modalità lo consente salva su disco finché non restano
+   * modifiche (anche quelle arrivate durante un salvataggio); altrimenti, o se non si riesce, il
+   * testo finisce nel buffer di emergenza con la sua base.
    */
   private async settle(): Promise<void> {
-    for (let attempt = 0; attempt < 3; attempt++) {
-      const doc = this.state.doc;
-      if (!doc || doc.saveState === 'saved' || doc.conflict || this.state.status === 'access-lost') break;
-      await this.flush();
-      if (this.state.doc?.saveState === 'error') break;
+    if (autosaveAllows(this.state.autosave.mode, 'switch')) {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const doc = this.state.doc;
+        if (!doc || doc.saveState === 'saved' || doc.conflict || this.state.status === 'access-lost') break;
+        await this.flush();
+        if (this.state.doc?.saveState === 'error') break;
+      }
     }
     const doc = this.state.doc;
     if (doc && doc.saveState !== 'saved') {
-      await this.deps.buffers.save(this.deps.workspaceId, doc.path, doc.text, this.bufferBase).catch(() => undefined);
+      this.clearCheckpoint();
+      await this.saveBuffer(doc.path, doc.text, this.bufferBase).catch(() => undefined);
     }
   }
 
@@ -422,7 +530,7 @@ export class Workspace {
       const current = this.state.doc;
       const pending = current?.path === path ? current.text : text;
       const base = current?.path === path ? this.bufferBase : text;
-      await this.deps.buffers.save(this.deps.workspaceId, path, pending, base).catch(() => undefined);
+      await this.saveBuffer(path, pending, base).catch(() => undefined);
       if (current?.path === path) this.setDoc({ saveState: 'error' });
       if (isAccessError(err)) {
         this.set({ status: 'access-lost' });
@@ -438,7 +546,26 @@ export class Workspace {
     this.knownVersion = version;
     this.versions.set(path, version);
     this.search.upsert(path, text);
-    await this.deps.buffers.clear(this.deps.workspaceId, path).catch(() => undefined);
+    // Il buffer si scarta solo se non ci sono battute più nuove di quelle appena scritte: in `off` un
+    // checkpoint arrivato durante la scrittura contiene testo che su disco non c'è ancora.
+    const newer = this.state.doc?.path === path && this.state.doc.text !== text;
+    if (!newer) {
+      await this.clearBuffer(path).catch(() => undefined);
+    } else {
+      // Il checkpoint più nuovo resta, ma va riferito a ciò che ORA c'è su disco: con la vecchia base,
+      // riaprendo il file (o dopo un crash) sembrerebbe un cambiamento esterno, cioè un conflitto.
+      const retained = await this.deps.buffers.load(this.deps.workspaceId, path).catch(() => null);
+      const latest = this.state.doc;
+      if (retained && latest?.path === path) {
+        if (latest.text === text) {
+          // Durante la lettura l'utente è tornato (es. Ctrl+Z) al testo appena scritto: la bozza è
+          // vecchia e riaprendo resusciterebbe testo annullato. Si scarta.
+          await this.clearBuffer(path).catch(() => undefined);
+        } else {
+          await this.saveBuffer(path, latest.text, text).catch(() => undefined);
+        }
+      }
+    }
     try {
       if (!this.state.entries.some((e) => e.path === path)) await this.refreshEntries();
     } catch {
@@ -451,7 +578,7 @@ export class Workspace {
       this.setDoc({ saveState: 'saved', deletedOnDisk: false });
     } else {
       this.setDoc({ saveState: 'dirty', deletedOnDisk: false });
-      this.schedule();
+      this.schedule('afterWrite');
     }
   }
 
@@ -478,7 +605,7 @@ export class Workspace {
     } finally {
       this.suspended--;
       const current = this.state.doc;
-      if (current && current.saveState !== 'saved') this.schedule();
+      if (current && current.saveState !== 'saved') this.schedule('afterExternal');
     }
   }
 
@@ -589,14 +716,15 @@ export class Workspace {
       this.setDoc({ text, eol: detectEol(text), saveState: 'saved', conflict: false, revision: current.revision + 1 });
       this.bumpIndex();
       // Il buffer si scarta solo DOPO aver applicato la ricarica (nessuna await in mezzo al controllo).
-      await this.deps.buffers.clear(this.deps.workspaceId, doc.path);
+      await this.clearBuffer(doc.path);
     });
   }
 
   async resume(): Promise<void> {
     this.set({ status: 'ready' });
     await this.checkExternal();
-    await this.flush();
+    if (autosaveAllows(this.state.autosave.mode, 'resume')) await this.flush();
+    else await this.checkpoint();
   }
 
   // --- operazioni sui file ------------------------------------------------------
@@ -625,6 +753,7 @@ export class Workspace {
   async rename(from: string, to: string): Promise<void> {
     await this.settle();
     this.suspended++;
+    this.moving++;
     try {
       await this.run(async () => {
         await this.deps.fs.rename(from, to);
@@ -642,6 +771,7 @@ export class Workspace {
         // qui sotto incontra un errore (non solo un file mancante, che è tollerato).
         try {
           await this.deps.buffers.move(this.deps.workspaceId, from, to);
+          await this.refreshDrafts();
           for (const path of [...this.versions.keys()]) {
             const next = movedPath(path, from, to);
             if (next === null) continue;
@@ -668,8 +798,9 @@ export class Workspace {
       });
     } finally {
       this.suspended--;
+      this.moving--;
       const current = this.state.doc;
-      if (current && current.saveState !== 'saved') this.schedule();
+      if (current && current.saveState !== 'saved') this.schedule('afterRename');
     }
   }
 
@@ -681,6 +812,7 @@ export class Workspace {
       // un salvataggio già in corso: altrimenti potrebbe ripianificarsi e ricreare il file appena
       // eliminato (vedi il timer ripulito solo DOPO aver aspettato, qui sotto).
       this.suspended++;
+      this.moving++;
       if (this.saving) await this.saving;
       if (this.timer !== null) this.scheduler.clear(this.timer);
       this.timer = null;
@@ -700,7 +832,7 @@ export class Workspace {
           if (!inside(p, path)) continue;
           this.search.remove(p);
           this.versions.delete(p);
-          await this.deps.buffers.clear(this.deps.workspaceId, p);
+          await this.clearBuffer(p);
         }
         await this.refreshEntries();
         this.bumpIndex();
@@ -708,9 +840,10 @@ export class Workspace {
     } finally {
       if (closing) {
         this.suspended--;
+        this.moving--;
         // Eliminazione fallita: il file resta aperto con le sue modifiche, riprendiamo a salvare.
         const current = this.state.doc;
-        if (current && current.saveState !== 'saved') this.schedule();
+        if (current && current.saveState !== 'saved') this.schedule('afterRename');
       }
     }
   }
@@ -745,6 +878,7 @@ export class Workspace {
   dispose(): void {
     if (this.timer !== null) this.scheduler.clear(this.timer);
     this.timer = null;
+    this.clearCheckpoint();
     this.listeners.clear();
   }
 }
