@@ -7,6 +7,7 @@ import type { MessageKey } from '../i18n/messages';
 import { dirname, joinPath } from '../lib/paths';
 import { readPref, writePref } from '../lib/prefs';
 import { Preview, type PreviewHandle } from '../preview/Preview';
+import { useTheme } from '../theme/useTheme';
 import type { SaveState, Workspace } from '../workspace/workspace';
 import { ConfirmDialog } from './ConfirmDialog';
 import { ConflictBar } from './ConflictBar';
@@ -15,6 +16,7 @@ import { Icon } from './Icon';
 import { NameDialog } from './NameDialog';
 import { renameTaken } from './names';
 import { SearchPanel } from './SearchPanel';
+import { ThemeSwitcher } from './ThemeSwitcher';
 import { Toasts } from './Toasts';
 import { buildTree, type TreeNode } from './tree';
 import { useWorkspaceState } from './useWorkspace';
@@ -62,6 +64,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }
   const [sidebarWidth, setSidebarWidth] = useState(() => clampWidth(readPref('sidebarWidth', 280)));
   const [dialog, setDialog] = useState<DialogState>(null);
   const [highlight, setHighlight] = useState<string[]>(NO_TERMS);
+  const [theme, setTheme] = useTheme();
   const editorRef = useRef<EditorHandle>(null);
   const previewRef = useRef<PreviewHandle>(null);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -289,6 +292,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder }
           >
             {doc ? (doc.deletedOnDisk ? t('save.deleted') : t(SAVE_LABEL[doc.saveState])) : ''}
           </span>
+          <ThemeSwitcher theme={theme} onChange={setTheme} className={styles.iconButton} />
         </header>
 
         {doc?.conflict && (

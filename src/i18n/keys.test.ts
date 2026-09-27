@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import en from './locales/en.json';
 import { NAME_ERRORS } from '../ui/names';
+import { THEME_PREFS } from '../theme/theme';
 import { TOAST_CODES } from '../workspace/toasts';
 import { UNSUPPORTED_REASONS } from '../fs/access';
 
@@ -19,4 +20,11 @@ test('every name validation error has a message in en.json', () => {
 
 test('every unsupported-browser reason has a message in en.json', () => {
   for (const reason of UNSUPPORTED_REASONS) assert.ok(keys.has(`unsupported.${reason}`), `manca unsupported.${reason}`);
+});
+
+test('every theme preference has its switcher tooltip and settings label', () => {
+  for (const pref of THEME_PREFS) {
+    assert.ok(keys.has(`theme.${pref}`), `manca theme.${pref}`);
+    assert.ok(keys.has(`theme.option.${pref}`), `manca theme.option.${pref}`);
+  }
 });

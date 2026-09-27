@@ -69,3 +69,16 @@ button {
   image-rendering: pixelated;
   vertical-align: middle;
 }
+
+/* Cambio tema: nessuna dissolvenza incrociata; il vecchio tema sta sopra e viene "mangiato" a blocchi
+   dalla maschera animata in src/theme/pixelTransition.ts. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+::view-transition-old(root) {
+  z-index: 1;
+  image-rendering: pixelated;
+}
