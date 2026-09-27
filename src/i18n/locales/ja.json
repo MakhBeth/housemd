@@ -113,8 +113,8 @@
   "toast.draftNotPersisted": "変更を安全に保管できませんでした。ファイルを保存するか、テキストをコピーしてください",
   "toast.bufferFailed": "緊急用のコピーを書き込めませんでした：{detail}",
   "toast.historyFailed": "ローカル履歴を利用できません：{detail}",
-  "toast.restoreCancelled": "復元を取り消しました。その間にドキュメントが変更されました",
-  "toast.newVersion": "HouseMD の新しいバージョンが利用できます",
+  "toast.restoreCancelled": "ドキュメントが変更されたため、復元を中止しました",
+  "toast.newVersion": "HouseMD の新しいバージョンがあります",
   "toast.reloadOtherTabs": "HouseMD が別のタブで古いバージョンのまま開かれています。続行するには、そのタブで保存してから閉じてください",
   "toast.openFolderFailed": "フォルダーを開けませんでした：{detail}"
 }

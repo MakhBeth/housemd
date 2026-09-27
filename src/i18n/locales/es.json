@@ -59,7 +59,7 @@
   "toast.close": "Cerrar",
   "tree.label": "Archivos de la carpeta",
   "tree.emptyFolder": "Carpeta vacía",
-  "tree.noFiles": "Ningún archivo markdown",
+  "tree.noFiles": "No hay archivos markdown",
   "tree.actions": "Acciones para {name}",
   "tree.rename": "Cambiar nombre",
   "tree.delete": "Eliminar",

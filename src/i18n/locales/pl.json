@@ -103,7 +103,7 @@
   "toast.configInvalidLinkPrefix": "{file}: images.linkPrefix musi zaczynać się od \"/\"",
   "toast.restoredDraft": "Przywrócono niezapisane zmiany pliku {path}",
   "toast.restoredDraftDeleted": "Przywrócono niezapisane zmiany pliku {path} (plik nie istnieje już na dysku)",
-  "toast.deletedOutside": "{path}: usunięto poza HouseMD",
+  "toast.deletedOutside": "Plik {path} został usunięty poza HouseMD",
   "toast.unreadableFiles": "Nie można odczytać plików ({count}): {paths}",
   "toast.alreadyExists": "Już istnieje: {path}",
   "toast.notFound": "Nie znaleziono: {path}",
