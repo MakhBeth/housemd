@@ -1,0 +1,98 @@
+.dialog {
+  border: 1px solid var(--c-border);
+  border-radius: 12px;
+  background: var(--c-surface);
+  color: var(--c-text);
+  padding: 20px;
+  width: min(420px, calc(100vw - 32px));
+}
+
+.dialog::backdrop {
+  background: rgb(0 0 0 / 0.35);
+}
+
+.title {
+  font-size: 17px;
+  margin: 0 0 12px;
+}
+
+.message {
+  margin: 0 0 8px;
+  color: var(--c-muted);
+}
+
+.input {
+  width: 100%;
+  font: inherit;
+  padding: 8px 10px;
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  background: var(--c-bg);
+  color: var(--c-text);
+}
+
+.error {
+  color: var(--c-danger);
+  margin: 8px 0 0;
+  font-size: 14px;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.primary,
+.secondary,
+.danger {
+  border-radius: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.primary {
+  background: var(--c-accent);
+  color: light-dark(#fff, #042f2e);
+  border: none;
+}
+
+.danger {
+  background: var(--c-danger);
+  color: light-dark(#fff, #450a0a);
+  border: none;
+}
+
+.secondary {
+  background: transparent;
+  border: 1px solid var(--c-border);
+}
+
+.field {
+  display: grid;
+  gap: 4px;
+  margin: 12px 0 0;
+}
+
+.group {
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  margin: 16px 0 0;
+  padding: 8px 12px 12px;
+  display: grid;
+  gap: 6px;
+}
+
+.group legend {
+  padding: 0 4px;
+  font-weight: 600;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}

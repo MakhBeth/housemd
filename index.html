@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="it">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#fbfaf7" />
+    <script>
+      // Tema applicato prima del primo render (niente lampo del tema sbagliato). Tenere allineato
+      // con src/theme/theme.ts: chiave 'housemd:theme', sfondi '#fbfaf7' e '#16161a'.
+      (function () {
+        var pref = 'auto';
+        try {
+          var raw = JSON.parse(localStorage.getItem('housemd:theme') || 'null');
+          if (raw === 'light' || raw === 'dark') pref = raw;
+        } catch (e) {}
+        var root = document.documentElement;
+        root.dataset.theme = pref;
+        root.style.colorScheme = pref === 'auto' ? 'light dark' : pref;
+        var dark = pref === 'dark' || (pref === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
+        document.querySelector('meta[name="theme-color"]').setAttribute('content', dark ? '#16161a' : '#fbfaf7');
+      })();
+    </script>
+    <meta name="description" content="Editor markdown nel browser per le tue cartelle locali. I file restano sul tuo computer." />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>HouseMD</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

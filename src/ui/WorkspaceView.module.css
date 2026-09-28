@@ -1,0 +1,247 @@
+.layout {
+  display: grid;
+  height: 100%;
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--c-sidebar);
+}
+
+.sidebarHeader {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--c-border);
+}
+
+.folder {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  font-weight: 700;
+  background: none;
+  border: none;
+  padding: 4px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder:hover:not(:disabled),
+.iconButton:hover {
+  background: var(--c-accent-soft);
+}
+
+/* Cambio cartella in corso. */
+.folder:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.iconButton {
+  background: none;
+  border: none;
+  border-radius: 6px;
+  width: 30px;
+  height: 30px;
+  cursor: pointer;
+  display: inline-grid;
+  place-items: center;
+  color: var(--c-text);
+}
+
+.resizer {
+  cursor: col-resize;
+  background: var(--c-border);
+  touch-action: none;
+}
+
+.resizer:hover,
+.resizer:focus-visible {
+  background: var(--c-accent);
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--c-border);
+  background: var(--c-bg);
+}
+
+.path {
+  flex: 1;
+  min-width: 0;
+  color: var(--c-muted);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modes {
+  display: flex;
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.mode {
+  background: none;
+  border: none;
+  padding: 4px 12px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.mode[aria-pressed='true'] {
+  background: var(--c-accent);
+  color: light-dark(#fff, #042f2e);
+}
+
+.saveState {
+  min-width: 11ch;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--c-muted);
+}
+
+.saveState[data-state='error'] {
+  color: var(--c-danger);
+  font-weight: 600;
+}
+
+.saveState :global(.icon) {
+  color: var(--c-accent);
+}
+
+.conflict {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--c-warning-bg);
+  border-bottom: 1px solid var(--c-border);
+}
+
+.conflict span {
+  flex: 1;
+}
+
+.conflict button {
+  border: 1px solid var(--c-border);
+  background: var(--c-surface);
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.panes {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.panes[data-mode='split'] {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.pane {
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.panes[data-mode='split'] .pane + .pane {
+  border-left: 1px solid var(--c-border);
+}
+
+.empty {
+  flex: 1;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 12px;
+  color: var(--c-muted);
+}
+
+.primary {
+  background: var(--c-accent);
+  color: light-dark(#fff, #042f2e);
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.accessDialog {
+  border: 1px solid var(--c-border);
+  border-radius: 12px;
+  background: var(--c-surface);
+  color: var(--c-text);
+  padding: 24px;
+  width: min(440px, calc(100vw - 32px));
+}
+
+.accessDialog::backdrop {
+  background: rgb(0 0 0 / 0.45);
+}
+
+.accessError {
+  color: var(--c-danger);
+  font-weight: 600;
+}
+
+.orphans {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--c-border);
+  background: var(--c-warning-bg);
+}
+
+.orphansTitle {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--c-muted);
+}
+
+.orphan {
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  padding: 3px 6px;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.orphan:hover,
+.orphan[aria-current='true'] {
+  background: var(--c-accent-soft);
+}

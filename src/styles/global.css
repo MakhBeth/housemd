@@ -1,0 +1,84 @@
+:root {
+  color-scheme: light dark;
+
+  --c-bg: light-dark(#fbfaf7, #16161a);
+  --c-surface: light-dark(#ffffff, #1e1e24);
+  --c-sidebar: light-dark(#f3f1ec, #1a1a1f);
+  --c-border: light-dark(#e2ded5, #2e2e36);
+  --c-text: light-dark(#1f1d1a, #e7e5e0);
+  --c-muted: light-dark(#6b665c, #9a978f);
+  --c-accent: light-dark(#0f766e, #2dd4bf);
+  --c-accent-soft: light-dark(#ccfbf1, #134e4a);
+  --c-danger: light-dark(#b91c1c, #f87171);
+  --c-warning-bg: light-dark(#fef3c7, #422006);
+  --c-highlight: light-dark(#fde68a, #854d0e);
+  --c-code-bg: light-dark(#f4f2ee, #25252c);
+
+  --font-ui: 'Space Grotesk', system-ui, sans-serif;
+  --font-prose: 'Space Grotesk', system-ui, sans-serif;
+  --font-mono: 'Space Mono', ui-monospace, monospace;
+
+  accent-color: var(--c-accent);
+  scrollbar-color: var(--c-border) transparent;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--c-bg);
+  color: var(--c-text);
+  font-family: var(--font-ui);
+  font-size: 15px;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--c-accent);
+  outline-offset: 2px;
+}
+
+::highlight(housemd-search) {
+  background-color: var(--c-highlight);
+  color: inherit;
+}
+
+.icon {
+  display: inline-block;
+  flex: none;
+  width: var(--icon-size, 20px);
+  height: var(--icon-size, 20px);
+  background-color: currentColor;
+  mask-repeat: no-repeat;
+  mask-position: center;
+  mask-size: 100% 100%;
+  image-rendering: pixelated;
+  vertical-align: middle;
+}
+
+/* Cambio tema: nessuna dissolvenza incrociata; il vecchio tema sta sopra e viene "mangiato" a blocchi
+   dalla maschera animata in src/theme/pixelTransition.ts. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+::view-transition-old(root) {
+  z-index: 1;
+  image-rendering: pixelated;
+}
