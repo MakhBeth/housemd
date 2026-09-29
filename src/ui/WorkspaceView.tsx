@@ -14,6 +14,7 @@ import { useI18n, useT } from '../i18n/I18nProvider';
 import type { MessageKey } from '../i18n/messages';
 import { dirname, joinPath } from '../lib/paths';
 import { readPref, writePref } from '../lib/prefs';
+import type { SettingsSection } from '../lib/route';
 import { Preview, type PreviewHandle } from '../preview/Preview';
 import { useTheme } from '../theme/useTheme';
 import type { SaveState, Workspace } from '../workspace/workspace';
@@ -26,7 +27,8 @@ import type { IconName } from './icons';
 import { NameDialog } from './NameDialog';
 import { renameTaken } from './names';
 import { SearchPanel } from './SearchPanel';
-import { SettingsDialog } from './SettingsDialog';
+import { SettingsView } from './SettingsView';
+import { useRoute } from './useRoute';
 import { shortcutFor } from './shortcuts';
 import { ThemeSwitcher } from './ThemeSwitcher';
 import { Toasts, type ToastItem } from './Toasts';
@@ -96,7 +98,14 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
   const [dialog, setDialog] = useState<DialogState>(null);
   const [highlight, setHighlight] = useState<string[]>(NO_TERMS);
   const [theme, setTheme] = useTheme();
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const settingsDirty = useRef(false);
+  const [closeRequest, setCloseRequest] = useState(0);
+  const { route, navigate } = useRoute({ canLeave: () => !settingsDirty.current, onBlocked: () => setCloseRequest((n) => n + 1) });
+  const onSettingsDirty = useCallback((dirty: boolean) => {
+    settingsDirty.current = dirty;
+  }, []);
+  const settingsOpen = route.view === 'settings';
+  const openSettings = useCallback((section: SettingsSection = 'general') => navigate({ view: 'settings', section }), [navigate]);
   const [historyOpen, setHistoryOpen] = useState(false);
   /** Ripristino chiesto in modalità anteprima: parte appena l'editor è montato. */
   const [queuedRestore, setQueuedRestore] = useState<{ id: number; path: string } | null>(null);
@@ -247,6 +256,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
   // Scorciatoie globali: vedi src/ui/shortcuts.ts.
   useEffect(() => {
     const onKey = (event: globalThis.KeyboardEvent) => {
+      if (settingsOpen) return;
       if (event.key === 'Escape' && shownMode === 'ai') ai?.stop();
       const shortcut = shortcutFor(event);
       if (!shortcut) return;
@@ -276,7 +286,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [workspace, shownMode, changeMode, setSidebar, sidebarOpen, ai]);
+  }, [workspace, shownMode, changeMode, setSidebar, sidebarOpen, ai, settingsOpen]);
 
   const onResizeStart = (event: PointerEvent<HTMLDivElement>) => {
     const target = event.currentTarget;
@@ -331,7 +341,9 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
   const sidebarLabel = sidebarOpen ? t('sidebar.hide') : t('sidebar.show');
 
   return (
+    <>
     <div
+      {...{ inert: settingsOpen ? '' : undefined }}
       className={styles.layout}
       style={{ gridTemplateColumns: sidebarOpen ? `${shownMode === 'ai' ? aiWidth : sidebarWidth}px 5px minmax(0, 1fr)` : 'minmax(0, 1fr)' }}
     >
@@ -348,7 +360,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
                   ? { from: selected.from, to: selected.to, originalText: session.textLf.slice(selected.from, selected.to), status: 'valid' }
                   : undefined;
               }}
-              onSettings={() => setSettingsOpen(true)}
+              onSettings={openSettings}
               syncNeedsPermission={!!syncBinding.handle && !syncBinding.permission}
             /> : <>
             <div className={styles.sidebarHeader}>
@@ -446,7 +458,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
               <Icon name="save" />
             </button>
             <ThemeSwitcher theme={theme} onChange={setTheme} className={`${styles.iconButton} tooltip`} />
-            <button className={`${styles.iconButton} tooltip`} onClick={() => setSettingsOpen(true)} aria-label={t('toolbar.settings')} data-tooltip={t('toolbar.settings')}>
+            <button className={`${styles.iconButton} tooltip`} onClick={() => openSettings()} aria-label={t('toolbar.settings')} data-tooltip={t('toolbar.settings')}>
               <Icon name="settings" />
             </button>
           </div>
@@ -524,6 +536,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
           </div>
         )}
       </main>
+    </div>
 
       {dialog && (dialog.kind === 'new-file' || dialog.kind === 'new-folder') && (
         <NameDialog
@@ -574,7 +587,12 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
       )}
 
       {settingsOpen && (
-        <SettingsDialog
+        <SettingsView
+          section={route.section}
+          onSection={(section) => navigate({ view: 'settings', section })}
+          onClose={() => navigate({ view: 'workspace' })}
+          onDirtyChange={onSettingsDirty}
+          closeRequest={closeRequest}
           ai={ai}
           syncBinding={syncBinding}
           theme={theme}
@@ -585,7 +603,6 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
             workspace.setAutosave(next);
           }}
           onSaveAll={() => void workspace.saveAll()}
-          onClose={() => setSettingsOpen(false)}
         />
       )}
 
@@ -601,7 +618,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
       )}
 
       <Toasts items={toastItems} onDismiss={dismissToast} />
-    </div>
+    </>
   );
 }
 
