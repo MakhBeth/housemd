@@ -74,8 +74,12 @@ export function SettingsView({ section, onSection, onClose, onDirtyChange, close
   };
 
   useEffect(() => onDirtyChange(dirty.size > 0), [dirty, onDirtyChange]);
+  // Il contatore vive in WorkspaceView e può essere già > 0 al montaggio: si reagisce solo ai cambi.
+  const seenRequest = useRef(closeRequest);
   useEffect(() => {
-    if (closeRequest > 0) close();
+    if (closeRequest === seenRequest.current) return;
+    seenRequest.current = closeRequest;
+    close();
     // Solo al cambio del contatore: close legge lo stato corrente a ogni render.
   }, [closeRequest]);
 
@@ -125,6 +129,8 @@ export function SettingsView({ section, onSection, onClose, onDirtyChange, close
             onClick={(e) => {
               e.preventDefault();
               onSection(id);
+              // Se la sezione è già quella della rotta l'effetto non riparte: si scorre direttamente.
+              content.current?.querySelector(`#settings-${id}`)?.scrollIntoView({ block: 'start' });
             }}
           >
             {t(LABELS[id])}
