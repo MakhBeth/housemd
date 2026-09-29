@@ -34,13 +34,17 @@ import { buildTree, type TreeNode } from './tree';
 import { useWorkspaceState } from './useWorkspace';
 import styles from './WorkspaceView.module.css';
 
-type Mode = 'editor' | 'split' | 'preview';
+type Mode = 'editor' | 'split' | 'preview' | 'ai';
+type PaneMode = Exclude<Mode, 'ai'>;
 
 const MODES: Array<{ id: Mode; label: MessageKey; icon: IconName }> = [
   { id: 'editor', label: 'mode.editor', icon: 'modeEditor' },
   { id: 'split', label: 'mode.split', icon: 'modeSplit' },
   { id: 'preview', label: 'mode.preview', icon: 'modePreview' },
+  { id: 'ai', label: 'mode.ai', icon: 'modeAi' },
 ];
+/** Ctrl+\ scorre solo le viste del documento, non la revisione AI. */
+const PANE_MODES = MODES.filter((m) => m.id !== 'ai');
 
 const SAVE_LABEL: Record<SaveState, MessageKey> = {
   saved: 'save.saved',
@@ -75,7 +79,6 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
   const doc = state.doc;
   const ai = useAiController(workspace);
   const aiState = useAiState(ai);
-  const [sidebarView, setSidebarView] = useState<'files' | 'ai'>(() => readPref('sidebarView', 'files'));
   const [aiWidth, setAiWidth] = useState(() => Math.min(640, Math.max(300, readPref('aiSidebarWidth', 380))));
   const session = useMemo(() => createDocSession(`${doc?.path}#${doc?.revision}`, doc?.text || ''), [doc?.path, doc?.revision]);
   const [aiSelection, setAiSelection] = useState<TextRange | null>(null);
@@ -84,9 +87,11 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
   useEffect(() => setAiSelection(null), [doc?.path, doc?.revision]);
   void aiSelection; // letto da AiSidebar in Task 11 (tsconfig ha noUnusedLocals)
   const syncBinding = useAiSync(ai);
-  const switchSidebar = (view: 'files' | 'ai') => { setSidebarView(view); writePref('sidebarView', view); setSidebarOpen(true); };
   useEffect(() => { if (doc) ai?.documentChanged(doc.path, { iterChangedRanges: () => {}, mapPos: (n: number) => n } as never, true); }, [doc?.path, doc?.revision]);
   const [mode, setMode] = useState<Mode>(() => readPref<Mode>('mode', 'split'));
+  // Preferenza 'ai' con il controller non ancora pronto (IndexedDB lento): intanto la vista divisa.
+  const shownMode: Mode = mode === 'ai' && !ai ? 'split' : mode;
+  const lastPane = useRef<PaneMode>(mode === 'ai' ? 'split' : mode);
   const [sidebarOpen, setSidebarOpen] = useState(() => readPref('sidebarOpen', true));
   const [sidebarWidth, setSidebarWidth] = useState(() => clampWidth(readPref('sidebarWidth', 280)));
   const [dialog, setDialog] = useState<DialogState>(null);
@@ -133,10 +138,16 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
     writePref('sidebarOpen', open);
   }, []);
 
-  const changeMode = useCallback((next: Mode) => {
-    setMode(next);
-    writePref('mode', next);
-  }, []);
+  const changeMode = useCallback(
+    (next: Mode) => {
+      if (next !== 'ai') lastPane.current = next;
+      // La chat sta nella sidebar: entrando in AI la si apre.
+      else setSidebar(true);
+      setMode(next);
+      writePref('mode', next);
+    },
+    [setSidebar],
+  );
 
   // Il ripristino deve passare dall'editor come transazione (annullabile con Ctrl+Z): in sola
   // anteprima l'editor non c'è, quindi si passa alla vista affiancata e si ripristina solo dopo.
@@ -144,22 +155,22 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
     (id: number) => {
       const path = workspace.getState().doc?.path;
       if (!path) return;
-      if (mode !== 'preview') {
+      if (shownMode !== 'preview') {
         void workspace.restoreVersion(id);
         return;
       }
       setQueuedRestore({ id, path });
       changeMode('split');
     },
-    [workspace, mode, changeMode],
+    [workspace, shownMode, changeMode],
   );
 
   useEffect(() => {
-    if (!queuedRestore || mode === 'preview' || !editorRef.current) return;
+    if (!queuedRestore || shownMode === 'preview' || !editorRef.current) return;
     setQueuedRestore(null);
     // Nel frattempo si è passati a un altro file: quella versione non riguarda più il documento.
     if (doc?.path === queuedRestore.path) void workspace.restoreVersion(queuedRestore.id);
-  }, [queuedRestore, mode, doc?.path, workspace]);
+  }, [queuedRestore, shownMode, doc?.path, workspace]);
 
   const openFile = useCallback(
     (path: string, terms: string[] = NO_TERMS) => {
@@ -237,7 +248,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
   // Scorciatoie globali: vedi src/ui/shortcuts.ts.
   useEffect(() => {
     const onKey = (event: globalThis.KeyboardEvent) => {
-      if (event.key === 'Escape' && sidebarView === 'ai') ai?.stop();
+      if (event.key === 'Escape' && shownMode === 'ai') ai?.stop();
       const shortcut = shortcutFor(event);
       if (!shortcut) return;
       event.preventDefault();
@@ -249,39 +260,39 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
           void workspace.saveAll();
           break;
         case 'search':
-          switchSidebar('files');
+          if (shownMode === 'ai') changeMode(lastPane.current);
           setSidebar(true);
           requestAnimationFrame(() => searchRef.current?.focus());
           break;
         case 'toggleAi':
-          switchSidebar(sidebarView === 'ai' ? 'files' : 'ai');
+          if (ai) changeMode(shownMode === 'ai' ? lastPane.current : 'ai');
           break;
         case 'toggleSidebar':
           setSidebar(!sidebarOpen);
           break;
         case 'cycleMode':
-          changeMode(MODES[(MODES.findIndex((m) => m.id === mode) + 1) % MODES.length].id);
+          changeMode(PANE_MODES[(PANE_MODES.findIndex((m) => m.id === shownMode) + 1) % PANE_MODES.length].id);
           break;
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [workspace, mode, changeMode, setSidebar, sidebarOpen, sidebarView, ai]);
+  }, [workspace, shownMode, changeMode, setSidebar, sidebarOpen, ai]);
 
   const onResizeStart = (event: PointerEvent<HTMLDivElement>) => {
     const target = event.currentTarget;
     target.setPointerCapture(event.pointerId);
-    let width = sidebarView === 'ai' ? aiWidth : sidebarWidth;
+    let width = shownMode === 'ai' ? aiWidth : sidebarWidth;
     const move = (e: globalThis.PointerEvent) => {
-      width = sidebarView === 'ai' ? Math.min(640, Math.max(300, e.clientX)) : clampWidth(e.clientX);
-      if (sidebarView === 'ai') setAiWidth(width); else setSidebarWidth(width);
+      width = shownMode === 'ai' ? Math.min(640, Math.max(300, e.clientX)) : clampWidth(e.clientX);
+      if (shownMode === 'ai') setAiWidth(width); else setSidebarWidth(width);
     };
     const up = () => {
       target.removeEventListener('pointermove', move);
       target.removeEventListener('pointerup', up);
       target.removeEventListener('pointercancel', up);
       target.removeEventListener('lostpointercapture', up);
-      writePref(sidebarView === 'ai' ? 'aiSidebarWidth' : 'sidebarWidth', width);
+      writePref(shownMode === 'ai' ? 'aiSidebarWidth' : 'sidebarWidth', width);
     };
     target.addEventListener('pointermove', move);
     target.addEventListener('pointerup', up);
@@ -292,9 +303,9 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
   const onResizeKey = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
     event.preventDefault();
-    const next = sidebarView === 'ai' ? Math.min(640, Math.max(300, aiWidth + (event.key === 'ArrowLeft' ? -16 : 16))) : clampWidth(sidebarWidth + (event.key === 'ArrowLeft' ? -16 : 16));
-    if (sidebarView === 'ai') setAiWidth(next); else setSidebarWidth(next);
-    writePref(sidebarView === 'ai' ? 'aiSidebarWidth' : 'sidebarWidth', next);
+    const next = shownMode === 'ai' ? Math.min(640, Math.max(300, aiWidth + (event.key === 'ArrowLeft' ? -16 : 16))) : clampWidth(sidebarWidth + (event.key === 'ArrowLeft' ? -16 : 16));
+    if (shownMode === 'ai') setAiWidth(next); else setSidebarWidth(next);
+    writePref(shownMode === 'ai' ? 'aiSidebarWidth' : 'sidebarWidth', next);
   };
 
   const onTreeAction = (action: TreeAction, node: TreeNode | null) => {
@@ -323,13 +334,12 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
   return (
     <div
       className={styles.layout}
-      style={{ gridTemplateColumns: sidebarOpen ? `${sidebarView === 'ai' ? aiWidth : sidebarWidth}px 5px minmax(0, 1fr)` : 'minmax(0, 1fr)' }}
+      style={{ gridTemplateColumns: sidebarOpen ? `${shownMode === 'ai' ? aiWidth : sidebarWidth}px 5px minmax(0, 1fr)` : 'minmax(0, 1fr)' }}
     >
       {sidebarOpen && (
         <>
           <aside className={styles.sidebar}>
-            <div className="ai-bar">{(['files', 'ai'] as const).map(v => <button key={v} aria-pressed={sidebarView === v} onClick={() => switchSidebar(v)}>{t(v === 'ai' ? 'ai.title' : 'ai.files')}</button>)}</div>
-            {sidebarView === 'ai' && ai ? <AiSidebar syncNeedsPermission={!!syncBinding.handle&&!syncBinding.permission} controller={ai} onSettings={() => setSettingsOpen(true)} getSelection={() => { const selected = session.selection?.main; return selected && !selected.empty ? { from: selected.from, to: selected.to, originalText: session.textLf.slice(selected.from, selected.to), status: 'valid' } : undefined; }} /> : <>
+            {shownMode === 'ai' && ai ? <AiSidebar syncNeedsPermission={!!syncBinding.handle&&!syncBinding.permission} controller={ai} onSettings={() => setSettingsOpen(true)} getSelection={() => { const selected = session.selection?.main; return selected && !selected.empty ? { from: selected.from, to: selected.to, originalText: session.textLf.slice(selected.from, selected.to), status: 'valid' } : undefined; }} /> : <>
             <div className={styles.sidebarHeader}>
               <button className={styles.iconButton} onClick={() => setSidebar(false)} aria-label={t('sidebar.hide')} title={t('sidebar.hide')}>
                 <Icon name="sidebarClose" />
@@ -369,9 +379,9 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
             role="separator"
             aria-orientation="vertical"
             aria-label={t('sidebar.resize')}
-            aria-valuenow={sidebarView === 'ai' ? aiWidth : sidebarWidth}
-            aria-valuemin={sidebarView === 'ai' ? 300 : MIN_SIDEBAR}
-            aria-valuemax={sidebarView === 'ai' ? 640 : MAX_SIDEBAR}
+            aria-valuenow={shownMode === 'ai' ? aiWidth : sidebarWidth}
+            aria-valuemin={shownMode === 'ai' ? 300 : MIN_SIDEBAR}
+            aria-valuemax={shownMode === 'ai' ? 640 : MAX_SIDEBAR}
             tabIndex={0}
             onPointerDown={onResizeStart}
             onKeyDown={onResizeKey}
@@ -385,15 +395,14 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
             <button className={`${styles.iconButton} tooltip`} onClick={() => setSidebar(!sidebarOpen)} aria-pressed={sidebarOpen} aria-label={sidebarLabel} data-tooltip={sidebarLabel}>
               <Icon name={sidebarOpen ? 'sidebarClose' : 'sidebarOpen'} />
             </button>
-            <button aria-pressed={sidebarView === 'ai'} onClick={() => switchSidebar(sidebarView === 'ai' ? 'files' : 'ai')}>{t('ai.title')}</button>
             <span className={styles.path}>{doc?.path ?? t('toolbar.noFile')}</span>
           </div>
           <div className={styles.modes} role="group" aria-label={t('toolbar.modes')}>
-            {MODES.map((m) => (
+            {(ai ? MODES : PANE_MODES).map((m) => (
               <button
                 key={m.id}
                 className={`${styles.mode} tooltip`}
-                aria-pressed={mode === m.id}
+                aria-pressed={shownMode === m.id}
                 aria-label={t(m.label)}
                 data-tooltip={t(m.label)}
                 onClick={() => changeMode(m.id)}
@@ -414,7 +423,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
             </span>
             <button
               className={`${styles.iconButton} tooltip`}
-              onClick={() => { if (sidebarView === 'ai') switchSidebar('files'); setHistoryOpen(!historyOpen); }}
+              onClick={() => { if (shownMode === 'ai') changeMode(lastPane.current); setHistoryOpen(!historyOpen); }}
               aria-pressed={historyOpen}
               disabled={!doc}
               aria-label={t('toolbar.history')}
@@ -439,9 +448,9 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
           />
         )}
 
-        {doc && sidebarView === 'ai' && ai ? <ReviewView controller={ai} editor={{ text: doc.text, resetKey: `${doc.path}#${doc.revision}`, session, restore: doc.restore, readOnly: state.updating, getDocs, onChange: text => workspace.edit(text), onTransactions: (changes, texts) => ai.documentChanged(doc.path, changes, false, texts), onImage: file => workspace.saveImage(file, file.name), onTopLine: () => {}, onSelection }} previewProps={{ text: doc.text, path: doc.path, files, config: state.config, readBlob, highlight: NO_TERMS, onTopLine: () => {}, onOpenWiki: target => void workspace.followWikiLink(target), onOpenPath: path => void openFile(path) }} /> : doc ? (
-          <div className={styles.panes} data-mode={historyOpen && mode === 'editor' ? 'split' : mode}>
-            {mode !== 'preview' && (
+        {doc && shownMode === 'ai' && ai ? <ReviewView controller={ai} editor={{ text: doc.text, resetKey: `${doc.path}#${doc.revision}`, session, restore: doc.restore, readOnly: state.updating, getDocs, onChange: text => workspace.edit(text), onTransactions: (changes, texts) => ai.documentChanged(doc.path, changes, false, texts), onImage: file => workspace.saveImage(file, file.name), onTopLine: () => {}, onSelection }} previewProps={{ text: doc.text, path: doc.path, files, config: state.config, readBlob, highlight: NO_TERMS, onTopLine: () => {}, onOpenWiki: target => void workspace.followWikiLink(target), onOpenPath: path => void openFile(path) }} /> : doc ? (
+          <div className={styles.panes} data-mode={historyOpen && shownMode === 'editor' ? 'split' : shownMode}>
+            {shownMode !== 'preview' && (
               <section className={styles.pane} aria-label={t('pane.editor')}>
                 <Editor
                   ref={editorRef}
@@ -455,7 +464,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
                   onChange={(text) => workspace.edit(text)}
                   onImage={(file) => workspace.saveImage(file, file.name)}
                   onTopLine={(line) => {
-                    if (mode === 'split') previewRef.current?.scrollToLine(line);
+                    if (shownMode === 'split') previewRef.current?.scrollToLine(line);
                   }}
                 />
               </section>
@@ -472,7 +481,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
                 />
               </section>
             ) : (
-              mode !== 'editor' && (
+              shownMode !== 'editor' && (
                 <section className={styles.pane} aria-label={t('pane.preview')}>
                   <Preview
                     ref={previewRef}
@@ -483,7 +492,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
                     readBlob={readBlob}
                     highlight={highlight}
                     onTopLine={(line) => {
-                      if (mode === 'split') editorRef.current?.scrollToLine(line);
+                      if (shownMode === 'split') editorRef.current?.scrollToLine(line);
                     }}
                     onOpenWiki={(target) => {
                       setHighlight(NO_TERMS);
