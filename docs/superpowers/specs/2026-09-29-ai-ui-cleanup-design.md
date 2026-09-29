@@ -42,7 +42,8 @@ se il controller AI esiste (`ai` non nullo); altrimenti i pulsanti restano tre.
 - La preferenza `mode` può valere `'ai'`. La vecchia preferenza `sidebarView` non si legge più: al primo avvio
   chi l'aveva a `'ai'` si ritrova nella modalità salvata in `mode` (nessuna migrazione, perdita accettabile).
 - `Ctrl/Cmd+Shift+E` alterna AI ↔ ultima modalità non AI (salvata in memoria, default `editor`).
-- `Ctrl/Cmd+K` ("torna ai file") viene rimosso: con D2 equivale a uscire dalla modalità AI.
+- `Ctrl/Cmd+K` (ricerca, `shortcuts.ts`) resta. Oggi fa `switchSidebar('files')` e mette il focus sul campo di
+  ricerca; in modalità AI farà lo stesso uscendo prima dalla modalità AI verso l'ultima modalità non AI.
 - `Esc` in modalità AI con una generazione in corso chiama `ai.stop()` (come oggi).
 - Il bottone Cronologia in modalità AI passa prima alla modalità precedente e poi apre la cronologia (oggi fa
   `switchSidebar('files')`).
@@ -162,9 +163,17 @@ Tornano con Nuova chat.
 
 ### 4.7 Errori generali
 
-`state.error` (errori non legati a un messaggio: sync, chiave mancante, `scopeLost`…) passa per il sistema di
-toast dell'app (`Toasts` / `workspace/toasts`) come toast di errore; `clearError()` quando il toast viene chiuso.
-Si eliminano `AiNotice` e il `<p role="alert">` della sidebar.
+`state.error` (errori non legati a un messaggio: sync, chiave mancante, `scopeLost`…) compare nello stesso
+contenitore dei toast dell'app. `Toasts` oggi accetta solo i `Toast` del `Workspace`, con codici chiusi
+(`workspace/toasts.ts`) tradotti come `toast.<code>`; i codici AI non vanno aggiunti lì (sono un altro dominio).
+
+- `Toasts` diventa presentazionale: `items: { key: string; kind: Toast['kind']; text: string }[]`
+  e `onDismiss(key)`. Chiusura automatica solo per `info` (come oggi), popover e stile invariati.
+- `WorkspaceView` costruisce la lista: i toast del `Workspace` (`key: 'ws-<id>'`, testo
+  `t('toast.' + code, params)`, come oggi) seguiti, se `ai.state.error` è valorizzato, da
+  `{ key: 'ai-error', kind: 'error', text: t('ai.error.' + code) }`. Le chiavi `ai.error.*` esistono già in tutti
+  i locali. `onDismiss('ai-error')` chiama `ai.clearError()`; gli altri `dismissToast(id)`.
+- Si eliminano `AiNotice` e il `<p role="alert">` della sidebar.
 
 ## 5. Barra di revisione (`ReviewBar`)
 
@@ -175,7 +184,9 @@ Si eliminano `AiNotice` e il `<p role="alert">` della sidebar.
 - Frecce: icone `chevron-up` / `chevron-down`, tooltip "Modifica precedente/successiva", disabilitate durante la
   generazione o senza proposta.
 - Stato (modulo puro `src/ai/reviewStatus.ts`,
-  `reviewStatus(proposal, running, elapsedSeconds)` → descrittore):
+  `reviewStatus({ proposal, running, elapsedSeconds, applied })` → descrittore). `applied` lo calcola `ReviewView`
+  come oggi (`ReviewView.tsx:21`: testo della proposta applicata uguale al testo del documento e proposta non in
+  streaming); `appliedPaths` del controller resta privato:
   - nessuna proposta → nessuno stato (la barra mostra il testo di §3.3);
   - generazione in corso → "Generazione… 12 s" e, se multi-parte, "3/7";
   - `partial` → "Parziale" + pulsante **Continua**;
