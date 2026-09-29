@@ -5,7 +5,6 @@ import { sameRange, type TextRange } from '../ai/selectionChip';
 import { AiSidebar } from './ai/AiSidebar';
 import { ReviewView } from './ai/ReviewView';
 import { useAiSync } from './ai/settings/AiSyncSection';
-import './ai/ai.css';
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 
 import { Editor, type EditorHandle } from '../editor/Editor';

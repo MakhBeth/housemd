@@ -128,9 +128,15 @@ sessioni persistite, CORS e permessi Chrome dall'origine pubblicata.
 
 ### Modalità AI
 
-Il pulsante **AI** (anche `Ctrl/Cmd+Shift+E`) apre chat e revisione del documento corrente. `Ctrl/Cmd+Enter`
-invia, **Stop**/`Esc` interrompe. Il testo parte solo su invio o clic su un preset; elenchi modelli e prove di
-connessione non inviano documenti. `Ctrl/Cmd+K` torna ai file. File e AI ricordano larghezze separate.
+L'icona **AI** accanto a Editor, Split e Preview (anche `Ctrl/Cmd+Shift+E`) apre la revisione del documento
+corrente con la chat nella sidebar. **Invio** invia, **Shift+Invio** va a capo, **Stop**/`Esc` interrompe.
+Selezionando del testo nell'editor compare il chip "Selezione": la richiesta riguarda solo quel tratto
+(✕ per usare tutto il documento). I preset compaiono come suggerimenti finché la chat è vuota. Il chip del
+modello apre profili, modello e parametri; l'effort ha un suo chip quando il profilo lo supporta.
+`Ctrl/Cmd+K` torna ai file con il focus sulla ricerca. File e AI ricordano larghezze separate.
+
+Le impostazioni sono una pagina: ingranaggio o `#settings` (`#settings/ai-profiles`, `#settings/ai-presets`,
+`#settings/ai-sync` per le sezioni AI). Indietro del browser o `Esc` le chiudono.
 
 In **Impostazioni → AI** si gestiscono più profili, chiavi, preset e sync. Ollama usa per default
 `http://localhost:11434`, LM Studio `http://localhost:1234`. Configurare `OLLAMA_ORIGINS` con l'origine di HouseMD,
@@ -143,15 +149,17 @@ Non vengono esportate o sincronizzate. Sono legate al provider e all'origine: ca
 nuovamente. **Estensioni e chi usa il profilo del browser possono leggere una chiave salvata**: preferire una
 chiave dedicata con limite di spesa. Il bridge Claude è locale, ma la CLI inoltra il testo ad Anthropic.
 
-**Diff** permette accettazione per blocco, **Affiancata** sorgente/anteprima con scorrimento collegato.
+La barra di revisione ha le frecce per le modifiche precedente/successiva, gli avvisi quando ci sono,
+**Scarta** e **Accetta tutto**; ogni blocco del diff si accetta anche da solo.
+
 L'accettazione è una transazione dell'editor, annullabile anche dopo aver cambiato vista, e crea uno snapshot
 `before-ai`. Durante lo streaming non si accetta; una risposta troncata si accetta solo per blocchi.
 I preset conservano di default il frontmatter e lavorano in parti; **Continua** riprende le parti non completate.
 L'ambito **Selezione** conserva le modifiche esterne all'intervallo e si invalida quando il tratto selezionato cambia.
 La chat e le proposte non sono persistite: aggiornamento PWA e chiusura proteggono il lavoro ancora pendente.
 
-Le risposte e le anteprime AI non interpretano HTML grezzo e non caricano nuove immagini remote senza clic
-esplicito; le immagini già nel documento originale restano consentite. Gli avvisi su codice, link e lunghezza
+Le risposte e le anteprime AI non interpretano HTML grezzo e non caricano immagini remote: nella chat
+compaiono come etichetta con l'host, nella revisione come testo. Gli avvisi su codice, link e lunghezza
 sono indicazioni da rivedere, non una certificazione della correttezza del modello.
 
 ### Sync delle impostazioni AI
