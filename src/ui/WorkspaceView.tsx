@@ -459,7 +459,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
           />
         )}
 
-        {doc && shownMode === 'ai' && ai ? <ReviewView controller={ai} editor={{ text: doc.text, resetKey: `${doc.path}#${doc.revision}`, session, restore: doc.restore, readOnly: state.updating, getDocs, onChange: text => workspace.edit(text), onTransactions: (changes, texts) => ai.documentChanged(doc.path, changes, false, texts), onImage: file => workspace.saveImage(file, file.name), onTopLine: () => {}, onSelection }} previewProps={{ text: doc.text, path: doc.path, files, config: state.config, readBlob, highlight: NO_TERMS, onTopLine: () => {}, onOpenWiki: target => void workspace.followWikiLink(target), onOpenPath: path => void openFile(path) }} /> : doc ? (
+        {doc && shownMode === 'ai' && ai ? <ReviewView controller={ai} editor={{ path: doc.path, text: doc.text, resetKey: `${doc.path}#${doc.revision}`, session, restore: doc.restore, readOnly: state.updating, getDocs, onChange: text => workspace.edit(text), onTransactions: (changes, texts) => ai.documentChanged(doc.path, changes, false, texts), onImage: file => workspace.saveImage(file, file.name), onTopLine: () => {}, onSelection }} /> : doc ? (
           <div className={styles.panes} data-mode={historyOpen && shownMode === 'editor' ? 'split' : shownMode}>
             {shownMode !== 'preview' && (
               <section className={styles.pane} aria-label={t('pane.editor')}>

@@ -1,0 +1,119 @@
+/* src/ui/ai/ReviewView.module.css — revisione della proposta AI. */
+.review {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 42px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--c-border);
+  font-family: var(--font-pixel);
+}
+
+.status {
+  color: var(--c-muted);
+  font-size: 13px;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.iconButton {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  cursor: pointer;
+}
+
+.iconButton:hover:not(:disabled) {
+  background: var(--c-accent-soft);
+}
+
+.secondary {
+  padding: 4px 10px;
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  background: none;
+  color: var(--c-text);
+  cursor: pointer;
+}
+
+.accept {
+  color: var(--c-accent);
+  font-weight: 600;
+}
+
+.iconButton:disabled,
+.secondary:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.warnings {
+  position-area: block-end span-inline-start;
+  margin: 6px 0 0;
+  padding: 8px;
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  background: var(--c-surface);
+  color: var(--c-text);
+}
+
+.warnings button {
+  display: block;
+  width: 100%;
+  padding: 4px;
+  border: none;
+  background: none;
+  text-align: start;
+  cursor: pointer;
+}
+
+.hint {
+  margin: 0;
+  padding: 12px;
+  border-bottom: 1px solid var(--c-border);
+  color: var(--c-muted);
+  font-size: 13px;
+}
+
+.stream pre {
+  max-height: 15vh;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+.diff {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.diff :global(.cm-mergeView) {
+  height: 100%;
+}
+
+.diff :global(.cm-editor) {
+  min-width: 0;
+}
+
+.diff :global(.cm-content) {
+  padding-bottom: 40vh;
+}
+
+.editor {
+  flex: 1;
+  min-height: 0;
+}
