@@ -6,7 +6,7 @@ import type { ModelProfile, ProviderKind } from '../../../ai/types';
 import type { MessageKey } from '../../../i18n/messages';
 import { useT } from '../../../i18n/I18nProvider';
 import { ModelSelect } from '../ModelSelect';
-import { Parameters } from '../ModelSelector';
+import { Parameters } from '../Parameters';
 export function AiProfilesSection({controller}:{controller:AiController}){
  const t=useT(),state=useSyncExternalStore(controller.subscribe,controller.getState),[draft,setDraft]=useState<ModelProfile|null>(null),[key,setKey]=useState(''),[remember,setRemember]=useState(false),[connected,setConnected]=useState(false);
  const run=(job:Promise<unknown>)=>void job.catch(e=>controller.report(e));

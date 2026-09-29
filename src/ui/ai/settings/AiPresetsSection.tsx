@@ -4,7 +4,7 @@ import type { PromptPreset } from '../../../ai/types';
 import { restorePreset, builtInPresets } from '../../../ai/presets';
 import type { MessageKey } from '../../../i18n/messages';
 import { useT } from '../../../i18n/I18nProvider';
-import { Parameters } from '../ModelSelector';
+import { Parameters } from '../Parameters';
 import { defaultProfile } from '../../../ai/profiles';
 export function AiPresetsSection({controller}:{controller:AiController}){
  const t=useT(),state=useSyncExternalStore(controller.subscribe,controller.getState),[draft,setDraft]=useState<PromptPreset|null>(null);

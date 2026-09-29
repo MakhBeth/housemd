@@ -3,13 +3,13 @@ import type { AiController } from '../../ai/aiController';
 import type { SelectionScope } from '../../ai/types';
 import type { MessageKey } from '../../i18n/messages';
 import { useT } from '../../i18n/I18nProvider';
-import { ModelSelector } from './ModelSelector';
+import { ModelChip } from './ModelChip';
 import { ChatLog } from './ChatLog';
 export function AiSidebar({controller,onSettings,getSelection,syncNeedsPermission}:{controller:AiController;onSettings:()=>void;getSelection:()=>SelectionScope|undefined;syncNeedsPermission?:boolean}){
  const t=useT(),state=useSyncExternalStore(controller.subscribe,controller.getState),[request,setRequest]=useState(''),[selection,setSelection]=useState(false),[elapsed,setElapsed]=useState(0);
  useEffect(()=>{if(!state.running)return;const timer=setInterval(()=>setElapsed(Math.floor((Date.now()-state.running!.startedAt)/1000)),1000);return()=>clearInterval(timer);},[state.running]);
  const send=(presetId?:string)=>{const preset=state.presets.find(p=>p.id===presetId),scope=selection?getSelection():undefined;if(selection&&!scope){controller.report({code:'scopeLost'});return;}void controller.send(preset?preset.name||t(`ai.preset.${preset.builtInId}` as MessageKey):request,preset,scope).catch(e=>controller.report(e));if(!preset)setRequest('');};
- return <div className="ai-sidebar"><ModelSelector controller={controller} onSettings={onSettings}/>{syncNeedsPermission&&<button onClick={onSettings}>⚠ {t('ai.syncReactivate')}</button>}<div className="ai-bar">{state.presets.filter(p=>!p.hidden).sort((a,b)=>a.order-b.order).map(p=><button key={p.id} disabled={!!state.running} onClick={()=>send(p.id)}>{p.name||t(`ai.preset.${p.builtInId}` as MessageKey)}</button>)}<button onClick={onSettings}>{t('ai.managePresets')}</button></div>
+ return <div className="ai-sidebar"><ModelChip controller={controller} onManage={onSettings}/>{syncNeedsPermission&&<button onClick={onSettings}>⚠ {t('ai.syncReactivate')}</button>}<div className="ai-bar">{state.presets.filter(p=>!p.hidden).sort((a,b)=>a.order-b.order).map(p=><button key={p.id} disabled={!!state.running} onClick={()=>send(p.id)}>{p.name||t(`ai.preset.${p.builtInId}` as MessageKey)}</button>)}<button onClick={onSettings}>{t('ai.managePresets')}</button></div>
  <ChatLog messages={state.chat.messages} onOpen={path=>controller.workspace.openFile(path)} onRetry={(id,remove)=>void controller.retry(id,remove)}/>
  
  {state.running&&<span aria-live="polite">{t('ai.working')} {elapsed}s</span>}
