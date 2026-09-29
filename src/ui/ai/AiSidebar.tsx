@@ -11,7 +11,7 @@ export function AiSidebar({controller,onSettings,getSelection,syncNeedsPermissio
  const send=(presetId?:string)=>{const preset=state.presets.find(p=>p.id===presetId),scope=selection?getSelection():undefined;if(selection&&!scope){controller.report({code:'scopeLost'});return;}void controller.send(preset?preset.name||t(`ai.preset.${preset.builtInId}` as MessageKey):request,preset,scope).catch(e=>controller.report(e));if(!preset)setRequest('');};
  return <div className="ai-sidebar"><ModelSelector controller={controller} onSettings={onSettings}/>{syncNeedsPermission&&<button onClick={onSettings}>⚠ {t('ai.syncReactivate')}</button>}<div className="ai-bar">{state.presets.filter(p=>!p.hidden).sort((a,b)=>a.order-b.order).map(p=><button key={p.id} disabled={!!state.running} onClick={()=>send(p.id)}>{p.name||t(`ai.preset.${p.builtInId}` as MessageKey)}</button>)}<button onClick={onSettings}>{t('ai.managePresets')}</button></div>
  <ChatLog messages={state.chat.messages} onOpen={path=>controller.workspace.openFile(path)} onRetry={(id,remove)=>void controller.retry(id,remove)}/>
- {state.error&&<p role="alert">{t(`ai.error.${state.error}` as MessageKey)}<button onClick={()=>controller.clearError()}>{t('settings.close')}</button></p>}
+ 
  {state.running&&<span aria-live="polite">{t('ai.working')} {elapsed}s</span>}
  <textarea aria-label={t('ai.request')} placeholder={t('ai.request')} value={request} onChange={e=>setRequest(e.target.value)} onKeyDown={e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();send();}if(e.key==='Escape')controller.stop();}}/>
  <label><input type="checkbox" checked={selection} onChange={e=>setSelection(e.target.checked)}/>{t('ai.selection')}</label>

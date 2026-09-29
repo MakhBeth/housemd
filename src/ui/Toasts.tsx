@@ -5,39 +5,46 @@ import type { Toast } from '../workspace/toasts';
 import { Icon } from './Icon';
 import styles from './Toasts.module.css';
 
+/** Un toast già tradotto: il Workspace e il controller AI hanno codici diversi, qui arriva solo testo. */
+export interface ToastItem {
+  key: string;
+  kind: Toast['kind'];
+  text: string;
+}
+
 interface Props {
-  toasts: Toast[];
-  onDismiss: (id: number) => void;
+  items: ToastItem[];
+  onDismiss: (key: string) => void;
 }
 
 const INFO_TIMEOUT_MS = 6000;
 /** `popover` come attributo: resta visibile finché non lo chiudiamo noi (popover="manual"). */
 const manualPopover = { popover: 'manual' } as Record<string, string>;
 
-export function Toasts({ toasts, onDismiss }: Props) {
+export function Toasts({ items, onDismiss }: Props) {
   const t = useT();
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const el = ref.current!;
     const open = el.matches(':popover-open');
-    if (toasts.length > 0 && !open) el.showPopover();
-    if (toasts.length === 0 && open) el.hidePopover();
-  }, [toasts.length]);
+    if (items.length > 0 && !open) el.showPopover();
+    if (items.length === 0 && open) el.hidePopover();
+  }, [items.length]);
 
   useEffect(() => {
-    const timers = toasts
-      .filter((toast) => toast.kind === 'info')
-      .map((toast) => setTimeout(() => onDismiss(toast.id), INFO_TIMEOUT_MS));
+    const timers = items
+      .filter((item) => item.kind === 'info')
+      .map((item) => setTimeout(() => onDismiss(item.key), INFO_TIMEOUT_MS));
     return () => timers.forEach(clearTimeout);
-  }, [toasts, onDismiss]);
+  }, [items, onDismiss]);
 
   return (
     <div ref={ref} {...manualPopover} className={styles.toasts}>
-      {toasts.map((toast) => (
-        <div key={toast.id} className={styles.toast} data-kind={toast.kind} role={toast.kind === 'error' ? 'alert' : 'status'}>
-          <p>{t(`toast.${toast.code}`, toast.params)}</p>
-          <button aria-label={t('toast.close')} title={t('toast.close')} onClick={() => onDismiss(toast.id)}>
+      {items.map((item) => (
+        <div key={item.key} className={styles.toast} data-kind={item.kind} role={item.kind === 'error' ? 'alert' : 'status'}>
+          <p>{item.text}</p>
+          <button aria-label={t('toast.close')} title={t('toast.close')} onClick={() => onDismiss(item.key)}>
             <Icon name="close" size={16} />
           </button>
         </div>

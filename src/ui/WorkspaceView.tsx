@@ -1,6 +1,6 @@
 import { useAiController } from './ai/useAiController';
+import { useAiState } from './ai/useAiState';
 import { createDocSession } from '../editor/docSession';
-import { AiNotice } from './ai/AiNotice';
 import { AiSidebar } from './ai/AiSidebar';
 import { ReviewView } from './ai/ReviewView';
 import { useAiSync } from './ai/settings/AiSyncSection';
@@ -28,7 +28,7 @@ import { SearchPanel } from './SearchPanel';
 import { SettingsDialog } from './SettingsDialog';
 import { shortcutFor } from './shortcuts';
 import { ThemeSwitcher } from './ThemeSwitcher';
-import { Toasts } from './Toasts';
+import { Toasts, type ToastItem } from './Toasts';
 import { buildTree, type TreeNode } from './tree';
 import { useWorkspaceState } from './useWorkspace';
 import styles from './WorkspaceView.module.css';
@@ -73,6 +73,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
   const state = useWorkspaceState(workspace);
   const doc = state.doc;
   const ai = useAiController(workspace);
+  const aiState = useAiState(ai);
   const [sidebarView, setSidebarView] = useState<'files' | 'ai'>(() => readPref('sidebarView', 'files'));
   const [aiWidth, setAiWidth] = useState(() => Math.min(640, Math.max(300, readPref('aiSidebarWidth', 380))));
   const session = useMemo(() => createDocSession(`${doc?.path}#${doc?.revision}`, doc?.text || ''), [doc?.path, doc?.revision]);
@@ -103,7 +104,21 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
   const files = useMemo(() => state.entries.filter((e) => e.kind === 'file').map((e) => e.path), [state.entries]);
   const getDocs = useCallback(() => workspace.search.titles(), [workspace]);
   const readBlob = useCallback((path: string) => workspace.readBlob(path), [workspace]);
-  const dismissToast = useCallback((id: number) => workspace.dismissToast(id), [workspace]);
+  const toastItems = useMemo<ToastItem[]>(
+    () => [
+      ...state.toasts.map((toast) => ({ key: `ws-${toast.id}`, kind: toast.kind, text: t(`toast.${toast.code}`, toast.params) })),
+      // Errori AI non legati a un messaggio (sync, chiave, selezione persa): stesso contenitore dei toast.
+      ...(aiState?.error ? [{ key: 'ai-error', kind: 'error' as const, text: t(`ai.error.${aiState.error}` as MessageKey) }] : []),
+    ],
+    [state.toasts, aiState?.error, t],
+  );
+  const dismissToast = useCallback(
+    (key: string) => {
+      if (key === 'ai-error') ai?.clearError();
+      else workspace.dismissToast(Number(key.slice('ws-'.length)));
+    },
+    [workspace, ai],
+  );
 
   const drafts = useMemo(() => new Set(state.drafts), [state.drafts]);
 
@@ -559,8 +574,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
         />
       )}
 
-      {ai && <AiNotice controller={ai}/>}
-      <Toasts toasts={state.toasts} onDismiss={dismissToast} />
+      <Toasts items={toastItems} onDismiss={dismissToast} />
     </div>
   );
 }
