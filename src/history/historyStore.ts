@@ -3,8 +3,8 @@ import { movedPath } from '../lib/paths';
 import { toPrune } from './policy';
 
 /** Perché è stato preso lo snapshot. */
-export type SnapshotReason = 'save' | 'before-reload' | 'before-overwrite' | 'before-restore';
-export const SNAPSHOT_REASONS: readonly SnapshotReason[] = ['save', 'before-reload', 'before-overwrite', 'before-restore'];
+export type SnapshotReason = 'save' | 'before-reload' | 'before-overwrite' | 'before-restore' | 'before-ai';
+export const SNAPSHOT_REASONS: readonly SnapshotReason[] = ['save', 'before-reload', 'before-overwrite', 'before-restore', 'before-ai'];
 
 export interface Snapshot {
   id: number;

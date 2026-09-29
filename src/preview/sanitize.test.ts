@@ -67,7 +67,10 @@ test('with a Sanitizer global, setHTML gets a sanitizer built from the default c
       'remove style',
       'remove form',
       'attr class',
-      'el img[src,alt,title,width,height]',
+      'attr data-ai-image',
+      'attr data-local-src',
+      'el button[type,data-ai-image]',
+      'el img[src,alt,title,width,height,data-local-src]',
       'el details',
       'el summary',
     ]);

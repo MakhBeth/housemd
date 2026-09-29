@@ -21,3 +21,10 @@ File System Access API) si usano **senza polyfill e senza fallback**. Unica ecce
 - Le operazioni del `Workspace` che toccano file passano dalla coda `runExclusive`; dentro la coda si
   chiamano solo le versioni interne `do…` (chiamare quelle pubbliche è un deadlock).
 - Nessun `await` della cronologia nei percorsi che cambiano il documento (snapshot fire-and-forget).
+
+## AI
+
+- Solo `src/ai/providers/*` fanno richieste di rete verso i modelli.
+- Le chiavi API stanno solo nello store `aiSecrets` o in memoria: mai in localStorage, config, sync, log o toast. Sono legate a provider e origine.
+- Il file di sync si scrive solo dopo un backup verificato (§8.4 della spec AI).
+- Risposte e proposte sono non fidate: nessun HTML grezzo né nuove risorse remote caricate senza clic esplicito.

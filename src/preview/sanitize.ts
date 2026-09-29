@@ -8,6 +8,7 @@ export const PURIFY_CONFIG = {
   USE_PROFILES: { html: true },
   FORBID_TAGS: ['style', 'form'],
   ALLOW_DATA_ATTR: false,
+  ADD_ATTR: ['data-ai-image', 'data-local-src'],
 };
 
 export interface Purifier {
@@ -47,7 +48,10 @@ function getSanitizer(): SanitizerLike | null {
     s.removeElement('style');
     s.removeElement('form');
     s.allowAttribute('class');
-    s.allowElement({ name: 'img', attributes: ['src', 'alt', 'title', 'width', 'height'] });
+    s.allowAttribute('data-ai-image');
+    s.allowAttribute('data-local-src');
+    s.allowElement({ name: 'button', attributes: ['type', 'data-ai-image'] });
+    s.allowElement({ name: 'img', attributes: ['src', 'alt', 'title', 'width', 'height', 'data-local-src'] });
     s.allowElement('details');
     s.allowElement('summary');
     cached = { ctor, sanitizer: s };

@@ -1,0 +1,38 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import 'fake-indexeddb/auto';
+import { createMemoryAiStores } from './stores';
+import { createIdbAiStores } from './idbStores';
+import { openDb, request, transactionDone } from '../lib/db';
+import type { ModelProfile } from './types';
+export const profile = (id = 'p', updatedAt = 0): ModelProfile => ({ id, name: id, kind: 'ollama', model: 'm', baseUrl: 'http://localhost:11434', params: {}, secretId: null, contextTokens: null, updatedAt, updatedBy: 'seed' });
+for (const kind of ['memory', 'idb']) test(`${kind}: monotonia, segreti locali, tombstone e confronto prima di importare`, async () => {
+  const store = kind === 'memory' ? createMemoryAiStores({ now: () => 10, writerId: 'w' }) : await createIdbAiStores({ now: () => 10, dbName: crypto.randomUUID() });
+  const p = await store.saveProfile({ ...profile('p', 100), secretId: 's' });
+  assert.equal(p.updatedAt, 101);
+  await store.saveSecret({ id: 's', value: 'private', binding: { kind: 'ollama', origin: 'http://localhost:11434' } });
+  const snapshot = await store.snapshot();
+  const edited = await store.saveProfile({ ...p, name: 'edited' });
+  assert.equal(edited.updatedAt, 102);
+  const remote = structuredClone(snapshot); remote.profiles[0].name = 'remote'; remote.profiles[0].updatedAt = 999;
+  assert.equal(await store.applySnapshot(snapshot, remote), false);
+  assert.equal((await store.load()).profiles[0].name, 'edited');
+  assert.equal(await store.compareAndReplaceSnapshot(snapshot, remote), false);
+  await store.replaceSnapshot(remote);
+  assert.equal((await store.load()).profiles[0].secretId, 's');
+  assert.equal((await store.getSecret('s'))?.value, 'private');
+  await store.deleteProfile('p');
+  assert.equal((await store.snapshot()).tombstones[0].deletedAt, 1000);
+  assert.equal((await store.load()).profiles.length, 0);
+});
+test('upgrade v2 mantiene workspace, buffer e cronologia', async () => {
+  const name = crypto.randomUUID();
+  const old = await new Promise<IDBDatabase>((resolve, reject) => { const r = indexedDB.open(name, 2); r.onupgradeneeded = () => { r.result.createObjectStore('workspace'); r.result.createObjectStore('buffers'); r.result.createObjectStore('history', { keyPath: 'id', autoIncrement: true }); }; r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
+  const tx = old.transaction(['workspace', 'buffers', 'history'], 'readwrite'); const done = transactionDone(tx);
+  tx.objectStore('workspace').put('w', 'one'); tx.objectStore('buffers').put('buffer', 'one'); tx.objectStore('history').put({ id: 1, text: 'history' }); await done; old.close();
+  const db = await openDb(name); assert.equal(db.version, 3);
+  const read = db.transaction(['workspace', 'buffers', 'history']);
+  assert.equal(await request(read.objectStore('workspace').get('one')), 'w');
+  assert.equal(await request(read.objectStore('buffers').get('one')), 'buffer');
+  assert.equal((await request(read.objectStore('history').get(1))).text, 'history'); db.close();
+});

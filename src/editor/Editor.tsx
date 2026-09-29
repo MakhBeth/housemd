@@ -1,25 +1,25 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef, type MutableRefObject } from 'react';
-import { basicSetup } from 'codemirror';
-import { Compartment, EditorState } from '@codemirror/state';
+import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
+import { EditorState, type ChangeDesc } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
-import { markdown } from '@codemirror/lang-markdown';
-import { autocompletion } from '@codemirror/autocomplete';
-import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
-import { tags } from '@lezer/highlight';
-
 import type { DocTitle } from '../search/searchIndex';
-import { imageFiles, insertImageLinks } from './images';
-import { initialRestoreSeq, pendingRestore, type RestoreCommand } from './restoreCommand';
-import { wikiCompletionSource } from './wikiCompletion';
+import { initialRestoreSeq, type RestoreCommand } from './restoreCommand';
+import { applyDocRestore } from './useDocBinding';
+import { docExtensions, editable, readOnlyExtensions } from './docExtensions';
+import { docStateConfig, saveDocSession, type DocSession } from './docSession';
 import styles from './Editor.module.css';
 
 export interface EditorHandle {
   scrollToLine(line: number): void;
   focus(): void;
+  getView(): EditorView | null;
+  replace(text: string): void;
 }
 
 export interface EditorProps {
   text: string;
+  session?: DocSession;
+  onTransactions?: (changes: ChangeDesc, texts: { before: string; after: string }) => void;
+  canChange?: (changes: ChangeDesc) => boolean;
   /** Quando cambia, il contenuto viene sostituito e la cronologia azzerata (altro file, ricarica). */
   resetKey: string;
   getDocs: () => DocTitle[];
@@ -31,86 +31,6 @@ export interface EditorProps {
   restore?: RestoreCommand | null;
   /** Sola lettura (aggiornamento dell'app in corso). */
   readOnly?: boolean;
-}
-
-type Callbacks = MutableRefObject<EditorProps>;
-
-const theme = EditorView.theme({
-  '&': { height: '100%', backgroundColor: 'var(--c-surface)', color: 'var(--c-text)' },
-  '&.cm-focused': { outline: 'none' },
-  '.cm-scroller': { fontFamily: 'var(--font-mono)', lineHeight: '1.65', fontSize: '14px' },
-  '.cm-content': { padding: '20px 0 40vh', caretColor: 'var(--c-text)' },
-  '.cm-line': { padding: '0 24px' },
-  '.cm-gutters': { backgroundColor: 'var(--c-surface)', color: 'var(--c-muted)', border: 'none' },
-  '.cm-activeLine, .cm-activeLineGutter': { backgroundColor: 'color-mix(in srgb, var(--c-accent-soft) 35%, transparent)' },
-  '.cm-cursor': { borderLeftColor: 'var(--c-text)' },
-  '&.cm-focused .cm-selectionBackground, .cm-selectionBackground': {
-    backgroundColor: 'color-mix(in srgb, var(--c-accent) 25%, transparent) !important',
-  },
-  '.cm-tooltip': { backgroundColor: 'var(--c-surface)', border: '1px solid var(--c-border)', color: 'var(--c-text)' },
-});
-
-const highlight = HighlightStyle.define([
-  { tag: tags.heading, fontWeight: '700' },
-  { tag: tags.heading1, fontSize: '1.25em' },
-  { tag: tags.heading2, fontSize: '1.12em' },
-  { tag: tags.emphasis, fontStyle: 'italic' },
-  { tag: tags.strong, fontWeight: '700' },
-  { tag: tags.strikethrough, textDecoration: 'line-through' },
-  { tag: [tags.link, tags.url], color: 'var(--c-accent)' },
-  { tag: tags.monospace, color: 'var(--c-accent)' },
-  { tag: tags.quote, color: 'var(--c-muted)', fontStyle: 'italic' },
-  { tag: [tags.processingInstruction, tags.meta, tags.contentSeparator], color: 'var(--c-muted)' },
-]);
-
-const editable = new Compartment();
-const readOnlyExtensions = (readOnly: boolean) => [EditorState.readOnly.of(readOnly), EditorView.editable.of(!readOnly)];
-
-function insertImages(view: EditorView, files: File[], pos: number, callbacks: Callbacks): void {
-  // insertImageLinks legge il resetKey subito (al momento dell'incolla/trascinamento) e dopo ogni
-  // salvataggio lo riconfronta: se l'editor è passato a un altro documento, non lo tocca.
-  void insertImageLinks(files, pos, (file) => callbacks.current.onImage(file), {
-    key: () => callbacks.current.resetKey,
-    length: () => view.state.doc.length,
-    insert(at, insert) {
-      view.dispatch({ changes: { from: at, insert }, selection: { anchor: at + insert.length } });
-    },
-  });
-}
-
-function createState(text: string, callbacks: Callbacks): EditorState {
-  return EditorState.create({
-    doc: text,
-    extensions: [
-      basicSetup,
-      markdown(),
-      syntaxHighlighting(highlight),
-      EditorView.lineWrapping,
-      theme,
-      editable.of(readOnlyExtensions(callbacks.current.readOnly ?? false)),
-      autocompletion({ override: [wikiCompletionSource(() => callbacks.current.getDocs())] }),
-      EditorView.updateListener.of((update) => {
-        if (update.docChanged) callbacks.current.onChange(update.state.doc.toString());
-      }),
-      EditorView.domEventHandlers({
-        paste(event, view) {
-          const files = imageFiles(event.clipboardData?.files);
-          if (files.length === 0) return false;
-          event.preventDefault();
-          insertImages(view, files, view.state.selection.main.head, callbacks);
-          return true;
-        },
-        drop(event, view) {
-          const files = imageFiles(event.dataTransfer?.files);
-          if (files.length === 0) return false;
-          event.preventDefault();
-          const pos = view.posAtCoords({ x: event.clientX, y: event.clientY }) ?? view.state.selection.main.head;
-          insertImages(view, files, pos, callbacks);
-          return true;
-        },
-      }),
-    ],
-  });
 }
 
 export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(props, ref) {
@@ -136,6 +56,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
     view.scrollDOM.addEventListener('scroll', onScroll, { passive: true });
     return () => {
       view.scrollDOM.removeEventListener('scroll', onScroll);
+      if (callbacks.current.session) saveDocSession(callbacks.current.session, view.state);
       view.destroy();
       viewRef.current = null;
     };
@@ -143,17 +64,15 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
 
   // Il testo viene riletto dalle props solo quando cambia resetKey: il resto arriva dall'editor stesso.
   useEffect(() => {
-    viewRef.current?.setState(createState(props.text, callbacks));
+    const session = props.session;
+    if (session && session.resetKey !== props.resetKey) { session.resetKey = props.resetKey; session.textLf = props.text; session.history = undefined; session.selection = undefined; }
+    viewRef.current?.setState(EditorState.create(session ? docStateConfig(session, docExtensions(callbacks)) : { doc: props.text, extensions: docExtensions(callbacks) }));
   }, [props.resetKey]);
 
   // Non passa da resetKey: la sostituzione deve restare nella cronologia di annullamento. Una volta sola.
   useEffect(() => {
     const view = viewRef.current;
-    const restore = pendingRestore(appliedRestore.current, props.restore);
-    if (!view || !restore) return;
-    appliedRestore.current = restore.seq;
-    if (view.state.doc.toString() === restore.textLf) return;
-    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: restore.textLf }, userEvent: 'input.restore' });
+    if (view) appliedRestore.current = applyDocRestore(view, appliedRestore.current, props.restore);
   }, [props.restore?.seq]);
 
   useEffect(() => {
@@ -171,6 +90,8 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
         suppressUntil.current = performance.now() + 150;
         view.scrollDOM.scrollTop = block.top + (line - Math.floor(line)) * block.height;
       },
+      getView() { return viewRef.current; },
+      replace(text) { const view = viewRef.current; if (view) view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text }, userEvent: 'input.ai' }); },
       focus() {
         viewRef.current?.focus();
       },

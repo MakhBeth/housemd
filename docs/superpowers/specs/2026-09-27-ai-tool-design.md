@@ -6,7 +6,8 @@ v1.1 completata e unita a `main`: coda `runExclusive`, `generation`, cronologia 
 impostazioni, DB IndexedDB v2, flusso di aggiornamento PWA.
 Riferimenti: `MakhBeth/tg-digest` (selezione dei modelli, bridge Claude Code) e la sync su file di Pivella
 (`pivella-sync.json`, `~/Projects/pivella/docs/fattibilita-mcp.md` §13.2–13.3).
-Stato: **rivista dopo le risposte di Davide** (§1), da approvare.
+Stato: **implementazione autorizzata da Davide il 28/9/2026**, presente sul branch locale `feat/ai-tool`;
+verifiche e collaudi esterni residui nel registro di implementazione e nel piano collegato.
 
 ## Obiettivo
 
@@ -1131,3 +1132,16 @@ dedicato come in v1.1), README (Ollama, LM Studio, bridge, chiavi, sync), collau
   fanno da rete.
 - **Crescita di `WorkspaceView.tsx` e `SettingsDialog.tsx`:** la modalità AI entra come componenti separati
   (`AiSidebar`, `ReviewView`, sezioni sotto `ui/ai/settings/`), senza logica nuova in quei file.
+
+## Registro di implementazione (28 settembre 2026)
+
+Implementazione autorizzata da Davide su `feat/ai-tool`, da `main` v1.1 (`6f9a568`). Piano e stato delle verifiche:
+`../plans/2026-09-28-ai-tool-implementation.md`.
+
+Fase 0: baseline locale 342 test, lint e build passati. Nessuna chiamata a provider a pagamento.
+§6.4/§6.5: CORS dall'origine pubblicata, autenticazione Claude reale, assenza di persistenza CLI reale e
+compatibilità dei servizi cloud **non verificati**; i test usano fetch/SDK e binario Claude simulati.
+L'origine pubblicata non è dichiarata nel repository: il bridge predefinito ammette solo
+`http://localhost:5173`; `ALLOWED_ORIGINS` va impostata con le origini effettive prima dell'uso da produzione.
+Il comportamento locale della UI è verificato in Chromium headless con provider/workspace finti, compresi
+undo dopo cambio vista e mancato caricamento di risorse remote non autorizzate.

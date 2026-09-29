@@ -7,6 +7,8 @@ import styles from './Preview.module.css';
 
 interface Props {
   frontmatter: Frontmatter;
+  blockedLabel?: (src: string) => string | null;
+  onAllowImage?: (src: string) => void;
   resolveImage: (src: string) => Promise<string | null>;
 }
 
@@ -18,7 +20,7 @@ function formatCardDate(value: string, locale: Locale): string {
     : date.toLocaleDateString(locale, { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
-export function FrontmatterCard({ frontmatter, resolveImage }: Props) {
+export function FrontmatterCard({ frontmatter, resolveImage, blockedLabel, onAllowImage }: Props) {
   const { t, locale } = useI18n();
   const card = frontmatter.data ? toCard(frontmatter.data) : null;
   const image = card?.image ?? null;
@@ -44,6 +46,7 @@ export function FrontmatterCard({ frontmatter, resolveImage }: Props) {
 
   return (
     <header className={styles.card}>
+      {image && blockedLabel?.(image) && <button type="button" onClick={() => onAllowImage?.(image)}>{blockedLabel(image)}</button>}
       {imageUrl && <img className={styles.cardImage} src={imageUrl} alt="" />}
       {card.title && <p className={styles.cardTitle}>{card.title}</p>}
       {(card.date || card.tags.length > 0) && (

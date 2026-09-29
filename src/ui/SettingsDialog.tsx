@@ -1,3 +1,7 @@
+import type { AiController } from '../ai/aiController';
+import { AiProfilesSection } from './ai/settings/AiProfilesSection';
+import { AiPresetsSection } from './ai/settings/AiPresetsSection';
+import { AiSyncSection, type SyncBinding } from './ai/settings/AiSyncSection';
 import { useEffect, useRef, useState } from 'react';
 
 import { LOCALE_NAMES, SUPPORTED_LOCALES, type Locale } from '../i18n/i18n';
@@ -7,6 +11,8 @@ import { AUTOSAVE_MODES, clampDelay, MAX_DELAY_MS, MIN_DELAY_MS, type AutosaveSe
 import styles from './Dialog.module.css';
 
 interface Props {
+  ai?: AiController | null;
+  syncBinding?: SyncBinding;
   theme: ThemePref;
   onTheme: (next: ThemePref) => void;
   autosave: AutosaveSettings;
@@ -17,7 +23,7 @@ interface Props {
 
 const lightDismiss = { closedby: 'any' } as Record<string, string>;
 
-export function SettingsDialog({ theme, onTheme, autosave, onAutosave, onSaveAll, onClose }: Props) {
+export function SettingsDialog({ theme, onTheme, autosave, onAutosave, onSaveAll, onClose, ai, syncBinding }: Props) {
   const { t, locale, setLocale } = useI18n();
   const ref = useRef<HTMLDialogElement>(null);
   const [delay, setDelay] = useState(String(autosave.delayMs));
@@ -109,6 +115,7 @@ export function SettingsDialog({ theme, onTheme, autosave, onAutosave, onSaveAll
         )}
       </fieldset>
 
+      {ai && <details><summary>{t('ai.title')}</summary><AiProfilesSection controller={ai}/><AiPresetsSection controller={ai}/>{syncBinding && <AiSyncSection controller={ai} binding={syncBinding}/>}</details>}
       <div className={styles.actions}>
         <button type="button" className={styles.secondary} onClick={onSaveAll}>
           {t('settings.saveAll')}

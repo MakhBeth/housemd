@@ -1,0 +1,8 @@
+import { useEffect, useRef } from 'react';
+import { safeRender } from '../../ai/safeRender';
+import { setSafeHTML } from '../../preview/sanitize';
+import type { ChatMessage } from '../../ai/types';
+import type { MessageKey } from '../../i18n/messages';
+import { useT } from '../../i18n/I18nProvider';
+function Markdown({text}:{text:string}){const ref=useRef<HTMLDivElement>(null);useEffect(()=>{const frame=requestAnimationFrame(()=>{if(ref.current)void setSafeHTML(ref.current,safeRender(text));});return()=>cancelAnimationFrame(frame);},[text]);return <div ref={ref}/>;}
+export function ChatLog({messages,onOpen,onRetry}:{messages:ChatMessage[];onOpen:(path:string)=>void;onRetry:(id:string,remove?:boolean)=>void}){const t=useT();return <div className="ai-chat" role="log">{messages.map((m,i)=><article key={m.id}>{m.docPath&&m.docPath!==messages[i-1]?.docPath&&<button onClick={()=>onOpen(m.docPath!)}>{m.docPath}</button>}<strong>{t(m.role==='user'?'ai.you':'ai.assistant')}</strong>{m.role==='assistant'?<Markdown text={m.text|| (m.status==='done'?t('ai.proposalReady'):t('ai.working'))}/>:<p>{m.text}</p>}{m.summary&&<p>{m.summary.parts} · {m.summary.originalWords} → {m.summary.proposalWords} {t('ai.words')}</p>}<small>{m.profileName} {m.model} {m.usage?.inputTokens!==undefined?`${m.usage.inputTokens} → ${m.usage.outputTokens??0}`:''}</small>{m.error&&<p>{t(`ai.error.${m.error}` as MessageKey)}</p>}{m.warnings?.map((w,j)=><p key={j}>{t(`ai.warning.${w.code}` as MessageKey)}</p>)}{m.status==='error'&&<button onClick={()=>onRetry(m.id)}>{t('ai.retry')}</button>}{m.error==='paramRejected'&&<button onClick={()=>onRetry(m.id,true)}>{t('ai.reset')} · {t('ai.retry')}</button>}</article>)}</div>;}

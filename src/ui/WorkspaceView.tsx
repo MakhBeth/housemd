@@ -1,3 +1,10 @@
+import { useAiController } from './ai/useAiController';
+import { createDocSession } from '../editor/docSession';
+import { AiNotice } from './ai/AiNotice';
+import { AiSidebar } from './ai/AiSidebar';
+import { ReviewView } from './ai/ReviewView';
+import { useAiSync } from './ai/settings/AiSyncSection';
+import './ai/ai.css';
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 
 import { Editor, type EditorHandle } from '../editor/Editor';
@@ -65,6 +72,13 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
   const { t, locale } = useI18n();
   const state = useWorkspaceState(workspace);
   const doc = state.doc;
+  const ai = useAiController(workspace);
+  const [sidebarView, setSidebarView] = useState<'files' | 'ai'>(() => readPref('sidebarView', 'files'));
+  const [aiWidth, setAiWidth] = useState(() => Math.min(640, Math.max(300, readPref('aiSidebarWidth', 380))));
+  const session = useMemo(() => createDocSession(`${doc?.path}#${doc?.revision}`, doc?.text || ''), [doc?.path, doc?.revision]);
+  const syncBinding = useAiSync(ai);
+  const switchSidebar = (view: 'files' | 'ai') => { setSidebarView(view); writePref('sidebarView', view); setSidebarOpen(true); };
+  useEffect(() => { if (doc) ai?.documentChanged(doc.path, { iterChangedRanges: () => {}, mapPos: (n: number) => n } as never, true); }, [doc?.path, doc?.revision]);
   const [mode, setMode] = useState<Mode>(() => readPref<Mode>('mode', 'split'));
   const [sidebarOpen, setSidebarOpen] = useState(() => readPref('sidebarOpen', true));
   const [sidebarWidth, setSidebarWidth] = useState(() => clampWidth(readPref('sidebarWidth', 280)));
@@ -180,9 +194,9 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
       // Reload protetto dell'aggiornamento PWA: solo quando beginUpdate ha già reso tutto durevole
       // niente "Esci dal sito?" (annullarlo lascerebbe l'app bloccata in sola lettura). Mentre il
       // documento si sta ancora mettendo al sicuro l'avviso resta: il testo è solo in memoria.
-      if (workspace.getState().updateReady) return;
+      if (workspace.getState().updateReady && !ai?.hasPendingWork()) return;
       const { doc: current, drafts: pending } = workspace.getState();
-      if ((current && current.saveState !== 'saved') || pending.length > 0) {
+      if ((current && current.saveState !== 'saved') || pending.length > 0 || ai?.hasPendingWork()) {
         void workspace.blur();
         event.preventDefault();
       }
@@ -197,11 +211,12 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
       document.removeEventListener('visibilitychange', onVisibility);
       window.removeEventListener('beforeunload', onBeforeUnload);
     };
-  }, [workspace]);
+  }, [workspace, ai]);
 
   // Scorciatoie globali: vedi src/ui/shortcuts.ts.
   useEffect(() => {
     const onKey = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape' && sidebarView === 'ai') ai?.stop();
       const shortcut = shortcutFor(event);
       if (!shortcut) return;
       event.preventDefault();
@@ -213,8 +228,12 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
           void workspace.saveAll();
           break;
         case 'search':
+          switchSidebar('files');
           setSidebar(true);
           requestAnimationFrame(() => searchRef.current?.focus());
+          break;
+        case 'toggleAi':
+          switchSidebar(sidebarView === 'ai' ? 'files' : 'ai');
           break;
         case 'toggleSidebar':
           setSidebar(!sidebarOpen);
@@ -226,22 +245,22 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [workspace, mode, changeMode, setSidebar, sidebarOpen]);
+  }, [workspace, mode, changeMode, setSidebar, sidebarOpen, sidebarView, ai]);
 
   const onResizeStart = (event: PointerEvent<HTMLDivElement>) => {
     const target = event.currentTarget;
     target.setPointerCapture(event.pointerId);
-    let width = sidebarWidth;
+    let width = sidebarView === 'ai' ? aiWidth : sidebarWidth;
     const move = (e: globalThis.PointerEvent) => {
-      width = clampWidth(e.clientX);
-      setSidebarWidth(width);
+      width = sidebarView === 'ai' ? Math.min(640, Math.max(300, e.clientX)) : clampWidth(e.clientX);
+      if (sidebarView === 'ai') setAiWidth(width); else setSidebarWidth(width);
     };
     const up = () => {
       target.removeEventListener('pointermove', move);
       target.removeEventListener('pointerup', up);
       target.removeEventListener('pointercancel', up);
       target.removeEventListener('lostpointercapture', up);
-      writePref('sidebarWidth', width);
+      writePref(sidebarView === 'ai' ? 'aiSidebarWidth' : 'sidebarWidth', width);
     };
     target.addEventListener('pointermove', move);
     target.addEventListener('pointerup', up);
@@ -252,9 +271,9 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
   const onResizeKey = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
     event.preventDefault();
-    const next = clampWidth(sidebarWidth + (event.key === 'ArrowLeft' ? -16 : 16));
-    setSidebarWidth(next);
-    writePref('sidebarWidth', next);
+    const next = sidebarView === 'ai' ? Math.min(640, Math.max(300, aiWidth + (event.key === 'ArrowLeft' ? -16 : 16))) : clampWidth(sidebarWidth + (event.key === 'ArrowLeft' ? -16 : 16));
+    if (sidebarView === 'ai') setAiWidth(next); else setSidebarWidth(next);
+    writePref(sidebarView === 'ai' ? 'aiSidebarWidth' : 'sidebarWidth', next);
   };
 
   const onTreeAction = (action: TreeAction, node: TreeNode | null) => {
@@ -283,11 +302,13 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
   return (
     <div
       className={styles.layout}
-      style={{ gridTemplateColumns: sidebarOpen ? `${sidebarWidth}px 5px minmax(0, 1fr)` : 'minmax(0, 1fr)' }}
+      style={{ gridTemplateColumns: sidebarOpen ? `${sidebarView === 'ai' ? aiWidth : sidebarWidth}px 5px minmax(0, 1fr)` : 'minmax(0, 1fr)' }}
     >
       {sidebarOpen && (
         <>
           <aside className={styles.sidebar}>
+            <div className="ai-bar">{(['files', 'ai'] as const).map(v => <button key={v} aria-pressed={sidebarView === v} onClick={() => switchSidebar(v)}>{t(v === 'ai' ? 'ai.title' : 'ai.files')}</button>)}</div>
+            {sidebarView === 'ai' && ai ? <AiSidebar syncNeedsPermission={!!syncBinding.handle&&!syncBinding.permission} controller={ai} onSettings={() => setSettingsOpen(true)} getSelection={() => { const selected = session.selection?.main; return selected && !selected.empty ? { from: selected.from, to: selected.to, originalText: session.textLf.slice(selected.from, selected.to), status: 'valid' } : undefined; }} /> : <>
             <div className={styles.sidebarHeader}>
               <button className={styles.iconButton} onClick={() => setSidebar(false)} aria-label={t('sidebar.hide')} title={t('sidebar.hide')}>
                 <Icon name="sidebarClose" />
@@ -320,15 +341,16 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
               </section>
             )}
             <FileTree nodes={tree} openPath={doc?.path ?? null} drafts={drafts} onOpen={(path) => openFile(path)} onAction={onTreeAction} />
+            </>}
           </aside>
           <div
             className={styles.resizer}
             role="separator"
             aria-orientation="vertical"
             aria-label={t('sidebar.resize')}
-            aria-valuenow={sidebarWidth}
-            aria-valuemin={MIN_SIDEBAR}
-            aria-valuemax={MAX_SIDEBAR}
+            aria-valuenow={sidebarView === 'ai' ? aiWidth : sidebarWidth}
+            aria-valuemin={sidebarView === 'ai' ? 300 : MIN_SIDEBAR}
+            aria-valuemax={sidebarView === 'ai' ? 640 : MAX_SIDEBAR}
             tabIndex={0}
             onPointerDown={onResizeStart}
             onKeyDown={onResizeKey}
@@ -342,6 +364,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
             <button className={`${styles.iconButton} tooltip`} onClick={() => setSidebar(!sidebarOpen)} aria-pressed={sidebarOpen} aria-label={sidebarLabel} data-tooltip={sidebarLabel}>
               <Icon name={sidebarOpen ? 'sidebarClose' : 'sidebarOpen'} />
             </button>
+            <button aria-pressed={sidebarView === 'ai'} onClick={() => switchSidebar(sidebarView === 'ai' ? 'files' : 'ai')}>{t('ai.title')}</button>
             <span className={styles.path}>{doc?.path ?? t('toolbar.noFile')}</span>
           </div>
           <div className={styles.modes} role="group" aria-label={t('toolbar.modes')}>
@@ -370,7 +393,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
             </span>
             <button
               className={`${styles.iconButton} tooltip`}
-              onClick={() => setHistoryOpen(!historyOpen)}
+              onClick={() => { if (sidebarView === 'ai') switchSidebar('files'); setHistoryOpen(!historyOpen); }}
               aria-pressed={historyOpen}
               disabled={!doc}
               aria-label={t('toolbar.history')}
@@ -395,12 +418,14 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
           />
         )}
 
-        {doc ? (
+        {doc && sidebarView === 'ai' && ai ? <ReviewView controller={ai} editor={{ text: doc.text, resetKey: `${doc.path}#${doc.revision}`, session, restore: doc.restore, readOnly: state.updating, getDocs, onChange: text => workspace.edit(text), onTransactions: (changes, texts) => ai.documentChanged(doc.path, changes, false, texts), onImage: file => workspace.saveImage(file, file.name), onTopLine: () => {} }} previewProps={{ text: doc.text, path: doc.path, files, config: state.config, readBlob, highlight: NO_TERMS, onTopLine: () => {}, onOpenWiki: target => void workspace.followWikiLink(target), onOpenPath: path => void openFile(path) }} /> : doc ? (
           <div className={styles.panes} data-mode={historyOpen && mode === 'editor' ? 'split' : mode}>
             {mode !== 'preview' && (
               <section className={styles.pane} aria-label={t('pane.editor')}>
                 <Editor
                   ref={editorRef}
+                  session={session}
+                  onTransactions={(changes, texts) => ai?.documentChanged(doc.path, changes, false, texts)}
                   text={doc.text}
                   resetKey={`${doc.path}#${doc.revision}`}
                   restore={doc.restore}
@@ -509,6 +534,8 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
 
       {settingsOpen && (
         <SettingsDialog
+          ai={ai}
+          syncBinding={syncBinding}
           theme={theme}
           onTheme={setTheme}
           autosave={state.autosave}
@@ -532,6 +559,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
         />
       )}
 
+      {ai && <AiNotice controller={ai}/>}
       <Toasts toasts={state.toasts} onDismiss={dismissToast} />
     </div>
   );
