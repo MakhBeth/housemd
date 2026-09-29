@@ -27,6 +27,8 @@ export interface EditorProps {
   onImage: (file: File) => Promise<string | null>;
   /** Riga (0-based, frazionaria) in cima alla vista, per lo scroll sincronizzato. */
   onTopLine: (line: number) => void;
+  /** Selezione principale cambiata (null se vuota): usata dal chip della selezione del composer AI. */
+  onSelection?: (range: { from: number; to: number } | null) => void;
   /** Ripristino dalla cronologia: sostituisce il testo con una transazione, quindi annullabile con Ctrl+Z. */
   restore?: RestoreCommand | null;
   /** Sola lettura (aggiornamento dell'app in corso). */

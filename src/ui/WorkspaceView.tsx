@@ -1,6 +1,7 @@
 import { useAiController } from './ai/useAiController';
 import { useAiState } from './ai/useAiState';
 import { createDocSession } from '../editor/docSession';
+import { sameRange, type TextRange } from '../ai/selectionChip';
 import { AiSidebar } from './ai/AiSidebar';
 import { ReviewView } from './ai/ReviewView';
 import { useAiSync } from './ai/settings/AiSyncSection';
@@ -77,6 +78,11 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
   const [sidebarView, setSidebarView] = useState<'files' | 'ai'>(() => readPref('sidebarView', 'files'));
   const [aiWidth, setAiWidth] = useState(() => Math.min(640, Math.max(300, readPref('aiSidebarWidth', 380))));
   const session = useMemo(() => createDocSession(`${doc?.path}#${doc?.revision}`, doc?.text || ''), [doc?.path, doc?.revision]);
+  const [aiSelection, setAiSelection] = useState<TextRange | null>(null);
+  // onSelection scatta a ogni movimento del cursore: si aggiorna lo stato solo se il tratto cambia.
+  const onSelection = useCallback((range: TextRange | null) => setAiSelection((prev) => (sameRange(prev, range) ? prev : range)), []);
+  useEffect(() => setAiSelection(null), [doc?.path, doc?.revision]);
+  void aiSelection; // letto da AiSidebar in Task 11 (tsconfig ha noUnusedLocals)
   const syncBinding = useAiSync(ai);
   const switchSidebar = (view: 'files' | 'ai') => { setSidebarView(view); writePref('sidebarView', view); setSidebarOpen(true); };
   useEffect(() => { if (doc) ai?.documentChanged(doc.path, { iterChangedRanges: () => {}, mapPos: (n: number) => n } as never, true); }, [doc?.path, doc?.revision]);
@@ -433,7 +439,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
           />
         )}
 
-        {doc && sidebarView === 'ai' && ai ? <ReviewView controller={ai} editor={{ text: doc.text, resetKey: `${doc.path}#${doc.revision}`, session, restore: doc.restore, readOnly: state.updating, getDocs, onChange: text => workspace.edit(text), onTransactions: (changes, texts) => ai.documentChanged(doc.path, changes, false, texts), onImage: file => workspace.saveImage(file, file.name), onTopLine: () => {} }} previewProps={{ text: doc.text, path: doc.path, files, config: state.config, readBlob, highlight: NO_TERMS, onTopLine: () => {}, onOpenWiki: target => void workspace.followWikiLink(target), onOpenPath: path => void openFile(path) }} /> : doc ? (
+        {doc && sidebarView === 'ai' && ai ? <ReviewView controller={ai} editor={{ text: doc.text, resetKey: `${doc.path}#${doc.revision}`, session, restore: doc.restore, readOnly: state.updating, getDocs, onChange: text => workspace.edit(text), onTransactions: (changes, texts) => ai.documentChanged(doc.path, changes, false, texts), onImage: file => workspace.saveImage(file, file.name), onTopLine: () => {}, onSelection }} previewProps={{ text: doc.text, path: doc.path, files, config: state.config, readBlob, highlight: NO_TERMS, onTopLine: () => {}, onOpenWiki: target => void workspace.followWikiLink(target), onOpenPath: path => void openFile(path) }} /> : doc ? (
           <div className={styles.panes} data-mode={historyOpen && mode === 'editor' ? 'split' : mode}>
             {mode !== 'preview' && (
               <section className={styles.pane} aria-label={t('pane.editor')}>
