@@ -1561,7 +1561,7 @@ import type { MessageKey } from '../../i18n/messages';
 import { setSafeHTML } from '../../preview/sanitize';
 import styles from './AiSidebar.module.css';
 
-/** Markdown della risposta: rendering sicuro (niente HTML grezzo, immagini remote solo su clic). */
+/** Markdown della risposta: rendering sicuro (niente HTML grezzo, immagini remote come etichetta, mai caricate). */
 function Markdown({ text }: { text: string }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
