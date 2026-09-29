@@ -4,7 +4,7 @@ import { basename, dirname, splitPath } from '../lib/paths';
 export interface TreeNode {
   name: string;
   path: string;
-  kind: 'file' | 'directory';
+  kind: 'file' | 'directory' | 'asset';
   children: TreeNode[];
 }
 
@@ -23,10 +23,12 @@ export function buildTree(entries: Entry[], locale?: string): TreeNode[] {
   };
   for (const entry of entries) {
     if (entry.kind === 'directory') ensureDir(entry.path);
-    else ensureDir(dirname(entry.path)).children.push({ name: basename(entry.path), path: entry.path, kind: 'file', children: [] });
+    else ensureDir(dirname(entry.path)).children.push({ name: basename(entry.path), path: entry.path, kind: entry.kind, children: [] });
   }
   const sort = (nodes: TreeNode[]) => {
-    nodes.sort((a, b) => (a.kind !== b.kind ? (a.kind === 'directory' ? -1 : 1) : collator.compare(a.name, b.name)));
+    // Cartelle prima; file e asset mescolati in ordine di nome.
+    const isDir = (n: TreeNode) => (n.kind === 'directory' ? 0 : 1);
+    nodes.sort((a, b) => isDir(a) - isDir(b) || collator.compare(a.name, b.name));
     for (const node of nodes) sort(node.children);
   };
   sort(root.children);

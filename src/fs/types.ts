@@ -19,11 +19,17 @@ export interface DirEntry {
   path: string;
 }
 
-export type Entry = FileEntry | DirEntry;
+/** File non markdown: mostrato nell'albero ma non apribile, quindi senza versione (non viene letto). */
+export interface AssetEntry {
+  kind: 'asset';
+  path: string;
+}
+
+export type Entry = FileEntry | DirEntry | AssetEntry;
 
 /** File system della cartella aperta. Percorsi relativi alla radice, separatore '/'. */
 export interface WorkspaceFS {
-  /** Scansione ricorsiva: file .md (con versione) e cartelle da mostrare. */
+  /** Scansione ricorsiva: file .md (con versione), altri file (asset) e cartelle da mostrare. */
   list(): Promise<Entry[]>;
   read(path: string): Promise<{ text: string; version: Version }>;
   readBlob(path: string): Promise<Blob>;

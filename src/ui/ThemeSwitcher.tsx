@@ -16,7 +16,7 @@ export function ThemeSwitcher({ theme, onChange, className }: Props) {
   const t = useT();
   const label = t(`theme.${theme}`);
   return (
-    <button className={className} onClick={() => onChange(nextTheme(theme))} aria-label={label} title={label}>
+    <button className={className} onClick={() => onChange(nextTheme(theme))} aria-label={label} data-tooltip={label}>
       <Icon name={THEME_ICON[theme]} />
     </button>
   );

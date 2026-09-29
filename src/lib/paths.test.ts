@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  basename, detectEol, dirname, isMarkdown, joinPath, movedPath, normalizePath,
+  basename, detectEol, dirname, isImage, isMarkdown, joinPath, movedPath, normalizePath,
   relativePath, resolveRelative, splitPath, stripMd, withEol,
 } from './paths';
 
@@ -60,4 +60,11 @@ test('movedPath follows a rename of the file or of a folder, only on exact prefi
   assert.equal(movedPath('old/sub/a.md', 'old', 'new'), 'new/sub/a.md');
   assert.equal(movedPath('older/a.md', 'old', 'new'), null);
   assert.equal(movedPath('x.md', 'old', 'new'), null);
+});
+
+test('isImage recognizes image extensions, case-insensitive', () => {
+  assert.equal(isImage('static/x.JPG'), true);
+  assert.equal(isImage('logo.svg'), true);
+  assert.equal(isImage('data.json'), false);
+  assert.equal(isImage('png'), false);
 });

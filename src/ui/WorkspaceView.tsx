@@ -14,6 +14,7 @@ import { ConflictBar } from './ConflictBar';
 import { FileTree, type TreeAction } from './FileTree';
 import { HistoryPanel } from './HistoryPanel';
 import { Icon } from './Icon';
+import type { IconName } from './icons';
 import { NameDialog } from './NameDialog';
 import { renameTaken } from './names';
 import { SearchPanel } from './SearchPanel';
@@ -27,10 +28,10 @@ import styles from './WorkspaceView.module.css';
 
 type Mode = 'editor' | 'split' | 'preview';
 
-const MODES: Array<{ id: Mode; label: MessageKey }> = [
-  { id: 'editor', label: 'mode.editor' },
-  { id: 'split', label: 'mode.split' },
-  { id: 'preview', label: 'mode.preview' },
+const MODES: Array<{ id: Mode; label: MessageKey; icon: IconName }> = [
+  { id: 'editor', label: 'mode.editor', icon: 'modeEditor' },
+  { id: 'split', label: 'mode.split', icon: 'modeSplit' },
+  { id: 'preview', label: 'mode.preview', icon: 'modePreview' },
 ];
 
 const SAVE_LABEL: Record<SaveState, MessageKey> = {
@@ -337,43 +338,54 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
 
       <main className={styles.main}>
         <header className={styles.toolbar}>
-          <button className={styles.iconButton} onClick={() => setSidebar(!sidebarOpen)} aria-pressed={sidebarOpen} aria-label={sidebarLabel} title={sidebarLabel}>
-            <Icon name={sidebarOpen ? 'sidebarClose' : 'sidebarOpen'} />
-          </button>
-          <span className={styles.path}>{doc?.path ?? t('toolbar.noFile')}</span>
+          <div className={styles.lead}>
+            <button className={`${styles.iconButton} tooltip`} onClick={() => setSidebar(!sidebarOpen)} aria-pressed={sidebarOpen} aria-label={sidebarLabel} data-tooltip={sidebarLabel}>
+              <Icon name={sidebarOpen ? 'sidebarClose' : 'sidebarOpen'} />
+            </button>
+            <span className={styles.path}>{doc?.path ?? t('toolbar.noFile')}</span>
+          </div>
           <div className={styles.modes} role="group" aria-label={t('toolbar.modes')}>
             {MODES.map((m) => (
-              <button key={m.id} className={styles.mode} aria-pressed={mode === m.id} onClick={() => changeMode(m.id)}>
-                {t(m.label)}
+              <button
+                key={m.id}
+                className={`${styles.mode} tooltip`}
+                aria-pressed={mode === m.id}
+                aria-label={t(m.label)}
+                data-tooltip={t(m.label)}
+                onClick={() => changeMode(m.id)}
+              >
+                <Icon name={m.icon} />
               </button>
             ))}
           </div>
-          <span
-            className={styles.saveState}
-            data-state={doc?.saveState ?? 'none'}
-            aria-live={doc?.saveState === 'error' ? 'assertive' : 'polite'}
-            role={doc?.saveState === 'error' ? 'alert' : undefined}
-          >
-            {doc?.saveState === 'dirty' && !doc.deletedOnDisk && <Icon name="draft" size={10} />}
-            {doc ? (doc.deletedOnDisk ? t('save.deleted') : t(SAVE_LABEL[doc.saveState])) : ''}
-          </span>
-          <button
-            className={styles.iconButton}
-            onClick={() => setHistoryOpen(!historyOpen)}
-            aria-pressed={historyOpen}
-            disabled={!doc}
-            aria-label={t('toolbar.history')}
-            title={t('toolbar.history')}
-          >
-            <Icon name="history" />
-          </button>
-          <button className={styles.iconButton} onClick={() => void workspace.saveAll()} aria-label={t('toolbar.saveAll')} title={t('toolbar.saveAll')}>
-            <Icon name="save" />
-          </button>
-          <ThemeSwitcher theme={theme} onChange={setTheme} className={styles.iconButton} />
-          <button className={styles.iconButton} onClick={() => setSettingsOpen(true)} aria-label={t('toolbar.settings')} title={t('toolbar.settings')}>
-            <Icon name="settings" />
-          </button>
+          <div className={styles.actions}>
+            <span
+              className={styles.saveState}
+              data-state={doc?.saveState ?? 'none'}
+              aria-live={doc?.saveState === 'error' ? 'assertive' : 'polite'}
+              role={doc?.saveState === 'error' ? 'alert' : undefined}
+            >
+              {doc?.saveState === 'dirty' && !doc.deletedOnDisk && <Icon name="draft" size={10} />}
+              {doc ? (doc.deletedOnDisk ? t('save.deleted') : t(SAVE_LABEL[doc.saveState])) : ''}
+            </span>
+            <button
+              className={`${styles.iconButton} tooltip`}
+              onClick={() => setHistoryOpen(!historyOpen)}
+              aria-pressed={historyOpen}
+              disabled={!doc}
+              aria-label={t('toolbar.history')}
+              data-tooltip={t('toolbar.history')}
+            >
+              <Icon name="history" />
+            </button>
+            <button className={`${styles.iconButton} tooltip`} onClick={() => void workspace.saveAll()} aria-label={t('toolbar.saveAll')} data-tooltip={t('toolbar.saveAll')}>
+              <Icon name="save" />
+            </button>
+            <ThemeSwitcher theme={theme} onChange={setTheme} className={`${styles.iconButton} tooltip`} />
+            <button className={`${styles.iconButton} tooltip`} onClick={() => setSettingsOpen(true)} aria-label={t('toolbar.settings')} data-tooltip={t('toolbar.settings')}>
+              <Icon name="settings" />
+            </button>
+          </div>
         </header>
 
         {doc?.conflict && (
@@ -465,7 +477,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
       {dialog?.kind === 'rename' && (
         <NameDialog
           title={t('dialog.rename.title', { name: dialog.node.name })}
-          kind={dialog.node.kind}
+          kind={dialog.node.kind === 'directory' ? 'directory' : 'file'}
           initial={dialog.node.name}
           confirmLabel={t('dialog.rename.confirm')}
           validate={(name) => {

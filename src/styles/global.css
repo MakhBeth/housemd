@@ -17,6 +17,7 @@
   --font-ui: 'Space Grotesk', system-ui, sans-serif;
   --font-prose: 'Space Grotesk', system-ui, sans-serif;
   --font-mono: 'Space Mono', ui-monospace, monospace;
+  --font-pixel: 'Pixelify Sans', var(--font-ui);
 
   accent-color: var(--c-accent);
   scrollbar-color: var(--c-border) transparent;
@@ -81,4 +82,42 @@ button {
 ::view-transition-old(root) {
   z-index: 1;
   image-rendering: pixelated;
+}
+
+/*
+ * Tooltip con Anchor Positioning: il pulsante porta `class="tooltip"`, `aria-label` (nome accessibile)
+ * e `data-tooltip` (testo visibile). `anchor-scope` fa sì che ogni tooltip si ancori al proprio pulsante.
+ * Compare anche al focus da tastiera; sotto il pulsante, girato sopra se non c'è spazio.
+ */
+.tooltip {
+  anchor-name: --tooltip-anchor;
+  anchor-scope: --tooltip-anchor;
+}
+
+.tooltip::after {
+  content: attr(data-tooltip);
+  position: fixed;
+  position-anchor: --tooltip-anchor;
+  position-area: block-end;
+  position-try-fallbacks: flip-block;
+  margin-top: 6px;
+  padding: 4px 8px;
+  background: var(--c-surface);
+  color: var(--c-text);
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.2);
+  font: 12px/1.3 var(--font-pixel);
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s ease, visibility 0.15s ease;
+  pointer-events: none;
+  z-index: 1000;
+}
+
+.tooltip:hover::after,
+.tooltip:focus-visible::after {
+  opacity: 1;
+  visibility: visible;
 }

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
 
 import { useT } from '../i18n/I18nProvider';
+import { isImage } from '../lib/paths';
 import { Icon } from './Icon';
 import { ancestorsOf, type TreeNode } from './tree';
 import styles from './FileTree.module.css';
@@ -92,6 +93,12 @@ export function FileTree({ nodes, openPath, drafts, onOpen, onAction }: Props) {
               </summary>
               {node.children.length > 0 ? renderNodes(node.children) : <p className={styles.emptyDir}>{t('tree.emptyFolder')}</p>}
             </details>
+          ) : node.kind === 'asset' ? (
+            // Non markdown: solo visibile, niente apertura né menu.
+            <div className={`${styles.row} ${styles.asset}`}>
+              <Icon name={isImage(node.name) ? 'image' : 'asset'} size={16} />
+              <span className={styles.name}>{node.name}</span>
+            </div>
           ) : (
             <div className={styles.row} data-active={node.path === openPath} onContextMenu={onContextMenu(node)}>
               <button

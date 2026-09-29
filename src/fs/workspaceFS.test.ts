@@ -10,9 +10,11 @@ function setup(options = {}) {
   return { ops, fs: createWorkspaceFS(ops) };
 }
 
-test('list returns markdown files and folders that contain them, skipping hidden and node_modules', async () => {
+test('list returns markdown files, other files as assets and their folders, skipping hidden and node_modules', async () => {
   const { ops, fs } = setup();
   ops.setFile('posts/a.md', '# A');
+  ops.setFile('posts/.DS_Store', 'no');
+  ops.setFile('data.json', '{}');
   ops.setFile('posts/a.it.md', '# A it');
   ops.setFile('static/images/x.jpg', 'jpg');
   ops.setFile('README.md', 'readme');
@@ -27,6 +29,7 @@ test('list returns markdown files and folders that contain them, skipping hidden
     entries.map((e) => `${e.kind}:${e.path}`),
     [
       'file:README.md',
+      'asset:data.json',
       'directory:empty',
       'directory:notes',
       'directory:notes/deep',
@@ -34,18 +37,22 @@ test('list returns markdown files and folders that contain them, skipping hidden
       'directory:posts',
       'file:posts/a.it.md',
       'file:posts/a.md',
+      'directory:static',
+      'directory:static/images',
+      'asset:static/images/x.jpg',
     ],
   );
   const a = entries.find((e) => e.path === 'posts/a.md');
   assert.equal(a?.kind === 'file' && a.version.size, 3);
 });
 
-test('nested empty folders stay visible, image-only folders do not', async () => {
+test('nested empty folders stay visible, and so do folders with only assets', async () => {
   const { ops, fs } = setup();
   await ops.mkdir('progetti/nuovo');
   ops.setFile('static/images/x.jpg', 'jpg');
+  ops.setFile('nascosti/.env', 'no');
   const entries = await fs.list();
-  assert.deepEqual(entries.map((e) => e.path), ['progetti', 'progetti/nuovo']);
+  assert.deepEqual(entries.map((e) => e.path), ['progetti', 'progetti/nuovo', 'static', 'static/images', 'static/images/x.jpg']);
 });
 
 test('read and write return versions; stat returns null for missing files', async () => {

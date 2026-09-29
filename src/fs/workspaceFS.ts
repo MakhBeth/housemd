@@ -18,7 +18,7 @@ export function createWorkspaceFS(ops: FsOps): WorkspaceFS {
   async function scan(dir: string): Promise<{ entries: Entry[]; visible: boolean }> {
     const children = (await ops.readDir(dir)) ?? [];
     const entries: Entry[] = [];
-    // Visibile se contiene (anche indirettamente) un .md o una cartella visibile, oppure se è vuota.
+    // Visibile se contiene (anche indirettamente) un file non nascosto o una cartella visibile, oppure se è vuota.
     let hasVisible = false;
     for (const child of children) {
       const path = joinPath(dir, child.name);
@@ -33,6 +33,9 @@ export function createWorkspaceFS(ops: FsOps): WorkspaceFS {
         const file = await ops.readFile(path);
         if (!file) continue;
         entries.push({ kind: 'file', path, version: versionOf(file) });
+        hasVisible = true;
+      } else if (!child.name.startsWith('.')) {
+        entries.push({ kind: 'asset', path });
         hasVisible = true;
       }
     }

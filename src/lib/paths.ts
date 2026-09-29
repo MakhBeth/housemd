@@ -36,6 +36,10 @@ export function isMarkdown(path: string): boolean {
   return /\.md$/i.test(path);
 }
 
+export function isImage(path: string): boolean {
+  return /\.(png|jpe?g|gif|webp|avif|svg|bmp|ico)$/i.test(path);
+}
+
 export function resolveRelative(fromFile: string, rel: string): string {
   return joinPath(dirname(fromFile), rel);
 }

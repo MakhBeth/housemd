@@ -22,6 +22,15 @@ test('buildTree nests entries, folders first, natural order', () => {
   assert.equal(tree[0].children[0].children[0].path, 'notes/sub/a.md');
 });
 
+test('buildTree keeps assets as their own kind, sorted among the files', () => {
+  const tree = buildTree([
+    { kind: 'file', path: 'b.md', version: v },
+    { kind: 'asset', path: 'a.png' },
+    { kind: 'asset', path: 'c.json' },
+  ]);
+  assert.deepEqual(tree.map((n) => `${n.kind}:${n.name}`), ['asset:a.png', 'file:b.md', 'asset:c.json']);
+});
+
 test('buildTree creates missing parent folders', () => {
   const tree = buildTree([{ kind: 'file', path: 'a/b/c.md', version: v }]);
   assert.equal(tree[0].path, 'a');

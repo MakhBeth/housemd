@@ -16,6 +16,7 @@
   gap: 4px;
   padding: 8px 10px;
   border-bottom: 1px solid var(--c-border);
+  font-family: var(--font-pixel);
 }
 
 .folder {
@@ -81,13 +82,27 @@
   padding: 6px 12px;
   border-bottom: 1px solid var(--c-border);
   background: var(--c-bg);
+  font-family: var(--font-pixel);
+}
+
+/* Le due ali occupano lo stesso spazio: così il gruppo delle modalità resta al centro. */
+.lead,
+.actions {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.actions {
+  justify-content: flex-end;
 }
 
 .path {
   flex: 1;
   min-width: 0;
   color: var(--c-muted);
-  font-family: var(--font-mono);
   font-size: 13px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -104,9 +119,10 @@
 .mode {
   background: none;
   border: none;
-  padding: 4px 12px;
+  padding: 4px 10px;
   cursor: pointer;
-  font-size: 13px;
+  display: inline-grid;
+  place-items: center;
 }
 
 .mode[aria-pressed='true'] {

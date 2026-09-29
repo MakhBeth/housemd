@@ -10,17 +10,22 @@ import chevronRight from 'pixelarticons/svg/chevron-right.svg?url';
 import circle from 'pixelarticons/svg/circle.svg?url';
 import clock from 'pixelarticons/svg/clock.svg?url';
 import close from 'pixelarticons/svg/close.svg?url';
+import fileBlank from 'pixelarticons/svg/file.svg?url';
 import fileText from 'pixelarticons/svg/file-text.svg?url';
+import eye from 'pixelarticons/svg/eye.svg?url';
 import folder from 'pixelarticons/svg/folder.svg?url';
 import folderPlus from 'pixelarticons/svg/folder-plus.svg?url';
+import image from 'pixelarticons/svg/image.svg?url';
 import invert from 'pixelarticons/svg/invert.svg?url';
 import moon from 'pixelarticons/svg/moon.svg?url';
 import moreHorizontal from 'pixelarticons/svg/more-horizontal.svg?url';
+import pencil from 'pixelarticons/svg/pencil.svg?url';
 import plus from 'pixelarticons/svg/plus.svg?url';
 import save from 'pixelarticons/svg/save.svg?url';
 import search from 'pixelarticons/svg/search.svg?url';
 import settingsCog from 'pixelarticons/svg/settings-cog.svg?url';
 import sun from 'pixelarticons/svg/sun.svg?url';
+import textColumns from 'pixelarticons/svg/text-colums.svg?url';
 import warningDiamond from 'pixelarticons/svg/warning-diamond.svg?url';
 
 export const ICONS = {
@@ -33,6 +38,8 @@ export const ICONS = {
   folderClosed: chevronRight,
   folderOpen: chevronDown,
   file: fileText,
+  asset: fileBlank,
+  image,
   draft: circle,
   search,
   settings: settingsCog,
@@ -43,6 +50,9 @@ export const ICONS = {
   close,
   warning: warningDiamond,
   save,
+  modeEditor: pencil,
+  modeSplit: textColumns,
+  modePreview: eye,
 } as const;
 
 export type IconName = keyof typeof ICONS;
