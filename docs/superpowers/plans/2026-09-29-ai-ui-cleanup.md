@@ -343,7 +343,7 @@ git commit -m "feat: selectionChip, etichetta della selezione per il composer"
 - Consumes: `Proposal` da `src/ai/types.ts`.
 - Produces:
   - `type ReviewStatus = { kind: 'none' } | { kind: 'generating'; seconds: number; done?: number; total?: number } | { kind: 'partial' } | { kind: 'truncated' } | { kind: 'scopeLost' } | { kind: 'applied' }`
-  - `reviewStatus(input: { proposal: Proposal | undefined; running: { path: string } | null; elapsedSeconds: number; applied: boolean }): ReviewStatus`
+  - `reviewStatus(input: { path: string; proposal: Proposal | undefined; running: { path: string } | null; elapsedSeconds: number; applied: boolean }): ReviewStatus` — `path` è il documento corrente, così un run che non ha ancora prodotto la proposta risulta già `generating`.
   - `isBusy(status: ReviewStatus): boolean` — vero per `generating` (frecce e Scarta disabilitati).
 
 - [ ] **Step 1: Write the failing test**
@@ -366,10 +366,18 @@ const proposal = (extra: Partial<Proposal> = {}): Proposal => ({
   createdAt: 1,
   ...extra,
 });
-const base = { running: null, elapsedSeconds: 0, applied: false };
+const base = { path: 'a.md', running: null, elapsedSeconds: 0, applied: false };
 
-test('no proposal shows nothing', () => {
+test('no proposal and no run on this path shows nothing', () => {
   assert.deepEqual(reviewStatus({ ...base, proposal: undefined }), { kind: 'none' });
+  assert.deepEqual(reviewStatus({ ...base, proposal: undefined, running: { path: 'b.md' } }), { kind: 'none' });
+});
+
+test('a run on this path before the first proposal is already generating', () => {
+  assert.deepEqual(reviewStatus({ ...base, proposal: undefined, path: 'a.md', running: { path: 'a.md' }, elapsedSeconds: 2 }), {
+    kind: 'generating',
+    seconds: 2,
+  });
 });
 
 test('a run on this path is generating, with parts when known', () => {
@@ -430,6 +438,8 @@ export type ReviewStatus =
   | { kind: 'applied' };
 
 interface Input {
+  /** Documento corrente: il run può esistere prima che arrivi la prima proposta. */
+  path: string;
   proposal: Proposal | undefined;
   running: { path: string } | null;
   elapsedSeconds: number;
@@ -437,9 +447,9 @@ interface Input {
   applied: boolean;
 }
 
-export function reviewStatus({ proposal, running, elapsedSeconds, applied }: Input): ReviewStatus {
-  if (!proposal) return { kind: 'none' };
-  const mine = running?.path === proposal.path;
+export function reviewStatus({ path, proposal, running, elapsedSeconds, applied }: Input): ReviewStatus {
+  const mine = running?.path === path;
+  if (!proposal) return mine ? { kind: 'generating', seconds: elapsedSeconds } : { kind: 'none' };
   if (mine || proposal.status === 'streaming') {
     const seconds = mine ? elapsedSeconds : 0;
     return proposal.progress ? { kind: 'generating', seconds, ...proposal.progress } : { kind: 'generating', seconds };
@@ -458,7 +468,7 @@ export function isBusy(status: ReviewStatus): boolean {
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `npx tsx --test src/ai/reviewStatus.test.ts`
-Expected: PASS (7 test).
+Expected: PASS (8 test).
 
 - [ ] **Step 5: Commit**
 
@@ -1574,7 +1584,7 @@ export function ChatLog({ messages, onOpen, onRetry }: Props) {
   return (
     <div className={styles.log} role="log">
       {messages.map((m, i) => (
-        <article key={m.id} className={styles.message} tabIndex={-1}>
+        <article key={m.id} className={styles.message} tabIndex={0}>
           {m.docPath && m.docPath !== messages[i - 1]?.docPath && (
             <button type="button" className={styles.file} onClick={() => onOpen(m.docPath!)}>
               {m.docPath}
@@ -2153,7 +2163,7 @@ Il popover degli avvisi usa `position-area` senza `position-anchor` esplicito: c
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 
 import type { AiController } from '../../ai/aiController';
-import { reviewStatus } from '../../ai/reviewStatus';
+import { isBusy, reviewStatus } from '../../ai/reviewStatus';
 import type { CheckWarning } from '../../ai/types';
 import { Editor, type EditorProps } from '../../editor/Editor';
 import { useT } from '../../i18n/I18nProvider';
@@ -2187,7 +2197,7 @@ export function ReviewView({ controller, editor }: Props) {
   const warnings: CheckWarning[] = [...state.chat.messages].reverse().find((m) => m.role === 'assistant' && m.docPath === editor.path)?.warnings ?? [];
   const text = p ? (controller.proposalText(p) ?? p.text) : editor.text;
   const applied = !!p && p.status !== 'streaming' && text === editor.text;
-  const status = reviewStatus({ proposal: p, running: state.running, elapsedSeconds: elapsed, applied });
+  const status = reviewStatus({ path: editor.path, proposal: p, running: state.running, elapsedSeconds: elapsed, applied });
   const streaming = !p || status.kind === 'generating' || status.kind === 'scopeLost';
   const range = p?.scope ? { from: p.scope.from, to: p.scope.from + p.text.length } : undefined;
 
@@ -2207,7 +2217,22 @@ export function ReviewView({ controller, editor }: Props) {
   if (!p) {
     return (
       <section className={styles.review}>
-        <p className={styles.hint}>{t('ai.emptyProposal')}</p>
+        {status.kind === 'generating' ? (
+          <ReviewBar
+            status={status}
+            warnings={[]}
+            onPrevious={() => {}}
+            onNext={() => {}}
+            onWarning={() => {}}
+            canAccept={false}
+            canDiscard={false}
+            onAcceptAll={() => {}}
+            onDiscard={() => {}}
+            onContinue={() => {}}
+          />
+        ) : (
+          <p className={styles.hint}>{t('ai.emptyProposal')}</p>
+        )}
         <div className={styles.editor}>
           <Editor {...editor} />
         </div>
@@ -2224,7 +2249,7 @@ export function ReviewView({ controller, editor }: Props) {
         onNext={() => diff.current?.next()}
         onWarning={(w) => diff.current?.scrollToLine((w as { line?: number }).line ?? 0)}
         canAccept={controller.canAccept(p, true)}
-        canDiscard={p.status !== 'streaming'}
+        canDiscard={!isBusy(status)}
         onAcceptAll={() => (editor.text !== p.baseText && !p.scope ? setConfirm(true) : accept())}
         onDiscard={() => controller.discard(p.path)}
         onContinue={() => void controller.continue(p.path)}
@@ -2254,7 +2279,7 @@ export function ReviewView({ controller, editor }: Props) {
 }
 ```
 
-Differenze volute rispetto a oggi: niente `left`/`SideBySidePane`, niente `view`/`override`/`right`/`linked`/`collapse`, il timer si sposta qui da `AiSidebar`. Condizioni di accettazione, conferma, scope ed `edited` restano identiche (confronta con `ReviewView.tsx:17-19` prima della modifica).
+Differenze volute rispetto a oggi: niente `left`/`SideBySidePane`, niente `view`/`override`/`right`/`linked`/`collapse`, il timer si sposta qui da `AiSidebar`; prima della prima proposta la barra mostra già "Generazione…"; Scarta è disabilitato per tutta la generazione (`isBusy`), non solo con la proposta in streaming. Condizioni di accettazione, conferma, scope ed `edited` restano identiche (confronta con `ReviewView.tsx:17-19` prima della modifica).
 
 - [ ] **Step 4: `DiffPane` senza `collapse`**
 
@@ -2802,8 +2827,8 @@ git commit -m "feat: profili e preset in forma elenco/dettaglio, conferme su eli
 **Interfaces:**
 - Consumes: `parseRoute`, `formatRoute`, `Route`, `SettingsSection`, `SETTINGS_SECTIONS` (Task 1); `AiProfilesSection` e `AiPresetsSection` con `onDirty` (Task 13).
 - Produces:
-  - `useRoute(): { route: Route; navigate: (route: Route) => void }`
-  - `SettingsView({ section, onSection, onClose, ai, syncBinding, theme, onTheme, autosave, onAutosave, onSaveAll })`
+  - `useRoute(guard: { canLeave: () => boolean; onBlocked: () => void }): { route: Route; navigate: (route: Route) => void }`
+  - `SettingsView({ section, onSection, onClose, onDirtyChange, closeRequest, ai, syncBinding, theme, onTheme, autosave, onAutosave, onSaveAll })` — `onDirtyChange(dirty)` segnala le bozze aperte, `closeRequest` (contatore) chiede la chiusura con conferma quando Indietro viene bloccato.
 
 - [ ] **Step 1: `useRoute.ts`**
 
@@ -2813,17 +2838,37 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { formatRoute, parseRoute, type Route } from '../lib/route';
 
+interface Guard {
+  /** Falso se uscire dalle impostazioni perderebbe modifiche non salvate. */
+  canLeave: () => boolean;
+  /** Uscita bloccata (es. Indietro del browser): chi la riceve chiede conferma. */
+  onBlocked: () => void;
+}
+
 /**
  * Vista indirizzata dall'hash. Entrare nelle impostazioni aggiunge una voce di cronologia (Indietro le
  * chiude); cambiare sezione la sostituisce; uscire torna indietro se ci si era entrati dall'app.
+ * Con modifiche non salvate l'uscita via cronologia viene annullata e passa per la conferma.
  */
-export function useRoute() {
+export function useRoute(guard: Guard) {
   const [route, setRoute] = useState<Route>(() => parseRoute(location.hash));
   const pushed = useRef(false);
+  const current = useRef(route);
+  current.current = route;
+  const guardRef = useRef(guard);
+  guardRef.current = guard;
 
   useEffect(() => {
     const onHash = () => {
       const next = parseRoute(location.hash);
+      const previous = current.current;
+      if (previous.view === 'settings' && next.view === 'workspace' && !guardRef.current.canLeave()) {
+        // Si rimette la voce delle impostazioni e si chiede conferma: la bozza resta montata.
+        history.pushState(history.state, '', formatRoute(previous));
+        pushed.current = true;
+        guardRef.current.onBlocked();
+        return;
+      }
       if (next.view === 'workspace') pushed.current = false;
       setRoute(next);
     };
@@ -2983,6 +3028,10 @@ interface Props {
   section: SettingsSection;
   onSection: (section: SettingsSection) => void;
   onClose: () => void;
+  /** Bozze aperte in qualche sezione: WorkspaceView le usa per bloccare Indietro. */
+  onDirtyChange: (dirty: boolean) => void;
+  /** Incrementato quando Indietro è stato bloccato: chiude passando dalla conferma. */
+  closeRequest: number;
   ai: AiController | null;
   syncBinding: SyncBinding;
   theme: ThemePref;
@@ -2999,7 +3048,7 @@ const LABELS: Record<SettingsSection, MessageKey> = {
   'ai-sync': 'settings.aiSync',
 };
 
-export function SettingsView({ section, onSection, onClose, ai, syncBinding, theme, onTheme, autosave, onAutosave, onSaveAll }: Props) {
+export function SettingsView({ section, onSection, onClose, onDirtyChange, closeRequest, ai, syncBinding, theme, onTheme, autosave, onAutosave, onSaveAll }: Props) {
   const { t, locale, setLocale } = useI18n();
   const [delay, setDelay] = useState(String(autosave.delayMs));
   const [dirty, setDirty] = useState<Set<SettingsSection>>(() => new Set());
@@ -3032,10 +3081,17 @@ export function SettingsView({ section, onSection, onClose, ai, syncBinding, the
     else onClose();
   };
 
-  // Entrando (o cambiando sezione dall'hash) si scorre alla sezione richiesta.
+  useEffect(() => onDirtyChange(dirty.size > 0), [dirty, onDirtyChange]);
+  useEffect(() => {
+    if (closeRequest > 0) close();
+    // Solo al cambio del contatore: close legge lo stato corrente a ogni render.
+  }, [closeRequest]);
+
+  // Entrando (o cambiando sezione dall'hash) si scorre alla sezione richiesta; `ai` nelle dipendenze
+  // perché con un link diretto a una sezione AI le sezioni compaiono solo quando il controller è pronto.
   useEffect(() => {
     content.current?.querySelector(`#settings-${section}`)?.scrollIntoView({ block: 'start' });
-  }, [section]);
+  }, [section, ai]);
 
   // La voce dell'indice segue la sezione visibile mentre si scorre.
   useEffect(() => {
@@ -3160,6 +3216,8 @@ export function SettingsView({ section, onSection, onClose, ai, syncBinding, the
           confirmLabel={t('ai.discardChanges')}
           onConfirm={() => {
             setConfirmClose(false);
+            // Prima di uscire: altrimenti la guardia di useRoute bloccherebbe di nuovo la cronologia.
+            onDirtyChange(false);
             onClose();
           }}
           onCancel={() => setConfirmClose(false)}
@@ -3177,7 +3235,12 @@ export function SettingsView({ section, onSection, onClose, ai, syncBinding, the
 2. Sostituire `const [settingsOpen, setSettingsOpen] = useState(false);` con:
 
 ```tsx
-  const { route, navigate } = useRoute();
+  const settingsDirty = useRef(false);
+  const [closeRequest, setCloseRequest] = useState(0);
+  const { route, navigate } = useRoute({ canLeave: () => !settingsDirty.current, onBlocked: () => setCloseRequest((n) => n + 1) });
+  const onSettingsDirty = useCallback((dirty: boolean) => {
+    settingsDirty.current = dirty;
+  }, []);
   const settingsOpen = route.view === 'settings';
   const openSettings = useCallback((section: SettingsSection = 'general') => navigate({ view: 'settings', section }), [navigate]);
 ```
@@ -3192,6 +3255,8 @@ export function SettingsView({ section, onSection, onClose, ai, syncBinding, the
           section={route.section}
           onSection={(section) => navigate({ view: 'settings', section })}
           onClose={() => navigate({ view: 'workspace' })}
+          onDirtyChange={onSettingsDirty}
+          closeRequest={closeRequest}
           ai={ai}
           syncBinding={syncBinding}
           theme={theme}
@@ -3219,7 +3284,7 @@ grep -rn "SettingsDialog\|setSettingsOpen" src tests || echo "nessun riferimento
 Run: `npm test && npm run lint && npm run build`
 Expected: PASS.
 
-Verifica manuale: nuovo profilo, modifica del nome, `Esc` → conferma "Scartare le modifiche non salvate?"; ingranaggio → `#settings`; voce "AI · Profili" → `#settings/ai-profiles` senza nuova voce di cronologia; Indietro del browser → documento nella stessa modalità; aprire direttamente `http://localhost:5173/#settings/ai-sync` → impostazioni sulla sezione Sync, X → documento (niente `history.back()` fuori dall'app); `#foo` → documento.
+Verifica manuale: nuovo profilo, modifica del nome, poi `Esc`, X e Indietro del browser → ogni volta conferma "Scartare le modifiche non salvate?" (Annulla lascia la bozza e l'hash su `#settings/ai-profiles`, Scarta torna al documento); ingranaggio → `#settings`; voce "AI · Profili" → `#settings/ai-profiles` senza nuova voce di cronologia; Indietro del browser → documento nella stessa modalità; aprire direttamente `http://localhost:5173/#settings/ai-sync` → impostazioni sulla sezione Sync, X → documento (niente `history.back()` fuori dall'app); `#foo` → documento.
 
 ```bash
 git add -A src/ui
@@ -3269,20 +3334,20 @@ Sostituire i passi che usavano i tab e la vista affiancata:
  await press('Use the whole document');
 ```
 
-- il controllo del rendering sicuro oggi apre "Side by side" → "Source" per vedere la proposta come anteprima. Senza vista affiancata la proposta è solo testo nel diff (nessuna richiesta di rete), mentre il markdown sicuro con immagini a consenso resta nella **chat**, che mostra il *commento* della risposta (`proposalStream.ts`: il testo fuori da `<housemd-proposal>`). Il provider finto oggi usa il commento fisso `Fixed`: in `tests/browser/ai-smoke.tsx` sostituire `'Fixed<housemd-proposal>'` con `((window as any).smoke?.comment||'Fixed')+'<housemd-proposal>'`. Poi, in `run-ai-smoke.mjs`, sostituire `await request();await click('Side by side');await click('Source');await sleep(500);` e le tre righe successive (asserzioni su `:59999` e `[data-ai-image]`) con:
+- il controllo del rendering sicuro oggi apre "Side by side" → "Source" per vedere la proposta come anteprima con le immagini a consenso. Con la vista affiancata sparisce anche quel consenso: la proposta è solo testo nel diff, e la chat rende il *commento* della risposta (`proposalStream.ts`: il testo fuori da `<housemd-proposal>`) con `safeRender(text)` senza opzioni, che trasforma ogni immagine in uno `<span>` con l'etichetta e non la carica mai (`src/ai/safeRender.ts:17-24`). Il provider finto oggi usa il commento fisso `Fixed`: in `tests/browser/ai-smoke.tsx` sostituire `'Fixed<housemd-proposal>'` con `((window as any).smoke?.comment||'Fixed')+'<housemd-proposal>'`. Poi, in `run-ai-smoke.mjs`, sostituire `await request();await click('Side by side');await click('Source');await sleep(500);` e le tre righe successive (asserzioni su `:59999` e `[data-ai-image]`) con:
 
 ```js
  await evaluate(`smoke.comment='Nota ![x](http://127.0.0.1:59999/image) <img src="http://127.0.0.1:59999/raw"><iframe src="http://127.0.0.1:59999/frame"></iframe>'`);
  await request();await sleep(500);
  assert.equal(network.filter(url=>url.includes(':59999')).length,0,'Chat e diff non caricano immagini, frontmatter o HTML remoto');
- assert.ok(await evaluate("document.querySelectorAll('[role=log] [data-ai-image]').length>0"),'Segnaposto immagine presente nella chat');
- await evaluate("document.querySelector('[role=log] [data-ai-image]').click()");await sleep(200);assert.ok(network.some(url=>url.includes(':59999/image')),'Caricamento soltanto dopo clic esplicito');
+ assert.equal(await evaluate("document.querySelectorAll('[role=log] img,[role=log] iframe').length"),0,'Nessun elemento remoto nella chat');
+ assert.ok(await evaluate("[...document.querySelectorAll('[role=log] span')].some(s=>s.textContent.includes('127.0.0.1:59999'))"),'Immagine resa come etichetta con l\'host');
  await evaluate("smoke.comment=''");
 ```
 
-  (`smoke.reply` impostato subito prima con frontmatter e HTML remoti resta: finisce nel diff come testo e l'asserzione sulla rete lo copre.)
+  (`smoke.reply` impostato subito prima con frontmatter e HTML remoti resta: finisce nel diff come testo e l'asserzione sulla rete lo copre. `Preview` mantiene la prop `untrusted` anche se nessuno la passa più: non si tocca in questo plan.)
 - `await click('Files');` prima del blocco di ripristino → `await press('Editor');`.
-- messaggio finale: `'Chromium AI smoke: modalità AI, composer con Invio, proposta, accept-all, blocco, AI→Editor undo, before-ai, chip selezione e accettazione ripetuta e per blocchi, rendering sicuro, ripristino cronologia: OK'`.
+- messaggio finale: `'Chromium AI smoke: modalità AI, composer con Invio, proposta, accept-all, blocco, AI→Editor undo, before-ai, chip selezione e accettazione ripetuta e per blocchi, rendering sicuro senza risorse remote, ripristino cronologia: OK'`.
 
 - [ ] **Step 3: Eseguire**
 
@@ -3356,7 +3421,7 @@ La barra di revisione ha le frecce per le modifiche precedente/successiva, gli a
 **Scarta** e **Accetta tutto**; ogni blocco del diff si accetta anche da solo.
 ```
 
-Lasciare invariato il resto della sezione (transazione annullabile, snapshot `before-ai`, frontmatter, parti,
+Nel paragrafo sul rendering sicuro sostituire "non caricano nuove immagini remote senza clic esplicito; le immagini già nel documento originale restano consentite" con "non caricano immagini remote: nella chat compaiono come etichetta con l'host, nella revisione come testo". Lasciare invariato il resto della sezione (transazione annullabile, snapshot `before-ai`, frontmatter, parti,
 **Continua**, ambito Selezione, persistenza). Controllare con `grep -n "Affiancata\|Ctrl/Cmd+Enter\|Ctrl/Cmd+K\` torna" README.md` che non restino riferimenti vecchi.
 
 - [ ] **Step 4: Verifica completa**
