@@ -85,7 +85,6 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
   // onSelection scatta a ogni movimento del cursore: si aggiorna lo stato solo se il tratto cambia.
   const onSelection = useCallback((range: TextRange | null) => setAiSelection((prev) => (sameRange(prev, range) ? prev : range)), []);
   useEffect(() => setAiSelection(null), [doc?.path, doc?.revision]);
-  void aiSelection; // letto da AiSidebar in Task 11 (tsconfig ha noUnusedLocals)
   const syncBinding = useAiSync(ai);
   useEffect(() => { if (doc) ai?.documentChanged(doc.path, { iterChangedRanges: () => {}, mapPos: (n: number) => n } as never, true); }, [doc?.path, doc?.revision]);
   const [mode, setMode] = useState<Mode>(() => readPref<Mode>('mode', 'split'));
@@ -339,7 +338,19 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
       {sidebarOpen && (
         <>
           <aside className={styles.sidebar}>
-            {shownMode === 'ai' && ai ? <AiSidebar syncNeedsPermission={!!syncBinding.handle&&!syncBinding.permission} controller={ai} onSettings={() => setSettingsOpen(true)} getSelection={() => { const selected = session.selection?.main; return selected && !selected.empty ? { from: selected.from, to: selected.to, originalText: session.textLf.slice(selected.from, selected.to), status: 'valid' } : undefined; }} /> : <>
+            {shownMode === 'ai' && ai ? <AiSidebar
+              controller={ai}
+              text={doc?.text ?? ''}
+              selection={aiSelection}
+              getSelection={() => {
+                const selected = session.selection?.main;
+                return selected && !selected.empty
+                  ? { from: selected.from, to: selected.to, originalText: session.textLf.slice(selected.from, selected.to), status: 'valid' }
+                  : undefined;
+              }}
+              onSettings={() => setSettingsOpen(true)}
+              syncNeedsPermission={!!syncBinding.handle && !syncBinding.permission}
+            /> : <>
             <div className={styles.sidebarHeader}>
               <button className={styles.iconButton} onClick={() => setSidebar(false)} aria-label={t('sidebar.hide')} title={t('sidebar.hide')}>
                 <Icon name="sidebarClose" />

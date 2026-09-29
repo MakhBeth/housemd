@@ -1,19 +1,58 @@
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useRef, useSyncExternalStore } from 'react';
+
 import type { AiController } from '../../ai/aiController';
+import type { TextRange } from '../../ai/selectionChip';
 import type { SelectionScope } from '../../ai/types';
-import type { MessageKey } from '../../i18n/messages';
 import { useT } from '../../i18n/I18nProvider';
-import { ModelChip } from './ModelChip';
+import type { SettingsSection } from '../../lib/route';
+import { Icon } from '../Icon';
 import { ChatLog } from './ChatLog';
-export function AiSidebar({controller,onSettings,getSelection,syncNeedsPermission}:{controller:AiController;onSettings:()=>void;getSelection:()=>SelectionScope|undefined;syncNeedsPermission?:boolean}){
- const t=useT(),state=useSyncExternalStore(controller.subscribe,controller.getState),[request,setRequest]=useState(''),[selection,setSelection]=useState(false),[elapsed,setElapsed]=useState(0);
- useEffect(()=>{if(!state.running)return;const timer=setInterval(()=>setElapsed(Math.floor((Date.now()-state.running!.startedAt)/1000)),1000);return()=>clearInterval(timer);},[state.running]);
- const send=(presetId?:string)=>{const preset=state.presets.find(p=>p.id===presetId),scope=selection?getSelection():undefined;if(selection&&!scope){controller.report({code:'scopeLost'});return;}void controller.send(preset?preset.name||t(`ai.preset.${preset.builtInId}` as MessageKey):request,preset,scope).catch(e=>controller.report(e));if(!preset)setRequest('');};
- return <div className="ai-sidebar"><ModelChip controller={controller} onManage={onSettings}/>{syncNeedsPermission&&<button onClick={onSettings}>⚠ {t('ai.syncReactivate')}</button>}<div className="ai-bar">{state.presets.filter(p=>!p.hidden).sort((a,b)=>a.order-b.order).map(p=><button key={p.id} disabled={!!state.running} onClick={()=>send(p.id)}>{p.name||t(`ai.preset.${p.builtInId}` as MessageKey)}</button>)}<button onClick={onSettings}>{t('ai.managePresets')}</button></div>
- <ChatLog messages={state.chat.messages} onOpen={path=>controller.workspace.openFile(path)} onRetry={(id,remove)=>void controller.retry(id,remove)}/>
- 
- {state.running&&<span aria-live="polite">{t('ai.working')} {elapsed}s</span>}
- <textarea aria-label={t('ai.request')} placeholder={t('ai.request')} value={request} onChange={e=>setRequest(e.target.value)} onKeyDown={e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();send();}if(e.key==='Escape')controller.stop();}}/>
- <label><input type="checkbox" checked={selection} onChange={e=>setSelection(e.target.checked)}/>{t('ai.selection')}</label>
- <div className="ai-bar"><button onClick={()=>controller.newChat()}>{t('ai.newChat')}</button>{state.running?<button onClick={()=>controller.stop()}>{t('ai.stop')}</button>:<button disabled={!request.trim()||!controller.profile()} onClick={()=>send()}>{t('ai.send')}</button>}</div></div>;
+import { Composer, type ComposerHandle } from './Composer';
+import { Suggestions } from './Suggestions';
+import styles from './AiSidebar.module.css';
+
+interface Props {
+  controller: AiController;
+  text: string;
+  selection: TextRange | null;
+  getSelection: () => SelectionScope | undefined;
+  onSettings: (section: SettingsSection) => void;
+  syncNeedsPermission?: boolean;
+}
+
+export function AiSidebar({ controller, text, selection, getSelection, onSettings, syncNeedsPermission }: Props) {
+  const t = useT();
+  const state = useSyncExternalStore(controller.subscribe, controller.getState);
+  const composer = useRef<ComposerHandle>(null);
+  return (
+    <div className={styles.sidebar}>
+      <div className={styles.header}>
+        <h2 className={styles.title}>{t('ai.title')}</h2>
+        <button
+          type="button"
+          className={`${styles.iconButton} tooltip`}
+          aria-label={t('ai.newChat')}
+          data-tooltip={t('ai.newChat')}
+          disabled={state.chat.messages.length === 0 && !state.running}
+          onClick={() => controller.newChat()}
+        >
+          <Icon name="newFile" />
+        </button>
+      </div>
+      <ChatLog
+        messages={state.chat.messages}
+        onOpen={(path) => void controller.workspace.openFile(path)}
+        onRetry={(id, remove) => void controller.retry(id, remove)}
+      />
+      <div className={styles.bottom}>
+        {syncNeedsPermission && (
+          <button type="button" className={styles.file} onClick={() => onSettings('ai-sync')}>
+            ⚠ {t('ai.syncReactivate')}
+          </button>
+        )}
+        <Composer ref={composer} controller={controller} text={text} selection={selection} getSelection={getSelection} onManage={() => onSettings('ai-profiles')} />
+        <Suggestions controller={controller} onSend={(id) => composer.current?.sendPreset(id)} />
+      </div>
+    </div>
+  );
 }
