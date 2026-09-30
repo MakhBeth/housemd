@@ -267,5 +267,19 @@
   "ai.deleteMessage": "L'operazione non si può annullare.",
   "ai.unsavedTitle": "Scartare le modifiche non salvate?",
   "ai.unsavedMessage": "Le modifiche a questo elemento non sono state salvate.",
-  "ai.discardChanges": "Scarta le modifiche"
+  "ai.discardChanges": "Scarta le modifiche",
+  "format.toolbar": "Formattazione",
+  "format.bold": "Grassetto (Ctrl+B)",
+  "format.italic": "Corsivo (Ctrl+I)",
+  "format.strike": "Barrato (Ctrl+Shift+X)",
+  "format.code": "Codice (Ctrl+E)",
+  "format.link": "Link (Ctrl+Shift+K)",
+  "format.heading": "Titolo",
+  "format.quote": "Citazione",
+  "format.bullet": "Elenco puntato",
+  "format.ordered": "Elenco numerato",
+  "format.task": "Elenco di attività",
+  "format.boldGlyph": "G",
+  "format.italicGlyph": "C",
+  "format.strikeGlyph": "S"
 }

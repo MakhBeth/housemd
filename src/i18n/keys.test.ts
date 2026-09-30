@@ -8,6 +8,7 @@ import { TOAST_CODES } from '../workspace/toasts';
 import { UNSUPPORTED_REASONS } from '../fs/access';
 import { AUTOSAVE_MODES } from '../workspace/autosave';
 import { SNAPSHOT_REASONS } from '../history/historyStore';
+import { FORMAT_ACTIONS } from '../editor/formatting';
 
 const keys = new Set(Object.keys(en));
 
@@ -37,4 +38,8 @@ test('every autosave mode has its settings label', () => {
 
 test('every snapshot reason has its label in en.json', () => {
   for (const reason of SNAPSHOT_REASONS) assert.ok(keys.has(`history.reason.${reason}`), `manca history.reason.${reason}`);
+});
+
+test('every formatting action has its toolbar label', () => {
+  for (const action of FORMAT_ACTIONS) assert.ok(keys.has(`format.${action}`), `manca format.${action}`);
 });

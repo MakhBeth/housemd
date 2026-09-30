@@ -267,5 +267,19 @@
   "ai.deleteMessage": "この操作は元に戻せません。",
   "ai.unsavedTitle": "保存されていない変更を破棄しますか？",
   "ai.unsavedMessage": "この項目の変更は保存されていません。",
-  "ai.discardChanges": "変更を破棄"
+  "ai.discardChanges": "変更を破棄",
+  "format.toolbar": "書式",
+  "format.bold": "太字 (Ctrl+B)",
+  "format.italic": "斜体 (Ctrl+I)",
+  "format.strike": "取り消し線 (Ctrl+Shift+X)",
+  "format.code": "コード (Ctrl+E)",
+  "format.link": "リンク (Ctrl+Shift+K)",
+  "format.heading": "見出し",
+  "format.quote": "引用",
+  "format.bullet": "箇条書き",
+  "format.ordered": "番号付きリスト",
+  "format.task": "タスクリスト",
+  "format.boldGlyph": "B",
+  "format.italicGlyph": "I",
+  "format.strikeGlyph": "S"
 }

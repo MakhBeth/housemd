@@ -11,9 +11,11 @@ import { wikiCompletionSource } from './wikiCompletion';
 import type { MutableRefObject } from 'react';
 import type { EditorProps } from './Editor';
 import { saveDocSession } from './docSession';
+import { formatToolbar, type Translate } from './formatToolbar';
 
 
-export type Callbacks = MutableRefObject<EditorProps>;
+/** Props dell'editor più la traduzione (per la barra di formattazione). */
+export type Callbacks = MutableRefObject<EditorProps & { t: Translate }>;
 
 const theme = EditorView.theme({
   '&': { height: '100%', backgroundColor: 'var(--c-surface)', color: 'var(--c-text)' },
@@ -76,6 +78,7 @@ export function docExtensions(callbacks: Callbacks) {
       docAppearance(),
       editable.of(readOnlyExtensions(callbacks.current.readOnly ?? false)),
       autocompletion({ override: [wikiCompletionSource(() => callbacks.current.getDocs())] }),
+      formatToolbar(() => callbacks.current.t),
       EditorView.updateListener.of((update) => {
         if (update.docChanged) {
           const after = update.state.doc.toString();

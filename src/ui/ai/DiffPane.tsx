@@ -8,11 +8,12 @@ import { docAppearance, docExtensions, editable, mainSelectionRange, readOnlyExt
 import { docStateConfig, saveDocSession } from '../../editor/docSession';
 import { applyDocRestore } from '../../editor/useDocBinding';
 import { initialRestoreSeq } from '../../editor/restoreCommand';
+import { useT } from '../../i18n/I18nProvider';
 import styles from './ReviewView.module.css';
 export interface DiffHandle extends EditorHandle { next():void; previous():void; }
 interface Props { editor:EditorProps; proposal:string; range?:{from:number;to:number}; canAccept:boolean; streaming:boolean; beforeAccept():boolean; onEdit(text:string):void; acceptLabel:string; rejectLabel:string; /** L'ultimo blocco rimasto è stato rifiutato: equivale a rifiutare tutto. */ onAllRejected():void; }
 export const DiffPane=forwardRef<DiffHandle,Props>(function DiffPane(props,ref){
- const host=useRef<HTMLDivElement>(null), merge=useRef<MergeView|null>(null), latest=useRef(props),callbacks=useRef(props.editor),applied=useRef(initialRestoreSeq(props.editor.restore));latest.current=props;callbacks.current=props.editor;
+ const host=useRef<HTMLDivElement>(null), merge=useRef<MergeView|null>(null), latest=useRef(props),t=useT(),callbacks=useRef({...props.editor,t}),applied=useRef(initialRestoreSeq(props.editor.restore));latest.current=props;callbacks.current={...props.editor,t};
  const remote=useRef(false), rightEditable=useRef(new Compartment());
  // Rifiuto di un blocco: il testo originale torna nella proposta (verso opposto a quello della libreria).
  const reject=(chunkIndex:number)=>{
