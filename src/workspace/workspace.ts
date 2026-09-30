@@ -1043,6 +1043,11 @@ export class Workspace {
    * Snapshot nella cronologia senza attesa: il testo è catturato adesso, la scrittura parte in fila
    * alle precedenti e un suo errore non blocca mai salvataggi, digitazione o cambi di file.
    */
+  snapshotBeforeAi(): void {
+    const doc = this.state.doc;
+    if (doc) this.snapshot(doc.path, doc.text, 'before-ai');
+  }
+
   private snapshot(path: string, text: string, reason: SnapshotReason): void {
     const history = this.deps.history;
     if (!history) return;

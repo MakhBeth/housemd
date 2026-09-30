@@ -1,6 +1,6 @@
 export const DB_NAME = 'HouseMD';
-/** 1 = v1 (workspace, buffers); 2 = v1.1 (+ history). */
-export const DB_VERSION = 2;
+/** 1 = v1 (workspace, buffers); 2 = v1.1 (+ history); 3 = AI. */
+export const DB_VERSION = 3;
 export const HISTORY_STORE = 'history';
 /** Dopo quanto, se un'altra scheda blocca l'aggiornamento del database, lo si dice all'utente. */
 export const DB_BLOCKED_NOTICE_MS = 3000;
@@ -21,6 +21,10 @@ export function onDbBlocked(listener: () => void): () => void {
 
 /** Upgrade incrementale: crea solo ciò che manca, senza toccare gli store esistenti. */
 function upgrade(db: IDBDatabase): void {
+  for (const name of ['aiProfiles', 'aiSecrets', 'aiPresets']) {
+    if (!db.objectStoreNames.contains(name)) db.createObjectStore(name, { keyPath: 'id' });
+  }
+  if (!db.objectStoreNames.contains('aiSyncMeta')) db.createObjectStore('aiSyncMeta');
   if (!db.objectStoreNames.contains('workspace')) db.createObjectStore('workspace');
   if (!db.objectStoreNames.contains('buffers')) db.createObjectStore('buffers');
   if (!db.objectStoreNames.contains(HISTORY_STORE)) {

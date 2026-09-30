@@ -3,6 +3,7 @@ import {
   type MouseEvent, type UIEvent,
 } from 'react';
 
+import { safeRender, allowedImage, resourceHost, type UntrustedOptions } from '../ai/safeRender';
 import type { HouseConfig } from '../config/config';
 import { resolveImageSrc } from '../config/images';
 import { useT } from '../i18n/I18nProvider';
@@ -22,6 +23,7 @@ export interface PreviewHandle {
 
 export interface PreviewProps {
   text: string;
+  untrusted?: UntrustedOptions;
   path: string;
   files: string[];
   config: HouseConfig;
@@ -38,6 +40,9 @@ const EXTERNAL = /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i;
 export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(props, ref) {
   const { text, path, files, config, readBlob, highlight, onTopLine, onOpenWiki, onOpenPath } = props;
   const t = useT();
+  const [approved, setApproved] = useState<Set<string>>(new Set());
+  useEffect(() => setApproved(new Set()), [path]);
+  const untrusted = useMemo(() => props.untrusted ? { ...props.untrusted, allowedUrls: new Set([...props.untrusted.allowedUrls, ...approved]), isLocal: (src: string) => !!resolveImageSrc(src, path, config), imageLabel: (host: string) => t('ai.loadImage', { host }) } : undefined, [props.untrusted, approved, path, config, t]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const anchors = useRef<Anchor[] | null>(null);
@@ -60,9 +65,10 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
   const resolveImage = useCallback(
     async (src: string) => {
       const local = resolveImageSrc(src, doc.path, config);
+      if (untrusted && !allowedImage(src, untrusted)) return null;
       return local ? cache.get(local) : src;
     },
-    [doc.path, config, cache],
+    [doc.path, config, cache, untrusted],
   );
 
   useEffect(() => {
@@ -70,7 +76,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     if (!body) return;
     let cancelled = false;
     const { split } = doc;
-    const html = renderMarkdown(split.body, { currentPath: doc.path, files, lineOffset: split.bodyLine });
+    const html = untrusted ? safeRender(split.body, untrusted, split.bodyLine) : renderMarkdown(split.body, { currentPath: doc.path, files, lineOffset: split.bodyLine });
     void (async () => {
       await setSafeHTML(body, html);
       if (cancelled) return;
@@ -81,7 +87,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
       const cardLocal = cardImage ? resolveImageSrc(cardImage, doc.path, config) : null;
       if (cardLocal) used.push(cardLocal);
       for (const img of body.querySelectorAll('img')) {
-        const src = img.getAttribute('src');
+        const src = img.getAttribute('data-local-src') || img.getAttribute('src');
         const local = src ? resolveImageSrc(src, doc.path, config) : null;
         if (!local) continue;
         used.push(local);
@@ -109,7 +115,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     return () => {
       cancelled = true;
     };
-  }, [doc, files, config, cache, highlight, t]);
+  }, [doc, files, config, cache, highlight, t, untrusted]);
 
   // Le posizioni cambiano con il ridimensionamento e il caricamento delle immagini.
   useEffect(() => {
@@ -153,6 +159,8 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
   };
 
   const onClick = (event: MouseEvent<HTMLDivElement>) => {
+    const blocked = (event.target as Element).closest<HTMLElement>('[data-ai-image]');
+    if (blocked) { const src = blocked.dataset.aiImage; if (src) setApproved(previous => new Set([...previous, src])); return; }
     const link = (event.target as Element).closest('a');
     if (!link) return;
     const href = link.getAttribute('href') ?? '';
@@ -177,7 +185,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
   return (
     <div ref={scrollRef} className={styles.scroller} onScroll={onScroll} onClick={onClick}>
       <article className={styles.prose}>
-        {doc.split.frontmatter && <FrontmatterCard frontmatter={doc.split.frontmatter} resolveImage={resolveImage} />}
+        {doc.split.frontmatter && <FrontmatterCard frontmatter={doc.split.frontmatter} resolveImage={resolveImage} blockedLabel={untrusted ? (src) => allowedImage(src, untrusted) ? null : t('ai.loadImage', { host: resourceHost(src) }) : undefined} onAllowImage={(src) => setApproved(previous => new Set([...previous, src]))} />}
         <div ref={bodyRef} />
       </article>
     </div>
