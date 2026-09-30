@@ -73,6 +73,34 @@ try{
  assert.equal(await evaluate("smoke.EditorView.findFromDOM(document.querySelector('.cm-editor')).state.doc.toString()"),'# Original\n\nParagraph.');
  assert.equal(await evaluate("smoke.undo(smoke.EditorView.findFromDOM(document.querySelector('.cm-editor')))"),true);
  assert.equal(await evaluate('smoke.ws.getState().doc.text'),beforeRestore,'Ripristino dalla cronologia annullabile anche con AI attiva');
+ // Selezione fatta in modalità Editor: passando ad AI il chip la riflette (senza chip la richiesta riscriverebbe tutto).
+ await evaluate(`(()=>{const view=smoke.EditorView.findFromDOM(document.querySelector('.cm-editor'));view.dispatch({changes:{from:0,to:view.state.doc.length,insert:'uno\\ndue\\ntre\\nquattro'},selection:{anchor:0,head:11}});})()`);
+ await sleep(100);await press('AI');
+ await until("[...document.querySelectorAll('span')].some(s=>s.textContent==='Selection · 3 lines')");
+ await press('Editor');await evaluate("(()=>{const view=smoke.EditorView.findFromDOM(document.querySelector('.cm-editor'));view.dispatch({selection:{anchor:4,head:11}});})()");
+ await press('AI');await until("[...document.querySelectorAll('span')].some(s=>s.textContent==='Selection · 2 lines')");
+
+ // Impostazioni: il focus entra sul titolo e torna dov'era; Indietro con una bozza aperta chiede conferma.
+ const settings="document.querySelector('[role=region][aria-label=\"Settings\"]')";
+ await evaluate(`${composer}.focus()`);await press('Settings');
+ await until(`!!${settings}&&document.activeElement===${settings}.querySelector('h1')`);
+ assert.ok(await evaluate(`(()=>{const a=[...${settings}.querySelectorAll('a')].find(a=>a.textContent==='AI · Profiles');if(!a)return false;a.click();return true;})()`),'Voce AI · Profiles');
+ await until("location.hash==='#settings/ai-profiles'");
+ assert.ok(await evaluate(`(()=>{const b=[...document.querySelectorAll('#settings-ai-profiles button')].find(b=>b.textContent==='+ Create');if(!b)return false;b.click();return true;})()`),'Crea profilo');
+ await sleep(150);
+ await evaluate(`(()=>{const input=[...document.querySelectorAll('#settings-ai-profiles label')].find(l=>l.querySelector('span')?.textContent==='Name').querySelector('input');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'Bozza');input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+ await sleep(150);
+ await evaluate('history.back()');
+ await until("!!document.querySelector('dialog[open]')&&document.querySelector('dialog[open] h2').textContent==='Discard unsaved changes?'");
+ assert.ok(await evaluate("location.hash.startsWith('#settings')"),'Indietro bloccato: l\'hash resta sulle impostazioni');
+ await click('Cancel');
+ await until("!document.querySelector('dialog[open]')");
+ assert.ok(await evaluate(`!!${settings}&&location.hash.startsWith('#settings')`),'Annulla lascia aperte le impostazioni');
+ assert.ok(await evaluate(`(()=>{const b=${settings}.querySelector('button[aria-label="Close"]');if(!b)return false;b.click();return true;})()`),'Pulsante Chiudi');
+ await until("!!document.querySelector('dialog[open]')");
+ await click('Discard changes');
+ await until(`!${settings}&&location.hash===''`);
+ await until(`document.activeElement===${composer}`);
  assert.deepEqual(errors,[],'Nessuna eccezione runtime');
- console.log('Chromium AI smoke: modalità AI, composer con Invio, proposta, accept-all, blocco, AI→Editor undo, before-ai, chip selezione e accettazione ripetuta e per blocchi, rendering sicuro senza risorse remote, ripristino cronologia: OK');
+ console.log('Chromium AI smoke: modalità AI, composer con Invio, proposta, accept-all, blocco, AI→Editor undo, before-ai, chip selezione e accettazione ripetuta e per blocchi, rendering sicuro senza risorse remote, ripristino cronologia, chip dopo selezione in Editor, impostazioni con focus e conferma su Indietro/Chiudi: OK');
 }finally{socket?.close();chrome.kill();vite.kill();await Promise.all([new Promise(r=>chrome.exitCode!==null?r():chrome.once('exit',r)),new Promise(r=>vite.exitCode!==null?r():vite.once('exit',r))]);await rm(profile,{recursive:true,force:true,maxRetries:3});}
