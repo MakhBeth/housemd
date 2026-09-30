@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { AiController } from '../../ai/aiController';
 import { isBusy, reviewStatus } from '../../ai/reviewStatus';
 import type { CheckWarning } from '../../ai/types';
-import { Editor, type EditorProps } from '../../editor/Editor';
+import { Editor, type EditorHandle, type EditorProps } from '../../editor/Editor';
 import { useT } from '../../i18n/I18nProvider';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { DiffPane, type DiffHandle } from './DiffPane';
@@ -20,6 +20,9 @@ export function ReviewView({ controller, editor }: Props) {
   const t = useT();
   const state = useSyncExternalStore(controller.subscribe, controller.getState);
   const diff = useRef<DiffHandle>(null);
+  const plain = useRef<EditorHandle>(null);
+  const section = useRef<HTMLElement>(null);
+  const shownView = useRef<'plain' | 'diff' | null>(null);
   const [confirm, setConfirm] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const p = state.proposals.get(editor.path);
@@ -39,6 +42,20 @@ export function ReviewView({ controller, editor }: Props) {
   const status = reviewStatus({ path: editor.path, proposal: p, running: state.running, elapsedSeconds: elapsed, applied });
   const streaming = !p || status.kind === 'generating' || status.kind === 'scopeLost';
   const range = p?.scope ? { from: p.scope.from, to: p.scope.from + p.text.length } : undefined;
+  const view: 'plain' | 'diff' = !p || (applied && status.kind === 'applied') ? 'plain' : 'diff';
+
+  // Passando tra diff ed editor normale (accettato tutto, Ctrl+Z che fa ricomparire il diff…) il focus
+  // segue l'editor nuovo, se prima era nella revisione: così il Ctrl+Z successivo arriva ancora a CodeMirror.
+  // useEffect (non layout): gli effetti dei figli, che creano gli editor, sono già stati eseguiti.
+  useEffect(() => {
+    const previous = shownView.current;
+    shownView.current = view;
+    if (previous === null || previous === view) return;
+    const active = document.activeElement;
+    if (active !== document.body && !section.current?.contains(active)) return;
+    if (view === 'plain') plain.current?.focus();
+    else diff.current?.focus();
+  }, [view]);
 
   const accept = () => {
     if (!p || !controller.beforeAccept(p, true)) return;
@@ -55,7 +72,7 @@ export function ReviewView({ controller, editor }: Props) {
 
   if (!p) {
     return (
-      <section className={styles.review}>
+      <section ref={section} className={styles.review}>
         {status.kind === 'generating' ? (
           <ReviewBar
             status={status}
@@ -73,7 +90,7 @@ export function ReviewView({ controller, editor }: Props) {
           <p className={styles.hint}>{t('ai.emptyProposal')}</p>
         )}
         <div className={styles.editor}>
-          <Editor {...editor} />
+          <Editor ref={plain} {...editor} />
         </div>
       </section>
     );
@@ -83,16 +100,16 @@ export function ReviewView({ controller, editor }: Props) {
   // La proposta resta: se Ctrl+Z riporta il documento com'era, il diff ricompare.
   if (applied && status.kind === 'applied') {
     return (
-      <section className={styles.review}>
+      <section ref={section} className={styles.review}>
         <div className={styles.editor}>
-          <Editor {...editor} />
+          <Editor ref={plain} {...editor} />
         </div>
       </section>
     );
   }
 
   return (
-    <section className={styles.review}>
+    <section ref={section} className={styles.review}>
       <ReviewBar
         status={status}
         warnings={warnings}

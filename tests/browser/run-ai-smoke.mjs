@@ -45,6 +45,27 @@ try{
  assert.equal(await evaluate("[...document.querySelectorAll('button')].some(b=>b.textContent==='Discard')"),false,'Tutti i blocchi rifiutati: proposta scartata e barra chiusa');
  assert.equal(await evaluate('smoke.ws.getState().doc.text'),'A\n\nB\n\nC');
 
+ // Ctrl+Z vero (tastiera) dopo ←, → e Accetta tutto: annulla l'ultima azione di revisione.
+ const ctrlZ=async()=>{for(const type of ['rawKeyDown','keyUp'])await send('Input.dispatchKeyEvent',{type,key:'z',code:'KeyZ',windowsVirtualKeyCode:90,modifiers:2});await sleep(200);};
+ const proposalText=()=>evaluate("smoke.EditorView.findFromDOM([...document.querySelectorAll('.cm-mergeView .cm-editor')].at(-1)).state.doc.toString()");
+ await evaluate("smoke.reply='A2\\n\\nB\\n\\nC2'");
+ await request();
+ await until("document.querySelectorAll('.cm-merge-revert button[data-action=accept]').length===2");
+ await mouse('.cm-merge-revert button[data-action=accept]');await sleep(150);
+ assert.equal(await evaluate('smoke.ws.getState().doc.text'),'A2\n\nB\n\nC');
+ await ctrlZ();
+ assert.equal(await evaluate('smoke.ws.getState().doc.text'),'A\n\nB\n\nC','Ctrl+Z annulla l\'accettazione di un blocco');
+ await until("document.querySelectorAll('.cm-merge-revert button[data-action=reject]').length===2");
+ await mouse('.cm-merge-revert button[data-action=reject]');await sleep(150);
+ assert.equal(await proposalText(),'A\n\nB\n\nC2');
+ await ctrlZ();
+ assert.equal(await proposalText(),'A2\n\nB\n\nC2','Ctrl+Z annulla il rifiuto di un blocco senza toccare il testo arrivato dal modello');
+ await click('Accept all');
+ await until("!document.querySelector('.cm-mergeView')");
+ await ctrlZ();
+ assert.equal(await evaluate('smoke.ws.getState().doc.text'),'A\n\nB\n\nC','Ctrl+Z dopo Accetta tutto riporta il documento');
+ await until("!!document.querySelector('.cm-mergeView')");
+
  // Selezione intra-riga: un'accettazione a righe non deve inglobare prefisso/suffisso.
  const scopedOriginal='prefisso BAD\none\ntwo\nthree\nfour\nfive\nBAD suffisso';
  const scopedReply=scopedOriginal.slice(9,-9).replaceAll('BAD','GOOD');
