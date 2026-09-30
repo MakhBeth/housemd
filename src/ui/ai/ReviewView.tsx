@@ -79,6 +79,18 @@ export function ReviewView({ controller, editor }: Props) {
     );
   }
 
+  // Nessuna differenza rimasta (accettato tutto, a blocchi o in una volta): torna l'editor normale.
+  // La proposta resta: se Ctrl+Z riporta il documento com'era, il diff ricompare.
+  if (applied && status.kind === 'applied') {
+    return (
+      <section className={styles.review}>
+        <div className={styles.editor}>
+          <Editor {...editor} />
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className={styles.review}>
       <ReviewBar
@@ -109,6 +121,8 @@ export function ReviewView({ controller, editor }: Props) {
         beforeAccept={() => controller.beforeAccept(p)}
         onEdit={edit}
         acceptLabel={t('ai.acceptBlock')}
+        rejectLabel={t('ai.rejectBlock')}
+        onAllRejected={() => controller.discard(p.path)}
       />
       {confirm && (
         <ConfirmDialog title={t('ai.acceptAll')} message={t('ai.changedWarning')} confirmLabel={t('ai.acceptAll')} onConfirm={accept} onCancel={() => setConfirm(false)} />

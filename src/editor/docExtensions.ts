@@ -64,14 +64,16 @@ export function mainSelectionRange(state: EditorState): { from: number; to: numb
   return main.empty ? null : { from: main.from, to: main.to };
 }
 
+/** Aspetto del documento (markdown, colori, carattere, a capo): condiviso con il lato AI del diff. */
+export function docAppearance() {
+  return [markdown(), syntaxHighlighting(highlight), EditorView.lineWrapping, theme];
+}
+
 export function docExtensions(callbacks: Callbacks) {
   return [
       basicSetup,
       EditorState.transactionFilter.of(tr => !tr.docChanged || tr.isUserEvent('input.restore') || callbacks.current.canChange?.(tr.changes) !== false ? tr : []),
-      markdown(),
-      syntaxHighlighting(highlight),
-      EditorView.lineWrapping,
-      theme,
+      docAppearance(),
       editable.of(readOnlyExtensions(callbacks.current.readOnly ?? false)),
       autocompletion({ override: [wikiCompletionSource(() => callbacks.current.getDocs())] }),
       EditorView.updateListener.of((update) => {

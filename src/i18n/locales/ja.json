@@ -148,6 +148,7 @@
   "ai.next": "次の変更",
   "ai.acceptAll": "すべて採用",
   "ai.acceptBlock": "この変更を採用",
+  "ai.rejectBlock": "この変更を却下",
   "ai.discard": "破棄",
   "ai.continue": "続行",
   "ai.applied": "提案を適用しました",

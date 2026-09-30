@@ -25,16 +25,34 @@ try{
  await send('Runtime.enable');await send('Network.enable');await send('Page.navigate',{url:origin+'/tests/browser/ai-smoke.html'});
  await until("!!document.querySelector('.cm-editor')");await until("[...document.querySelectorAll('button')].some(b=>b.getAttribute('aria-label')==='AI')");await press('AI');await until(`!!${composer}`);await request();
  await click('Accept all');assert.equal(await evaluate('smoke.ws.getState().doc.text'),'# Changed\n\nNew paragraph.');
+ await until("!document.querySelector('.cm-mergeView')");assert.equal(await evaluate("[...document.querySelectorAll('button')].some(b=>b.textContent==='Accept all')"),false,'Senza differenze la barra di revisione sparisce');
  await press('Editor');assert.equal(await evaluate("smoke.undo(smoke.EditorView.findFromDOM(document.querySelector('.cm-editor')))"),true);assert.equal(await evaluate('smoke.ws.getState().doc.text'),'# Original\n\nParagraph.');
  assert.equal(await evaluate("smoke.history.list('smoke','a.md').then(rows=>rows.filter(r=>r.reason==='before-ai').length)"),1);
- await press('AI');await until("!!document.querySelector('.cm-merge-revert button')");await evaluate("document.querySelector('.cm-merge-revert button').dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true}))");assert.equal(await evaluate('smoke.ws.getState().doc.text'),'# Changed\n\nNew paragraph.');
+ await press('AI');await until("!!document.querySelector('.cm-merge-revert button[data-action=accept]')");await evaluate("document.querySelector('.cm-merge-revert button[data-action=accept]').dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true}))");assert.equal(await evaluate('smoke.ws.getState().doc.text'),'# Changed\n\nNew paragraph.');
+
+ // Rifiuto per blocco: → rimette l'originale nella proposta; rifiutare l'ultimo blocco scarta la proposta.
+ const mouse=selector=>evaluate(`document.querySelector(${JSON.stringify(selector)}).dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true}))`);
+ await until("!document.querySelector('.cm-mergeView')");
+ await evaluate("(()=>{const view=smoke.EditorView.findFromDOM(document.querySelector('.cm-editor'));view.dispatch({changes:{from:0,to:view.state.doc.length,insert:'A\\n\\nB\\n\\nC'},selection:{anchor:0}});smoke.reply='A2\\n\\nB\\n\\nC2';})()");
+ await sleep(100);await request();
+ await until("document.querySelectorAll('.cm-merge-revert button[data-action=reject]').length===2");
+ assert.equal(await evaluate("(()=>{const [a,b]=document.querySelectorAll('.cm-mergeView .cm-scroller');return getComputedStyle(a).fontFamily===getComputedStyle(b).fontFamily&&getComputedStyle(a).lineHeight===getComputedStyle(b).lineHeight;})()"),true,'Stesso carattere e interlinea nei due lati del diff');
+ await mouse('.cm-merge-revert button[data-action=reject]');await sleep(150);
+ assert.equal(await evaluate('smoke.ws.getState().doc.text'),'A\n\nB\n\nC','Rifiutare un blocco non tocca il documento');
+ assert.equal(await evaluate("smoke.EditorView.findFromDOM([...document.querySelectorAll('.cm-editor')].at(-1)).state.doc.toString()"),'A\n\nB\n\nC2','Il blocco rifiutato torna come l\'originale nella proposta');
+ await mouse('.cm-merge-revert button[data-action=reject]');
+ await until("!document.querySelector('.cm-mergeView')");
+ assert.equal(await evaluate("[...document.querySelectorAll('button')].some(b=>b.textContent==='Discard')"),false,'Tutti i blocchi rifiutati: proposta scartata e barra chiusa');
+ assert.equal(await evaluate('smoke.ws.getState().doc.text'),'A\n\nB\n\nC');
 
  // Selezione intra-riga: un'accettazione a righe non deve inglobare prefisso/suffisso.
  const scopedOriginal='prefisso BAD\none\ntwo\nthree\nfour\nfive\nBAD suffisso';
  const scopedReply=scopedOriginal.slice(9,-9).replaceAll('BAD','GOOD');
  const scopedTarget='prefisso '+scopedReply+' suffisso';
  const setSelectedDocument=async()=>{
-  await click('Discard');
+  // Dopo un'accettazione completa non c'è più la barra: si scarta solo se c'è ancora una proposta aperta.
+  if(await evaluate("[...document.querySelectorAll('button')].some(b=>b.textContent==='Discard'&&!b.disabled)"))await click('Discard');
+  await until("!document.querySelector('.cm-mergeView')");
   await evaluate(`(()=>{const view=smoke.EditorView.findFromDOM(document.querySelector('.cm-editor'));const text=${JSON.stringify(scopedOriginal)};view.dispatch({changes:{from:0,to:view.state.doc.length,insert:text},selection:{anchor:9,head:text.length-9}});smoke.reply=${JSON.stringify(scopedReply)};})()`);
   await sleep(100);
  };
@@ -42,15 +60,14 @@ try{
  await setSelectedDocument();
  await until("[...document.querySelectorAll('span')].some(s=>s.textContent.startsWith('Selection · '))");
  await request();
- for(let i=0;i<2;i++){
-  await click('Accept all');
-  assert.equal(await evaluate('smoke.ws.getState().doc.text'),scopedTarget,'Accetta tutto conserva il contesto esterno alla selezione');
-  assert.equal(await rightText(),scopedTarget,'Accetta tutto ripetibile senza restringere la proposta alla sola selezione');
- }
+ await click('Accept all');
+ assert.equal(await evaluate('smoke.ws.getState().doc.text'),scopedTarget,'Accetta tutto conserva il contesto esterno alla selezione');
+ await until("!document.querySelector('.cm-mergeView')");
+ assert.equal(await rightText(),scopedTarget,'Dopo Accetta tutto resta l\'editor con il documento completo');
  await setSelectedDocument();await request();
- await until("document.querySelectorAll('.cm-merge-revert button').length===2");
+ await until("document.querySelectorAll('.cm-merge-revert button[data-action=accept]').length===2");
  for(let i=0;i<2;i++){
-  await evaluate("document.querySelector('.cm-merge-revert button').dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true}))");
+  await evaluate("document.querySelector('.cm-merge-revert button[data-action=accept]').dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true}))");
   await sleep(150);
   assert.equal(await rightText(),scopedTarget,'Accetta blocco intra-riga mantiene i confini originali della selezione');
  }

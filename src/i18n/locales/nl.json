@@ -148,6 +148,7 @@
   "ai.next": "Volgende wijziging",
   "ai.acceptAll": "Alles accepteren",
   "ai.acceptBlock": "Deze wijziging accepteren",
+  "ai.rejectBlock": "Deze wijziging afwijzen",
   "ai.discard": "Verwerpen",
   "ai.continue": "Doorgaan",
   "ai.applied": "Voorstel toegepast",

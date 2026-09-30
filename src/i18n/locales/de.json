@@ -148,6 +148,7 @@
   "ai.next": "Nächste Änderung",
   "ai.acceptAll": "Alles übernehmen",
   "ai.acceptBlock": "Diese Änderung übernehmen",
+  "ai.rejectBlock": "Diese Änderung ablehnen",
   "ai.discard": "Verwerfen",
   "ai.continue": "Fortsetzen",
   "ai.applied": "Vorschlag übernommen",

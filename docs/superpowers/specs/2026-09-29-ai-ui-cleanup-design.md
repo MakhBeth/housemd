@@ -198,6 +198,12 @@ contenitore dei toast dell'app. `Toasts` oggi accetta solo i `Toast` del `Worksp
 - Scarta e Accetta tutto: stile secondario; Accetta tutto con testo in colore accento. Stesse condizioni di
   abilitazione e stessa conferma (`ConfirmDialog` quando il documento è cambiato) di oggi.
 - `streamingPreview` (anteprima grezza durante lo streaming): resta, come `<details>` chiuso sotto la barra.
+- Controlli per blocco (aggiunta del 30/9, dopo la prova manuale): **←** accetta il blocco (verso "b-to-a" della
+  libreria), **→** lo rifiuta rimettendo il testo originale nella proposta. Il lato AI usa lo stesso aspetto
+  dell'editor (`docAppearance()`: carattere, interlinea, colori), così le righe dei due lati restano allineate.
+- Quando non restano differenze la revisione si chiude: se l'ultima azione è un'accettazione torna l'editor
+  normale e la proposta resta (Ctrl+Z fa ricomparire il diff); se l'ultimo blocco viene rifiutato equivale a
+  "rifiuta tutto" e la proposta viene scartata.
 
 ## 6. Pagina impostazioni (`SettingsView`)
 

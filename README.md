@@ -151,7 +151,9 @@ nuovamente. **Estensioni e chi usa il profilo del browser possono leggere una ch
 chiave dedicata con limite di spesa. Il bridge Claude è locale, ma la CLI inoltra il testo ad Anthropic.
 
 La barra di revisione ha le frecce per le modifiche precedente/successiva, gli avvisi quando ci sono,
-**Scarta** e **Accetta tutto**; ogni blocco del diff si accetta anche da solo.
+**Scarta** e **Accetta tutto**. Ogni blocco del diff ha **←** (accetta) e **→** (rifiuta: torna il testo originale).
+Quando non restano differenze la barra si chiude: accettando si torna all'editor (Ctrl+Z fa ricomparire il diff),
+rifiutando tutti i blocchi la proposta viene scartata.
 
 L'accettazione è una transazione dell'editor, annullabile anche dopo aver cambiato vista, e crea uno snapshot
 `before-ai`. Durante lo streaming non si accetta; una risposta troncata si accetta solo per blocchi.
