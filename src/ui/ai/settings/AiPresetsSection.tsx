@@ -2,11 +2,11 @@
 import { useState, useSyncExternalStore } from 'react';
 
 import type { AiController } from '../../../ai/aiController';
+import { presetLabel } from '../../../ai/presetName';
 import { builtInPresets, restorePreset } from '../../../ai/presets';
 import { defaultProfile } from '../../../ai/profiles';
 import type { PromptPreset } from '../../../ai/types';
 import { useT } from '../../../i18n/I18nProvider';
-import type { MessageKey } from '../../../i18n/messages';
 import { ConfirmDialog } from '../../ConfirmDialog';
 import { Parameters } from '../Parameters';
 import { ItemList, useDraft } from './ItemList';
@@ -18,7 +18,7 @@ export function AiPresetsSection({ controller, onDirty }: { controller: AiContro
   const { draft, setDraft, markSaved, select, pending, confirmSwitch, cancelSwitch } = useDraft<PromptPreset>(onDirty);
   const [deleting, setDeleting] = useState(false);
   const run = (job: Promise<unknown>) => void job.catch((e) => controller.report(e));
-  const name = (p: PromptPreset) => p.name || t(`ai.preset.${p.builtInId}` as MessageKey);
+  const name = (p: PromptPreset) => presetLabel(p, t);
   const sorted = [...state.presets].sort((a, b) => a.order - b.order);
 
   return (
@@ -76,7 +76,7 @@ export function AiPresetsSection({ controller, onDirty }: { controller: AiContro
           </label>
           <Parameters profile={defaultProfile()} value={draft.params ?? {}} onChange={(params) => setDraft({ ...draft, params })} />
           <div className={styles.actions}>
-            <button type="button" onClick={() => setDraft({ ...draft, id: crypto.randomUUID(), builtInId: undefined })}>
+            <button type="button" onClick={() => setDraft({ ...draft, id: crypto.randomUUID(), builtInId: undefined, name: name(draft) })}>
               {t('ai.duplicate')}
             </button>
             {draft.builtInId ? (

@@ -131,7 +131,8 @@ sessioni persistite, CORS e permessi Chrome dall'origine pubblicata.
 L'icona **AI** accanto a Editor, Split e Preview (anche `Ctrl/Cmd+Shift+E`) apre la revisione del documento
 corrente con la chat nella sidebar. **Invio** invia, **Shift+Invio** va a capo, **Stop**/`Esc` interrompe.
 Selezionando del testo nell'editor compare il chip "Selezione": la richiesta riguarda solo quel tratto
-(✕ per usare tutto il documento). I preset compaiono come suggerimenti finché la chat è vuota. Il chip del
+(✕ per usare tutto il documento). I preset compaiono come suggerimenti finché la chat è vuota. Il testo parte
+solo su invio o clic su un suggerimento; elenchi modelli e prove di connessione non inviano documenti. Il chip del
 modello apre profili, modello e parametri; l'effort ha un suo chip quando il profilo lo supporta.
 `Ctrl/Cmd+K` torna ai file con il focus sulla ricerca. File e AI ricordano larghezze separate.
 

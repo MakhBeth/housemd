@@ -2,10 +2,10 @@ import { forwardRef, useImperativeHandle, useState, useSyncExternalStore } from 
 
 import type { AiController } from '../../ai/aiController';
 import { composerAction } from '../../ai/composerKeys';
+import { presetLabel } from '../../ai/presetName';
 import { sameRange, selectionLabel, type TextRange } from '../../ai/selectionChip';
 import type { SelectionScope } from '../../ai/types';
 import { useT } from '../../i18n/I18nProvider';
-import type { MessageKey } from '../../i18n/messages';
 import { Icon } from '../Icon';
 import { EffortChip } from './EffortChip';
 import { ModelChip } from './ModelChip';
@@ -37,7 +37,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer({ co
   const send = (presetId?: string) => {
     if (running) return;
     const preset = presetId ? state.presets.find((p) => p.id === presetId) : undefined;
-    const message = preset ? preset.name || t(`ai.preset.${preset.builtInId}` as MessageKey) : request.trim();
+    const message = preset ? presetLabel(preset, t) : request.trim();
     if (!message || !controller.profile()) return;
     const scope = scoped ? getSelection() : undefined;
     if (scoped && !scope) return controller.report({ code: 'scopeLost' });
