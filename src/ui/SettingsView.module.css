@@ -32,6 +32,11 @@
   font-weight: normal;
 }
 
+/* Il titolo riceve il focus solo da script (all'apertura): nessun anello. */
+.navHeader h1:focus {
+  outline: none;
+}
+
 .navLink {
   padding: 6px 10px;
   border-radius: 6px;

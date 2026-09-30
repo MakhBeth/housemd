@@ -5,7 +5,7 @@ import { EditorView } from '@codemirror/view';
 import { basicSetup } from 'codemirror';
 import { markdown } from '@codemirror/lang-markdown';
 import type { EditorProps, EditorHandle } from '../../editor/Editor';
-import { docExtensions, editable, readOnlyExtensions } from '../../editor/docExtensions';
+import { docExtensions, editable, mainSelectionRange, readOnlyExtensions } from '../../editor/docExtensions';
 import { docStateConfig, saveDocSession } from '../../editor/docSession';
 import { applyDocRestore } from '../../editor/useDocBinding';
 import { initialRestoreSeq } from '../../editor/restoreCommand';
@@ -19,6 +19,8 @@ export const DiffPane=forwardRef<DiffHandle,Props>(function DiffPane(props,ref){
  const session=props.editor.session!;
  const m=new MergeView({parent:host.current!,a:docStateConfig(session,docExtensions(callbacks)),b:{doc:latest.current.proposal,extensions:[basicSetup,EditorState.transactionFilter.of(tr=>{if(remote.current||!tr.docChanged||!latest.current.range)return tr;let valid=true;tr.changes.iterChangedRanges((from,to)=>{if(from<latest.current.range!.from||to>latest.current.range!.to)valid=false;});return valid?tr:[];}),markdown(),EditorView.lineWrapping,rightEditable.current.of(readOnlyExtensions(props.streaming)),EditorView.updateListener.of(u=>{if(u.docChanged&&!remote.current)latest.current.onEdit(u.state.doc.toString());})]},revertControls:'b-to-a',renderRevertControl:()=>{const b=document.createElement('button');b.textContent='←';b.title=latest.current.acceptLabel;b.disabled=!latest.current.canAccept; b.setAttribute('aria-label',latest.current.acceptLabel);b.addEventListener('mousedown',e=>{if(!latest.current.canAccept||!latest.current.beforeAccept()){e.preventDefault();e.stopPropagation();}});b.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&latest.current.canAccept){e.preventDefault();b.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true}));}});return b;}});
  merge.current=m;
+ // Lo stato creato dalla sessione non passa dall'updateListener: si annuncia la selezione ripristinata.
+ callbacks.current.onSelection?.(mainSelectionRange(m.a.state));
  return()=>{saveDocSession(session,m.a.state);m.destroy();merge.current=null;};
  },[props.editor.resetKey]);
  useEffect(()=>{const m=merge.current;if(!m)return;remote.current=true;if(m.b.state.doc.toString()!==props.proposal)m.b.dispatch({changes:{from:0,to:m.b.state.doc.length,insert:props.proposal}});remote.current=false;},[props.proposal]);

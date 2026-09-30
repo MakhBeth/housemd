@@ -58,6 +58,12 @@ function insertImages(view: EditorView, files: File[], pos: number, callbacks: C
   });
 }
 
+/** Selezione principale come tratto, null se vuota (chip della selezione del composer AI). */
+export function mainSelectionRange(state: EditorState): { from: number; to: number } | null {
+  const main = state.selection.main;
+  return main.empty ? null : { from: main.from, to: main.to };
+}
+
 export function docExtensions(callbacks: Callbacks) {
   return [
       basicSetup,
@@ -74,10 +80,7 @@ export function docExtensions(callbacks: Callbacks) {
           callbacks.current.onTransactions?.(update.changes, { before: update.startState.doc.toString(), after });
           callbacks.current.onChange(after);
         }
-        if (update.selectionSet || update.docChanged) {
-          const main = update.state.selection.main;
-          callbacks.current.onSelection?.(main.empty ? null : { from: main.from, to: main.to });
-        }
+        if (update.selectionSet || update.docChanged) callbacks.current.onSelection?.(mainSelectionRange(update.state));
         if (callbacks.current.session) saveDocSession(callbacks.current.session, update.state);
       }),
       EditorView.domEventHandlers({

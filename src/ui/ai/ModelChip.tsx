@@ -61,14 +61,16 @@ export function ModelChip({ controller, onManage }: Props) {
   const label = `${profile.name} · ${effective.model || t('ai.cliDefault')}`;
   const changed = Object.keys(overrides).length > 0;
   const run = (job: Promise<unknown>) => void job.catch((e) => controller.report(e));
+  const note = privacyNote(t, profile);
 
   return (
     <span className={styles.chipAnchor}>
       <button
         type="button"
         className={`${styles.chip} tooltip`}
-        data-tooltip={privacyNote(t, profile)}
+        data-tooltip={note}
         aria-label={`${t('ai.profile')}: ${label}`}
+        aria-describedby={`${id}-privacy`}
         {...{ popovertarget: id }}
       >
         {label}
@@ -76,6 +78,9 @@ export function ModelChip({ controller, onManage }: Props) {
         <Icon name="chevronDown" size={12} />
       </button>
       <div ref={popover} id={id} {...autoPopover} className={styles.popover}>
+        <p id={`${id}-privacy`} className={styles.popoverNote}>
+          {note}
+        </p>
         {[true, false].map((local) => {
           const group = state.profiles.filter((p) => isLocalProfile(p) === local);
           if (group.length === 0) return null;

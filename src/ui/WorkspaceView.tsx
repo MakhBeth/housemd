@@ -104,7 +104,21 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
     settingsDirty.current = dirty;
   }, []);
   const settingsOpen = route.view === 'settings';
-  const openSettings = useCallback((section: SettingsSection = 'general') => navigate({ view: 'settings', section }), [navigate]);
+  // Elemento col focus prima di aprire le impostazioni: alla chiusura il focus torna lì.
+  const focusBeforeSettings = useRef<HTMLElement | null>(null);
+  const openSettings = useCallback(
+    (section: SettingsSection = 'general') => {
+      if (document.activeElement instanceof HTMLElement && document.activeElement !== document.body) focusBeforeSettings.current = document.activeElement;
+      navigate({ view: 'settings', section });
+    },
+    [navigate],
+  );
+  useEffect(() => {
+    if (settingsOpen) return;
+    const previous = focusBeforeSettings.current;
+    focusBeforeSettings.current = null;
+    if (previous?.isConnected) previous.focus();
+  }, [settingsOpen]);
   const [historyOpen, setHistoryOpen] = useState(false);
   /** Ripristino chiesto in modalità anteprima: parte appena l'editor è montato. */
   const [queuedRestore, setQueuedRestore] = useState<{ id: number; path: string } | null>(null);
@@ -255,10 +269,11 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
   // Scorciatoie globali: vedi src/ui/shortcuts.ts.
   useEffect(() => {
     const onKey = (event: globalThis.KeyboardEvent) => {
-      if (settingsOpen) return;
-      if (event.key === 'Escape' && shownMode === 'ai') ai?.stop();
+      if (event.key === 'Escape' && shownMode === 'ai' && !settingsOpen) ai?.stop();
       const shortcut = shortcutFor(event);
       if (!shortcut) return;
+      // Con le impostazioni aperte restano solo i salvataggi (altrimenti Ctrl+S apre "Salva pagina").
+      if (settingsOpen && shortcut !== 'save' && shortcut !== 'saveAll') return;
       event.preventDefault();
       switch (shortcut) {
         case 'save':
@@ -445,8 +460,8 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
             </span>
             <button
               className={`${styles.iconButton} tooltip`}
-              onClick={() => { if (shownMode === 'ai') changeMode(lastPane.current); setHistoryOpen(!historyOpen); }}
-              aria-pressed={historyOpen}
+              onClick={() => { if (shownMode === 'ai') changeMode(lastPane.current); setHistoryOpen(shownMode === 'ai' ? true : !historyOpen); }}
+              aria-pressed={shownMode !== 'ai' && historyOpen}
               disabled={!doc}
               aria-label={t('toolbar.history')}
               data-tooltip={t('toolbar.history')}
@@ -488,6 +503,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
                   onTopLine={(line) => {
                     if (shownMode === 'split') previewRef.current?.scrollToLine(line);
                   }}
+                  onSelection={onSelection}
                 />
               </section>
             )}

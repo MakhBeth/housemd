@@ -4,7 +4,7 @@ import { EditorView } from '@codemirror/view';
 import type { DocTitle } from '../search/searchIndex';
 import { initialRestoreSeq, type RestoreCommand } from './restoreCommand';
 import { applyDocRestore } from './useDocBinding';
-import { docExtensions, editable, readOnlyExtensions } from './docExtensions';
+import { docExtensions, editable, mainSelectionRange, readOnlyExtensions } from './docExtensions';
 import { docStateConfig, saveDocSession, type DocSession } from './docSession';
 import styles from './Editor.module.css';
 
@@ -68,7 +68,11 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
   useEffect(() => {
     const session = props.session;
     if (session && session.resetKey !== props.resetKey) { session.resetKey = props.resetKey; session.textLf = props.text; session.history = undefined; session.selection = undefined; }
-    viewRef.current?.setState(EditorState.create(session ? docStateConfig(session, docExtensions(callbacks)) : { doc: props.text, extensions: docExtensions(callbacks) }));
+    const view = viewRef.current;
+    if (!view) return;
+    view.setState(EditorState.create(session ? docStateConfig(session, docExtensions(callbacks)) : { doc: props.text, extensions: docExtensions(callbacks) }));
+    // setState non passa dall'updateListener: la selezione ripristinata dalla sessione va annunciata qui.
+    callbacks.current.onSelection?.(mainSelectionRange(view.state));
   }, [props.resetKey]);
 
   // Non passa da resetKey: la sostituzione deve restare nella cronologia di annullamento. Una volta sola.

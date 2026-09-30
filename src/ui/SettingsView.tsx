@@ -47,6 +47,7 @@ export function SettingsView({ section, onSection, onClose, onDirtyChange, close
   const [confirmClose, setConfirmClose] = useState(false);
   const [visible, setVisible] = useState<SettingsSection>(section);
   const content = useRef<HTMLDivElement>(null);
+  const title = useRef<HTMLHeadingElement>(null);
   const sections: SettingsSection[] = ai ? ['general', 'ai-profiles', 'ai-presets', 'ai-sync'] : ['general'];
 
   const markDirty = (id: SettingsSection) => (value: boolean) =>
@@ -72,6 +73,9 @@ export function SettingsView({ section, onSection, onClose, onDirtyChange, close
     if (dirty.size > 0) setConfirmClose(true);
     else onClose();
   };
+
+  // Aprendo, il focus va sul titolo: il resto dell'app è inerte e il focus precedente andrebbe perso.
+  useEffect(() => title.current?.focus({ preventScroll: true }), []);
 
   useEffect(() => onDirtyChange(dirty.size > 0), [dirty, onDirtyChange]);
   // Il contatore vive in WorkspaceView e può essere già > 0 al montaggio: si reagisce solo ai cambi.
@@ -118,7 +122,9 @@ export function SettingsView({ section, onSection, onClose, onDirtyChange, close
           <button type="button" className={`${styles.iconButton} tooltip`} aria-label={t('settings.close')} data-tooltip={t('settings.close')} onClick={close}>
             <Icon name="close" />
           </button>
-          <h1>{t('settings.title')}</h1>
+          <h1 ref={title} tabIndex={-1}>
+            {t('settings.title')}
+          </h1>
         </div>
         {sections.map((id) => (
           <a
