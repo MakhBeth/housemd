@@ -72,6 +72,15 @@ button {
   }
 }
 
+/*
+ * Campi di testo ed editor soddisfano :focus-visible anche al clic: lì il ring compare solo se il focus
+ * è arrivato dalla tastiera (data-focus-source, src/ui/focusSource.ts). Il campo ha già il suo bordo.
+ */
+:root[data-focus-source='pointer'] :is(input, textarea, select, [contenteditable]):focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
 ::highlight(housemd-search) {
   background-color: var(--c-highlight);
   color: inherit;

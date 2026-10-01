@@ -16,8 +16,10 @@ import { readValidPref } from './lib/prefs';
 import { registerSW } from 'virtual:pwa-register';
 import { registerUpdates } from './pwa/registerUpdates';
 import { updateHost } from './pwa/updateHost';
+import { installFocusSource } from './ui/focusSource';
 
 const updates = registerUpdates(registerSW, updateHost);
+installFocusSource(document);
 
 const requestedLocale = readValidPref('locale', parseLocale) ?? detectLocale(navigator.languages);
 
