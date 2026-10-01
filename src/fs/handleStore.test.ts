@@ -100,3 +100,21 @@ test('corrupt entries in the known list are skipped, valid ones still match', as
   await saveWorkspace({ name: 'b' }, dbName);
   assert.equal(await findKnownWorkspaceId(picked('a'), dbName), a.workspaceId);
 });
+
+test('saving another folder keeps fields this version does not know in the known list', async () => {
+  const dbName = 'hs-unknown-fields';
+  const db = await openDb(dbName);
+  const tx = db.transaction('workspace', 'readwrite');
+  tx.objectStore('workspace').put([{ handle: { name: 'a' }, workspaceId: 'id-a', color: 'blue' }], 'known');
+  await transactionDone(tx);
+  db.close();
+  await saveWorkspace({ name: 'b' }, dbName);
+  const db2 = await openDb(dbName);
+  const known = await new Promise<unknown>((resolve, reject) => {
+    const req = db2.transaction('workspace').objectStore('workspace').get('known');
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+  db2.close();
+  assert.equal((known as Array<{ workspaceId: string; color?: string }>).find((k) => k.workspaceId === 'id-a')?.color, 'blue');
+});

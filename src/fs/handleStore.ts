@@ -17,16 +17,18 @@ const KNOWN_KEY = 'known';
 
 /**
  * Forma di un record salvato. L'handle resta opaco (nessun metodo della File System Access API
- * nominato qui: solo fsaOps.ts e access.ts la toccano); basta che sia un oggetto.
+ * nominato qui: solo fsaOps.ts e access.ts la toccano); basta che sia un oggetto. looseObject: i campi
+ * che questa versione non conosce restano quando la lista viene riscritta.
  */
-const RECORD = z.object({
+const RECORD = z.looseObject({
   handle: z.custom<object>((value) => typeof value === 'object' && value !== null),
   workspaceId: z.string().check(z.minLength(1)),
 });
 
 function asStored<H>(value: unknown): StoredWorkspace<H> | null {
   const parsed = RECORD.safeParse(value);
-  return parsed.success ? (parsed.data as StoredWorkspace<H>) : null;
+  // L'oggetto opaco validato è l'handle di tipo H che il chiamante aveva salvato.
+  return parsed.success ? (parsed.data as unknown as StoredWorkspace<H>) : null;
 }
 
 /** Lista delle cartelle note: le voci illeggibili si scartano. */

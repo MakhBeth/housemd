@@ -19,7 +19,8 @@ export interface Snapshot {
 
 export type NewSnapshot = Omit<Snapshot, 'id'>;
 
-const SNAPSHOT = z.object({
+/** looseObject: i campi che questa versione non conosce restano (move() riscrive il record). */
+const SNAPSHOT = z.looseObject({
   id: z.number(),
   workspaceId: z.string(),
   path: z.string(),

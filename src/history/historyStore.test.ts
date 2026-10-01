@@ -76,3 +76,26 @@ test('indexedDB: a corrupt snapshot is left out of the list and reads as null', 
   assert.equal(await store.get(badId), null);
   assert.equal((await store.get(good))?.text, 'ok');
 });
+
+test('indexedDB: moving a snapshot keeps fields this version does not know (written by a newer one)', async () => {
+  const dbName = 'history-unknown-fields';
+  const store = indexedDbHistoryStore(dbName);
+  const db = await openDb(dbName);
+  const tx = db.transaction(HISTORY_STORE, 'readwrite');
+  tx.objectStore(HISTORY_STORE).add({ workspaceId: 'ws', path: 'a.md', savedAt: 1, text: 'x', reason: 'save', author: 'futuro' });
+  await transactionDone(tx);
+  db.close();
+  await store.move('ws', 'a.md', 'b.md');
+  const [moved] = await store.list('ws', 'b.md');
+  const raw = await new Promise<unknown>((resolve, reject) => {
+    void openDb(dbName).then((db2) => {
+      const req = db2.transaction(HISTORY_STORE).objectStore(HISTORY_STORE).get(moved.id);
+      req.onsuccess = () => {
+        db2.close();
+        resolve(req.result);
+      };
+      req.onerror = () => reject(req.error);
+    });
+  });
+  assert.equal((raw as { author?: string }).author, 'futuro');
+});
