@@ -1,3 +1,5 @@
+import * as z from 'zod/mini';
+
 import { DB_NAME, openDb, request, transactionDone } from '../lib/db';
 
 /** Testo non salvato più la sua base: l'ultimo contenuto noto su disco quando il buffer è stato scritto. */
@@ -27,9 +29,14 @@ function movedPath(path: string, from: string, to: string): string | null {
   return null;
 }
 
-/** Un buffer scritto dal formato precedente (semplice stringa) diventa `{ text, base: text }`. */
-function normalizeStored(value: BufferedText | string): BufferedText {
-  return typeof value === 'string' ? { text: value, base: value } : value;
+/** Formato salvato: stringa (versione precedente, diventa `{ text, base: text }`) oppure `{ text, base }`. */
+const STORED = z.union([z.string(), z.object({ text: z.string(), base: z.string() })]);
+
+/** Record letto dallo storage → buffer; null se manca o non è leggibile (dato corrotto). */
+function normalizeStored(value: unknown): BufferedText | null {
+  const parsed = STORED.safeParse(value);
+  if (!parsed.success) return null;
+  return typeof parsed.data === 'string' ? { text: parsed.data, base: parsed.data } : parsed.data;
 }
 
 export function memoryBufferStore(): BufferStore {
@@ -39,8 +46,7 @@ export function memoryBufferStore(): BufferStore {
       entries.set(bufferKey(ws, path), { text, base });
     },
     async load(ws, path) {
-      const value = entries.get(bufferKey(ws, path));
-      return value === undefined ? null : normalizeStored(value);
+      return normalizeStored(entries.get(bufferKey(ws, path)));
     },
     async clear(ws, path) {
       entries.delete(bufferKey(ws, path));
@@ -78,11 +84,7 @@ export function indexedDbBufferStore(dbName = DB_NAME): BufferStore {
 
   return {
     save: (ws, path, text, base) => withStore('readwrite', (s) => void s.put({ text, base }, bufferKey(ws, path))),
-    load: (ws, path) =>
-      withStore('readonly', async (s) => {
-        const value = (await request(s.get(bufferKey(ws, path)))) as BufferedText | string | undefined;
-        return value === undefined ? null : normalizeStored(value);
-      }),
+    load: (ws, path) => withStore('readonly', async (s) => normalizeStored(await request(s.get(bufferKey(ws, path))))),
     clear: (ws, path) => withStore('readwrite', (s) => void s.delete(bufferKey(ws, path))),
     move: (ws, from, to) =>
       withStore('readwrite', async (s) => {
