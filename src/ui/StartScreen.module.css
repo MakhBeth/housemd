@@ -24,6 +24,34 @@
   color: var(--c-text);
 }
 
+/* La casa è disegnata a punti accesi su fondo scuro: col tema chiaro si mostra il negativo. */
+.logoLight {
+  display: none;
+}
+
+:global(:root[data-theme='light']) .logoLight {
+  display: block;
+}
+
+:global(:root[data-theme='light']) .logoDark {
+  display: none;
+}
+
+@media (prefers-color-scheme: light) {
+  :global(:root:not([data-theme='dark'])) .logoLight {
+    display: block;
+  }
+
+  :global(:root:not([data-theme='dark'])) .logoDark {
+    display: none;
+  }
+}
+
+/* 38 colonne: più grande della casa, con lo stesso criterio di larghezza. */
+.wordmark {
+  font-size: clamp(8px, calc((min(100vw, 520px) - 48px) / 24), 16px);
+}
+
 .visuallyHidden {
   position: absolute;
   width: 1px;

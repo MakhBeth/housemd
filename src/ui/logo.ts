@@ -36,3 +36,20 @@ export const LOGO_LINES: readonly string[] = [
 ];
 
 export const LOGO = LOGO_LINES.join('\n');
+
+/** Accende i punti spenti e viceversa: ogni carattere braille codifica 8 punti nei bit sopra U+2800. */
+export function invertBraille(text: string): string {
+  return text.replace(/[\u2800-\u28ff]/g, (char) => String.fromCharCode(0x2800 + (0xff ^ (char.charCodeAt(0) - 0x2800))));
+}
+
+/** La casa in negativo per il tema chiaro: i punti disegnano le zone scure, i vuoti quelle chiare. */
+export const LOGO_INVERTED = invertBraille(LOGO);
+
+/** La scritta "HouseMD" in braille sotto la casa: righe di uguale larghezza, "MD" allineato all'ultima. */
+export const WORDMARK_LINES: readonly string[] = [
+  "⣿⡇⠀⢸⣿⠀⠀⢀⣴⡿⠛⢿⣦⡀⠀⠀⣿⡇⠀⣾⣷⠀⠀⢰⣿⠛⠻⠇⠀⠀⢸⣿⠛⠛⠃   ",
+  "⣿⡷⠶⢾⣿⠀⠀⢸⣿⠀⠀⠀⣿⡇⠀⠀⣿⡇⠀⣿⣿⠀⠀⠘⠿⢿⣶⣄⠀⠀⢸⣿⠶⠶⠂   ",
+  "⣿⡇⠀⢸⣿⠀⠀⠈⠻⣷⣤⣾⠟⠁⠀⠀⠿⣧⣤⡿⠇⠀⠀⢰⣦⣤⣾⠟⠀⠀⢸⣿⣤⣤⡄ MD",
+];
+
+export const WORDMARK = WORDMARK_LINES.join('\n');

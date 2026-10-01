@@ -1,6 +1,6 @@
 import type { UnsupportedReason } from '../fs/access';
 import { useT } from '../i18n/I18nProvider';
-import { LOGO } from './logo';
+import { LOGO, LOGO_INVERTED, WORDMARK } from './logo';
 import styles from './StartScreen.module.css';
 
 interface Props {
@@ -27,8 +27,14 @@ export function StartScreen({ mode, reason, error, folderName, onPick, onResume,
     <main className={styles.start}>
       <div className={styles.panel}>
         <h1 className={styles.visuallyHidden}>{t('app.name')}</h1>
-        <pre className={styles.logo} aria-hidden="true">
+        <pre className={`${styles.logo} ${styles.logoDark}`} aria-hidden="true">
           {LOGO}
+        </pre>
+        <pre className={`${styles.logo} ${styles.logoLight}`} aria-hidden="true">
+          {LOGO_INVERTED}
+        </pre>
+        <pre className={`${styles.logo} ${styles.wordmark}`} aria-hidden="true">
+          {WORDMARK}
         </pre>
         <p className={styles.tagline}>{t('start.tagline')}</p>
         {message && <p className={styles.message}>{message}</p>}
