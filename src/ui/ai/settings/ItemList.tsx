@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 
 import { useT } from '../../../i18n/I18nProvider';
+import { cancelSwitch, confirmSwitch, editDraft, emptyDraft, isDirty, openDraft, selectDraft, type DraftState } from '../../../state/draftState';
 import styles from './Settings.module.css';
 
 interface Props<T extends { id: string }> {
@@ -28,35 +29,23 @@ export function ItemList<T extends { id: string }>({ items, selectedId, label, o
   );
 }
 
-/**
- * Bozza del dettaglio: `dirty` finché differisce dall'ultimo salvataggio; passare a un altro elemento
- * con modifiche aperte chiede conferma (`pending` finché l'utente non decide).
- */
+/** Adattatore React di `state/draftState.ts`: stessa API di prima per le sezioni profili e preset. */
 export function useDraft<T>(onDirty?: (dirty: boolean) => void) {
-  const [draft, setDraftState] = useState<T | null>(null);
-  const [saved, setSaved] = useState<string | null>(null);
-  const [pending, setPending] = useState<T | null>(null);
-  const dirty = draft !== null && JSON.stringify(draft) !== saved;
+  const [state, setState] = useState<DraftState<T>>(emptyDraft);
+  const dirty = isDirty(state);
 
   useEffect(() => onDirty?.(dirty), [dirty, onDirty]);
   useEffect(() => () => onDirty?.(false), [onDirty]);
 
-  const open = (item: T | null) => {
-    setDraftState(item);
-    setSaved(item === null ? null : JSON.stringify(item));
-  };
   return {
-    draft,
+    draft: state.draft,
     dirty,
-    setDraft: (item: T) => setDraftState(item),
+    setDraft: (item: T) => setState((s) => editDraft(s, item)),
     /** Dopo un salvataggio riuscito: la bozza corrente diventa il riferimento. */
-    markSaved: (item: T | null) => open(item),
-    select: (item: T | null) => (dirty ? setPending(item) : open(item)),
-    pending: pending !== null,
-    confirmSwitch: () => {
-      open(pending);
-      setPending(null);
-    },
-    cancelSwitch: () => setPending(null),
+    markSaved: (item: T | null) => setState((s) => openDraft(s, item)),
+    select: (item: T | null) => setState((s) => selectDraft(s, item)),
+    pending: state.pending !== null,
+    confirmSwitch: () => setState(confirmSwitch),
+    cancelSwitch: () => setState(cancelSwitch),
   };
 }
