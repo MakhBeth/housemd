@@ -11,11 +11,10 @@ async function openSettings(app: App): Promise<void> {
 async function dirtyProfile(app: App): Promise<void> {
   await settings(app).getByRole('link', { name: app.t('settings.aiProfiles') }).click();
   await expect(app.page).toHaveURL(/#settings\/ai-profiles$/);
-  // "+ Create" c'è in ogni sezione AI: si cerca dentro quella dei profili (le sezioni non hanno nome
-  // accessibile, si riconoscono dal titolo).
-  const section = settings(app).locator('section').filter({ has: app.page.getByRole('heading', { name: app.t('settings.aiProfiles'), level: 2 }) });
-  await section.getByRole('button', { name: `+ ${app.t('ai.create')}` }).click();
-  await section.getByLabel(app.t('ai.name'), { exact: true }).fill('Bozza');
+  // "+ Create" e "Name" ci sono in ogni sezione AI, e le sezioni non hanno un nome accessibile: quella
+  // dei profili è la prima, nello stesso ordine dei link di navigazione.
+  await settings(app).getByRole('button', { name: `+ ${app.t('ai.create')}` }).first().click();
+  await settings(app).getByLabel(app.t('ai.name'), { exact: true }).first().fill('Bozza');
 }
 
 test.beforeEach(async ({ app }) => {
