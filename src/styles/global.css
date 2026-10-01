@@ -65,6 +65,13 @@ button {
     0 0 0 6px var(--c-focus-dark);
 }
 
+/* Esplicito, senza contare sulla sostituzione del colore trasparente da parte del browser. */
+@media (forced-colors: active) {
+  :focus-visible {
+    outline-color: Highlight;
+  }
+}
+
 ::highlight(housemd-search) {
   background-color: var(--c-highlight);
   color: inherit;
