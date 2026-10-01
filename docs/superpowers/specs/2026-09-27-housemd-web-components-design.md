@@ -690,7 +690,7 @@ wikilink:
 3. Anteprima: debounce, link wiki/relativi/esterni, immagine mancante, frontmatter valido e non
    valido, HTML malevolo neutralizzato, larghezza massima del testo.
 4. Scroll sincronizzato in split in entrambe le direzioni, senza rimbalzi.
-5. Albero: espandi/chiudi, menu da pulsante, clic destro e tastiera, popover vicino ai bordi,
+5. Albero: espandi/chiudi, menu da pulsante ⋯ e da tastiera (niente clic destro), popover vicino ai bordi,
    nuovo/rinomina/elimina, nome già esistente, un solo tab stop.
 6. Ricerca: `Ctrl+K`, risultati, Invio, Esc, evidenziazione nell'anteprima.
 7. Conflitto con modifica esterna: ricarica e sovrascrivi; file eliminato fuori; bozze orfane.

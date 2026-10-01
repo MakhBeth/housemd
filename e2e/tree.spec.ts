@@ -60,19 +60,14 @@ test.describe('dialogs and menu', () => {
     await expect.poll(() => app.exists('note.md')).toBe(false);
   });
 
-  // Comportamento attuale: con un clic destro vero il menu si apre e si richiude subito. Su Linux
-  // Chromium manda `contextmenu` al mousedown; il pointerup che segue cade fuori dal popover e lo chiude
-  // per light dismiss. test.fail: oggi fallisce; quando l'app verrà corretta, questo test lo segnalerà.
-  test('a real right click opens the tree menu', async ({ app, page }) => {
-    test.fail();
+  test('a right click does not open the tree menu (the ⋯ button does)', async ({ app, page }) => {
     await app.treeFile('note.md').click({ button: 'right' });
-    await expect(page.getByRole('button', { name: app.t('tree.delete'), exact: true })).toBeVisible({ timeout: 2000 });
+    await expect(page.getByRole('button', { name: app.t('tree.delete'), exact: true })).toBeHidden();
   });
 
-  test('delete from the context menu asks first; cancel keeps the file', async ({ app, page }) => {
+  test('delete from the menu asks first; cancel keeps the file', async ({ app, page }) => {
     const openMenu = async () => {
-      // Solo l'evento contextmenu, senza il pointerup che oggi richiude il menu (vedi test sopra).
-      await app.treeFile('note.md').dispatchEvent('contextmenu');
+      await page.getByRole('button', { name: app.t('tree.actions', { name: 'note.md' }) }).click();
       await page.getByRole('button', { name: app.t('tree.delete'), exact: true }).click();
       return page.getByRole('dialog', { name: app.t('dialog.delete.title', { name: 'note.md' }) });
     };

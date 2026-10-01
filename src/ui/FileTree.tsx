@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 
 import { useT } from '../i18n/I18nProvider';
 import { isImage } from '../lib/paths';
@@ -72,12 +72,6 @@ export function FileTree({ nodes, openPath, drafts, onOpen, onAction }: Props) {
     requestAnimationFrame(() => menu.querySelector('button')?.focus());
   };
 
-  const onContextMenu = (node: TreeNode) => (event: MouseEvent<HTMLElement>) => {
-    event.preventDefault();
-    const trigger = event.currentTarget.querySelector<HTMLElement>('[data-menu-trigger]') ?? event.currentTarget;
-    openMenu(node, trigger);
-  };
-
   const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     const current = (event.target as HTMLElement).dataset.treeItem;
     if (current === undefined) return; // focus nel menu o altrove: tasti normali
@@ -134,7 +128,7 @@ export function FileTree({ nodes, openPath, drafts, onOpen, onAction }: Props) {
         <li key={node.path}>
           {node.kind === 'directory' ? (
             <details open={expanded.has(node.path)} onToggle={(e) => toggle(node.path, e.currentTarget.open)}>
-              <summary className={styles.row} onContextMenu={onContextMenu(node)} {...rowProps(node.path)}>
+              <summary className={styles.row} {...rowProps(node.path)}>
                 <Icon name={expanded.has(node.path) ? 'folderOpen' : 'folderClosed'} size={16} />
                 <Icon name="folder" size={16} />
                 <span className={styles.name}>{node.name}</span>
@@ -149,7 +143,7 @@ export function FileTree({ nodes, openPath, drafts, onOpen, onAction }: Props) {
               <span className={styles.name}>{node.name}</span>
             </div>
           ) : (
-            <div className={styles.row} data-active={node.path === openPath} onContextMenu={onContextMenu(node)}>
+            <div className={styles.row} data-active={node.path === openPath}>
               <button
                 className={styles.file}
                 {...rowProps(node.path)}
