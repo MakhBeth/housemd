@@ -1,7 +1,7 @@
-import { forwardRef, useEffect, useState, type ReactNode } from 'react';
+import { forwardRef, useEffect, useState } from 'react';
 
 import { useT } from '../i18n/I18nProvider';
-import { findMatches } from '../search/fold';
+import { segments } from '../elements/search-panel/segments';
 import type { SearchIndex, SearchResult } from '../search/searchIndex';
 import { Icon } from './Icon';
 import styles from './SearchPanel.module.css';
@@ -14,15 +14,7 @@ interface Props {
 }
 
 function Highlighted({ text, terms }: { text: string; terms: string[] }) {
-  const parts: ReactNode[] = [];
-  let last = 0;
-  for (const [start, end] of findMatches(text, terms)) {
-    if (start > last) parts.push(text.slice(last, start));
-    parts.push(<mark key={start}>{text.slice(start, end)}</mark>);
-    last = end;
-  }
-  parts.push(text.slice(last));
-  return <>{parts}</>;
+  return <>{segments(text, terms).map((part, i) => (part.mark ? <mark key={i}>{part.text}</mark> : part.text))}</>;
 }
 
 export const SearchPanel = forwardRef<HTMLInputElement, Props>(function SearchPanel({ index, indexRevision, onOpen }, ref) {
