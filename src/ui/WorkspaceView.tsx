@@ -12,7 +12,8 @@ import { requestAccess } from '../fs/access';
 import { useI18n, useT } from '../i18n/I18nProvider';
 import type { MessageKey } from '../i18n/messages';
 import { dirname, joinPath } from '../lib/paths';
-import { readPref, writePref } from '../lib/prefs';
+import { readPref, readValidPref, writePref } from '../lib/prefs';
+import { parseTextWidth, textWidthVars } from '../lib/textWidth';
 import type { SettingsSection } from '../lib/route';
 import { Preview, type PreviewHandle } from '../preview/Preview';
 import { useTheme } from '../theme/useTheme';
@@ -97,6 +98,11 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
   const [dialog, setDialog] = useState<DialogState>(null);
   const [highlight, setHighlight] = useState<string[]>(NO_TERMS);
   const [theme, setTheme] = useTheme();
+  const [textWidth, setTextWidth] = useState(() => readValidPref('textWidth', parseTextWidth));
+  useEffect(() => {
+    const root = document.documentElement.style;
+    for (const [name, value] of Object.entries(textWidthVars(textWidth))) root.setProperty(name, value);
+  }, [textWidth]);
   const settingsDirty = useRef(false);
   const [closeRequest, setCloseRequest] = useState(0);
   const { route, navigate } = useRoute({ canLeave: () => !settingsDirty.current, onBlocked: () => setCloseRequest((n) => n + 1) });
@@ -618,6 +624,11 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
           onAutosave={(next) => {
             writePref('autosave', next);
             workspace.setAutosave(next);
+          }}
+          textWidth={textWidth}
+          onTextWidth={(next) => {
+            writePref('textWidth', next);
+            setTextWidth(next);
           }}
           onSaveAll={() => void workspace.saveAll()}
         />
