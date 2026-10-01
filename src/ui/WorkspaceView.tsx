@@ -12,7 +12,7 @@ import { requestAccess } from '../fs/access';
 import { useI18n, useT } from '../i18n/I18nProvider';
 import type { MessageKey } from '../i18n/messages';
 import { dirname, joinPath } from '../lib/paths';
-import { readPref, readValidPref, writePref } from '../lib/prefs';
+import { readLastFile, readPref, readValidPref, writeLastFile, writePref } from '../lib/prefs';
 import { parseTextWidth, textWidthVars } from '../lib/textWidth';
 import { APP_TITLE, pageTitle } from '../lib/pageTitle';
 import type { SettingsSection } from '../lib/route';
@@ -61,7 +61,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
   const doc = state.doc;
   const ai = useAiController(workspace);
   const aiState = useAiState(ai);
-  const [aiWidth, setAiWidth] = useState(() => clampWidth('ai', readPref('aiSidebarWidth', WIDTH_LIMITS.ai.initial)));
+  const [aiWidth, setAiWidth] = useState(() => clampWidth('ai', readPref('aiSidebarWidth')));
   const session = useMemo(() => createDocSession(`${doc?.path}#${doc?.revision}`, doc?.text || ''), [doc?.path, doc?.revision]);
   const [aiSelection, setAiSelection] = useState<TextRange | null>(null);
   // onSelection scatta a ogni movimento del cursore: si aggiorna lo stato solo se il tratto cambia.
@@ -69,12 +69,12 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
   useEffect(() => setAiSelection(null), [doc?.path, doc?.revision]);
   const syncBinding = useAiSync(ai);
   useEffect(() => { if (doc) ai?.documentChanged(doc.path, { iterChangedRanges: () => {}, mapPos: (n: number) => n } as never, true); }, [doc?.path, doc?.revision]);
-  const [mode, setMode] = useState<Mode>(() => readPref<Mode>('mode', 'split'));
+  const [mode, setMode] = useState<Mode>(() => readPref('mode'));
   // Preferenza 'ai' con il controller non ancora pronto (IndexedDB lento): intanto la vista divisa.
   const shownMode: Mode = mode === 'ai' && !ai ? 'split' : mode;
   const lastPane = useRef<PaneMode>(mode === 'ai' ? 'split' : mode);
-  const [sidebarOpen, setSidebarOpen] = useState(() => readPref('sidebarOpen', true));
-  const [sidebarWidth, setSidebarWidth] = useState(() => clampWidth('sidebar', readPref('sidebarWidth', WIDTH_LIMITS.sidebar.initial)));
+  const [sidebarOpen, setSidebarOpen] = useState(() => readPref('sidebarOpen'));
+  const [sidebarWidth, setSidebarWidth] = useState(() => clampWidth('sidebar', readPref('sidebarWidth')));
   const [dialog, setDialog] = useState<DialogState>(null);
   const [highlight, setHighlight] = useState<string[]>(NO_TERMS);
   const [theme, setTheme] = useTheme();
@@ -209,7 +209,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
   useEffect(() => {
     if (reopened.current || state.status !== 'ready') return;
     reopened.current = true;
-    const last = readPref<string | null>(`lastFile:${workspaceId}`, null);
+    const last = readLastFile(workspaceId);
     if (!last) return;
     if (files.includes(last)) {
       void openFile(last);
@@ -225,7 +225,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
   }, [state.status, files, openFile, workspace, workspaceId]);
 
   useEffect(() => {
-    if (doc) writePref(`lastFile:${workspaceId}`, doc.path);
+    if (doc) writeLastFile(workspaceId, doc.path);
   }, [doc?.path, workspaceId]);
 
   // Finestra in primo piano → controlla le modifiche esterne; in secondo piano → salva o mette nel
