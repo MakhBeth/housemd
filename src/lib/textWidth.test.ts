@@ -8,11 +8,13 @@ test('clampTextWidth keeps the value within the limits and rounds it', () => {
   assert.equal(clampTextWidth('100'), 100);
   assert.equal(clampTextWidth(80.6), 81);
   assert.equal(clampTextWidth(5), MIN_TEXT_WIDTH);
+  assert.equal(clampTextWidth(0), MIN_TEXT_WIDTH, 'zero non vuol dire "nessun limite": solo il campo vuoto');
+  assert.equal(clampTextWidth('-3'), MIN_TEXT_WIDTH);
   assert.equal(clampTextWidth(10_000), MAX_TEXT_WIDTH);
 });
 
-test('empty, zero, negative or non-numeric means no limit', () => {
-  for (const value of ['', '  ', 0, -3, 'abc', null, undefined, NaN, {}]) assert.equal(clampTextWidth(value), null, String(value));
+test('empty or non-numeric means no limit', () => {
+  for (const value of ['', '  ', 'abc', null, undefined, NaN, {}]) assert.equal(clampTextWidth(value), null, String(value));
 });
 
 test('parseTextWidth falls back to the defaults for missing or broken prefs', () => {

@@ -15,10 +15,10 @@ export const MIN_TEXT_WIDTH = 30;
 export const MAX_TEXT_WIDTH = 300;
 export const DEFAULT_TEXT_WIDTH: TextWidth = { editor: null, preview: 72 };
 
-/** Numero → caratteri nei limiti; vuoto, zero o non numerico → nessun limite. */
+/** Numero → caratteri nei limiti (anche zero o negativo → minimo); vuoto o non numerico → nessun limite. */
 export function clampTextWidth(value: unknown): number | null {
   const n = typeof value === 'string' ? (value.trim() === '' ? NaN : Number(value)) : value;
-  if (typeof n !== 'number' || !Number.isFinite(n) || n <= 0) return null;
+  if (typeof n !== 'number' || !Number.isFinite(n)) return null;
   return Math.min(MAX_TEXT_WIDTH, Math.max(MIN_TEXT_WIDTH, Math.round(n)));
 }
 

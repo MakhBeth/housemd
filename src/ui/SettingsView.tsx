@@ -69,10 +69,11 @@ export function SettingsView({ section, onSection, onClose, onDirtyChange, close
   const profilesDirty = useCallback(markDirty('ai-profiles'), []);
   const presetsDirty = useCallback(markDirty('ai-presets'), []);
 
-  const commitWidth = (pane: TextWidthPane) => {
-    const next = clampTextWidth(widths[pane]);
-    setWidths((prev) => ({ ...prev, [pane]: String(next ?? '') }));
-    if (next !== textWidth[pane]) onTextWidth({ ...textWidth, [pane]: next });
+  // Entrambi i campi insieme: chiudendo con un campo ancora a fuoco (Esc) la modifica non va persa.
+  const commitWidths = () => {
+    const next: TextWidth = { editor: clampTextWidth(widths.editor), preview: clampTextWidth(widths.preview) };
+    setWidths({ editor: String(next.editor ?? ''), preview: String(next.preview ?? '') });
+    if (next.editor !== textWidth.editor || next.preview !== textWidth.preview) onTextWidth(next);
   };
 
   const commitDelay = () => {
@@ -82,6 +83,7 @@ export function SettingsView({ section, onSection, onClose, onDirtyChange, close
   };
   const close = () => {
     commitDelay();
+    commitWidths();
     if (dirty.size > 0) setConfirmClose(true);
     else onClose();
   };
@@ -218,9 +220,9 @@ export function SettingsView({ section, onSection, onClose, onDirtyChange, close
                   placeholder={t('settings.textWidth.none')}
                   value={widths[pane]}
                   onChange={(e) => setWidths((prev) => ({ ...prev, [pane]: e.target.value }))}
-                  onBlur={() => commitWidth(pane)}
+                  onBlur={commitWidths}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter') commitWidth(pane);
+                    if (e.key === 'Enter') commitWidths();
                   }}
                 />
               </label>
