@@ -38,7 +38,7 @@ export function Notice({ message, actionLabel, onAction, busy, dismissLabel, onD
         </button>
       )}
       {onDismiss && (
-        <button className={styles.dismiss} onClick={onDismiss} aria-label={dismissLabel} title={dismissLabel}>
+        <button className={`${styles.dismiss} tooltip`} onClick={onDismiss} aria-label={dismissLabel} data-tooltip={dismissLabel}>
           <Icon name="close" size={16} />
         </button>
       )}

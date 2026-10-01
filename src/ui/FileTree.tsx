@@ -44,7 +44,8 @@ export function FileTree({ nodes, openPath, drafts, onOpen, onAction }: Props) {
 
   const openMenu = (node: TreeNode, trigger: HTMLElement) => {
     anchorRef.current?.style.removeProperty('anchor-name');
-    trigger.style.setProperty('anchor-name', ANCHOR);
+    // Il pulsante resta anche l'ancora del suo tooltip (.tooltip in global.css).
+    trigger.style.setProperty('anchor-name', `${ANCHOR}, --tooltip-anchor`);
     anchorRef.current = trigger;
     setMenuNode(node);
     const menu = menuRef.current!;
@@ -66,9 +67,9 @@ export function FileTree({ nodes, openPath, drafts, onOpen, onAction }: Props) {
   const menuButton = (node: TreeNode) => (
     <button
       data-menu-trigger
-      className={styles.menuButton}
+      className={`${styles.menuButton} tooltip`}
       aria-label={t('tree.actions', { name: node.name })}
-      title={t('tree.actions', { name: node.name })}
+      data-tooltip={t('tree.actions', { name: node.name })}
       onClick={(event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -109,7 +110,7 @@ export function FileTree({ nodes, openPath, drafts, onOpen, onAction }: Props) {
                 <Icon name="file" size={16} />
                 <span className={styles.name}>{node.name}</span>
                 {drafts.has(node.path) && (
-                  <span className={styles.draft} role="img" aria-label={t('tree.draft')} title={t('tree.draft')}>
+                  <span className={`${styles.draft} tooltip`} role="img" aria-label={t('tree.draft')} data-tooltip={t('tree.draft')}>
                     <Icon name="draft" size={10} />
                   </span>
                 )}
