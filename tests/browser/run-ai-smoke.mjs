@@ -139,6 +139,23 @@ try{
  await click('Discard changes');
  await until(`!${settings}&&location.hash===''`);
  await until(`document.activeElement===${composer}`);
+ // Larghezza del testo: dalle impostazioni a una variabile CSS che limita editor e anteprima.
+ await press('Split');await press('Settings');await until(`!!${settings}`);
+ const widthInput=label=>`[...${settings}.querySelectorAll('label')].find(l=>l.querySelector('span')?.textContent===${JSON.stringify(label)}).querySelector('input')`;
+ const setWidth=(label,value)=>evaluate(`(()=>{const input=${widthInput(label)};input.focus();Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,${JSON.stringify(value)});input.dispatchEvent(new Event('input',{bubbles:true}));input.blur();})()`);
+ assert.equal(await evaluate(`${widthInput('Preview (characters)')}.value`),'72','Anteprima a 72 caratteri di default');
+ await setWidth('Editor (characters)','40');await setWidth('Preview (characters)','');await sleep(150);
+ assert.equal(await evaluate("document.documentElement.style.getPropertyValue('--editor-text-width')"),'40ch');
+ assert.equal(await evaluate("document.documentElement.style.getPropertyValue('--preview-text-width')"),'100%');
+ assert.equal(await evaluate("JSON.parse(localStorage.getItem('housemd:textWidth'))?.editor"),40,'Preferenza salvata');
+ assert.ok(await evaluate(`(()=>{const b=${settings}.querySelector('button[aria-label="Close"]');if(!b)return false;b.click();return true;})()`),'Chiudi impostazioni');
+ await until(`!${settings}`);
+ await send('Emulation.setDeviceMetricsOverride',{width:1400,height:800,deviceScaleFactor:1,mobile:false});await press('Editor');await sleep(150);
+ if(process.env.HOUSEMD_SCREENSHOT){const shot=await send('Page.captureScreenshot',{format:'png'});(await import('node:fs')).writeFileSync(process.env.HOUSEMD_SCREENSHOT,Buffer.from(shot.result.data,'base64'));}
+ assert.equal(await evaluate("(()=>{const c=document.querySelector('.cm-content');const ch=(()=>{const s=document.createElement('span');s.textContent='0';s.style.font=getComputedStyle(c).font;document.body.append(s);const w=s.getBoundingClientRect().width;s.remove();return w;})();return Math.abs(c.getBoundingClientRect().width-(40*ch+48))<2;})()"),true,'Il testo dell\'editor è largo 40 caratteri');
+ await press('Preview');await sleep(150);
+ assert.equal(await evaluate("(()=>{const p=document.querySelector('[class*=prose]');return Math.abs(p.getBoundingClientRect().width-p.parentElement.clientWidth)<2;})()"),true,'Anteprima senza limite: occupa tutto il pannello');
+ await send('Emulation.clearDeviceMetricsOverride');await press('AI');
  assert.deepEqual(errors,[],'Nessuna eccezione runtime');
- console.log('Chromium AI smoke: modalità AI, composer con Invio, proposta, accept-all, blocco, AI→Editor undo, before-ai, chip selezione e accettazione ripetuta e per blocchi, rendering sicuro senza risorse remote, ripristino cronologia, chip dopo selezione in Editor, impostazioni con focus e conferma su Indietro/Chiudi: OK');
+ console.log('Chromium AI smoke: modalità AI, composer con Invio, proposta, accept-all, blocco, AI→Editor undo, before-ai, chip selezione e accettazione ripetuta e per blocchi, rendering sicuro senza risorse remote, ripristino cronologia, chip dopo selezione in Editor, impostazioni con focus e conferma su Indietro/Chiudi, larghezza del testo: OK');
 }finally{socket?.close();chrome.kill();vite.kill();await Promise.all([new Promise(r=>chrome.exitCode!==null?r():chrome.once('exit',r)),new Promise(r=>vite.exitCode!==null?r():vite.once('exit',r))]);await rm(profile,{recursive:true,force:true,maxRetries:3});}

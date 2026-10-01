@@ -89,6 +89,10 @@ automatico, come in VS Code:
 Nelle ultime due modalità le modifiche finiscono comunque, entro pochi secondi, in una copia di
 emergenza nel browser: i file con modifiche non salvate hanno un pallino nell'albero.
 
+**Larghezza massima del testo**, separata per editor e anteprima, in caratteri (da 30 a 300; vuoto
+per nessun limite). Di default l'editor non ha limite e l'anteprima si ferma a 72 caratteri; il testo
+resta centrato nel pannello.
+
 ## Cronologia locale
 
 Ogni salvataggio (al più uno ogni 5 minuti per file) e ogni ricarica, sovrascrittura o ripristino

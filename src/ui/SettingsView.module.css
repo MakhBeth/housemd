@@ -96,3 +96,9 @@
     margin: 0 8px 0 0;
   }
 }
+
+.hint {
+  margin: 4px 0 0;
+  color: var(--c-muted);
+  font-size: 13px;
+}

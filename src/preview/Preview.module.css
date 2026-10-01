@@ -5,7 +5,8 @@
 }
 
 .prose {
-  max-width: 72ch;
+  /* Larghezza del testo dalle impostazioni (src/lib/textWidth.ts), più il padding orizzontale. */
+  max-width: calc(var(--preview-text-width, 72ch) + 64px);
   margin: 0 auto;
   padding: 24px 32px 40vh;
   font-family: var(--font-prose);

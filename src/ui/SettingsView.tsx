@@ -6,6 +6,7 @@ import { LOCALE_NAMES, SUPPORTED_LOCALES, type Locale } from '../i18n/i18n';
 import { useI18n } from '../i18n/I18nProvider';
 import type { MessageKey } from '../i18n/messages';
 import { formatRoute, type SettingsSection } from '../lib/route';
+import { clampTextWidth, MAX_TEXT_WIDTH, MIN_TEXT_WIDTH, TEXT_WIDTH_PANES, type TextWidth, type TextWidthPane } from '../lib/textWidth';
 import { THEME_PREFS, type ThemePref } from '../theme/theme';
 import { AUTOSAVE_MODES, clampDelay, MAX_DELAY_MS, MIN_DELAY_MS, type AutosaveSettings } from '../workspace/autosave';
 import { AiPresetsSection } from './ai/settings/AiPresetsSection';
@@ -30,6 +31,8 @@ interface Props {
   onTheme: (next: ThemePref) => void;
   autosave: AutosaveSettings;
   onAutosave: (next: AutosaveSettings) => void;
+  textWidth: TextWidth;
+  onTextWidth: (next: TextWidth) => void;
   onSaveAll: () => void;
 }
 
@@ -40,9 +43,12 @@ const LABELS: Record<SettingsSection, MessageKey> = {
   'ai-sync': 'settings.aiSync',
 };
 
-export function SettingsView({ section, onSection, onClose, onDirtyChange, closeRequest, ai, syncBinding, theme, onTheme, autosave, onAutosave, onSaveAll }: Props) {
+export function SettingsView({ section, onSection, onClose, onDirtyChange, closeRequest, ai, syncBinding, theme, onTheme, autosave, onAutosave, textWidth, onTextWidth, onSaveAll }: Props) {
   const { t, locale, setLocale } = useI18n();
   const [delay, setDelay] = useState(String(autosave.delayMs));
+  // Campo vuoto = nessun limite.
+  const widthText = (pane: TextWidthPane) => String(textWidth[pane] ?? '');
+  const [widths, setWidths] = useState<Record<TextWidthPane, string>>(() => ({ editor: widthText('editor'), preview: widthText('preview') }));
   const [dirty, setDirty] = useState<Set<SettingsSection>>(() => new Set());
   const [confirmClose, setConfirmClose] = useState(false);
   const [visible, setVisible] = useState<SettingsSection>(section);
@@ -62,6 +68,12 @@ export function SettingsView({ section, onSection, onClose, onDirtyChange, close
   // Callback stabili: useDraft le mette nelle dipendenze dei suoi effetti.
   const profilesDirty = useCallback(markDirty('ai-profiles'), []);
   const presetsDirty = useCallback(markDirty('ai-presets'), []);
+
+  const commitWidth = (pane: TextWidthPane) => {
+    const next = clampTextWidth(widths[pane]);
+    setWidths((prev) => ({ ...prev, [pane]: String(next ?? '') }));
+    if (next !== textWidth[pane]) onTextWidth({ ...textWidth, [pane]: next });
+  };
 
   const commitDelay = () => {
     const next = clampDelay(Number(delay));
@@ -191,6 +203,29 @@ export function SettingsView({ section, onSection, onClose, onDirtyChange, close
                 />
               </label>
             )}
+          </fieldset>
+          <fieldset className={dialog.group}>
+            <legend>{t('settings.textWidth')}</legend>
+            {TEXT_WIDTH_PANES.map((pane) => (
+              <label key={pane} className={dialog.field}>
+                <span>{t(`settings.textWidth.${pane}`)}</span>
+                <input
+                  className={dialog.input}
+                  type="number"
+                  min={MIN_TEXT_WIDTH}
+                  max={MAX_TEXT_WIDTH}
+                  step={1}
+                  placeholder={t('settings.textWidth.none')}
+                  value={widths[pane]}
+                  onChange={(e) => setWidths((prev) => ({ ...prev, [pane]: e.target.value }))}
+                  onBlur={() => commitWidth(pane)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') commitWidth(pane);
+                  }}
+                />
+              </label>
+            ))}
+            <p className={styles.hint}>{t('settings.textWidth.hint', { min: MIN_TEXT_WIDTH, max: MAX_TEXT_WIDTH })}</p>
           </fieldset>
           <button type="button" className={dialog.secondary} onClick={onSaveAll}>
             {t('settings.saveAll')}

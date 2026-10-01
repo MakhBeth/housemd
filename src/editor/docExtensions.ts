@@ -19,7 +19,8 @@ const theme = EditorView.theme({
   '&': { height: '100%', backgroundColor: 'var(--c-surface)', color: 'var(--c-text)' },
   '&.cm-focused': { outline: 'none' },
   '.cm-scroller': { fontFamily: 'var(--font-mono)', lineHeight: '1.65', fontSize: '14px' },
-  '.cm-content': { padding: '20px 0 40vh', caretColor: 'var(--c-text)' },
+  // Larghezza del testo dalle impostazioni (src/lib/textWidth.ts), più il padding delle righe; centrato.
+  '.cm-content': { padding: '20px 0 40vh', caretColor: 'var(--c-text)', maxWidth: 'calc(var(--editor-text-width, 100%) + 48px)', margin: '0 auto' },
   '.cm-line': { padding: '0 24px' },
   '.cm-gutters': { backgroundColor: 'var(--c-surface)', color: 'var(--c-muted)', border: 'none' },
   '.cm-activeLine, .cm-activeLineGutter': { backgroundColor: 'color-mix(in srgb, var(--c-accent-soft) 35%, transparent)' },
