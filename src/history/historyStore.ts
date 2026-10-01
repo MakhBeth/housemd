@@ -1,3 +1,5 @@
+import * as z from 'zod/mini';
+
 import { DB_NAME, HISTORY_STORE, openDb, request, transactionDone } from '../lib/db';
 import { movedPath } from '../lib/paths';
 import { toPrune } from './policy';
@@ -16,6 +18,23 @@ export interface Snapshot {
 }
 
 export type NewSnapshot = Omit<Snapshot, 'id'>;
+
+const SNAPSHOT = z.object({
+  id: z.number(),
+  workspaceId: z.string(),
+  path: z.string(),
+  savedAt: z.number(),
+  text: z.string(),
+  reason: z.enum(['save', 'before-reload', 'before-overwrite', 'before-restore', 'before-ai'] as const satisfies readonly SnapshotReason[]),
+});
+
+/** Snapshot letto da IndexedDB, oppure null se il record è illeggibile. */
+function asSnapshot(value: unknown): Snapshot | null {
+  const parsed = SNAPSHOT.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
+
+const validSnapshots = (values: unknown[]): Snapshot[] => values.map(asSnapshot).filter((s): s is Snapshot => s !== null);
 
 /** Cronologia locale delle versioni di ogni file, per workspace. */
 export interface HistoryStore {
@@ -83,15 +102,15 @@ export function indexedDbHistoryStore(dbName = DB_NAME): HistoryStore {
     add: (snapshot) => withStore('readwrite', async (store) => (await request(store.add(snapshot))) as number),
     list: (workspaceId, path) =>
       withStore('readonly', async (store) =>
-        ((await request(store.index('byFile').getAll(fileRange(workspaceId, path)))) as Snapshot[]).sort(newestFirst),
+        validSnapshots(await request(store.index('byFile').getAll(fileRange(workspaceId, path)))).sort(newestFirst),
       ),
-    get: (id) => withStore('readonly', async (store) => ((await request(store.get(id))) as Snapshot | undefined) ?? null),
+    get: (id) => withStore('readonly', async (store) => asSnapshot(await request(store.get(id)))),
     move: (workspaceId, from, to) =>
       withStore('readwrite', async (store) => {
         // Da [ws, from] a [ws, from + "/￿"]: il file stesso e tutto ciò che contiene (più
         // qualche vicino come "from-x", scartato da movedPath).
         const range = IDBKeyRange.bound([workspaceId, from], [workspaceId, `${from}/￿`]);
-        const found = (await request(store.index('byFile').getAll(range))) as Snapshot[];
+        const found = validSnapshots(await request(store.index('byFile').getAll(range)));
         for (const s of found) {
           const next = movedPath(s.path, from, to);
           if (next !== null) store.put({ ...s, path: next });
@@ -99,7 +118,7 @@ export function indexedDbHistoryStore(dbName = DB_NAME): HistoryStore {
       }),
     prune: (workspaceId, path, now) =>
       withStore('readwrite', async (store) => {
-        const found = (await request(store.index('byFile').getAll(fileRange(workspaceId, path)))) as Snapshot[];
+        const found = validSnapshots(await request(store.index('byFile').getAll(fileRange(workspaceId, path))));
         for (const id of toPrune(found, now)) store.delete(id);
       }),
   };

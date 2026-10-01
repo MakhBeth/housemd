@@ -2,6 +2,7 @@ import 'fake-indexeddb/auto';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import { HISTORY_STORE, openDb, transactionDone } from '../lib/db';
 import { MAX_SNAPSHOT_AGE_MS } from './policy';
 import { indexedDbHistoryStore, memoryHistoryStore, type HistoryStore, type NewSnapshot } from './historyStore';
 
@@ -57,3 +58,21 @@ for (const [name, make] of factories) {
     assert.equal((await store.list('ws-1', 'b.md')).length, 1);
   });
 }
+
+test('indexedDB: a corrupt snapshot is left out of the list and reads as null', async () => {
+  const dbName = 'history-corrupt';
+  const store = indexedDbHistoryStore(dbName);
+  const good = await store.add({ workspaceId: 'ws', path: 'a.md', savedAt: 1, text: 'ok', reason: 'save' });
+  const db = await openDb(dbName);
+  const tx = db.transaction(HISTORY_STORE, 'readwrite');
+  const badId = (await new Promise<IDBValidKey>((resolve, reject) => {
+    const req = tx.objectStore(HISTORY_STORE).add({ workspaceId: 'ws', path: 'a.md', savedAt: 2, text: 42, reason: 'nope' });
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  })) as number;
+  await transactionDone(tx);
+  db.close();
+  assert.deepEqual((await store.list('ws', 'a.md')).map((s) => s.id), [good]);
+  assert.equal(await store.get(badId), null);
+  assert.equal((await store.get(good))?.text, 'ok');
+});

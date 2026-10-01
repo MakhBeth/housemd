@@ -75,3 +75,28 @@ test('[codex F8] a database from before the known list still finds the current f
   conn.close();
   assert.equal(await findKnownWorkspaceId(picked('vecchia'), db), 'id-vecchio');
 });
+
+test('a corrupt current record means no saved folder', async () => {
+  const dbName = 'hs-corrupt-1';
+  const db = await openDb(dbName);
+  const tx = db.transaction('workspace', 'readwrite');
+  tx.objectStore('workspace').put({ handle: null, workspaceId: '' }, 'current');
+  await transactionDone(tx);
+  db.close();
+  assert.equal(await loadWorkspace(dbName), null);
+});
+
+test('corrupt entries in the known list are skipped, valid ones still match', async () => {
+  const dbName = 'hs-corrupt-2';
+  const a = await saveWorkspace({ name: 'a' }, dbName);
+  const db = await openDb(dbName);
+  const tx = db.transaction('workspace', 'readwrite');
+  const store = tx.objectStore('workspace');
+  store.put(['garbage', { handle: { name: 'x' } }, { handle: { name: 'a' }, workspaceId: a.workspaceId }], 'known');
+  await transactionDone(tx);
+  db.close();
+  assert.equal(await findKnownWorkspaceId(picked('a'), dbName), a.workspaceId);
+  // Il salvataggio successivo riscrive la lista senza le voci illeggibili.
+  await saveWorkspace({ name: 'b' }, dbName);
+  assert.equal(await findKnownWorkspaceId(picked('a'), dbName), a.workspaceId);
+});
