@@ -1,4 +1,6 @@
-import { test as base, expect, type Locator, type Page } from '@playwright/test';
+import { rm } from 'node:fs/promises';
+
+import { chromium, test as base, expect, type BrowserContext, type Locator, type Page } from '@playwright/test';
 
 import { translate, type Params } from '../../src/i18n/i18n.ts';
 import { FakeModel } from './aiHarness.ts';
@@ -141,6 +143,35 @@ export class App {
 }
 
 export const test = base.extend<{ flags: Partial<HarnessFlags>; appLocale: E2ELocale; ai: FakeModel; app: App }>({
+  /**
+   * Contesto persistente con il profilo su disco, uno nuovo per test. Nei contesti normali (in memoria)
+   * Chromium rifiuta le scritture OPFS con QuotaExceededError quando la RAM libera scende, anche con
+   * la quota quasi vuota: su disco il problema sparisce. Le opzioni di `use` vanno passate a mano.
+   */
+  context: async (
+    { baseURL, viewport, locale, timezoneId, reducedMotion, serviceWorkers, colorScheme, userAgent, headless, launchOptions },
+    use,
+    testInfo,
+  ) => {
+    const dir = testInfo.outputPath('profile');
+    const context: BrowserContext = await chromium.launchPersistentContext(dir, {
+      ...launchOptions,
+      headless,
+      baseURL,
+      viewport,
+      locale,
+      timezoneId,
+      reducedMotion,
+      serviceWorkers,
+      colorScheme,
+      userAgent,
+      deviceScaleFactor: 1,
+    });
+    for (const page of context.pages()) await page.close();
+    await use(context);
+    await context.close();
+    await rm(dir, { recursive: true, force: true });
+  },
   flags: [{}, { option: true }],
   appLocale: ['en', { option: true }],
   // Sempre installato: senza, l'app proverebbe a contattare un Ollama vero sulla macchina che esegue i test.

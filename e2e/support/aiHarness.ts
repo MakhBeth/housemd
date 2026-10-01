@@ -14,7 +14,9 @@ export class FakeModel {
   requests = 0;
 
   async install(page: Page): Promise<void> {
-    await page.route(`${OLLAMA}/**`, (route) => this.#answer(route));
+    // Un reload interrompe le richieste in volo (l'app chiede l'elenco dei modelli all'avvio): la route
+    // allora non esiste più e fulfill lancia. Non è un errore del test, si ignora.
+    await page.route(`${OLLAMA}/**`, (route) => this.#answer(route).catch(() => {}));
   }
 
   async #answer(route: Route): Promise<void> {

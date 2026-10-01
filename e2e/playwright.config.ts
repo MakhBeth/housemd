@@ -10,6 +10,9 @@ export default defineConfig({
   outputDir: '../test-results',
   snapshotPathTemplate: '{testDir}/__screenshots__/{testFilePath}/{arg}-{platform}{ext}',
   fullyParallel: true,
+  // Le quote di storage dei contesti (OPFS, IndexedDB) dipendono dalla memoria libera: con troppi
+  // worker in parallelo le scritture OPFS falliscono con QuotaExceededError.
+  workers: process.env.E2E_WORKERS ? Number(process.env.E2E_WORKERS) : 2,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: [['list'], ['html', { open: 'never', outputFolder: '../playwright-report' }]],
