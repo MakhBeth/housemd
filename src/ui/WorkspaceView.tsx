@@ -14,6 +14,7 @@ import type { MessageKey } from '../i18n/messages';
 import { dirname, joinPath } from '../lib/paths';
 import { readPref, readValidPref, writePref } from '../lib/prefs';
 import { parseTextWidth, textWidthVars } from '../lib/textWidth';
+import { APP_TITLE, pageTitle } from '../lib/pageTitle';
 import type { SettingsSection } from '../lib/route';
 import { Preview, type PreviewHandle } from '../preview/Preview';
 import { useTheme } from '../theme/useTheme';
@@ -110,6 +111,11 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
     settingsDirty.current = dirty;
   }, []);
   const settingsOpen = route.view === 'settings';
+  // Titolo della scheda; smontando (ritorno alla schermata iniziale) torna il nome dell'app.
+  useEffect(() => {
+    document.title = pageTitle({ settings: settingsOpen, filePath: doc?.path }, t('settings.title'));
+  }, [settingsOpen, doc?.path, t]);
+  useEffect(() => () => { document.title = APP_TITLE; }, []);
   // Elemento col focus prima di aprire le impostazioni: alla chiusura il focus torna lì.
   const focusBeforeSettings = useRef<HTMLElement | null>(null);
   const openSettings = useCallback(
@@ -386,16 +392,16 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
               syncNeedsPermission={!!syncBinding.handle && !syncBinding.permission}
             /> : <>
             <div className={styles.sidebarHeader}>
-              <button className={styles.iconButton} onClick={() => setSidebar(false)} aria-label={t('sidebar.hide')} title={t('sidebar.hide')}>
+              <button className={`${styles.iconButton} tooltip`} onClick={() => setSidebar(false)} aria-label={t('sidebar.hide')} data-tooltip={t('sidebar.hide')}>
                 <Icon name="sidebarClose" />
               </button>
-              <button className={styles.folder} onClick={onChangeFolder} disabled={switchingFolder} title={t('sidebar.changeFolder')}>
+              <button className={`${styles.folder} tooltip`} onClick={onChangeFolder} disabled={switchingFolder} data-tooltip={t('sidebar.changeFolder')}>
                 {state.name}
               </button>
-              <button className={styles.iconButton} onClick={() => onTreeAction('new-file', null)} aria-label={t('file.new')} title={t('file.new')}>
+              <button className={`${styles.iconButton} tooltip`} onClick={() => onTreeAction('new-file', null)} aria-label={t('file.new')} data-tooltip={t('file.new')}>
                 <Icon name="newFile" />
               </button>
-              <button className={styles.iconButton} onClick={() => onTreeAction('new-folder', null)} aria-label={t('folder.new')} title={t('folder.new')}>
+              <button className={`${styles.iconButton} tooltip`} onClick={() => onTreeAction('new-folder', null)} aria-label={t('folder.new')} data-tooltip={t('folder.new')}>
                 <Icon name="newFolder" />
               </button>
             </div>
@@ -406,9 +412,9 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
                 {orphans.map((path) => (
                   <button
                     key={path}
-                    className={styles.orphan}
+                    className={`${styles.orphan} tooltip`}
                     aria-current={doc?.path === path ? 'true' : undefined}
-                    title={t('orphans.recover', { path })}
+                    data-tooltip={t('orphans.recover', { path })}
                     onClick={() => openFile(path)}
                   >
                     {path}

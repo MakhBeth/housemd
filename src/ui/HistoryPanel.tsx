@@ -52,7 +52,7 @@ export function HistoryPanel({ workspace, path, currentText, onRestore, onClose 
     <div className={styles.panel}>
       <header className={styles.header}>
         <h2 className={styles.title}>{t('history.title', { path })}</h2>
-        <button className={styles.close} onClick={onClose} aria-label={t('history.close')} title={t('history.close')}>
+        <button className={`${styles.close} tooltip`} onClick={onClose} aria-label={t('history.close')} data-tooltip={t('history.close')}>
           <Icon name="close" />
         </button>
       </header>

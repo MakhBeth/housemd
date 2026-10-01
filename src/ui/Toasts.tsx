@@ -44,7 +44,7 @@ export function Toasts({ items, onDismiss }: Props) {
       {items.map((item) => (
         <div key={item.key} className={styles.toast} data-kind={item.kind} role={item.kind === 'error' ? 'alert' : 'status'}>
           <p>{item.text}</p>
-          <button aria-label={t('toast.close')} title={t('toast.close')} onClick={() => onDismiss(item.key)}>
+          <button className="tooltip" aria-label={t('toast.close')} data-tooltip={t('toast.close')} onClick={() => onDismiss(item.key)}>
             <Icon name="close" size={16} />
           </button>
         </div>

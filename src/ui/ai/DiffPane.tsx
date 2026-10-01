@@ -25,7 +25,7 @@ export const DiffPane=forwardRef<DiffHandle,Props>(function DiffPane(props,ref){
   // Focus sulla proposta: Ctrl+Z annulla il rifiuto (è nella cronologia di b).
   if(m.chunks.length===0)latest.current.onAllRejected();else m.b.focus();
  };
- const controlButton=(text:string,label:string,action:'accept'|'reject')=>{const b=document.createElement('button');b.type='button';b.textContent=text;b.title=label;b.setAttribute('aria-label',label);b.dataset.action=action;return b;};
+ const controlButton=(text:string,label:string,action:'accept'|'reject')=>{const b=document.createElement('button');b.type='button';b.textContent=text;b.className='tooltip';b.dataset.tooltip=label;b.setAttribute('aria-label',label);b.dataset.action=action;return b;};
  // Due pulsanti per blocco: ← accetta (gestito dalla libreria, revertControls 'b-to-a'), → rifiuta (gestito qui).
  const renderControls=()=>{
   const box=document.createElement('div');box.className=styles.revert;

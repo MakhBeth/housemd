@@ -74,7 +74,8 @@ function toolbarView(view: EditorView, translate: Translate): TooltipView {
     button.type = 'button';
     button.dataset.action = action;
     const label = translate(`format.${action}` as MessageKey);
-    button.title = label;
+    button.className = 'tooltip';
+    button.dataset.tooltip = label;
     button.setAttribute('aria-label', label);
     const look = LOOK[action];
     const inner = document.createElement('span');

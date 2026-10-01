@@ -124,6 +124,13 @@ try{
  await evaluate("(()=>{const view=smoke.EditorView.findFromDOM(document.querySelector('.cm-editor'));view.focus();view.dispatch({changes:{from:0,to:view.state.doc.length,insert:'uno due tre'},selection:{anchor:4,head:7}});})()");
  await until("!!document.querySelector('.cm-formatToolbar[role=toolbar]')");
  if(process.env.HOUSEMD_SCREENSHOT){const shot=await send('Page.captureScreenshot',{format:'png'});(await import('node:fs')).writeFileSync(process.env.HOUSEMD_SCREENSHOT,Buffer.from(shot.result.data,'base64'));}
+ assert.equal(await evaluate('document.title'),'HMD - a.md','Titolo della scheda col file aperto');
+ // Tooltip disegnato anche sui pulsanti della barra: al passaggio del mouse compare ::after col testo.
+ const hover=async selector=>{const r=await evaluate(`(()=>{const b=document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();return {x:b.x+b.width/2,y:b.y+b.height/2};})()`);await send('Input.dispatchMouseEvent',{type:'mouseMoved',x:r.x,y:r.y});await sleep(250);};
+ await hover('.cm-formatToolbar button[data-action=bold]');
+ assert.equal(await evaluate("(()=>{const b=document.querySelector('.cm-formatToolbar button[data-action=bold]');const a=getComputedStyle(b,'::after');return b.title===''&&a.content===JSON.stringify(b.dataset.tooltip)&&b.dataset.tooltip==='Bold (Ctrl+B)'&&a.visibility==='visible';})()"),true,'Tooltip disegnato sulla barra di formattazione');
+ if(process.env.HOUSEMD_SCREENSHOT){const shot=await send('Page.captureScreenshot',{format:'png'});(await import('node:fs')).writeFileSync(process.env.HOUSEMD_SCREENSHOT.replace('.png','-tooltip.png'),Buffer.from(shot.result.data,'base64'));}
+ await send('Input.dispatchMouseEvent',{type:'mouseMoved',x:5,y:400});
  for(const type of ['rawKeyDown','keyUp'])await send('Input.dispatchKeyEvent',{type,key:'b',code:'KeyB',windowsVirtualKeyCode:66,modifiers:2});await sleep(150);
  const editorText="smoke.EditorView.findFromDOM(document.querySelector('.cm-editor')).state.doc.toString()";
  assert.equal(await evaluate(editorText),'uno **due** tre','Ctrl+B mette il grassetto');
@@ -157,6 +164,7 @@ try{
  await until(`document.activeElement===${composer}`);
  // Larghezza del testo: dalle impostazioni a una variabile CSS che limita editor e anteprima.
  await press('Split');await press('Settings');await until(`!!${settings}`);
+ assert.equal(await evaluate('document.title'),'HMD - Settings','Titolo della scheda nelle impostazioni');
  const widthInput=label=>`[...${settings}.querySelectorAll('label')].find(l=>l.querySelector('span')?.textContent===${JSON.stringify(label)}).querySelector('input')`;
  const setWidth=(label,value)=>evaluate(`(()=>{const input=${widthInput(label)};input.focus();Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,${JSON.stringify(value)});input.dispatchEvent(new Event('input',{bubbles:true}));input.blur();})()`);
  assert.equal(await evaluate(`${widthInput('Preview (characters)')}.value`),'72','Anteprima a 72 caratteri di default');
@@ -173,5 +181,5 @@ try{
  assert.equal(await evaluate("(()=>{const p=document.querySelector('[class*=prose]');return Math.abs(p.getBoundingClientRect().width-p.parentElement.clientWidth)<2;})()"),true,'Anteprima senza limite: occupa tutto il pannello');
  await send('Emulation.clearDeviceMetricsOverride');await press('AI');
  assert.deepEqual(errors,[],'Nessuna eccezione runtime');
- console.log('Chromium AI smoke: modalità AI, composer con Invio, proposta, accept-all, blocco, AI→Editor undo, before-ai, chip selezione e accettazione ripetuta e per blocchi, rendering sicuro senza risorse remote, ripristino cronologia, chip dopo selezione in Editor, barra di formattazione e Ctrl+B, impostazioni con focus e conferma su Indietro/Chiudi, larghezza del testo: OK');
+ console.log('Chromium AI smoke: modalità AI, composer con Invio, proposta, accept-all, blocco, AI→Editor undo, before-ai, chip selezione e accettazione ripetuta e per blocchi, rendering sicuro senza risorse remote, ripristino cronologia, chip dopo selezione in Editor, barra di formattazione e Ctrl+B, impostazioni con focus e conferma su Indietro/Chiudi, larghezza del testo, titolo della scheda e tooltip disegnati: OK');
 }finally{socket?.close();chrome.kill();vite.kill();await Promise.all([new Promise(r=>chrome.exitCode!==null?r():chrome.once('exit',r)),new Promise(r=>vite.exitCode!==null?r():vite.once('exit',r))]);await rm(profile,{recursive:true,force:true,maxRetries:3});}
