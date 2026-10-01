@@ -14,7 +14,19 @@
 
 Editor markdown nel browser per le tue cartelle locali, stile HackMD: editor e anteprima affiancati,
 salvataggio automatico, ricerca, `[[wikilink]]`. Nessun server: i file restano sul tuo computer
-(File System Access API, quindi **solo Chrome o Edge su desktop**).
+(File System Access API: **Chrome o Edge su desktop**; per Brave vedi la nota qui sotto).
+
+## Brave (desktop)
+
+Brave può usare la stessa File System Access API, ma la tiene disattivata per impostazione
+predefinita ([documentazione](https://developer.chrome.com/docs/capabilities/web-apis/file-system-access)).
+Per abilitarla:
+
+1. Apri `brave://flags/#file-system-access-api`.
+2. Imposta **Enabled** e riavvia Brave.
+3. Riapri HouseMD e autorizza l'accesso alla cartella.
+
+La compatibilità con Brave non è ancora stata verificata con un collaudo dedicato.
 
 ## Sviluppo
 
