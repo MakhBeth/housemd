@@ -18,7 +18,7 @@ import { APP_TITLE, pageTitle } from '../lib/pageTitle';
 import type { SettingsSection } from '../lib/route';
 import { Preview, type PreviewHandle } from '../preview/Preview';
 import { useTheme } from '../theme/useTheme';
-import type { SaveState, Workspace } from '../workspace/workspace';
+import type { Workspace } from '../workspace/workspace';
 import { ConfirmDialog } from './ConfirmDialog';
 import { ConflictBar } from './ConflictBar';
 import { FileTree, type TreeAction } from './FileTree';
@@ -35,17 +35,11 @@ import { Toasts, type ToastItem } from './Toasts';
 import { buildTree, type TreeNode } from './tree';
 import { useWorkspaceState } from './useWorkspace';
 import styles from './WorkspaceView.module.css';
+import { saveIndicator } from '../elements/workspace/saveIndicator';
 import {
   clampWidth, gridColumns, MODES, nextPaneMode, PANE_MODES, panesMode, resizeByKey, sidePanel, WIDTH_LIMITS,
   type Mode, type PaneMode,
 } from '../elements/workspace/layout';
-
-const SAVE_LABEL: Record<SaveState, MessageKey> = {
-  saved: 'save.saved',
-  dirty: 'save.dirty',
-  saving: 'save.saving',
-  error: 'save.error',
-};
 
 type DialogState =
   | { kind: 'new-file' | 'new-folder'; dir: string }
@@ -358,6 +352,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
   const exists = (path: string) => state.entries.some((e) => e.path.toLowerCase() === path.toLowerCase());
   const taken = t('name.error.taken');
   const sidebarLabel = sidebarOpen ? t('sidebar.hide') : t('sidebar.show');
+  const indicator = saveIndicator(doc);
 
   return (
     <>
@@ -454,14 +449,9 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
             ))}
           </div>
           <div className={styles.actions}>
-            <span
-              className={styles.saveState}
-              data-state={doc?.saveState ?? 'none'}
-              aria-live={doc?.saveState === 'error' ? 'assertive' : 'polite'}
-              role={doc?.saveState === 'error' ? 'alert' : undefined}
-            >
-              {doc?.saveState === 'dirty' && !doc.deletedOnDisk && <Icon name="draft" size={10} />}
-              {doc ? (doc.deletedOnDisk ? t('save.deleted') : t(SAVE_LABEL[doc.saveState])) : ''}
+            <span className={styles.saveState} data-state={indicator.state} aria-live={indicator.live} role={indicator.role}>
+              {indicator.draftIcon && <Icon name="draft" size={10} />}
+              {indicator.label ? t(indicator.label) : ''}
             </span>
             <button
               className={`${styles.iconButton} tooltip`}
