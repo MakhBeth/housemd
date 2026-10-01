@@ -3,3 +3,6 @@ dist
 dev-dist
 *.local
 .superpowers/
+test-results/
+playwright-report/
+blob-report/
