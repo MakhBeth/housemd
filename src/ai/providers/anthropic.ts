@@ -4,6 +4,7 @@ import { ANTHROPIC_MODELS } from '../models';
 import { AiError, mapError } from '../errors';
 import { filterParams, capabilities } from '../capabilities';
 import { checkResponse, stopReason, type ProviderDeps, type AnthropicClient } from './shared';
+import { textDelta, tokens } from './shapes';
 export function anthropic(profile: ModelProfile, secret?: StoredSecret | null, deps: ProviderDeps = {}): ChatProvider {
   return {
     async testConnection(signal) {
@@ -24,9 +25,9 @@ export function anthropic(profile: ModelProfile, secret?: StoredSecret | null, d
         for await (const raw of client.messages.stream(body, { signal })) {
           signal.throwIfAborted();
           const e = raw as { type: string; delta?: { type?: string; text?: string; stop_reason?: string }; content_block?: { type: string }; message?: { usage?: { input_tokens?: number; output_tokens?: number } }; usage?: { input_tokens?: number; output_tokens?: number } };
-          if (e.type === 'content_block_delta' && e.delta?.type === 'text_delta') yield { type: 'text', text: e.delta.text ?? '' };
+          if (e.type === 'content_block_delta' && e.delta?.type === 'text_delta') yield { type: 'text', text: textDelta(e.delta.text) };
           if (e.content_block?.type === 'thinking' || e.delta?.type === 'thinking_delta') yield { type: 'thinking' };
-          const usage = e.usage ?? e.message?.usage; if (usage) yield { type: 'usage', inputTokens: usage.input_tokens, outputTokens: usage.output_tokens };
+          const usage = e.usage ?? e.message?.usage; if (usage) yield { type: 'usage', inputTokens: tokens(usage.input_tokens), outputTokens: tokens(usage.output_tokens) };
           if (e.delta?.stop_reason) finish = { type: 'done', stop: stopReason(e.delta.stop_reason) };
         }
         if (!finish) throw new AiError('badStream'); yield finish;
