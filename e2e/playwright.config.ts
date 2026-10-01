@@ -17,6 +17,8 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: [['list'], ['html', { open: 'never', outputFolder: '../playwright-report' }]],
   expect: {
+    // Ogni test avvia un browser con profilo su disco: con la macchina carica 5 s non bastano sempre.
+    timeout: 10_000,
     toHaveScreenshot: { maxDiffPixelRatio: 0.002, animations: 'disabled', caret: 'hide' },
   },
   use: {

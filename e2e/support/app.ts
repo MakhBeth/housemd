@@ -169,7 +169,11 @@ export const test = base.extend<{ flags: Partial<HarnessFlags>; appLocale: E2ELo
     });
     for (const page of context.pages()) await page.close();
     await use(context);
-    await context.close();
+    // Con il profilo persistente Playwright chiude un browser intero; a volte la pipe verso il processo è
+    // già chiusa e Node risponde EIO. Il test è già finito: si ignora solo quell'errore.
+    await context.close().catch((error: unknown) => {
+      if (!String(error).includes('EIO')) throw error;
+    });
     await rm(dir, { recursive: true, force: true });
   },
   flags: [{}, { option: true }],

@@ -99,6 +99,8 @@ test('with the default limit the preview is narrower than the pane', async ({ ap
   // Contro-prova del test precedente: con 72 caratteri il titolo non arriva ai bordi.
   await app.mode('mode.preview').click();
   const heading = app.previewPane().getByRole('heading', { name: 'A' });
+  // L'anteprima si disegna dopo un debounce: prima si aspetta il titolo, poi si misura.
+  await expect(heading).toBeVisible();
   const pane = await app.previewPane().evaluate((el) => el.clientWidth);
   const box = await heading.boundingBox();
   expect(box).not.toBeNull();
