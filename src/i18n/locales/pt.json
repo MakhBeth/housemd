@@ -267,5 +267,19 @@
   "ai.deleteMessage": "Esta ação não pode ser desfeita.",
   "ai.unsavedTitle": "Descartar alterações não salvas?",
   "ai.unsavedMessage": "As alterações deste item não foram salvas.",
-  "ai.discardChanges": "Descartar alterações"
+  "ai.discardChanges": "Descartar alterações",
+  "format.toolbar": "Formatação",
+  "format.bold": "Negrito (Ctrl+B)",
+  "format.italic": "Itálico (Ctrl+I)",
+  "format.strike": "Tachado (Ctrl+Shift+X)",
+  "format.code": "Código (Ctrl+E)",
+  "format.link": "Link (Ctrl+Shift+K)",
+  "format.heading": "Título",
+  "format.quote": "Citação",
+  "format.bullet": "Lista com marcadores",
+  "format.ordered": "Lista numerada",
+  "format.task": "Lista de tarefas",
+  "format.boldGlyph": "N",
+  "format.italicGlyph": "I",
+  "format.strikeGlyph": "S"
 }

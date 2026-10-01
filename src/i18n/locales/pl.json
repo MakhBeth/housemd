@@ -267,5 +267,19 @@
   "ai.deleteMessage": "Tej operacji nie można cofnąć.",
   "ai.unsavedTitle": "Odrzucić niezapisane zmiany?",
   "ai.unsavedMessage": "Zmiany w tym elemencie nie zostały zapisane.",
-  "ai.discardChanges": "Odrzuć zmiany"
+  "ai.discardChanges": "Odrzuć zmiany",
+  "format.toolbar": "Formatowanie",
+  "format.bold": "Pogrubienie (Ctrl+B)",
+  "format.italic": "Kursywa (Ctrl+I)",
+  "format.strike": "Przekreślenie (Ctrl+Shift+X)",
+  "format.code": "Kod (Ctrl+E)",
+  "format.link": "Link (Ctrl+Shift+K)",
+  "format.heading": "Nagłówek",
+  "format.quote": "Cytat",
+  "format.bullet": "Lista punktowana",
+  "format.ordered": "Lista numerowana",
+  "format.task": "Lista zadań",
+  "format.boldGlyph": "B",
+  "format.italicGlyph": "I",
+  "format.strikeGlyph": "S"
 }

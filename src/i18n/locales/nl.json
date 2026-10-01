@@ -267,5 +267,19 @@
   "ai.deleteMessage": "Dit kan niet ongedaan worden gemaakt.",
   "ai.unsavedTitle": "Niet-opgeslagen wijzigingen negeren?",
   "ai.unsavedMessage": "De wijzigingen aan dit item zijn niet opgeslagen.",
-  "ai.discardChanges": "Wijzigingen negeren"
+  "ai.discardChanges": "Wijzigingen negeren",
+  "format.toolbar": "Opmaak",
+  "format.bold": "Vet (Ctrl+B)",
+  "format.italic": "Cursief (Ctrl+I)",
+  "format.strike": "Doorhalen (Ctrl+Shift+X)",
+  "format.code": "Code (Ctrl+E)",
+  "format.link": "Link (Ctrl+Shift+K)",
+  "format.heading": "Kop",
+  "format.quote": "Citaat",
+  "format.bullet": "Opsomming",
+  "format.ordered": "Genummerde lijst",
+  "format.task": "Takenlijst",
+  "format.boldGlyph": "B",
+  "format.italicGlyph": "I",
+  "format.strikeGlyph": "S"
 }

@@ -74,8 +74,20 @@ File opzionale `.housemd.json` nella radice della cartella aperta:
 | `Ctrl+S` | Salva subito |
 | `Ctrl+Alt+S` | Salva tutto (anche le bozze degli altri file) |
 | `Ctrl+K` | Cerca |
-| `Ctrl+B` | Mostra / nascondi la barra laterale |
+| `Ctrl+B` | Mostra / nascondi la barra laterale (fuori dall'editor) |
 | `Ctrl+\` | Editor / Affiancati / Anteprima |
+
+Nell'editor, selezionando del testo compare una barra di formattazione (grassetto, corsivo, barrato,
+codice, link, titolo, citazione, elenchi). Le stesse azioni in linea hanno una scorciatoia; ripetuta,
+toglie la formattazione:
+
+| Tasti | Azione |
+|---|---|
+| `Ctrl+B` | Grassetto |
+| `Ctrl+I` | Corsivo |
+| `Ctrl+Shift+X` | Barrato |
+| `Ctrl+E` | Codice in linea |
+| `Ctrl+Shift+K` | Link |
 
 ## Impostazioni
 

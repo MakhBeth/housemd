@@ -267,5 +267,19 @@
   "ai.deleteMessage": "Cette action est irréversible.",
   "ai.unsavedTitle": "Abandonner les modifications non enregistrées ?",
   "ai.unsavedMessage": "Les modifications de cet élément n'ont pas été enregistrées.",
-  "ai.discardChanges": "Abandonner les modifications"
+  "ai.discardChanges": "Abandonner les modifications",
+  "format.toolbar": "Mise en forme",
+  "format.bold": "Gras (Ctrl+B)",
+  "format.italic": "Italique (Ctrl+I)",
+  "format.strike": "Barré (Ctrl+Shift+X)",
+  "format.code": "Code (Ctrl+E)",
+  "format.link": "Lien (Ctrl+Shift+K)",
+  "format.heading": "Titre",
+  "format.quote": "Citation",
+  "format.bullet": "Liste à puces",
+  "format.ordered": "Liste numérotée",
+  "format.task": "Liste de tâches",
+  "format.boldGlyph": "G",
+  "format.italicGlyph": "I",
+  "format.strikeGlyph": "S"
 }
