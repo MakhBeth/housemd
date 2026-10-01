@@ -1,86 +1,114 @@
 # HouseMD — migrazione a Web Components e CSS con `@scope` — design
 
-Data: 2026-09-27
-Base: branch `plan/web-components-stack` (HEAD `e2a4448`, v1.1 con i18n e tema a pixel).
+Data: 2026-09-27 · **Revisione: 2026-10-01**
+Base: `main` (HEAD `822f52d`: v1.1, strumenti AI, impostazioni a pagina, barra di formattazione,
+larghezza del testo, tooltip disegnati, albero con un solo tab stop).
 Stato: **solo piano**. Nessun file di implementazione è stato toccato per scrivere questo documento.
 
-Decisioni prese il 2026-09-27 (risposte alle domande aperte, §12):
+Decisioni (27/09, riviste il 01/10; risposte alle domande aperte, §12):
 
-1. **Un solo merge in `main`**, alla fine, e **solo dopo approvazione esplicita** di Davide. Tutte le
-   fasi vivono su un branch di integrazione.
-2. **zod ridotto**: solo ai confini critici (file system e provider esterni di dati), mai sulla
-   logica interna (§6.2).
+1. **Merge in due tempi.** Le fasi 0–3 (e2e, logica pura, zod/ts-pattern, store, infrastruttura
+   DOM/CSS, React 19) non cambiano la UI ed entrano in `main` con **PR separate**, una per fase. Le
+   fasi 4–8 (convivenza e uscita da React) vivono su un branch di integrazione e arrivano in `main`
+   con **un solo merge**, solo dopo approvazione esplicita di Davide.
+2. **zod ridotto**: solo ai confini con dati che il codice non controlla (file system, storage del
+   browser, risposte JSON dei provider), mai sulla logica interna (§6.2).
 3. **Playwright** entra nel progetto ed è la **prima parte implementativa**: una suite end-to-end
-   sull'app React di oggi che fa da rete di sicurezza per tutta la migrazione (§7 fase 0, §8.4).
+   sull'app React di oggi che fa da rete di sicurezza per tutta la migrazione (§7 fase 0, §8.4). Il
+   collaudo AI scritto a mano (`tests/browser/run-ai-smoke.mjs`, CDP grezzo) diventa una spec
+   Playwright e sparisce.
+4. **React 19 prima della convivenza** (nuova). React 19 assegna da solo proprietà ed eventi ai
+   custom element: il `reactBridge.tsx` della prima versione non serve più (§7 fase 3).
+
+## 0. Cosa è cambiato rispetto alla versione del 27/09
+
+- La UI è raddoppiata: AI (modalità AI, composer, chip modello/effort, revisione con
+  `@codemirror/merge`, profili, preset, sync), impostazioni a pagina con rotta nell'hash,
+  pannello della cronologia, avviso di aggiornamento PWA, barra di formattazione sulla selezione,
+  larghezza massima del testo, tooltip disegnati, navigazione da tastiera dell'albero.
+- Alcune estrazioni previste dalla fase 1 esistono già: `ui/shortcuts.ts` (`shortcutFor`, al posto
+  del `keymap.ts` previsto), `ui/treeNav.ts`, `lib/route.ts`, `lib/textWidth.ts`,
+  `lib/pageTitle.ts`, `app/switchFolder.ts`, `ai/reviewStatus.ts`, `ai/composerKeys.ts`,
+  `ai/selectionChip.ts`. `AiController` e `UpdateFlow` sono già store esterni come `Workspace`.
+- v1.1 è in `main`: il branch `plan/web-components-stack` non esiste più e l'avvertenza sul merge di
+  v1.1 cade.
+- La fase 0 non è mai partita: non c'è `e2e/` né Playwright.
+- Esiste un selettore di lingua (impostazioni → generale): il cambio di lingua a caldo ora si
+  verifica anche end-to-end.
+- `CLAUDE.md` ha regole nuove che la riscrittura deve rispettare: coda `runExclusive`, cronologia
+  senza `await`, regole AI (rete solo da `ai/providers`, chiavi solo in `aiSecrets`, risposte non
+  fidate).
 
 ## Obiettivo
 
 Togliere React e i CSS Modules e costruire l'interfaccia con soli standard web: Custom Elements, DOM
 API, `<dialog>`, Popover, Anchor Positioning, CSS `@scope` e `@layer`. Le uniche librerie nuove sono
-`ts-pattern` (match esaustivi sugli stati) e `zod` (validazione di tutto ciò che arriva da fuori:
-`localStorage`, IndexedDB, `.housemd.json`, frontmatter).
+`ts-pattern` (match esaustivi sugli stati) e `zod` (validazione di ciò che arriva da fuori).
 
-Il comportamento visibile non cambia: stessa UI, stessi testi, stesse scorciatoie, stessi toast.
-La migrazione riesce se alla fine `npm test` e `npm run build` passano, i test di oggi ci sono ancora
-(adattati dove serve, mai cancellati per farli passare) e la checklist manuale (§9) va a buon fine.
+Il comportamento visibile non cambia: stessa UI, stessi testi, stesse scorciatoie, stessi toast,
+stessi tooltip. La migrazione riesce se alla fine `npm test`, `npm run lint`, `npm run build` e
+`npm run test:e2e` passano, i test di oggi ci sono ancora (adattati dove serve, mai cancellati per
+farli passare) e la checklist manuale (§9) va a buon fine.
 
 ## Fuori scope
 
 - Nuove funzionalità o ritocchi grafici. Se qualcosa cambia aspetto, è un bug della migrazione.
-- Sostituire CodeMirror, markdown-it, MiniSearch, DOMPurify, `yaml`, `diff`: sono già
-  indipendenti dal framework e restano come sono.
+- Sostituire CodeMirror (anche `@codemirror/merge`), markdown-it, MiniSearch, DOMPurify, `yaml`,
+  `diff`, `@anthropic-ai/sdk`: sono già indipendenti dal framework e restano come sono.
+- Toccare `bridge/` (il bridge locale Claude Code è un processo Node, senza UI).
 - Un "mini-framework" fatto in casa (virtual DOM, template reattivi, signals). Si scrivono al
-  massimo tre helper piccoli e testati (§5.2).
-- Librerie di componenti (Lit, FAST, Stencil…): la richiesta è "standard puri"; Lit sarebbe la
-  scelta naturale se servisse un livello in più, ma qui non serve (§4.3).
+  massimo quattro helper piccoli e testati (§5.2).
+- Librerie di componenti (Lit, FAST, Stencil…): la richiesta è "standard puri" (§4.3).
 
 ---
 
 ## 1. Lo stack di oggi
 
-### 1.1 Numeri
+### 1.1 Numeri (misurati su `822f52d`)
 
 | Area | File | Righe (circa) | Dipende da React? |
 |---|---|---|---|
-| Logica pura (`fs/`, `workspace/`, `search/`, `preview/*.ts`, `config/`, `lib/`, `i18n/i18n.ts`, `theme/*.ts`, `ui/*.ts`, `wikilinks/`) | ~35 | ~2 700 | **No** |
-| Componenti `.tsx` | 17 | ~1 900 | Sì |
-| CSS Modules (`*.module.css`) | 8 | ~960 | Sì (import `styles.x`) |
-| `global.css` | 1 | 84 | No |
-| Test (`*.test.ts`) | 31 | ~2 400, **189 `test()`** | **Nessuno importa React** |
-
-(Conteggio statico dei `test(`: nel worktree del piano non c'è `node_modules`, quindi il primo passo
-dell'implementazione registra il baseline reale di `npm test`.)
+| Logica pura `.ts` (escluse le prove) | 98 | ~5 900 | 6 file sì: gli hook `ui/useWorkspace.ts`, `ui/useRoute.ts`, `theme/useTheme.ts`, `ui/ai/useAiController.ts`, `ui/ai/useAiState.ts` e un tipo in `editor/docExtensions.ts` |
+| Componenti `.tsx` | 35 | ~3 800 (`WorkspaceView` da solo 712) | Sì |
+| CSS Modules (`*.module.css`) | 15 | ~1 640 | Sì (import `styles.x`) |
+| `global.css` | 1 | 142 | No |
+| Test (`*.test.ts`) | 67 | ~5 800, **488 test verdi** | **Nessuno importa React** |
+| Collaudo browser (`tests/browser/`) | 3 | ~210 | Sì: `ai-smoke.tsx` monta componenti React |
 
 ### 1.2 Dipendenze coinvolte
 
-- Da togliere: `react`, `react-dom`, `@types/react`, `@types/react-dom`, `@vitejs/plugin-react`.
-- Da aggiungere: `ts-pattern`, `zod` (v4, import da `zod/mini`, vedi §6.2); in sviluppo
-  `@playwright/test` (§8.4).
-- Invariate: CodeMirror 6 (già vanilla: in React c'è solo un `<div ref>` che lo ospita),
-  `markdown-it`, `dompurify`, `minisearch`, `yaml`, `diff`, `pixelarticons`, `@fontsource/*`,
-  `vite`, `vite-plugin-pwa`, `tsx`, `typescript`, `jsdom`, `fake-indexeddb`.
-- `tsconfig.json`: via `"jsx": "react-jsx"`; `useDefineForClassFields: true` resta (vedi rischio R9).
+- Da aggiornare nella fase 3: `react`/`react-dom` 18 → 19, con `@types/react*` allineati.
+- Da togliere alla fine: `react`, `react-dom`, `@types/react`, `@types/react-dom`,
+  `@vitejs/plugin-react`.
+- Da aggiungere: `ts-pattern`, `zod` (v4, import da `zod/mini`, §6.2); in sviluppo
+  `@playwright/test` (versione esatta, §8.4).
+- Invariate: CodeMirror 6 e `@codemirror/merge`, `@anthropic-ai/sdk`, `markdown-it`, `dompurify`,
+  `minisearch`, `yaml`, `diff`, `pixelarticons`, `@fontsource/*`, `vite`, `vite-plugin-pwa`, `tsx`,
+  `typescript`, `jsdom`, `fake-indexeddb`.
+- `tsconfig.json`: via `"jsx": "react-jsx"` alla fine; `useDefineForClassFields: true` resta (R9).
 
 ### 1.3 Come React è usato davvero
 
-La mappa conta più delle righe: dice cosa va sostituito e con cosa.
-
 | Uso di React | Dove | Sostituto |
 |---|---|---|
-| `useSyncExternalStore(workspace.subscribe, workspace.getState)` | `ui/useWorkspace.ts` | L'elemento si iscrive a `workspace.subscribe` in `connectedCallback` e si disiscrive in `disconnectedCallback`. `Workspace` è **già** uno store esterno: non cambia. |
-| Context `I18nProvider` / `useT` / `useI18n` | `i18n/I18nProvider.tsx` | Store `i18nStore` (modulo puro con `subscribe`/`getState`/`setLocale`), stessa semantica "vince l'ultima richiesta". |
-| `useTheme` + `flushSync` dentro la view transition | `theme/useTheme.ts` | `themeStore`; dentro `startViewTransition(apply)` il DOM si aggiorna in modo sincrono per natura, `flushSync` sparisce. |
-| `forwardRef` + `useImperativeHandle` (`scrollToLine`, `focus`) | `Editor`, `Preview`, `SearchPanel` | Metodi pubblici della classe dell'elemento (`editor.scrollToLine(n)`). |
-| `key` per forzare il rimontaggio di `WorkspaceView` (`openCount`) | `App.tsx` | L'app sostituisce esplicitamente l'elemento con una nuova istanza; `openCount` sparisce. |
-| `useEffect` con `showModal()` + gestione dei "close fantasma" di StrictMode | `NameDialog`, `ConfirmDialog`, `AccessLostDialog` | Dialog con API a promessa (§5.4); niente StrictMode, niente doppio montaggio. |
-| Liste con `key` (albero, risultati, toast, bozze orfane) | `FileTree`, `SearchPanel`, `Toasts`, `WorkspaceView` | Helper `reconcileList` (§5.2). |
-| Attributi non tipizzati da React 18 (`closedby`, `popover`) passati con cast | dialog, toast, menu | Attributi HTML normali: il cast sparisce. |
+| `useSyncExternalStore` su store esterni | `useWorkspace`, `useAiState`, `UpdateNotice`, chip e sezioni AI | L'elemento si iscrive in `connect()` con `watch()` (§5.1). `Workspace`, `AiController`, `UpdateFlow` sono **già** store: non cambiano. |
+| Context `I18nProvider` / `useT` / `useI18n` | `i18n/I18nProvider.tsx` | `i18nStore` (§5.3), stessa semantica "vince l'ultima richiesta". |
+| `useTheme` + `flushSync` dentro la view transition | `theme/useTheme.ts` | `themeStore`; la notifica sincrona dentro `apply` sostituisce `flushSync`. |
+| `useRoute` (hash, guardia sulle modifiche aperte delle impostazioni) | `ui/useRoute.ts` | `routeStore` (§5.3): `hashchange` + `parseRoute`/`formatRoute` di `lib/route.ts`, stessa guardia. |
+| `useDraft` (bozza con stato "sporco" nelle impostazioni AI) | `ui/ai/settings/ItemList.tsx` | Modulo puro `draftState.ts` (`edit`, `reset`, `isDirty`) con test. |
+| `useAiController` (crea il controller, legge `aiProfile`) e `useAiSync` | `ui/ai/useAiController.ts`, `AiSyncSection.tsx` | Funzioni di creazione chiamate da `hmd-workspace`; la parte asincrona resta nel modulo puro. |
+| `forwardRef` + `useImperativeHandle` (`scrollToLine`, `focus`, `focusInput`…) | `Editor`, `Preview`, `SearchPanel`, `Composer`, `DiffPane` | Metodi pubblici della classe dell'elemento. |
+| `useId` | `ModelChip`, `ReviewBar` | Helper `uid(prefix)` in `src/dom/` (contatore per documento). |
+| `key` per rimontare `WorkspaceView` (`openCount`) | `App.tsx` | L'app sostituisce l'elemento con una nuova istanza; `openCount` sparisce. |
+| `useEffect` con `showModal()` + workaround per StrictMode | `NameDialog`, `ConfirmDialog`, dialog dentro `WorkspaceView` | Dialog con API a promessa (§5.4). |
+| Liste con `key` (albero, risultati, toast, bozze orfane, chat, profili, preset, cronologia) | molti | Helper `reconcileList` (§5.2). |
+| Tipo `MutableRefObject` | `editor/docExtensions.ts` | Tipo locale `{ current: T }`. |
 | `switch (screen.kind)` | `App.tsx` | `match(screen)…exhaustive()` di ts-pattern. |
 
-Conclusione dell'analisi: il progetto è già scritto "da standard web" (dialog, popover, anchor,
-Custom Highlight, view transition, File System Access) con React usato come motore di rendering e
-poco altro. Il rischio sta nel rendering a mano delle liste e nella pulizia dei listener, non
-nell'architettura.
+Conclusione: il progetto è già scritto "da standard web" (dialog, popover, anchor, Custom Highlight,
+view transition, File System Access, tooltip con Anchor Positioning) con React usato come motore di
+rendering. Il rischio sta nel rendering a mano delle liste, nella pulizia dei listener e — nuovo —
+nella mole: `WorkspaceView` e la parte AI sono metà della UI.
 
 ---
 
@@ -92,13 +120,21 @@ Invariati da `CLAUDE.md`:
 - Mai `innerHTML` con HTML non sanitizzato: l'unico `innerHTML` resta dentro `preview/sanitize.ts`.
 - Mai `alert/confirm/prompt`: `<dialog>` con `showModal()` e `closedby`.
 - Solo `fs/fsaOps.ts` e `fs/access.ts` toccano la File System Access API.
-- Logica in moduli puri testati con `npm test`; testi UI da `t()`.
+- Logica in moduli puri testati con `npm test`; testi UI da `t()`, chiavi in tutti i `locales/*.json`.
+- Le operazioni del `Workspace` passano da `runExclusive`; nessun `await` della cronologia nei
+  percorsi che cambiano il documento. La migrazione **non tocca** `workspace/`: gli elementi chiamano
+  le stesse API pubbliche che chiamano oggi i componenti.
+- AI: rete solo da `ai/providers/*`; chiavi solo in `aiSecrets` o in memoria (mai in attributi,
+  `dataset`, log o toast); risposte e proposte non fidate, rese solo da `ai/safeRender.ts` +
+  `setSafeHTML`.
+- Tooltip: mai `title` nativo sui controlli, sempre `.tooltip` + `data-tooltip` + `aria-label`
+  (lo controlla `ui/tooltips.test.ts`).
 
 Nuovi:
 
-1. **Elementi sottili.** Un custom element fa tre cose: crea il suo DOM, lo aggiorna da uno stato,
-   trasforma eventi DOM in chiamate a moduli puri o store. Calcoli, validazioni e macchine a stati
-   stanno fuori, in moduli `.ts` testati senza DOM.
+1. **Elementi sottili.** Un custom element crea il suo DOM, lo aggiorna da uno stato, trasforma
+   eventi DOM in chiamate a moduli puri o store. Calcoli, validazioni e macchine a stati stanno
+   fuori, in moduli `.ts` testati senza DOM.
 2. **Niente costruzione di DOM da stringhe.** Niente `innerHTML`, `insertAdjacentHTML`,
    `outerHTML =`, `document.write` fuori da `sanitize.ts`: il DOM si crea con `el()` (§5.2) e i testi
    entrano con `textContent`. Lo fa rispettare un test statico (§8.3).
@@ -111,16 +147,22 @@ Nuovi:
 
 ```
 index.html
-  <hmd-app>                         ← macchina a stati delle schermate (ts-pattern)
-    <hmd-start-screen>              ← unsupported | start | resume
-    <hmd-workspace>                 ← layout, toolbar, scorciatoie, pannelli
+  <hmd-app>                           ← macchina a stati delle schermate (ts-pattern)
+    <hmd-start-screen>                ← unsupported | start | resume
+    <hmd-workspace>                   ← layout, toolbar, scorciatoie, pannelli, rotta
       <hmd-search-panel>
-      <hmd-file-tree>               ← menu azioni in popover ancorato
-      <hmd-editor>                  ← ospita l'EditorView di CodeMirror
-      <hmd-preview>                 ← HTML sanitizzato + <hmd-frontmatter-card>
+      <hmd-file-tree>                 ← menu azioni in popover ancorato, un solo tab stop
+      <hmd-history-panel>
+      <hmd-editor>                    ← EditorView di CodeMirror (+ barra di formattazione, già CM)
+      <hmd-preview>                   ← HTML sanitizzato + <hmd-frontmatter-card>
+      <hmd-ai-sidebar>                ← <hmd-ai-chat-log> <hmd-ai-suggestions> <hmd-ai-composer>
+                                        <hmd-ai-model-chip> <hmd-ai-effort-chip> <hmd-ai-parameters>
+      <hmd-ai-review>                 ← <hmd-ai-review-bar> <hmd-ai-diff-pane> (MergeView)
+      <hmd-settings>                  ← pagina da #/settings/<sezione>: generale, profili, preset, sync
       <hmd-conflict-bar>
       <hmd-theme-switcher>
-      <hmd-toasts>                  ← popover="manual"
+      <hmd-notice> <hmd-update-notice>
+      <hmd-toasts>                    ← popover="manual"
   dialog: showNameDialog() / showConfirmDialog() / showAccessLostDialog()  (funzioni, non elementi)
 ```
 
@@ -133,39 +175,41 @@ src/
     el.ts        el.test.ts        ← creazione di elementi, niente stringhe HTML
     list.ts      list.test.ts      ← reconcileList per liste con chiave
     element.ts   element.test.ts   ← classe base HmdElement (ciclo di vita, AbortController)
+    uid.ts       uid.test.ts       ← id unici per aria-* e popovertarget (era useId)
     icon.ts                        ← icon(name, size?) → <span class="icon">  (era Icon.tsx)
   state/
-    i18nStore.ts i18nStore.test.ts
-    themeStore.ts themeStore.test.ts
-    prefs.schema.ts prefs.schema.test.ts   ← schemi zod delle preferenze
+    i18nStore.ts  themeStore.ts  routeStore.ts  draftState.ts   (+ test)
+    prefs.schema.ts prefs.schema.test.ts
   elements/
-    app/            app.element.ts            app.css           screens.ts (+ test)
-    start-screen/   start-screen.element.ts   start-screen.css
-    workspace/      workspace.element.ts      workspace.css     layout.ts, keymap.ts, dialogState.ts (+ test)
-    file-tree/      file-tree.element.ts      file-tree.css     treeState.ts (+ test)
-    search-panel/   search-panel.element.ts   search-panel.css  segments.ts (+ test)
-    editor/         editor.element.ts         editor.css
-    preview/        preview.element.ts        preview.css
-                    frontmatter-card.element.ts               cardDate.ts (+ test)
-    toasts/         toasts.element.ts         toasts.css
-    conflict-bar/   conflict-bar.element.ts
-    theme-switcher/ theme-switcher.element.ts
-    dialogs/        nameDialog.ts confirmDialog.ts accessLostDialog.ts  dialogs.css
-    define.ts                                 ← unico punto con customElements.define()
+    app/            app.element.ts  app.css  screens.ts (+ test)
+    start-screen/   …
+    workspace/      workspace.element.ts  workspace.css  layout.ts dialogFor.ts saveIndicator.ts (+ test)
+    file-tree/      file-tree.element.ts  file-tree.css  treeState.ts (+ test)
+    search-panel/   …  segments.ts (+ test)
+    history-panel/  …
+    editor/         editor.element.ts  editor.css
+    preview/        preview.element.ts  frontmatter-card.element.ts  preview.css  cardDate.ts (+ test)
+    ai/             sidebar, chat-log, composer, suggestions, model-chip, model-select,
+                    effort-chip, parameters, review, review-bar, diff-pane  (*.element.ts + *.css)
+    settings/       settings.element.ts + sezioni (general, profiles, presets, sync, item-list)
+    toasts/ notice/ update-notice/ conflict-bar/ theme-switcher/
+    dialogs/        nameDialog.ts confirmDialog.ts accessLostDialog.ts dialogs.css
+    events.ts                      ← mappa tipizzata dei CustomEvent
+    define.ts                      ← unico punto con customElements.define()
   testing/
-    domEnv.ts                                 ← globali jsdom per i test *.dom.test.ts
-e2e/                                          ← Playwright (fase 0), fuori da src/
+    domEnv.ts                      ← globali jsdom per i test *.dom.test.ts
+e2e/                               ← Playwright (fase 0), fuori da src/
   playwright.config.ts  tsconfig.json
-  support/  fsHarness.ts  app.ts  i18n.ts     ← cartella finta su OPFS, fixture, t()
-  *.spec.ts                                   ← suffisso .spec: `tsx --test` non li raccoglie
+  support/  fsHarness.ts  aiHarness.ts  app.ts  i18n.ts
+  *.spec.ts                        ← suffisso .spec: `tsx --test` non li raccoglie
 ```
 
-I moduli puri esistenti (`workspace/`, `fs/`, `preview/render.ts`, `ui/tree.ts`, `ui/names.ts`…)
-**non si spostano**: spostarli adesso sporcherebbe la storia e i diff senza guadagno. `src/ui/` perde
-i `.tsx` e tiene i `.ts` puri (`tree`, `names`, `icons`, `logo`).
+I moduli puri esistenti (`workspace/`, `fs/`, `ai/`, `history/`, `preview/render.ts`, `ui/tree.ts`,
+`ui/treeNav.ts`, `ui/shortcuts.ts`, `ui/names.ts`, `lib/*`…) **non si spostano**. `src/ui/` perde i
+`.tsx` e gli hook e tiene i `.ts` puri.
 
-Nomi: prefisso `hmd-`; un file `*.element.ts` per elemento; la classe si chiama come il tag in
-PascalCase (`HmdFileTree`). Identificatori in inglese, testi da `t()`.
+Nomi: prefisso `hmd-` (`hmd-ai-` per la parte AI); un file `*.element.ts` per elemento; la classe si
+chiama come il tag in PascalCase (`HmdFileTree`). Identificatori in inglese, testi da `t()`.
 
 ---
 
@@ -178,16 +222,17 @@ Tutti gli elementi rendono nel **light DOM**. L'isolamento degli stili arriva da
 - `@layer` dichiarati una volta in `global.css`: `@layer reset, base, components, overrides;`
 - un file CSS per elemento, tutto dentro `@layer components { @scope (hmd-x) to (<figli hmd-*>) { … } }`;
 - classi brevi e locali (`.row`, `.name`, `.menu`), che non escono dallo scope e al limite inferiore
-  (`to (…)`) non entrano negli elementi figli.
+  non entrano negli elementi figli.
 
-Esempio (`file-tree.css`):
+Le utilità condivise restano globali in `@layer base`: `.icon`, `:focus-visible` (focus ring oreo e
+la variante `forced-colors`), `::highlight(housemd-search)` e i **tooltip disegnati**
+(`.tooltip` + `data-tooltip` con `anchor-name`/`anchor-scope`/`position-try-fallbacks`).
 
 ```css
 @layer components {
   @scope (hmd-file-tree) {
     :scope { display: block; flex: 1; overflow-y: auto; padding: 6px 4px 24px; }
     .list { list-style: none; margin: 0; padding: 0 0 0 12px; }
-    :scope > nav > .list { padding-left: 0; }
     .row:hover, .row[data-active='true'] { background: var(--c-accent-soft); }
     .menu { position-anchor: --housemd-tree-menu; /* … */ }
   }
@@ -197,49 +242,45 @@ Esempio (`file-tree.css`):
 `workspace.css` usa il limite inferiore per non stilizzare i componenti che contiene:
 
 ```css
-@scope (hmd-workspace) to (hmd-file-tree, hmd-search-panel, hmd-editor, hmd-preview, hmd-toasts) { … }
+@scope (hmd-workspace) to (hmd-file-tree, hmd-search-panel, hmd-history-panel, hmd-editor,
+  hmd-preview, hmd-ai-sidebar, hmd-ai-review, hmd-settings, hmd-toasts) { … }
 ```
 
 ### 4.2 Perché non Shadow DOM
 
-HouseMD usa già diverse piattaforme web che dentro uno shadow root costano lavoro in più o si
-rompono. Per ciascuna:
-
 | Funzionalità usata oggi | Con Shadow DOM | Con light DOM + `@scope` |
 |---|---|---|
-| **CSS Custom Highlight** (`::highlight(housemd-search)` in `global.css`, evidenziazione ricerca nell'anteprima) | La regola `::highlight()` deve stare in un foglio **dentro** lo shadow root che contiene il testo; quella globale non basta. | Funziona com'è. |
-| **Anchor Positioning** (menu dell'albero: `anchor-name` sul pulsante, `position-anchor` sul popover) | I nomi delle ancore dipendono dall'albero: ancora e popover devono stare nello stesso albero, cosa da verificare a ogni confine tra shadow root. | Funziona com'è. |
-| **Riferimenti per ID** (`aria-labelledby`, `aria-describedby`, `for`, `popovertarget`, `commandfor`) | Non attraversano il confine dello shadow root; la *Reference Target* non è una base su cui contare oggi (da riverificare quando sarà stabile). | Funzionano. |
-| **CodeMirror 6** (inietta i suoi stili con `StyleModule` nel `document`) | Va passata l'opzione `root` all'`EditorView` e verificato il comportamento di tooltip e autocompletamento. | Invariato. |
-| **Stili di base condivisi** (`.icon`, `:focus-visible`, `button { font: inherit }`, `box-sizing`) | Non entrano negli shadow root: servono un `CSSStyleSheet` condiviso e `adoptedStyleSheets` in ogni elemento. | Si ereditano dal documento. |
-| **HTML dell'anteprima** (sanitizzato, stilizzato da `Preview.module.css`) | Da stilizzare dentro lo shadow root dell'anteprima. | `@scope (hmd-preview) { .prose … }`. |
-| **View transition del tema** (cattura di `root`) | Indifferente. | Indifferente. |
-| **Token `light-dark()` e font** | Le custom property si ereditano: nessun problema. | Nessun problema. |
+| **CSS Custom Highlight** (`::highlight(housemd-search)`) | La regola deve stare dentro lo shadow root che contiene il testo. | Funziona com'è. |
+| **Tooltip disegnati** (`.tooltip::after` globale, ancorato con `anchor-scope`) | Il foglio globale non entra negli shadow root: andrebbe adottato in ogni elemento. | Funziona com'è. |
+| **Anchor Positioning** (menu dell'albero, chip e popover AI, tooltip) | Ancora e popover devono stare nello stesso albero: da verificare a ogni confine. | Funziona com'è. |
+| **Riferimenti per ID** (`aria-labelledby`, `for`, `popovertarget`, `commandfor`) | Non attraversano lo shadow root; *Reference Target* non è una base su cui contare oggi. | Funzionano. |
+| **CodeMirror 6 e `@codemirror/merge`** (iniettano gli stili nel `document`) | Opzione `root` dell'`EditorView`, da verificare per tooltip, autocompletamento, barra di formattazione e MergeView. | Invariato. |
+| **Stili di base condivisi** (`.icon`, focus ring, `button { font: inherit }`) | Servono `adoptedStyleSheets` in ogni elemento. | Si ereditano dal documento. |
+| **HTML sanitizzato** (anteprima e chat AI) | Da stilizzare dentro ogni shadow root. | `@scope (hmd-preview)`, `@scope (hmd-ai-chat-log)`. |
+| **View transition del tema**, token `light-dark()` | Indifferente. | Indifferente. |
 
-Lo Shadow DOM serve soprattutto a proteggere un componente da **pagine ospiti che non si
-controllano**. HouseMD è un'applicazione unica: controlliamo tutto il CSS. Quello che serve davvero
-(nessuna collisione di nomi di classe, nessuna fuga di stili verso i figli) lo danno già `@scope`
-con il limite inferiore e `@layer`, senza i costi della tabella. Sostituiscono anche l'hashing dei
-CSS Modules.
+Lo Shadow DOM protegge un componente da pagine ospiti che non si controllano. HouseMD è
+un'applicazione unica: `@scope` con limite inferiore e `@layer` bastano e sostituiscono l'hashing
+dei CSS Modules.
 
-Il limite di questa scelta: nessuno *impedisce* a un foglio di stilizzare un altro elemento.
-Contromisura: un test statico (§8.3) controlla che ogni CSS sotto `src/elements/` contenga solo
-blocchi `@scope` con le radici ammesse per la sua cartella, secondo una tabella esplicita nel test:
+Il limite: nessuno *impedisce* a un foglio di stilizzare un altro elemento. Contromisura: un test
+statico (§8.3) controlla che ogni CSS sotto `src/elements/` contenga solo blocchi `@scope` con le
+radici ammesse:
 
 | Cartella | Radici `@scope` ammesse |
 |---|---|
 | `elements/<nome>/` (regola generale) | `hmd-<nome>` |
 | `elements/preview/` | `hmd-preview`, `hmd-frontmatter-card` |
-| `elements/dialogs/` | `dialog.hmd-dialog` (i dialog sono `<dialog>` nativi aggiunti a `document.body`, non custom element; le funzioni di §5.4 mettono sempre la classe `hmd-dialog`) |
+| `elements/ai/` | `hmd-ai-*` |
+| `elements/settings/` | `hmd-settings`, `hmd-settings-*` |
+| `elements/dialogs/` | `dialog.hmd-dialog` (dialog nativi aggiunti a `document.body`) |
 
-Una nuova eccezione si aggiunge alla tabella del test, con una riga di motivazione, mai con un
-`skip`.
+Una nuova eccezione si aggiunge alla tabella del test con una riga di motivazione, mai con uno `skip`.
 
 ### 4.3 Criteri per rivedere la decisione
 
-Si passa allo Shadow DOM (e probabilmente a Lit) per un elemento solo se deve essere incorporato in
-pagine di terzi, o se serve `<slot>` con contenuto dell'utente. Oggi nessun elemento ha questi
-requisiti.
+Shadow DOM (e probabilmente Lit) per un elemento solo se deve essere incorporato in pagine di terzi
+o se serve `<slot>` con contenuto dell'utente. Oggi nessun elemento ha questi requisiti.
 
 ---
 
@@ -274,53 +315,52 @@ export abstract class HmdElement extends HTMLElement {
 }
 ```
 
-- Tutti i `addEventListener` passano `{ signal }`: niente cleanup a mano, quindi niente perdite
-  (oggi ci pensano i `return () => …` degli effetti).
-- Dove un elemento si sposta nel DOM senza dover perdere lo stato, si usa `moveBefore()` e si
-  implementa `connectedMoveCallback()` (Chromium stabile), così il ciclo di vita non riparte.
-  Oggi non serve in nessun punto: è solo una regola per il futuro.
-- Gli input arrivano come **proprietà JS** tipizzate (`workspace`, `nodes`, `openPath`), non come
-  attributi stringa. Gli attributi riflettono solo lo stato che serve al CSS
-  (`data-mode`, `data-state`, `aria-*`).
-- Gli output sono `CustomEvent` tipizzati con `bubbles: true` (`hmd-open`, `hmd-tree-action`), i
-  cui nomi e `detail` sono dichiarati in una mappa di tipi in `src/elements/events.ts`, oppure
-  callback passate come proprietà dove l'evento non serve a nessun altro (es. `onImage` dell'editor,
-  che restituisce una Promise).
+- Tutti i `addEventListener` passano `{ signal }`: niente cleanup a mano.
+- Dove un elemento si sposta senza dover perdere lo stato, `moveBefore()` + `connectedMoveCallback()`.
+  Oggi non serve: regola per il futuro.
+- Input come **proprietà JS** tipizzate (`workspace`, `ai`, `nodes`, `openPath`), non attributi
+  stringa. Gli attributi riflettono solo lo stato che serve al CSS (`data-mode`, `data-state`, `aria-*`).
+- Output come `CustomEvent` tipizzati con `bubbles: true` (`hmd-open`, `hmd-tree-action`), dichiarati
+  in `src/elements/events.ts`, oppure callback passate come proprietà dove l'evento non serve ad
+  altri (es. `onImage` dell'editor, che restituisce una Promise).
+- **Convivenza con React 19 (fasi 4–7).** React 19 assegna come proprietà ogni prop il cui nome
+  esiste sull'istanza dell'elemento e registra come listener le prop `on<nome-evento>`. Quindi:
+  `define.ts` va importato **prima** del primo render (altrimenti React vede un elemento non
+  aggiornato e imposta attributi); i nomi degli eventi sono minuscoli con trattino (`hmd-open` →
+  prop `onhmd-open`); i tipi JSX dei tag `hmd-*` si dichiarano in un solo file temporaneo
+  `src/elements/jsx.d.ts`, cancellato nella fase 7.
 
-### 5.2 Tre helper per il DOM (puri rispetto allo stato, testati in jsdom)
+### 5.2 Quattro helper per il DOM (testati in jsdom)
 
 1. `el(tag, props?, ...children)`: crea un elemento. `props` accetta `class`, `dataset`, attributi
-   (`'aria-label'`), proprietà (`hidden`, `value`) e listener (`on: { click }`). I figli stringa
-   diventano **nodi di testo**, mai HTML. Sostituisce JSX.
+   (`'aria-label'`, `'data-tooltip'`), proprietà (`hidden`, `value`) e listener (`on: { click }`).
+   I figli stringa diventano **nodi di testo**, mai HTML. Sostituisce JSX.
 2. `reconcileList(parent, items, key, create, update)`: allinea i figli di `parent` a `items` per
-   chiave: riusa i nodi esistenti (così restano focus e selezione), crea quelli nuovi, rimuove gli
-   altri e riordina con `moveBefore` quando c'è, altrimenti `insertBefore`. Serve per albero,
-   risultati di ricerca, toast e bozze orfane.
-3. `setText(node, text)` / `toggleAttr(node, name, on)`: scrivono solo se il valore cambia, per non
-   invalidare il layout a ogni notifica dello store.
+   chiave: riusa i nodi (così restano focus e selezione), crea i nuovi, rimuove gli altri e riordina
+   con `moveBefore` quando c'è, altrimenti `insertBefore`.
+3. `setText(node, text)` / `toggleAttr(node, name, on)`: scrivono solo se il valore cambia.
+4. `uid(prefix)`: id stabile e unico nel documento, al posto di `useId`.
 
 Regola di rendering: **creare una volta, aggiornare in modo mirato.** `connect()` costruisce lo
 scheletro; `render()` (chiamato dalle iscrizioni) aggiorna testi, attributi e liste. Non si
-ricostruisce mai un sottoalbero che contiene un campo con il focus (campo di ricerca, input dei
-dialog).
+ricostruisce mai un sottoalbero che contiene un campo con il focus (ricerca, composer, input dei
+dialog e delle impostazioni).
 
 ### 5.3 Store
 
-- `Workspace` resta com'è (`subscribe`/`getState`).
-- `i18nStore` (`src/state/i18nStore.ts`): `createI18nStore({ locale, messages, load, persist })`
-  → `{ getState, subscribe, t, setLocale }`. Contiene la logica oggi in `I18nProvider`
-  (contatore delle richieste: "vince l'ultima richiesta, non l'ultima caricata"; si salva come
-  preferenza la lingua **effettivamente caricata**, quindi `en` quando il chunk richiesto fallisce,
-  esattamente come `I18nProvider.tsx` oggi; `document.documentElement.lang` aggiornato da chi si
-  iscrive, non dallo store). La migrazione non cambia questo comportamento: se lo si vuole cambiare
-  (es. non salvare nulla quando il chunk fallisce) è una correzione separata, con un suo commit e un
-  suo test. Oggi questa logica **non ha test**: con la
-  migrazione li riceve (§8.2).
-- `themeStore` (`src/state/themeStore.ts`): preferenza, `setTheme(next)` che salva e chiama
-  `pixelTransition(() => { state = next; notify(); applyTheme(next); })`. La notifica dentro la
-  callback aggiorna in modo sincrono l'icona dello switcher prima dello snapshot "new" della view
-  transition, lo stesso effetto che oggi dà `flushSync`. Iscrizione a `prefers-color-scheme` in
-  modalità `auto` come in `useTheme`.
+- `Workspace`, `AiController`, `UpdateFlow` restano come sono (`subscribe`/`getState`).
+- `i18nStore` (`src/state/i18nStore.ts`): `createI18nStore({ locale, messages, load, persist })` →
+  `{ getState, subscribe, t, setLocale }`. Contiene la logica di `I18nProvider` ("vince l'ultima
+  richiesta, non l'ultima caricata"; si salva la lingua **effettivamente caricata**;
+  `document.documentElement.lang` aggiornato da chi si iscrive). Oggi questa logica **non ha test**:
+  li riceve (§8.2). Ora `setLocale` ha un chiamante reale (il selettore nelle impostazioni).
+- `themeStore` (`src/state/themeStore.ts`): `setTheme(next)` salva e chiama
+  `pixelTransition(() => { state = next; notify(); applyTheme(next); })`; la notifica sincrona dentro
+  la callback sostituisce `flushSync`. Iscrizione a `prefers-color-scheme` in modalità `auto`.
+- `routeStore` (`src/state/routeStore.ts`): stato da `parseRoute(location.hash)`, `navigate(route)`
+  con la stessa guardia di `useRoute` (modifiche aperte nelle impostazioni → conferma), `hashchange`
+  e titolo della scheda (`pageTitle`) aggiornati da chi si iscrive.
+- `draftState` (`src/state/draftState.ts`): la bozza delle sezioni profili/preset (`useDraft`).
 
 Istanze uniche create in `main.ts` e passate come proprietà a `<hmd-app>`, che le passa ai figli.
 Niente singleton importati dagli elementi: nei test si usa uno store finto.
@@ -333,14 +373,15 @@ const ok   = await showConfirmDialog({ title, message, confirmLabel, t });      
 await showAccessLostDialog({ folderName, onResume, t });                                 // si chiude solo con accesso concesso
 ```
 
-Ogni funzione crea un `<dialog closedby="any">` (o `closedby="none"` per l'accesso perso), lo
-aggiunge a `document.body`, chiama `showModal()` e risolve la Promise all'evento `close`, poi rimuove
-il dialog. I pulsanti "Annulla" usano `command="close" commandfor="<id>"` (Invoker Commands,
-Chromium stabile) invece di un handler JS. Il focus torna da solo al pulsante che ha aperto il
-dialog (comportamento nativo di `showModal`). I workaround per StrictMode spariscono.
+Ogni funzione crea un `<dialog closedby="any">` (`closedby="none"` per l'accesso perso), lo aggiunge
+a `document.body`, chiama `showModal()`, risolve la Promise all'evento `close` e rimuove il dialog.
+"Annulla" usa `command="close" commandfor="<id>"`. Il focus torna da solo al pulsante che ha aperto
+il dialog. I workaround per StrictMode spariscono. Le conferme oggi sparse (eliminazione, modifiche
+aperte su Indietro/Chiudi delle impostazioni, elimina profilo/preset) passano tutte da
+`showConfirmDialog`.
 
-La logica di `WorkspaceView` che oggi decide quale dialog aprire (`DialogState`) diventa una
-funzione pura `dialogFor(action, node)` con `match(...).exhaustive()`, testata.
+La logica che decide quale dialog aprire per un'azione dell'albero diventa
+`dialogFor(action, node)` con `match(...).exhaustive()`, testata.
 
 ---
 
@@ -350,155 +391,161 @@ funzione pura `dialogFor(action, node)` con `match(...).exhaustive()`, testata.
 
 | Punto | Oggi | Con ts-pattern |
 |---|---|---|
-| Schermata dell'app (`boot/unsupported/start/resume/open`) | `switch` in `App.tsx` | `screens.ts`: `renderScreen(screen)` con `match(screen).with({ kind: 'open' }, …).exhaustive()` |
-| Azione dell'albero → dialog | `if/else` in `onTreeAction` | `dialogFor(action, node)` in `workspace/dialogState.ts` |
-| Scorciatoie da tastiera | `if/else if` su `event.key` | `keymap.ts`: `commandForKey({ key, ctrl, meta })` → `'save' \| 'search' \| 'cycleMode' \| null` con `match` + `P.union` |
-| Stato di salvataggio → etichetta, `role`, `aria-live` | `Record<SaveState, MessageKey>` + ternari | `saveIndicator(doc)` puro, esaustivo anche su `deletedOnDisk` |
-| Nodo dell'albero (`file`/`directory`) | ternari nel JSX | `match(node.kind)` in `file-tree` |
-| Toast `kind` → `role` | ternario | `match(toast.kind)` |
+| Schermata dell'app (`boot/unsupported/start/resume/open`) | `switch` in `App.tsx` | `screens.ts`: `match(screen)….exhaustive()` |
+| Scorciatoia → comando | `shortcutFor` restituisce `Shortcut`, poi `if/else` in `WorkspaceView` | `match(shortcut)….exhaustive()`: un `Shortcut` nuovo senza ramo è un errore di `tsc` |
+| Modalità (`editor/split/preview/ai`) → colonne e pannelli | ternari in `WorkspaceView` | `layout.ts`: `gridColumns`, `nextMode`, `clampWidth` (sidebar e AI) |
+| Azione dell'albero → dialog | `if/else` | `dialogFor(action, node)` |
+| Stato di salvataggio → etichetta, `role`, `aria-live` | `Record<SaveState, MessageKey>` + ternari | `saveIndicator(doc)`, esaustivo anche su `deletedOnDisk` |
+| Rotta → vista | ternario su `route.view` | `match(route)` in `hmd-workspace` |
+| Nodo dell'albero, `toast.kind`, stato della revisione | ternari | `match` |
 
-Regola: `.exhaustive()` sempre. Un caso nuovo in un'unione diventa un errore di `tsc` (`npm run
-lint`), non un ramo silenzioso. `ts-pattern` entra nella logica pura, così i test la coprono.
+Regola: `.exhaustive()` sempre. `ts-pattern` entra nella logica pura, così i test la coprono.
 
-### 6.2 zod: solo ai confini critici
+### 6.2 zod: solo ai confini
 
-**Regola (decisione 2):** zod valida solo dati che arrivano da **fuori dal processo** e che il
-codice non controlla: il **file system** della cartella dell'utente e i **provider esterni** di dati
-persistenti del browser (IndexedDB, `localStorage`), che possono contenere formati di versioni
-precedenti, dati corrotti o modificati a mano. **Mai** sulla logica interna: stato di `Workspace`,
-stato degli store, proprietà ed eventi degli elementi, risultati di funzioni pure, messaggi di
-traduzione. Lì bastano i tipi di TypeScript e ts-pattern.
+**Regola (decisione 2):** zod valida solo dati che arrivano da **fuori dal processo**: file della
+cartella dell'utente, storage del browser (IndexedDB, `localStorage`, che possono contenere formati
+vecchi, corrotti o modificati a mano) e **risposte JSON dei provider di modelli**. **Mai** sulla
+logica interna (stato di `Workspace` e `AiController`, store, proprietà ed eventi degli elementi,
+traduzioni).
 
-Si usa **`zod/mini`** (API a funzioni, tree-shakable) per tenere piccolo il bundle della PWA. Criterio
-di accettazione: la crescita del bundle principale gzip, misurata con `vite build` prima e dopo, va
-annotata nel commit che introduce zod. Se supera 8 KB, si rivaluta.
+Si usa **`zod/mini`**. Criterio: la crescita del bundle principale gzip, misurata con `vite build`
+prima e dopo, va annotata nel commit che introduce zod; oltre 8 KB si rivaluta. Gli schemi dei
+provider vanno nel chunk dei provider, non nel bundle principale.
+
+Contratto: i test esistenti di ciascun confine **non cambiano le asserzioni**. Si aggiungono solo
+casi per i dati corrotti.
 
 | Confine | Oggi | Con zod |
 |---|---|---|
-| Preferenze in `localStorage` (`theme`, `locale`, `mode`, `sidebarOpen`, `sidebarWidth`, `lastFile:<id>`) | `readPref<T>` fa `JSON.parse(raw) as T`, **senza validazione** per `mode`, `sidebarOpen`, `sidebarWidth`, `lastFile` | `state/prefs.schema.ts`: uno schema per chiave; `readPref(key)` è tipizzato dalla mappa `PREFS` e ricade sul default se `safeParse` fallisce. `readValidPref` e `parseTheme`/`parseLocale` restano come API (i loro test non cambiano) ma internamente usano gli schemi. |
-| `.housemd.json` | `parseConfig` con controlli a mano | Schemi per campo con `safeParse` **per campo**, per tenere il fallback campo per campo e l'ordine dei `problems` di oggi (`invalidSaveTo` prima di `invalidLinkPrefix`). La normalizzazione (`normalizePath`) resta fuori dagli schemi, nel codice che segue. Il contratto è `config.test.ts`, che non cambia. |
-| Buffer di emergenza in IndexedDB (formato vecchio stringa / nuovo `{text, base}`) | `normalizeStored` con `typeof` | `z.union([z.string(), z.object({ text, base })])` + trasformazione; un record corrotto diventa `null` invece di un'eccezione a runtime. Test nuovo per il record corrotto. |
-| `handleStore` (record `{ handle, workspaceId }` e lista `known`) | cast | Si valida solo la **forma del record**: `workspaceId` stringa non vuota, `handle` oggetto non nullo (`z.custom((v) => typeof v === 'object' && v !== null)`), `known` array di record (le voci non valide si scartano). L'handle resta **opaco**: nessun controllo su `kind` o sui metodi, perché `handleStore.ts` è generico sul tipo di handle (`H`), i suoi test salvano oggetti `{ name }` e si aspettano di riaverli identici, e nominare metodi della File System Access API in quel file violerebbe la regola "solo `fsaOps.ts`/`access.ts`" (e il test di architettura). Un record non valido equivale a "nessuna cartella salvata" (`null`), come un database vuoto. |
+| Preferenze in `localStorage` (`theme`, `locale`, `mode`, `sidebarOpen`, `sidebarWidth`, `aiSidebarWidth`, `aiProfile`, `autosave`, `textWidth`, `lastFile:<id>`) | `readPref<T>` = `JSON.parse(raw) as T`; validazione solo per alcune chiavi | `state/prefs.schema.ts`: uno schema per chiave; `readPref(key)` tipizzato dalla mappa `PREFS`, default se `safeParse` fallisce. `parseTheme`/`parseLocale`/`parseTextWidth` restano come API. |
+| `.housemd.json` | `parseConfig` a mano | Schemi per campo con `safeParse` per campo (fallback campo per campo, stesso ordine dei `problems`). Contratto: `config.test.ts`. |
+| `housemd-sync.json` (sync AI) | `ai/sync/schema.ts`, validatori a mano che lanciano `syncInvalid` | Stessi vincoli espressi in zod (URL senza credenziali, `effort` in elenco, interi positivi…); `canonical()` resta. Contratto: `sync.test.ts`. |
+| Buffer di emergenza in IndexedDB | `normalizeStored` con `typeof` | `z.union([z.string(), z.object({ text, base })])`; record corrotto → `null`. |
+| `handleStore` (`{ handle, workspaceId }`, lista `known`) | cast | Solo la forma del record; l'handle resta **opaco** (`z.custom` oggetto non nullo), nessun metodo della FSA nominato. Record non valido = nessuna cartella salvata. |
+| Cronologia e store AI in IndexedDB (`history`, profili, preset, `aiSecrets`) | cast | Forma dei record; record non valido scartato. Per `aiSecrets` l'errore di validazione non riporta mai il valore. |
+| Risposte JSON dei provider (handshake del bridge, elenchi modelli, risposte non in streaming, eventi SSE già parsati) | `as { … }` in `ai/providers/*` | Schemi permissivi (`z.looseObject`) sui soli campi letti; una forma inattesa diventa l'`AiError` di oggi. Il testo generato resta stringa non fidata. Contratto: `providers.test.ts`. |
 
-Esclusi di proposito:
-
-- **Frontmatter → card (`toCard`)**: il confine con il file è il parser `yaml`, che già restituisce
-  `unknown` o un errore mostrato nella card. `toCard` è logica di presentazione tollerante per
-  scelta (un campo strano finisce in `extra`), non una validazione: resta com'è.
-- **Messaggi di traduzione**: arrivano dal bundle, sono tipizzati dall'import JSON e controllati da
-  `locales.test.ts`/`keys.test.ts`.
-- **Stato interno** di qualsiasi tipo.
+Esclusi di proposito: frontmatter → card (`toCard` è presentazione tollerante dopo il parser
+`yaml`), messaggi di traduzione, stato interno.
 
 ---
 
 ## 7. Migrazione a passi
 
-**Branch e merge (decisione 1).** Tutto il lavoro avviene su un branch di integrazione
-`feat/web-components`, creato dalla punta di `plan/web-components-stack`. Attenzione: quel branch
-contiene anche i commit di v1.1 (font, icone, logo, i18n, tema) che **non sono ancora in `main`**
-(`git log main..plan/web-components-stack`). Il merge finale li porta con sé: o l'approvazione
-finale copre anche v1.1, o v1.1 va unito prima, separatamente. Ogni fase è una serie di commit su quel branch e finisce
-con `npm test` verde, `npm run lint` e `npm run build` puliti, `npm run test:e2e` verde (snapshot
-invariati) e la checklist manuale ridotta di §9. **Nessun merge in `main` a fine fase**: il merge
-è uno solo, alla fine della fase 7, e si fa solo dopo l'approvazione esplicita di Davide. Se durante
-la migrazione `main` riceve altre modifiche, si fa rebase del branch di integrazione (mai merge di
-`main` dentro il branch), rilanciando entrambe le suite.
+**Branch e merge (decisione 1).**
 
-### Fase 0: Playwright e rete di sicurezza (React ancora dentro)
+- **Fasi 0–3 → `main` con una PR per fase**, da branch corti creati da `main`. Ogni PR finisce con
+  `npm test` verde, `npm run lint` e `npm run build` puliti, `npm run test:e2e` verde (snapshot
+  invariati).
+- **Fasi 4–8 → branch di integrazione `feat/web-components`**, creato da `main` dopo il merge della
+  fase 3. Stesso cancello a fine fase più la checklist ridotta di §9. **Un solo merge in `main`**,
+  alla fine della fase 8, dopo l'approvazione esplicita di Davide. Se `main` riceve modifiche, si fa
+  rebase del branch (mai merge di `main` dentro il branch) rilanciando entrambe le suite; una
+  funzionalità nuova arrivata in `main` va migrata nel branch prima del merge finale.
 
-È la prima parte implementativa (decisione 3). Non cambia una riga dell'app.
+### Fase 0: Playwright e rete di sicurezza (PR in `main`)
 
-1. `npm ci && npm test`: annotare il numero reale di test passati (atteso: 189 `test()`).
-2. **Suite Playwright sull'app React di oggi** (§8.4): harness con cartella finta su OPFS, spec
-   funzionali per i flussi della checklist e snapshot visivi delle schermate principali in tema
-   chiaro e scuro. Gli snapshot generati qui sono il **riferimento visivo** di tutta la migrazione:
-   non si rigenerano mai per far passare una fase, salvo differenze motivate e approvate.
-3. Rendere `uiText.test.ts` **indipendente dall'estensione**: oggi scansiona solo i `.tsx`; quando i
-   `.tsx` spariranno passerebbe **senza controllare nulla**. Si aggiunge
-   `assert.ok(files.length > 0)` e la lista dei file diventa "`*.tsx` + `*.element.ts` +
-   `src/elements/**/*.ts`" (vedi §8.1).
-4. Aggiungere i test statici di §8.3 già validi sul codice React di oggi (niente `innerHTML` fuori
-   da `sanitize.ts`; File System Access solo in `fsaOps.ts`/`access.ts`).
+Non cambia una riga dell'app.
 
-### Fase 1: logica pura, ts-pattern, zod (React ancora dentro)
+1. `npm ci && npm test`: annotare il baseline (oggi 488 test verdi).
+2. **Suite Playwright sull'app React di oggi** (§8.4): harness OPFS, harness AI con provider finto,
+   spec funzionali per i flussi della checklist e snapshot visivi in tema chiaro e scuro. Gli
+   snapshot sono il **riferimento visivo** di tutta la migrazione.
+3. **Portare `tests/browser/run-ai-smoke.mjs` in Playwright** (`e2e/ai-review.spec.ts`), con le
+   stesse asserzioni, contro l'app vera invece della pagina `ai-smoke.html`. Poi cancellare
+   `tests/browser/` e lo script `test:browser` (sostituito da `test:e2e`); aggiornare README.
+4. Rendere `uiText.test.ts` **indipendente dall'estensione** e mai vuoto (§8.1); estendere la regex di
+   `tooltips.test.ts` alle forme di `el()`.
+5. Aggiungere i test statici di §8.3 già validi sul codice di oggi.
+
+### Fase 1: logica pura, ts-pattern, zod, store (PR in `main`)
 
 1. Aggiungere `ts-pattern` e `zod`.
-2. Estrarre dai componenti le funzioni pure, con i loro test: `keymap.ts`, `layout.ts`
-   (`clampWidth`, `nextMode`, `gridColumns`), `dialogState.ts`, `saveIndicator`, `segments.ts`
-   (oggi `Highlighted` in `SearchPanel`), `cardDate.ts` (oggi `formatCardDate` in
-   `FrontmatterCard`), `screens.ts`. I componenti React le importano: il comportamento non cambia.
-3. zod ai soli confini di §6.2: `prefs.schema.ts` + `readPref` tipizzato dagli schemi
-   (`localStorage`), `parseConfig` (`.housemd.json`), `normalizeStored` e `handleStore` (IndexedDB).
-   I test esistenti devono passare **senza modifiche alle asserzioni**.
-4. `i18nStore` e `themeStore` come moduli puri con test. `I18nProvider` e `useTheme` diventano
-   adattatori sottili (`useSyncExternalStore` sugli store), così React e i futuri custom element
-   condividono una sola fonte di verità durante la convivenza.
+2. Estrarre dai componenti le funzioni pure che mancano, con test: `layout.ts`, `dialogFor.ts`,
+   `saveIndicator.ts`, `segments.ts` (`Highlighted` in `SearchPanel`), `cardDate.ts`
+   (`formatCardDate`), `screens.ts`, `treeState.ts` (`expanded` di `FileTree`), `draftState.ts`.
+   I componenti React le importano: il comportamento non cambia.
+3. zod ai confini di §6.2, senza modifiche alle asserzioni dei test esistenti.
+4. `i18nStore`, `themeStore`, `routeStore` come moduli puri con test. `I18nProvider`, `useTheme` e
+   `useRoute` diventano adattatori sottili (`useSyncExternalStore`), così React e i futuri elementi
+   condividono una sola fonte di verità.
 
-### Fase 2: infrastruttura DOM e CSS
+### Fase 2: infrastruttura DOM e CSS (PR in `main`)
 
-1. `src/dom/el.ts`, `list.ts`, `element.ts`, `icon.ts` + `src/testing/domEnv.ts`, con test in jsdom.
-2. `global.css`: dichiarare l'ordine `@layer reset, base, components, overrides;` e spostare gli stili
-   globali di oggi nei layer `reset`/`base`. Il reset `*, *::before, *::after { box-sizing }` resta,
-   ma dentro `@layer reset`, così qualsiasi regola di componente lo sovrascrive senza problemi di
-   specificità.
-3. I CSS Modules restano per ora, senza layer, quindi vincono sui layer: nessun cambio visivo.
+1. `src/dom/el.ts`, `list.ts`, `element.ts`, `uid.ts`, `icon.ts` + `src/testing/domEnv.ts`, con test.
+   Fino alla fase 4 non li usa la produzione: è voluto, sono la base del branch.
+2. `global.css`: ordine `@layer reset, base, components, overrides;`, stili globali di oggi (tooltip
+   e focus ring compresi) nei layer `reset`/`base`.
+3. Estendere `buildCss.test.ts`: oltre a `light-dark()` verifica che `@layer` e `@scope` arrivino
+   intatti nel CSS di produzione (il minificatore ha già trasformato `light-dark()` una volta).
+4. I CSS Modules restano, senza layer, quindi vincono sui layer: nessun cambio visivo (snapshot).
 
-### Fase 3: foglie come custom element dentro React
+### Fase 3: React 19 (PR in `main`)
 
-Ordine: `theme-switcher`, `conflict-bar`, `toasts`, dialog (funzioni), `start-screen`.
+1. `react`/`react-dom` 19 e tipi allineati. Correggere ciò che React 19 cambia: `useRef` con
+   argomento obbligatorio, `MutableRefObject` → `RefObject`, namespace `JSX` globale, `forwardRef`
+   (ancora supportato, si lascia), doppio montaggio di StrictMode sui ref callback.
+2. Nessun cambio di comportamento: lo provano e2e e snapshot. Se un comportamento cambia, è un bug
+   dell'aggiornamento, non della spec.
 
-- React 18 passa ai custom element **solo attributi**, non proprietà né eventi. Serve una
-  convivenza: un solo helper temporaneo `src/dom/reactBridge.tsx`
-  (`useElement(ref, props, events)`: assegna le proprietà in un effetto e registra i listener).
-  Il file è marcato come temporaneo e **si cancella nella fase 6**; un test statico ne verifica
-  l'assenza alla fine (§8.3).
-- Ogni componente migrato: il suo `.module.css` diventa `<nome>.css` con `@scope` dentro
-  `@layer components`, il `.tsx` si cancella e chi lo usava monta il tag tramite il bridge.
-- I dialog: `NameDialog`/`ConfirmDialog`/`AccessLostDialog` diventano le funzioni di §5.4, chiamate
-  da `WorkspaceView` (con un `useEffect` che reagisce a `state.status === 'access-lost'`).
+### Fase 4: foglie come custom element dentro React (branch)
 
-### Fase 4: editor e anteprima
+Ordine: `theme-switcher`, `conflict-bar`, `notice`, `update-notice`, `toasts`, dialog (funzioni),
+`start-screen`, `ai-suggestions`, `ai-effort-chip`, `ai-parameters`.
 
-- `hmd-editor`: sposta `Editor.tsx` quasi uguale (`createState`, `theme`, `highlight`,
-  `insertImages` non cambiano); `resetKey` diventa un setter che chiama `view.setState(...)` solo
-  quando il valore cambia; `scrollToLine`/`focus` diventano metodi pubblici.
-- `hmd-preview`: debounce, `setSafeHTML`, cache delle immagini, `ResizeObserver`, link e
-  `highlightTerms` passano dagli effetti a metodi privati chiamati dai setter delle proprietà
-  (`text`, `path`, `files`, `config`, `highlight`) attraverso un `scheduleRender()` che raccoglie
-  più assegnazioni nello stesso microtask. Si conserva il flag `cancelled` per i render asincroni
-  superati. `hmd-frontmatter-card` è un elemento separato con la sua gestione di `alive`.
-- Punto delicato: lo scroll sincronizzato (`suppressUntil` a 150 ms) deve restare identico.
-  I moduli puri `scrollSync.ts` non cambiano; lo copre la spec e2e `sync-scroll.spec.ts` (§8.4).
+- Ogni componente migrato: il `.module.css` diventa `<nome>.css` con `@scope` dentro
+  `@layer components`, il `.tsx` si cancella, chi lo usava monta il tag (proprietà ed eventi passati
+  direttamente da React 19, §5.1).
+- I dialog diventano le funzioni di §5.4, chiamate da `WorkspaceView`.
 
-### Fase 5: albero e ricerca
+### Fase 5: editor, anteprima, diff (branch)
 
-- `hmd-file-tree`: `expanded` diventa uno stato puro (`treeState.ts`: `expand`, `collapse`,
-  `revealPath` con `ancestorsOf`) con test; il rendering usa `reconcileList` per livello, e
-  `<details>` resta nativo. Il menu resta un `popover="auto"` con `anchor-name` impostato sul
-  pulsante che l'ha aperto.
-- `hmd-search-panel`: debounce a 120 ms, Invio senza attesa, Esc che svuota. I risultati usano
-  `reconcileList` e `segments()` → nodi `<mark>` creati con `el()`. Il campo non viene mai
-  ricreato. `focusInput()` è un metodo pubblico (per `Ctrl+K`).
+- `hmd-editor`: sposta `Editor.tsx` quasi uguale; `resetKey` diventa un setter che chiama
+  `view.setState(...)` solo quando cambia; `scrollToLine`/`focus` metodi pubblici; l'evento di
+  cambio selezione (usato dal chip del composer) diventa `hmd-selection`. `docSession.ts`,
+  `useDocBinding.ts` (`applyDocRestore`), `formatToolbar.ts` non cambiano.
+- `hmd-ai-diff-pane`: ospita la `MergeView`; resta la regola "mai `setState` sull'editor posseduto
+  da MergeView". Ctrl+Z su accettazioni e rifiuti invariato.
+- `hmd-preview`: debounce, `setSafeHTML`, cache delle immagini, `ResizeObserver`, link,
+  `highlightTerms` e larghezza del testo passano dagli effetti a metodi privati chiamati dai setter
+  attraverso `scheduleRender()` (un microtask). Si conserva il flag `cancelled`.
+  `hmd-frontmatter-card` è separato.
+- `hmd-ai-chat-log`: messaggi via `safeRender` + `setSafeHTML`, metadati al passaggio del mouse,
+  immagini remote solo su clic.
+- Scroll sincronizzato (`suppressUntil` 150 ms) identico; lo copre `sync-scroll.spec.ts`.
 
-### Fase 6: `hmd-workspace`, `hmd-app`, via React
+### Fase 6: pannelli e AI (branch)
 
-1. `hmd-workspace` al posto di `WorkspaceView`: layout a griglia (`data-mode`, colonne via custom
-   property `--sidebar-width` invece di `style.gridTemplateColumns`), resizer con pointer capture,
-   scorciatoie via `commandForKey`, listener `focus/blur/visibilitychange/beforeunload` legati al
-   `signal`, riapertura dell'ultimo file e bozze orfane.
-2. `hmd-app` al posto di `App.tsx`; `main.ts` al posto di `main.tsx`: carica i messaggi, crea gli
-   store, importa `elements/define.ts`, poi monta `<hmd-app>` in `#root`.
-3. Cancellare: tutti i `.tsx`, `*.module.css`, `reactBridge.tsx`, `ui/useWorkspace.ts`,
-   `i18n/I18nProvider.tsx`, `theme/useTheme.ts`. Togliere le dipendenze React e
-   `@vitejs/plugin-react`, e `"jsx"` da `tsconfig.json`.
-4. Aggiornare `CLAUDE.md` (regole: "elementi sottili", "light DOM + `@scope`", "niente DOM da
-   stringhe") e `README.md` (stack).
+- `hmd-file-tree`: `treeState.ts` + `treeNav.ts` (un solo tab stop, frecce, menu da tastiera);
+  `reconcileList` per livello; `<details>` nativo; menu `popover="auto"` ancorato.
+- `hmd-search-panel`: debounce 120 ms, Invio, Esc; `segments()` → `<mark>`; il campo non viene mai
+  ricreato; `focusInput()` pubblico.
+- `hmd-history-panel`: elenco, diff (`diffRows`), ripristino annullabile.
+- AI: `hmd-ai-composer` (`composerKeys`, chip della selezione, `focus()` pubblico),
+  `hmd-ai-model-chip`/`model-select` (popover, nota privacy), `hmd-ai-review-bar`
+  (`reviewStatus`), `hmd-ai-review`, `hmd-ai-sidebar`.
 
-### Fase 7: rifinitura
+### Fase 7: impostazioni, `hmd-workspace`, `hmd-app`, via React (branch)
 
-- Misurare bundle e tempo di avvio rispetto al baseline della fase 0 (atteso: −40 KB gzip circa per
+1. `hmd-settings` e sezioni (generale con lingua, autosalvataggio, larghezza del testo; profili;
+   preset; sync), indirizzate da `routeStore`, con conferma su Indietro/Chiudi e Ctrl+S.
+2. `hmd-workspace` al posto di `WorkspaceView`: griglia (`data-mode`, colonne via `--sidebar-width`),
+   resizer con pointer capture e frecce (sidebar e AI), scorciatoie via `shortcutFor` + `match`,
+   listener `focus/blur/visibilitychange/beforeunload` legati al `signal`, riapertura dell'ultimo
+   file, bozze orfane, creazione di `AiController`, titolo della scheda.
+3. `hmd-app` al posto di `App.tsx`; `main.ts` al posto di `main.tsx`.
+4. Cancellare: tutti i `.tsx`, `*.module.css`, `elements/jsx.d.ts`, gli hook React. Togliere le
+   dipendenze React, `@vitejs/plugin-react` e `"jsx"` da `tsconfig.json`.
+5. Aggiornare `CLAUDE.md` ("elementi sottili", "light DOM + `@scope`", "niente DOM da stringhe") e
+   `README.md` (stack).
+
+### Fase 8: rifinitura e richiesta di merge
+
+- Bundle e tempo di avvio rispetto al baseline della fase 0 (atteso: −40 KB gzip circa per
   React/ReactDOM, + zod/mini + ts-pattern).
 - Passata di accessibilità con l'albero di accessibilità di Chrome sulle schermate principali.
+- Richiesta di approvazione del merge a Davide.
 
 ---
 
@@ -506,177 +553,160 @@ Ordine: `theme-switcher`, `conflict-bar`, `toasts`, dialog (funzioni), `start-sc
 
 ### 8.1 Test esistenti: tutti restano
 
-Nessuno dei 31 file di test importa React: 29 restano **identici**, 1 si adatta, 1 si rafforza.
+Nessuno dei 67 file di test importa React. Restano **identici** tutti tranne tre controlli statici
+che scansionano i sorgenti dei componenti:
 
-| File | Destino | Note |
-|---|---|---|
-| `workspace/workspace.test.ts` (924 righe) e gli altri di `workspace/` | Invariati | `Workspace` non cambia. |
-| `fs/*.test.ts` (access, handleStore, types, workspaceFS) | Invariati | `handleStore` passa a zod internamente; le asserzioni restano. |
-| `config/config.test.ts`, `config/images.test.ts` | Invariati | Sono il contratto della riscrittura con zod. |
-| `preview/*.test.ts` (render, sanitize, frontmatter, imageCache, scrollSync) | Invariati | `sanitize.test.ts` usa già jsdom. |
-| `search/*.test.ts`, `wikilinks/*.test.ts`, `editor/*.test.ts`, `lib/paths.test.ts` | Invariati | |
-| `theme/*.test.ts`, `ui/tree.test.ts`, `ui/names.test.ts`, `ui/logo.test.ts` | Invariati | |
-| `ui/icons.test.ts` | Invariato | `icons.ts` resta (import `?url` degli SVG). |
-| `i18n/i18n.test.ts`, `locales.test.ts`, `keys.test.ts` | Invariati | |
-| **`i18n/uiText.test.ts`** | **Adattato** | Vedi sotto. |
+| File | Destino |
+|---|---|
+| `workspace/*`, `fs/*`, `config/*`, `preview/*`, `search/*`, `wikilinks/*`, `editor/*`, `history/*`, `ai/*` (anche `providers`, `sync`), `pwa/*`, `lib/*`, `app/*`, `theme/*`, `i18n/i18n|locales|keys`, `ui/tree|treeNav|names|icons|logo|shortcuts` | Invariati. Quelli dei confini zod sono il contratto della riscrittura. |
+| `styles/buildCss.test.ts` | **Esteso** (fase 2): `@layer` e `@scope` sopravvivono alla build. |
+| **`i18n/uiText.test.ts`** | **Adattato** (fase 0). |
+| **`ui/tooltips.test.ts`** | **Esteso** (fase 0). |
 
-**Adattamento di `uiText.test.ts`.** Oggi fa due controlli sui `.tsx`: (a) nessun testo italiano di
-v1 scritto a mano; (b) nessun `aria-label|title|placeholder|alt="…"` letterale con lettere. Con i
-custom element la sintassi cambia, quindi:
+**`uiText.test.ts`.** Oggi scansiona solo i `.tsx`: quando spariranno passerebbe **senza controllare
+nulla**. Diventa:
 
-- File scansionati: tutti i `.ts`/`.tsx` sotto `src/elements/`, `src/dom/` e i `.tsx` rimasti
-  (durante la convivenza). Più `assert.ok(files.length > 0)` contro il passaggio a vuoto.
-- (a) resta com'è: la regex cerca il testo dopo `'`, `"`, `` ` `` o `>`, e funziona anche con `el()`.
-- (b) si estende alle forme nuove, sempre con valore letterale che contiene lettere:
-  - `setAttribute('aria-label' | 'title' | 'placeholder' | 'alt', '<letterale>')`
-  - chiavi di oggetto in `el()`: `'aria-label': '<letterale>'`, `title: '<letterale>'`, …
-  - `.title = '<letterale>'`, `.placeholder = '<letterale>'`, `.alt = '<letterale>'`
-  - `textContent = '<letterale con lettere>'` (nuovo: in JSX un testo nudo si vedeva come figlio,
-    qui passa da `textContent`)
-- Si aggiunge un caso di test **negativo** su una stringa sorgente sintetica per ogni forma, per
-  dimostrare che la regex scatta davvero (oggi manca, ed è così che un controllo statico smette di
-  controllare senza che nessuno se ne accorga).
+- file scansionati: `.tsx` rimasti + tutti i `.ts` sotto `src/elements/` e `src/dom/`, più
+  `assert.ok(files.length > 0)`;
+- (a) nessun testo italiano di v1 scritto a mano: invariato;
+- (b) nessun `aria-label|title|placeholder|alt|data-tooltip` letterale con lettere, esteso a
+  `setAttribute('…', '<letterale>')`, chiavi di oggetto in `el()`, `.placeholder = '…'`,
+  `.alt = '…'`, `textContent = '<letterale con lettere>'`;
+- un caso **negativo** su una stringa sintetica per ogni forma, per provare che la regex scatta.
+
+**`tooltips.test.ts`.** Già scansiona `.ts` e `.tsx`. Si aggiungono la forma `el(…, { title: … })` e
+`setAttribute('title', …)` (sempre vietate sui controlli), con casi negativi sintetici.
 
 ### 8.2 Test nuovi
 
 | File | Cosa verifica |
 |---|---|
-| `dom/el.test.ts` | Figli stringa = nodi di testo (`<b>` resta testo letterale); attributi, dataset, proprietà, listener; `undefined`/`false` non impostano attributi. |
-| `dom/list.test.ts` | `reconcileList`: riusa i nodi per chiave (stesso oggetto), rimuove, inserisce, riordina; **il focus su un nodo riusato resta**. |
-| `dom/element.test.ts` | `connect` una volta sola; `disconnect` interrompe i listener (evento dopo il distacco → nessuna chiamata); `watch` si disiscrive. |
-| `state/i18nStore.test.ts` | Vince l'ultima richiesta con loader che si risolvono fuori ordine; con chunk fallito si salva `en` (la lingua caricata), come oggi; notifiche. |
-| `state/themeStore.test.ts` | Ciclo `auto→light→dark`; salvataggio; `apply` chiamato dentro la transizione (con `pixelTransition` iniettato finto). |
-| `state/prefs.schema.test.ts` | Valori corrotti in `localStorage` (`"sidebarWidth": "abc"`, `mode: 42`, JSON rotto) → default. |
-| `workspace/buffers.test.ts` (esteso) | Record IndexedDB corrotto → `null`, nessuna eccezione. |
-| `elements/app/screens.test.ts` | Transizioni di schermata e scelta della schermata (esaustiva). |
-| `elements/workspace/keymap.test.ts`, `layout.test.ts`, `dialogState.test.ts` | Scorciatoie (Ctrl e Meta), `clampWidth` ai limiti, ciclo delle modalità, dialog per azione/nodo. |
+| `dom/el.test.ts` | Figli stringa = nodi di testo (`<b>` resta testo); attributi, dataset, proprietà, listener; `undefined`/`false` non impostano attributi. |
+| `dom/list.test.ts` | `reconcileList`: riusa i nodi per chiave, rimuove, inserisce, riordina; **il focus su un nodo riusato resta**. |
+| `dom/element.test.ts` | `connect` una volta sola; `disconnect` interrompe i listener; `watch` si disiscrive. |
+| `dom/uid.test.ts` | Id unici e con prefisso. |
+| `state/i18nStore.test.ts` | Vince l'ultima richiesta con loader fuori ordine; chunk fallito → si salva `en`; notifiche. |
+| `state/themeStore.test.ts` | Ciclo `auto→light→dark`; salvataggio; `apply` dentro la transizione (finta). |
+| `state/routeStore.test.ts` | Hash → rotta; guardia che blocca la navigazione con modifiche aperte; rotta sconosciuta → workspace. |
+| `state/draftState.test.ts` | Bozza sporca/pulita, reset. |
+| `state/prefs.schema.test.ts` | Valori corrotti (`"sidebarWidth": "abc"`, `mode: 42`, JSON rotto, `textWidth` fuori limite) → default. |
+| `workspace/buffers.test.ts`, `fs/handleStore.test.ts`, `history/historyStore.test.ts`, `ai/stores.test.ts`, `ai/sync/sync.test.ts`, `ai/providers/providers.test.ts` (estesi) | Record o risposte corrotti → `null` / scartati / `AiError`, nessuna eccezione non gestita. |
+| `elements/app/screens.test.ts` | Scelta e transizioni di schermata (esaustiva). |
+| `elements/workspace/layout.test.ts`, `dialogFor.test.ts`, `saveIndicator.test.ts` | Colonne per modalità (4), limiti delle larghezze, ciclo delle modalità, dialog per azione/nodo, etichette di salvataggio. |
 | `elements/file-tree/treeState.test.ts` | `revealPath` apre gli antenati senza chiudere altro; toggle idempotente. |
-| `elements/search-panel/segments.test.ts` | Segmenti testo/evidenziato, anche con più termini e sovrapposizioni (stessa semantica di `findMatches`). |
-| `elements/preview/cardDate.test.ts` | Date `YYYY-MM-DD` formattate per lingua; valori non data restituiti così come sono. |
-| `elements/**/*.dom.test.ts` (smoke) | Per ogni elemento: si definisce, si monta in jsdom con store finti, mostra i testi da `t()`, cambia lingua → testi aggiornati, distacco → nessun listener rimasto. Niente pixel e niente layout: jsdom non ne ha. |
+| `elements/search-panel/segments.test.ts` | Segmenti testo/evidenziato con più termini e sovrapposizioni. |
+| `elements/preview/cardDate.test.ts` | Date formattate per lingua; valori non data restituiti così come sono. |
+| `elements/**/*.dom.test.ts` (smoke) | Per ogni elemento: si definisce, si monta in jsdom con store finti, mostra i testi da `t()`, cambio lingua → testi aggiornati, distacco → nessun listener rimasto. |
 
 **Ambiente DOM nei test.** `src/testing/domEnv.ts` crea un `JSDOM` e mette su `globalThis`
 `window`, `document`, `HTMLElement`, `customElements`, `Node`, `CustomEvent`, `Event`,
-`AbortController` e `AbortSignal` **presi tutti dalla `window` di quel `JSDOM`**. Non quelli di Node:
-jsdom rifiuta in `addEventListener` un `signal` che non sia un suo `AbortSignal`, e `HmdElement`
-passa proprio il suo signal ai listener. Un test di `element.test.ts` lo verifica (listener con
-signal registrato senza errori e rimosso dall'`abort()`). Ogni `*.dom.test.ts` lo importa **come primo import** (gli import ESM si valutano
-nell'ordine, quindi le classi estendono l'`HTMLElement` di jsdom). `node:test` esegue ogni file in
-un processo separato, per cui i globali non passano da un file all'altro. `npm test` resta
-`tsx --test`, senza script nuovi.
+`AbortController` e `AbortSignal` **presi dalla `window` di quel `JSDOM`** (jsdom rifiuta un
+`AbortSignal` di Node in `addEventListener`). Ogni `*.dom.test.ts` lo importa **come primo import**.
+`node:test` esegue ogni file in un processo separato. `npm test` resta `tsx --test`.
 
-Limiti noti di jsdom da verificare nello spike della fase 2: `showModal()`/`closedby`, Popover,
-`CSS.highlights`, Anchor Positioning e `moveBefore` possono mancare o essere parziali. Regola: il
-codice che li usa è già protetto (es. `highlightTerms`) oppure viene sostituito da uno stub
-esplicito in `domEnv.ts`. I **comportamenti** di queste API si verificano a mano (§9), non in jsdom.
+Limiti di jsdom da verificare nella fase 2: `showModal()`/`closedby`, Popover, `CSS.highlights`,
+Anchor Positioning, `moveBefore`. Il codice che li usa è già protetto oppure riceve uno stub esplicito
+in `domEnv.ts`. I **comportamenti** reali li verifica Playwright o la checklist manuale.
 
-### 8.3 Test statici nuovi (architettura)
+### 8.3 Test statici nuovi (`architecture.test.ts`)
 
-- `architecture.test.ts`:
-  - nessun `innerHTML`, `outerHTML`, `insertAdjacentHTML`, `document.write` in `src/` fuori da
-    `preview/sanitize.ts` (e dai test);
-  - nessun import di `react`/`react-dom` e nessun `.tsx` in `src/` **a partire dalla fase 6**
-    (prima è saltato con `{ skip: … }` legato all'esistenza di `reactBridge.tsx`: quando il bridge
-    sparisce, il test si attiva da solo);
-  - ogni file in `src/elements/<nome>/*.css` contiene solo blocchi `@scope` con le radici ammesse
-    dalla tabella di §4.2 per quella cartella, dentro `@layer components`;
-  - `customElements.define` compare solo in `elements/define.ts`;
-  - `showDirectoryPicker`/`requestPermission`/`queryPermission` compaiono solo in `fs/fsaOps.ts` e
-    `fs/access.ts` (regola di `CLAUDE.md` finora non verificata da un test).
+- nessun `innerHTML`, `outerHTML`, `insertAdjacentHTML`, `document.write` in `src/` fuori da
+  `preview/sanitize.ts` (e dai test);
+- nessun import di `react`/`react-dom` e nessun `.tsx` in `src/` **a partire dalla fase 7** (prima
+  saltato con `{ skip }` legato all'esistenza di `src/elements/jsx.d.ts` o di `src/main.tsx`: quando
+  spariscono, il test si attiva da solo);
+- ogni CSS in `src/elements/<cartella>/` contiene solo blocchi `@scope` con le radici di §4.2, dentro
+  `@layer components`;
+- `customElements.define` solo in `elements/define.ts`;
+- `showDirectoryPicker`/`requestPermission`/`queryPermission` solo in `fs/fsaOps.ts` e `fs/access.ts`;
+- l'identificatore `fetch`, `XMLHttpRequest`, `EventSource`, `WebSocket` e gli import di
+  `@anthropic-ai/sdk` solo in `src/ai/providers/` (regola AI di `CLAUDE.md`, finora non verificata;
+  al 01/10 non ci sono eccezioni).
 
 ### 8.4 End-to-end con Playwright (fase 0)
 
-**Scopo.** Fissare il comportamento e l'aspetto dell'app React di oggi **prima** di toccarla, così
-che ogni fase della migrazione si verifichi contro lo stesso riferimento. Le spec non devono sapere
-se sotto c'è React o un custom element.
+**Scopo.** Fissare comportamento e aspetto dell'app React di oggi **prima** di toccarla. Le spec non
+devono sapere se sotto c'è React o un custom element.
 
 **Regole delle spec.**
 
 - Localizzatori solo per ruolo e nome accessibile (`getByRole('button', { name: t('file.new') })`),
-  mai classi CSS né struttura del DOM: le classi dei CSS Modules spariscono con la migrazione. Unica
-  eccezione ammessa: `.cm-content`/`.cm-scroller` di CodeMirror, che resta.
-- Nessun testo scritto a mano: i nomi arrivano da `en.json` tramite `translate()` di
-  `src/i18n/i18n.ts` (lingua forzata a `en` nella fixture).
-- Animazioni ridotte (`reducedMotion: 'reduce'`): il cambio tema è istantaneo e gli snapshot sono
-  stabili. La transizione a pixel resta nella checklist manuale.
-- **Tempi controllati, non misurati.** Dove il risultato dipende da un timer dell'app
-  (autosalvataggio a 1000 ms, gara tra modifica locale ed esterna), la spec usa l'orologio di
-  Playwright (`page.clock`): lo mette in pausa prima della modifica e lo fa avanzare di proposito.
-  Mai un timeout più corto del timer come prova che "non è stato il timer".
-- **Tema prima del render.** La spec trattiene la richiesta del modulo dell'app (`page.route` sul
-  bundle `assets/index-*.js`) durante il ricaricamento, verifica `data-theme` e `color-scheme`
-  impostati dallo script inline mentre l'app **non** è ancora partita (`#root` vuoto), poi rilascia
-  il modulo e verifica che l'avvio si completi.
+  mai classi CSS. Eccezioni ammesse: `.cm-content`/`.cm-scroller`/`.cm-mergeView` e i pulsanti
+  `.cm-merge-revert` di CodeMirror, che restano.
+- Nessun testo scritto a mano: i nomi arrivano da `en.json` tramite `translate()` (lingua forzata a
+  `en` nella fixture, tranne la spec della lingua).
+- `reducedMotion: 'reduce'`: cambio tema istantaneo, snapshot stabili.
+- **Tempi controllati, non misurati**: dove conta un timer dell'app (autosalvataggio, debounce della
+  ricerca e dell'anteprima), `page.clock`.
+- **Tema prima del render**: la spec trattiene il bundle `assets/index-*.js`, verifica `data-theme` e
+  `color-scheme` con `#root` vuoto, poi rilascia il modulo.
 
-**Cartella finta.** Il selettore nativo di cartelle non si può pilotare. Uno script iniettato con
-`addInitScript` (solo nei test, in `e2e/support/fsHarness.ts`) sostituisce
-`window.showDirectoryPicker` con una funzione che restituisce una sottocartella dell'**Origin
-Private File System** (`navigator.storage.getDirectory()`). Gli handle OPFS sono veri
-`FileSystemDirectoryHandle` di Chromium: `fsaOps.ts`, `handleStore` (IndexedDB) e i permessi
-passano dal codice reale. Lo stesso script permette di simulare, con flag in `localStorage`
-(`hmd-e2e`, fuori dal prefisso `housemd:`), permesso `prompt`/`denied` e scritture che falliscono
-con `NotAllowedError` (accesso perso). I test scrivono e leggono la cartella OPFS con
-`page.evaluate` per preparare i file e simulare modifiche esterne. Il codice di produzione non
-cambia: la regola "solo `fsaOps.ts`/`access.ts` toccano la File System Access API" riguarda `src/`.
+**Cartella finta.** Uno script iniettato con `addInitScript` (solo nei test, `e2e/support/fsHarness.ts`)
+sostituisce `window.showDirectoryPicker` con una sottocartella dell'**OPFS**. Gli handle sono veri
+`FileSystemDirectoryHandle`: `fsaOps.ts`, `handleStore` e IndexedDB girano sul codice reale. Flag in
+`localStorage` (`hmd-e2e`) simulano permesso `prompt`/`denied` e scritture che falliscono con
+`NotAllowedError`.
+
+**Provider AI finto.** L'app crea da sola il profilo predefinito Ollama
+(`http://localhost:11434`). `e2e/support/aiHarness.ts` risponde a quell'indirizzo con `page.route`
+(elenco modelli, stream SSE con il testo deciso dalla spec), come fa oggi il `fetch` finto di
+`ai-smoke.tsx`. Nessun account, nessuna API a pagamento, nessuna chiave vera. Copre ciò che oggi copre
+`run-ai-smoke.mjs`: "Accept all", rifiuto per blocco, revisione che si chiude senza differenze,
+Ctrl+Z dopo accettazione, voce `before-ai` nella cronologia, stesso carattere nei due lati del diff.
 
 **Esecuzione.** `npm run test:e2e` → `playwright test -c e2e/playwright.config.ts`, contro
-`vite build` + `vite preview` sulla porta 4173, progetto Chromium, service worker bloccati
-(la PWA resta nella checklist manuale). **Build sempre nuova**: `reuseExistingServer: false`,
-quindi se la porta è occupata la suite fallisce invece di provare un `dist/` vecchio o un'altra
-cartella; la suite fa da cancello di ogni fase e deve provare il codice del commit corrente. Snapshot in `e2e/__screenshots__/`, generati su Linux.
-`npm test` resta `tsx --test` e non raccoglie le spec (suffisso `.spec.ts`, cartella `e2e/`).
+`vite build` + `vite preview` (porta 4173), Chromium, service worker bloccati,
+`reuseExistingServer: false`. Snapshot in `e2e/__screenshots__/`, generati su Linux. `npm test` non
+raccoglie le spec (suffisso `.spec.ts`, cartella `e2e/`).
 
-**Copertura** (una spec per area): avvio e browser non supportato; apertura, ripresa accesso e
-cambio cartella; editor con autosalvataggio e `Ctrl+S`; anteprima (markdown, wikilink, link
-relativi, HTML malevolo neutralizzato, frontmatter); scroll sincronizzato; albero (menu, nuovo,
-rinomina, elimina, nome già esistente); ricerca (`Ctrl+K`, Invio, Esc, evidenziazione con
-`CSS.highlights`); conflitto e file eliminato fuori; accesso perso; tema e lingua; snapshot visivi.
+**Copertura** (una spec per area): avvio e browser non supportato; apertura, ripresa accesso e cambio
+cartella; editor con autosalvataggio e `Ctrl+S`; barra di formattazione e scorciatoie (Ctrl+B, Ctrl+I,
+Ctrl+Shift+X, Ctrl+E, Ctrl+Shift+K); anteprima (markdown, wikilink, link relativi, HTML malevolo,
+frontmatter, larghezza del testo); scroll sincronizzato; albero (menu, tastiera con un solo tab stop,
+nuovo, rinomina, elimina, nome già esistente); ricerca (`Ctrl+K`, Invio, Esc, `CSS.highlights`);
+conflitto e file eliminato fuori; accesso perso; cronologia (diff, ripristino annullabile);
+impostazioni (rotte nell'hash, Indietro/Chiudi con modifiche aperte, Ctrl+S); AI (modalità, composer,
+chip, revisione, come sopra); tooltip (compaiono al focus da tastiera, mai `title` nativo); tema e
+lingua (anche a caldo dal selettore); titolo della scheda; snapshot visivi.
 
 ---
 
 ## 9. Checklist (per ogni fase che tocca la UI)
 
-**Automatica** (`npm run test:e2e`), punto per punto: 1 tutto; 2 tutto (incolla e trascina
-immagini con eventi sintetici, autocompletamento `[[`); 3 tutto; 4 tutto; 5 tutto tranne la
-posizione del popover vicino ai bordi; 6 tutto; 7 tutto, bozze orfane comprese; 8 tutto (Esc e
-clic fuori); 9 solo ciclo e tema applicato prima del render; 10 solo lingua dalla preferenza
-salvata e `lang` (vedi sotto); 11 solo resizer e focus nel menu dell'albero. Più gli snapshot
-visivi.
+**Automatica** (`npm run test:e2e`): punti 1–8 e 13–16 tutto, tranne la posizione dei popover vicino
+ai bordi; 9 solo ciclo e tema prima del render; 10 tutto; 11 resizer, tastiera dell'albero e focus nel
+menu. Più gli snapshot visivi.
 
-**Manuale, sempre**: selettore nativo di cartelle e prompt reale dei permessi; posizione dei
-popover vicino ai bordi della finestra; transizione a pixel del tema e `prefers-reduced-motion`;
-screen reader, ordine del focus e `aria-live`; Edge; PWA (installazione, offline, avviso di nuova
-versione).
-
-**Non verificabile oggi**: il cambio di lingua "a caldo". Nessun punto dell'interfaccia attuale
-chiama `setLocale` (la lingua si sceglie solo con la preferenza salvata o quella del browser),
-quindi non c'è un flusso da fissare con Playwright. Il comportamento a caldo si copre con i test
-di `i18nStore` e con gli smoke test degli elementi (§8.2); un e2e arriverà quando esisterà un
-selettore di lingua.
+**Manuale, sempre**: selettore nativo di cartelle e prompt reale dei permessi; posizione di popover e
+tooltip vicino ai bordi; transizione a pixel e `prefers-reduced-motion`; screen reader, ordine del
+focus e `aria-live`; focus ring in `forced-colors`; Edge; PWA (installazione, offline, avviso di nuova
+versione); AI con un provider vero (bridge Claude Code o Ollama).
 
 Dettaglio, in Chrome ed Edge stabili, cartella di prova con sottocartelle, immagini, frontmatter,
 wikilink:
 
-1. Avvio: browser non supportato (UA finto), prima apertura, ripresa accesso, cambio cartella
-   (anche A → B → A).
-2. Editor: digitazione, autosalvataggio, `Ctrl+S`, incolla e trascina immagini,
-   autocompletamento `[[`.
-3. Anteprima: aggiornamento con debounce, link wiki/relativi/esterni, immagine mancante,
-   frontmatter valido e non valido, HTML malevolo (script, `onerror`, `javascript:`) neutralizzato.
+1. Avvio: browser non supportato, prima apertura, ripresa accesso, cambio cartella (anche A → B → A).
+2. Editor: digitazione, autosalvataggio, `Ctrl+S`, incolla e trascina immagini, autocompletamento `[[`.
+3. Anteprima: debounce, link wiki/relativi/esterni, immagine mancante, frontmatter valido e non
+   valido, HTML malevolo neutralizzato, larghezza massima del testo.
 4. Scroll sincronizzato in split in entrambe le direzioni, senza rimbalzi.
-5. Albero: espandi/chiudi, menu da pulsante e da clic destro, posizione del popover vicino ai bordi,
-   nuovo/rinomina/elimina file e cartelle, nome già esistente.
-6. Ricerca: `Ctrl+K`, risultati, Invio, Esc, evidenziazione nell'anteprima (Custom Highlight).
-7. Conflitto con modifica esterna: ricarica e sovrascrivi; file eliminato fuori dall'app; bozze
-   orfane.
-8. Accesso perso: dialog non chiudibile con Esc né con clic fuori; accesso negato; ripresa.
-9. Tema: ciclo con transizione a pixel, `prefers-reduced-motion`, modalità `auto` che segue il
-   sistema, nessun lampo del tema sbagliato all'avvio.
-10. Lingua: preferenza salvata e lingua del browser all'avvio, `lang` su `<html>`. (Il cambio a
-    caldo non ha oggi un'interfaccia: vedi sopra.)
-11. Tastiera e screen reader: ordine del focus, focus che torna al pulsante dopo i dialog,
-    `aria-live` dello stato di salvataggio, resizer con le frecce.
+5. Albero: espandi/chiudi, menu da pulsante, clic destro e tastiera, popover vicino ai bordi,
+   nuovo/rinomina/elimina, nome già esistente, un solo tab stop.
+6. Ricerca: `Ctrl+K`, risultati, Invio, Esc, evidenziazione nell'anteprima.
+7. Conflitto con modifica esterna: ricarica e sovrascrivi; file eliminato fuori; bozze orfane.
+8. Accesso perso: dialog non chiudibile con Esc né clic fuori; accesso negato; ripresa.
+9. Tema: ciclo con transizione a pixel, `prefers-reduced-motion`, `auto` che segue il sistema,
+   nessun lampo all'avvio.
+10. Lingua: preferenza salvata, lingua del browser, `lang` su `<html>`, cambio a caldo dalle
+    impostazioni.
+11. Tastiera e screen reader: ordine del focus, focus che torna dopo i dialog, `aria-live` del
+    salvataggio, resizer con le frecce, tooltip al focus.
 12. PWA: installazione, offline, avviso di nuova versione.
+13. Barra di formattazione sulla selezione e scorciatoie.
+14. Cronologia: elenco, diff, ripristino annullabile con Ctrl+Z.
+15. Impostazioni: sezioni via hash, conferma su Indietro/Chiudi, Ctrl+S, autosalvataggio e larghezze.
+16. AI: modalità AI, composer (Invio/Shift+Invio), chip della selezione, modello ed effort, revisione
+    (accetta tutto, rifiuto per blocco, Ctrl+Z), errori nei toast, profili/preset/sync.
 
 ---
 
@@ -684,53 +714,58 @@ wikilink:
 
 | # | Rischio | Probabilità / impatto | Mitigazione |
 |---|---|---|---|
-| R1 | **UI non aggiornata**: senza rendering dichiarativo un campo dello stato viene dimenticato in `render()`. | Alta / medio | Ogni elemento ha un solo `render()` guidato da `getState()`; smoke test che cambiano lo store e controllano il DOM; checklist §9. |
-| R2 | **Focus e selezione persi** ricreando nodi (ricerca, albero, input dei dialog). | Media / alto per l'usabilità | `reconcileList` con chiavi; regola "mai ricreare un sottoalbero con il focus"; test sul focus in `list.test.ts`. |
-| R3 | **Listener e iscrizioni non tolti**: perdite di memoria, doppi salvataggi dopo un cambio di cartella. | Media / alto | `AbortController` per connessione in `HmdElement`; test del distacco; nessun `addEventListener` senza `signal` (regola di review). |
-| R4 | **XSS**: costruire DOM a mano invita a `innerHTML`. | Bassa / critico (la pagina ha accesso alla cartella) | `el()` crea solo nodi di testo; test statico di §8.3; `sanitize.ts` resta l'unica eccezione. |
-| R5 | **Controlli statici che passano a vuoto** (`uiText.test.ts` senza più `.tsx`). | Alta se ignorato / medio | Fase 0: `files.length > 0` e casi negativi sintetici. |
-| R6 | **Collisioni CSS** senza l'hashing dei CSS Modules. | Media / basso | `@scope` con limite inferiore, `@layer`, test statico sui file CSS. |
-| R7 | **Regressioni nella convivenza React + custom element** (fasi 3–5): React 18 non passa proprietà né eventi. | Media / medio | Un solo `reactBridge.tsx`, temporaneo, cancellato nella fase 6 (verificato da un test); fasi brevi. |
-| R8 | **Dev experience**: `customElements.define` non si può ripetere, quindi l'HMR di Vite ricarica tutta la pagina. | Certa / basso | Accettato. `define.ts` controlla `customElements.get` per non lanciare errori in dev. Lo stato importante sta nel buffer di emergenza, quindi un ricaricamento non perde dati. |
-| R9 | **`useDefineForClassFields`**: un campo di classe con lo stesso nome di una proprietà impostata prima dell'upgrade la oscura. | Bassa / medio | Tutti gli elementi sono definiti prima di montare `<hmd-app>`; gli input sono setter privati (`#workspace`) con accessor pubblici, mai campi pubblici omonimi. |
-| R10 | **Scroll sincronizzato e view transition del tema** dipendono da tempi sottili (`suppressUntil`, DOM aggiornato dentro la callback). | Media / medio | Logica copiata identica; `themeStore` notifica in modo sincrono dentro `apply`; test del `themeStore` con transizione finta; checklist §9 punti 4 e 9. |
-| R11 | **Accessibilità**: si perdono `aria-*` che JSX rendeva ovvi (`aria-pressed`, `aria-current`, `aria-valuenow`). | Media / medio | Inventario degli `aria-*` per componente preso dai `.tsx` prima di cancellarli (allegato al PR di ogni fase); checklist §9 punto 11. |
-| R12 | **Bundle**: zod pesa più del previsto. | Bassa / basso | `zod/mini`; soglia misurata nella fase 1 (§6.2). |
-| R13 | **Limiti di jsdom** su dialog/popover/highlight. | Certa / basso | Stub espliciti; il comportamento reale si verifica a mano. |
-| R14 | **Tempo**: 1 900 righe di UI da riscrivere, con rischio di fermarsi a metà in convivenza. | Media / medio | Tutto resta sul branch di integrazione fino all'approvazione (decisione 1): `main` non vede mai la convivenza. Le fasi 0–2 (e2e, test, zod, ts-pattern, store) sono comunque recuperabili da sole con un merge separato, se Davide lo approva. Il bridge è l'unico debito della convivenza ed è tracciato. |
-| R15 | **L'harness OPFS non è il file system reale**: permessi e selettore sono simulati; OPFS non ha i nomi "case-insensitive" di Windows/macOS. | Certa / medio | Selettore e permessi reali restano nella checklist manuale; i casi di maiuscole restano coperti dai test unitari di `workspaceFS`. |
-| R16 | **Snapshot visivi instabili** (font, antialiasing, versione di Chromium). | Media / medio | Font nel bundle, animazioni ridotte, stessa versione di Playwright bloccata in `package-lock.json`; tolleranza `maxDiffPixelRatio` piccola e dichiarata nella config; snapshot rigenerati solo con approvazione. |
-| R17 | **Lentezza della suite e2e** (build + preview a ogni esecuzione). | Media / basso | Accettata: niente riuso del server (proverebbe build vecchie); la suite si lancia a fine task, non a ogni salvataggio, e durante lo sviluppo di una spec si filtra per file. |
+| R1 | **UI non aggiornata**: un campo dello stato dimenticato in `render()`. | Alta / medio | Un solo `render()` guidato da `getState()`; smoke test che cambiano lo store; checklist §9. |
+| R2 | **Focus e selezione persi** ricreando nodi (ricerca, composer, albero, dialog, impostazioni). | Media / alto | `reconcileList` con chiavi; mai ricreare un sottoalbero con il focus; test sul focus. |
+| R3 | **Listener non tolti**: perdite, doppi salvataggi dopo un cambio di cartella. | Media / alto | `AbortController` in `HmdElement`; test del distacco; nessun `addEventListener` senza `signal`. |
+| R4 | **XSS**: costruire DOM a mano invita a `innerHTML`; la chat AI rende testo non fidato. | Bassa / critico | `el()` solo testo; test statico §8.3; `sanitize.ts` unica eccezione; chat solo via `safeRender` + `setSafeHTML`. |
+| R5 | **Controlli statici che passano a vuoto** (`uiText`, `tooltips`). | Alta se ignorato / medio | Fase 0: `files.length > 0` e casi negativi sintetici. |
+| R6 | **Collisioni CSS** senza hashing. | Media / basso | `@scope` con limite inferiore, `@layer`, test statico. |
+| R7 | **Regressioni nella convivenza** (fasi 4–7). | Media / medio | React 19 passa proprietà ed eventi; `define.ts` prima del render; `jsx.d.ts` unico debito, cancellato e verificato. |
+| R8 | **HMR**: `customElements.define` non si ripete, ricarica completa. | Certa / basso | Accettato; `define.ts` controlla `customElements.get`. |
+| R9 | **`useDefineForClassFields`** oscura proprietà impostate prima dell'upgrade. | Bassa / medio | Elementi definiti prima del montaggio; input come accessor su campi privati. |
+| R10 | **Tempi sottili** (scroll sincronizzato, view transition, MergeView e Ctrl+Z). | Media / medio | Logica copiata identica; spec e2e dedicate; checklist 4, 9, 16. |
+| R11 | **Accessibilità**: `aria-*`, `aria-label` + `data-tooltip`, tab stop dell'albero persi. | Media / medio | Inventario per componente preso dai `.tsx` prima di cancellarli (nel PR di fase); test `tooltips`; checklist 11. |
+| R12 | **Bundle**: zod pesa più del previsto. | Bassa / basso | `zod/mini`; schemi dei provider nel loro chunk; soglia misurata. |
+| R13 | **Limiti di jsdom**. | Certa / basso | Stub espliciti; comportamento reale in Playwright o a mano. |
+| R14 | **Tempo**: ~3 800 righe di UI, rischio di fermarsi in convivenza. | Alta / medio | Fasi 0–3 già in `main` e utili da sole; convivenza solo sul branch; ordine dalle foglie. |
+| R15 | **Harness OPFS** non è il file system reale. | Certa / medio | Selettore e permessi reali nella checklist manuale; maiuscole coperte da `workspaceFS`. |
+| R16 | **Snapshot instabili**. | Media / medio | Font nel bundle, animazioni ridotte, Playwright a versione esatta, `maxDiffPixelRatio` dichiarato, rigenerazione solo con approvazione. |
+| R17 | **Suite e2e lenta**. | Media / basso | Accettato; filtro per file durante lo sviluppo. |
+| R18 | **React 19** cambia qualcosa di sottile (StrictMode e ref callback, tipi). | Media / medio | Fase a sé con PR in `main`, coperta da e2e e snapshot prima di qualsiasi custom element. |
+| R19 | **Minificatore CSS** che trasforma `@scope`/`@layer` (è già successo con `light-dark()`). | Bassa / alto | `buildCss.test.ts` esteso nella fase 2, prima che i fogli `@scope` esistano. |
+| R20 | **`main` che si muove** durante il branch lungo (nuove funzionalità in React). | Alta / medio | Rebase frequente; ogni funzionalità nuova va migrata nel branch prima del merge finale; e2e scritte per ruolo valgono per entrambe. |
+| R21 | **Regole AI violate nella riscrittura** (chiavi in `dataset`, fetch fuori dai provider). | Bassa / critico | Test statico su `fetch`/SDK; chiavi mai negli attributi; review dedicata della fase 6. |
 
 ---
 
 ## 11. Criteri di completamento
 
 - `package.json` senza `react`, `react-dom`, `@types/react*`, `@vitejs/plugin-react`; con
-  `ts-pattern` e `zod`.
+  `ts-pattern` e `zod`; senza `tests/browser/` né `test:browser`.
 - Nessun `.tsx` né `*.module.css` in `src/`; `architecture.test.ts` completamente attivo.
-- `npm test`: tutti i test del baseline della fase 0 ci sono ancora (stesso nome o rinominati in
-  modo tracciato nel PR) e passano, più i nuovi di §8.2–8.3.
+- `npm test`: tutti i test del baseline (488 al 01/10, più quelli aggiunti in `main` nel frattempo)
+  ci sono ancora (stesso nome o rinominati in modo tracciato) e passano, più i nuovi di §8.2–8.3.
 - `npm run lint` e `npm run build` puliti; PWA installabile e funzionante offline.
-- `npm run test:e2e` verde con gli **stessi snapshot** generati nella fase 0 (ogni snapshot
-  rigenerato è elencato e motivato).
-- Merge in `main` solo dopo l'approvazione esplicita di Davide.
+- `npm run test:e2e` verde con gli **stessi snapshot** della fase 0 (ogni rigenerazione elencata e
+  motivata).
+- Merge del branch in `main` solo dopo l'approvazione esplicita di Davide.
 - Checklist §9 completata in Chrome ed Edge.
-- `CLAUDE.md` e `README.md` aggiornati allo stack nuovo.
+- `CLAUDE.md` e `README.md` aggiornati.
 
 ## 12. Domande aperte → decisioni
 
-1. **Un merge solo o per fase?** → Un solo merge in `main`, alla fine, dopo approvazione esplicita.
-2. **Quanto zod?** → Ridotto: solo file system e provider esterni (§6.2); pacchetto `zod/mini`.
-3. **Test in browser reale?** → Sì: Playwright, come prima parte implementativa (fase 0, §8.4).
+1. **Un merge solo o per fase?** → In due tempi: fasi 0–3 con PR separate in `main`; fasi 4–8 con un
+   solo merge dopo approvazione esplicita (rivista il 01/10).
+2. **Quanto zod?** → Ridotto: file system, storage del browser, risposte JSON dei provider;
+   `zod/mini`.
+3. **Test in browser reale?** → Playwright, prima parte implementativa; il collaudo CDP dell'AI ci
+   confluisce (01/10).
+4. **Come convivono React e custom element?** → React 19 prima della convivenza, niente bridge (01/10).
 
 ## 13. Piani di implementazione
 
-Lo spec copre più sottosistemi, quindi l'implementazione è divisa in piani separati, ciascuno con
-software funzionante e testato alla fine:
-
-1. `docs/superpowers/plans/2026-09-27-housemd-wc-01-e2e-baseline.md`: fase 0.
-2. Fasi 1–2 (logica pura, ts-pattern, zod, store, infrastruttura DOM/CSS): da scrivere dopo il
-   piano 1, perché la suite e2e ne è il prerequisito.
-3. Fasi 3–5 (elementi in convivenza).
-4. Fasi 6–7 (via React, rifinitura, richiesta di approvazione del merge).
+1. `docs/superpowers/plans/2026-09-27-housemd-wc-01-e2e-baseline.md`: fase 0 (da riscrivere sulla
+   base di questa revisione).
+2. Fasi 1–3 (logica pura, ts-pattern, zod, store, infrastruttura DOM/CSS, React 19).
+3. Fasi 4–6 (elementi in convivenza).
+4. Fasi 7–8 (impostazioni, workspace, via React, rifinitura, richiesta di merge).
