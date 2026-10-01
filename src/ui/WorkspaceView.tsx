@@ -24,7 +24,6 @@ import { ConflictBar } from './ConflictBar';
 import { FileTree, type TreeAction } from './FileTree';
 import { HistoryPanel } from './HistoryPanel';
 import { Icon } from './Icon';
-import type { IconName } from './icons';
 import { NameDialog } from './NameDialog';
 import { renameTaken } from './names';
 import { SearchPanel } from './SearchPanel';
@@ -36,18 +35,10 @@ import { Toasts, type ToastItem } from './Toasts';
 import { buildTree, type TreeNode } from './tree';
 import { useWorkspaceState } from './useWorkspace';
 import styles from './WorkspaceView.module.css';
-
-type Mode = 'editor' | 'split' | 'preview' | 'ai';
-type PaneMode = Exclude<Mode, 'ai'>;
-
-const MODES: Array<{ id: Mode; label: MessageKey; icon: IconName }> = [
-  { id: 'editor', label: 'mode.editor', icon: 'modeEditor' },
-  { id: 'split', label: 'mode.split', icon: 'modeSplit' },
-  { id: 'preview', label: 'mode.preview', icon: 'modePreview' },
-  { id: 'ai', label: 'mode.ai', icon: 'modeAi' },
-];
-/** Ctrl+\ scorre solo le viste del documento, non la revisione AI. */
-const PANE_MODES = MODES.filter((m) => m.id !== 'ai');
+import {
+  clampWidth, gridColumns, MODES, nextPaneMode, PANE_MODES, panesMode, resizeByKey, sidePanel, WIDTH_LIMITS,
+  type Mode, type PaneMode,
+} from '../elements/workspace/layout';
 
 const SAVE_LABEL: Record<SaveState, MessageKey> = {
   saved: 'save.saved',
@@ -55,10 +46,6 @@ const SAVE_LABEL: Record<SaveState, MessageKey> = {
   saving: 'save.saving',
   error: 'save.error',
 };
-
-const MIN_SIDEBAR = 180;
-const MAX_SIDEBAR = 480;
-const clampWidth = (w: number) => Math.min(MAX_SIDEBAR, Math.max(MIN_SIDEBAR, Math.round(w)));
 
 type DialogState =
   | { kind: 'new-file' | 'new-folder'; dir: string }
@@ -82,7 +69,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
   const doc = state.doc;
   const ai = useAiController(workspace);
   const aiState = useAiState(ai);
-  const [aiWidth, setAiWidth] = useState(() => Math.min(640, Math.max(300, readPref('aiSidebarWidth', 380))));
+  const [aiWidth, setAiWidth] = useState(() => clampWidth('ai', readPref('aiSidebarWidth', WIDTH_LIMITS.ai.initial)));
   const session = useMemo(() => createDocSession(`${doc?.path}#${doc?.revision}`, doc?.text || ''), [doc?.path, doc?.revision]);
   const [aiSelection, setAiSelection] = useState<TextRange | null>(null);
   // onSelection scatta a ogni movimento del cursore: si aggiorna lo stato solo se il tratto cambia.
@@ -95,7 +82,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
   const shownMode: Mode = mode === 'ai' && !ai ? 'split' : mode;
   const lastPane = useRef<PaneMode>(mode === 'ai' ? 'split' : mode);
   const [sidebarOpen, setSidebarOpen] = useState(() => readPref('sidebarOpen', true));
-  const [sidebarWidth, setSidebarWidth] = useState(() => clampWidth(readPref('sidebarWidth', 280)));
+  const [sidebarWidth, setSidebarWidth] = useState(() => clampWidth('sidebar', readPref('sidebarWidth', WIDTH_LIMITS.sidebar.initial)));
   const [dialog, setDialog] = useState<DialogState>(null);
   const [highlight, setHighlight] = useState<string[]>(NO_TERMS);
   const [theme, setTheme] = useTheme();
@@ -308,7 +295,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
           setSidebar(!sidebarOpen);
           break;
         case 'cycleMode':
-          changeMode(PANE_MODES[(PANE_MODES.findIndex((m) => m.id === shownMode) + 1) % PANE_MODES.length].id);
+          changeMode(nextPaneMode(shownMode));
           break;
       }
     };
@@ -319,17 +306,19 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
   const onResizeStart = (event: PointerEvent<HTMLDivElement>) => {
     const target = event.currentTarget;
     target.setPointerCapture(event.pointerId);
-    let width = shownMode === 'ai' ? aiWidth : sidebarWidth;
+    const panel = sidePanel(shownMode);
+    let width = panel === 'ai' ? aiWidth : sidebarWidth;
     const move = (e: globalThis.PointerEvent) => {
-      width = shownMode === 'ai' ? Math.min(640, Math.max(300, e.clientX)) : clampWidth(e.clientX);
-      if (shownMode === 'ai') setAiWidth(width); else setSidebarWidth(width);
+      width = clampWidth(panel, e.clientX);
+      if (panel === 'ai') setAiWidth(width);
+      else setSidebarWidth(width);
     };
     const up = () => {
       target.removeEventListener('pointermove', move);
       target.removeEventListener('pointerup', up);
       target.removeEventListener('pointercancel', up);
       target.removeEventListener('lostpointercapture', up);
-      writePref(shownMode === 'ai' ? 'aiSidebarWidth' : 'sidebarWidth', width);
+      writePref(panel === 'ai' ? 'aiSidebarWidth' : 'sidebarWidth', width);
     };
     target.addEventListener('pointermove', move);
     target.addEventListener('pointerup', up);
@@ -338,11 +327,13 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
   };
 
   const onResizeKey = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    const panel = sidePanel(shownMode);
+    const next = resizeByKey(panel, panel === 'ai' ? aiWidth : sidebarWidth, event.key);
+    if (next === null) return;
     event.preventDefault();
-    const next = shownMode === 'ai' ? Math.min(640, Math.max(300, aiWidth + (event.key === 'ArrowLeft' ? -16 : 16))) : clampWidth(sidebarWidth + (event.key === 'ArrowLeft' ? -16 : 16));
-    if (shownMode === 'ai') setAiWidth(next); else setSidebarWidth(next);
-    writePref(shownMode === 'ai' ? 'aiSidebarWidth' : 'sidebarWidth', next);
+    if (panel === 'ai') setAiWidth(next);
+    else setSidebarWidth(next);
+    writePref(panel === 'ai' ? 'aiSidebarWidth' : 'sidebarWidth', next);
   };
 
   const onTreeAction = (action: TreeAction, node: TreeNode | null) => {
@@ -373,7 +364,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
     <div
       {...{ inert: settingsOpen ? '' : undefined }}
       className={styles.layout}
-      style={{ gridTemplateColumns: sidebarOpen ? `${shownMode === 'ai' ? aiWidth : sidebarWidth}px 5px minmax(0, 1fr)` : 'minmax(0, 1fr)' }}
+      style={{ gridTemplateColumns: gridColumns(sidebarOpen, shownMode === 'ai' ? aiWidth : sidebarWidth) }}
     >
       {sidebarOpen && (
         <>
@@ -431,8 +422,8 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
             aria-orientation="vertical"
             aria-label={t('sidebar.resize')}
             aria-valuenow={shownMode === 'ai' ? aiWidth : sidebarWidth}
-            aria-valuemin={shownMode === 'ai' ? 300 : MIN_SIDEBAR}
-            aria-valuemax={shownMode === 'ai' ? 640 : MAX_SIDEBAR}
+            aria-valuemin={WIDTH_LIMITS[sidePanel(shownMode)].min}
+            aria-valuemax={WIDTH_LIMITS[sidePanel(shownMode)].max}
             tabIndex={0}
             onPointerDown={onResizeStart}
             onKeyDown={onResizeKey}
@@ -500,7 +491,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
         )}
 
         {doc && shownMode === 'ai' && ai ? <ReviewView controller={ai} editor={{ path: doc.path, text: doc.text, resetKey: `${doc.path}#${doc.revision}`, session, restore: doc.restore, readOnly: state.updating, getDocs, onChange: text => workspace.edit(text), onTransactions: (changes, texts) => ai.documentChanged(doc.path, changes, false, texts), onImage: file => workspace.saveImage(file, file.name), onTopLine: () => {}, onSelection }} /> : doc ? (
-          <div className={styles.panes} data-mode={historyOpen && shownMode === 'editor' ? 'split' : shownMode}>
+          <div className={styles.panes} data-mode={panesMode(shownMode, historyOpen)}>
             {shownMode !== 'preview' && (
               <section className={styles.pane} aria-label={t('pane.editor')}>
                 <Editor
