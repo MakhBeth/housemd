@@ -1,6 +1,7 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
 
 import { writePref } from '../lib/prefs';
+import { createI18nStore } from '../state/i18nStore';
 import { translate, type Locale, type Messages, type Params } from './i18n';
 import { loadMessages, type MessageKey } from './messages';
 
@@ -19,27 +20,27 @@ interface Props {
 }
 
 export function I18nProvider({ initialLocale, initialMessages, children }: Props) {
-  const [state, setState] = useState({ locale: initialLocale, messages: initialMessages });
-  // Cambi di lingua rapidi: vince l'ultimo richiesto, non l'ultimo caricato.
-  const request = useRef(0);
+  const [store] = useState(() =>
+    createI18nStore({
+      locale: initialLocale,
+      messages: initialMessages,
+      load: loadMessages,
+      persist: (locale) => writePref('locale', locale),
+    }),
+  );
+  const state = useSyncExternalStore(store.subscribe, store.getState);
 
   useEffect(() => {
     document.documentElement.lang = state.locale;
   }, [state.locale]);
 
-  const setLocale = useCallback((locale: Locale) => {
-    const id = ++request.current;
-    void loadMessages(locale).then(({ locale: loaded, messages }) => {
-      if (id !== request.current) return;
-      // Se il chunk richiesto è fallito, `loaded` è 'en': non si salva la scelta fallita.
-      writePref('locale', loaded);
-      setState({ locale: loaded, messages });
-    });
-  }, []);
-
   const value = useMemo<I18nValue>(
-    () => ({ locale: state.locale, setLocale, t: (key, params) => translate(state.messages, key, params) }),
-    [state, setLocale],
+    () => ({
+      locale: state.locale,
+      setLocale: (locale) => void store.setLocale(locale),
+      t: (key, params) => translate(state.messages, key, params),
+    }),
+    [state, store],
   );
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }
