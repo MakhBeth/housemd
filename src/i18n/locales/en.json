@@ -272,5 +272,19 @@
   "ai.deleteMessage": "This cannot be undone.",
   "ai.unsavedTitle": "Discard unsaved changes?",
   "ai.unsavedMessage": "The changes to this item have not been saved.",
-  "ai.discardChanges": "Discard changes"
+  "ai.discardChanges": "Discard changes",
+  "format.toolbar": "Formatting",
+  "format.bold": "Bold (Ctrl+B)",
+  "format.italic": "Italic (Ctrl+I)",
+  "format.strike": "Strikethrough (Ctrl+Shift+X)",
+  "format.code": "Code (Ctrl+E)",
+  "format.link": "Link (Ctrl+Shift+K)",
+  "format.heading": "Heading",
+  "format.quote": "Quote",
+  "format.bullet": "Bulleted list",
+  "format.ordered": "Numbered list",
+  "format.task": "Task list",
+  "format.boldGlyph": "B",
+  "format.italicGlyph": "I",
+  "format.strikeGlyph": "S"
 }

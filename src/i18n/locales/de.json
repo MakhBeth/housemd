@@ -272,5 +272,19 @@
   "ai.deleteMessage": "Das kann nicht rückgängig gemacht werden.",
   "ai.unsavedTitle": "Ungespeicherte Änderungen verwerfen?",
   "ai.unsavedMessage": "Die Änderungen an diesem Element wurden nicht gespeichert.",
-  "ai.discardChanges": "Änderungen verwerfen"
+  "ai.discardChanges": "Änderungen verwerfen",
+  "format.toolbar": "Formatierung",
+  "format.bold": "Fett (Ctrl+B)",
+  "format.italic": "Kursiv (Ctrl+I)",
+  "format.strike": "Durchgestrichen (Ctrl+Shift+X)",
+  "format.code": "Code (Ctrl+E)",
+  "format.link": "Link (Ctrl+Shift+K)",
+  "format.heading": "Überschrift",
+  "format.quote": "Zitat",
+  "format.bullet": "Aufzählung",
+  "format.ordered": "Nummerierte Liste",
+  "format.task": "Aufgabenliste",
+  "format.boldGlyph": "F",
+  "format.italicGlyph": "K",
+  "format.strikeGlyph": "S"
 }

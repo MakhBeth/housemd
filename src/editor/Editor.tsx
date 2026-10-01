@@ -6,6 +6,7 @@ import { initialRestoreSeq, type RestoreCommand } from './restoreCommand';
 import { applyDocRestore } from './useDocBinding';
 import { docExtensions, editable, mainSelectionRange, readOnlyExtensions } from './docExtensions';
 import { docStateConfig, saveDocSession, type DocSession } from './docSession';
+import { useT } from '../i18n/I18nProvider';
 import styles from './Editor.module.css';
 
 export interface EditorHandle {
@@ -38,8 +39,9 @@ export interface EditorProps {
 export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(props, ref) {
   const hostRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
-  const callbacks = useRef(props);
-  callbacks.current = props;
+  const t = useT();
+  const callbacks = useRef({ ...props, t });
+  callbacks.current = { ...props, t };
   const suppressUntil = useRef(0);
   // Ultimo ripristino applicato; quello già presente al montaggio conta come applicato.
   const appliedRestore = useRef(initialRestoreSeq(props.restore));

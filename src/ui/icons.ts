@@ -9,6 +9,12 @@ import arrowUp from 'pixelarticons/svg/arrow-up.svg?url';
 import chevronDown from 'pixelarticons/svg/chevron-down.svg?url';
 import chevronRight from 'pixelarticons/svg/chevron-right.svg?url';
 import chevronUp from 'pixelarticons/svg/chevron-up.svg?url';
+import bulletlist from 'pixelarticons/svg/bulletlist.svg?url';
+import checkboxOn from 'pixelarticons/svg/checkbox-on.svg?url';
+import code from 'pixelarticons/svg/code.svg?url';
+import heading from 'pixelarticons/svg/heading.svg?url';
+import link from 'pixelarticons/svg/link.svg?url';
+import quoteTextInline from 'pixelarticons/svg/quote-text-inline.svg?url';
 import circle from 'pixelarticons/svg/circle.svg?url';
 import clock from 'pixelarticons/svg/clock.svg?url';
 import close from 'pixelarticons/svg/close.svg?url';
@@ -62,6 +68,12 @@ export const ICONS = {
   stop: stopSolid,
   chevronUp,
   chevronDown,
+  formatCode: code,
+  formatLink: link,
+  formatHeading: heading,
+  formatQuote: quoteTextInline,
+  formatBullet: bulletlist,
+  formatTask: checkboxOn,
 } as const;
 
 export type IconName = keyof typeof ICONS;

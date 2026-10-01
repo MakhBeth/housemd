@@ -276,6 +276,8 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
   useEffect(() => {
     const onKey = (event: globalThis.KeyboardEvent) => {
       if (event.key === 'Escape' && shownMode === 'ai' && !settingsOpen) ai?.stop();
+      // Già gestito dall'editor (Ctrl+B è il grassetto lì, la barra laterale altrove).
+      if (event.defaultPrevented) return;
       const shortcut = shortcutFor(event);
       if (!shortcut) return;
       // Con le impostazioni aperte restano solo i salvataggi (altrimenti Ctrl+S apre "Salva pagina").

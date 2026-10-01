@@ -118,6 +118,22 @@ try{
  await press('Editor');await evaluate("(()=>{const view=smoke.EditorView.findFromDOM(document.querySelector('.cm-editor'));view.dispatch({selection:{anchor:4,head:11}});})()");
  await press('AI');await until("[...document.querySelectorAll('span')].some(s=>s.textContent==='Selection · 2 lines')");
 
+ // Formattazione: la barra compare sulla selezione con l'editor a fuoco; Ctrl+B è il grassetto, non la barra laterale.
+ const sidebarLabel="[...document.querySelectorAll('button')].map(b=>b.getAttribute('aria-label')).find(l=>/sidebar/i.test(l||''))??null";
+ await press('Editor');const sidebarBefore=await evaluate(sidebarLabel);
+ await evaluate("(()=>{const view=smoke.EditorView.findFromDOM(document.querySelector('.cm-editor'));view.focus();view.dispatch({changes:{from:0,to:view.state.doc.length,insert:'uno due tre'},selection:{anchor:4,head:7}});})()");
+ await until("!!document.querySelector('.cm-formatToolbar[role=toolbar]')");
+ if(process.env.HOUSEMD_SCREENSHOT){const shot=await send('Page.captureScreenshot',{format:'png'});(await import('node:fs')).writeFileSync(process.env.HOUSEMD_SCREENSHOT,Buffer.from(shot.result.data,'base64'));}
+ for(const type of ['rawKeyDown','keyUp'])await send('Input.dispatchKeyEvent',{type,key:'b',code:'KeyB',windowsVirtualKeyCode:66,modifiers:2});await sleep(150);
+ const editorText="smoke.EditorView.findFromDOM(document.querySelector('.cm-editor')).state.doc.toString()";
+ assert.equal(await evaluate(editorText),'uno **due** tre','Ctrl+B mette il grassetto');
+ assert.equal(await evaluate(sidebarLabel),sidebarBefore,'Ctrl+B nell\'editor non tocca la barra laterale');
+ assert.ok(await evaluate("(()=>{const b=document.querySelector('.cm-formatToolbar button[data-action=italic]');if(!b)return false;b.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true}));b.click();return true;})()"),'Pulsante corsivo');
+ assert.equal(await evaluate(editorText),'uno ***due*** tre','Il pulsante aggiunge il corsivo');
+ assert.equal(await evaluate("document.activeElement===document.querySelector('.cm-content')"),true,'Il focus resta nell\'editor');
+ await evaluate("document.querySelector('.cm-content').blur()");await until("!document.querySelector('.cm-formatToolbar')");
+ await press('AI');
+
  // Impostazioni: il focus entra sul titolo e torna dov'era; Indietro con una bozza aperta chiede conferma.
  const settings="document.querySelector('[role=region][aria-label=\"Settings\"]')";
  await evaluate(`${composer}.focus()`);await press('Settings');
@@ -157,5 +173,5 @@ try{
  assert.equal(await evaluate("(()=>{const p=document.querySelector('[class*=prose]');return Math.abs(p.getBoundingClientRect().width-p.parentElement.clientWidth)<2;})()"),true,'Anteprima senza limite: occupa tutto il pannello');
  await send('Emulation.clearDeviceMetricsOverride');await press('AI');
  assert.deepEqual(errors,[],'Nessuna eccezione runtime');
- console.log('Chromium AI smoke: modalità AI, composer con Invio, proposta, accept-all, blocco, AI→Editor undo, before-ai, chip selezione e accettazione ripetuta e per blocchi, rendering sicuro senza risorse remote, ripristino cronologia, chip dopo selezione in Editor, impostazioni con focus e conferma su Indietro/Chiudi, larghezza del testo: OK');
+ console.log('Chromium AI smoke: modalità AI, composer con Invio, proposta, accept-all, blocco, AI→Editor undo, before-ai, chip selezione e accettazione ripetuta e per blocchi, rendering sicuro senza risorse remote, ripristino cronologia, chip dopo selezione in Editor, barra di formattazione e Ctrl+B, impostazioni con focus e conferma su Indietro/Chiudi, larghezza del testo: OK');
 }finally{socket?.close();chrome.kill();vite.kill();await Promise.all([new Promise(r=>chrome.exitCode!==null?r():chrome.once('exit',r)),new Promise(r=>vite.exitCode!==null?r():vite.once('exit',r))]);await rm(profile,{recursive:true,force:true,maxRetries:3});}
