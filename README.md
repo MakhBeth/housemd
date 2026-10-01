@@ -89,6 +89,10 @@ toglie la formattazione:
 | `Ctrl+E` | Codice in linea |
 | `Ctrl+Shift+K` | Link |
 
+L'albero dei file è un solo passo di `Tab`: dentro si naviga con `↑`/`↓`, `Home`/`End`, `→` apre una
+cartella (e poi entra), `←` la chiude (o risale alla cartella madre); `Invio` apre, `Shift+F10` mostra il
+menu della riga.
+
 ## Impostazioni
 
 Dall'ingranaggio nella toolbar: lingua (9 lingue), tema (automatico, chiaro, scuro) e salvataggio
