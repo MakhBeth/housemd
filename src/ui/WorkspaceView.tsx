@@ -35,16 +35,14 @@ import { Toasts, type ToastItem } from './Toasts';
 import { buildTree, type TreeNode } from './tree';
 import { useWorkspaceState } from './useWorkspace';
 import styles from './WorkspaceView.module.css';
+import { match } from 'ts-pattern';
+import { dialogFor, type DialogState } from '../elements/workspace/dialogFor';
+import { allowedInSettings } from '../elements/workspace/keymap';
 import { saveIndicator } from '../elements/workspace/saveIndicator';
 import {
   clampWidth, gridColumns, MODES, nextPaneMode, PANE_MODES, panesMode, resizeByKey, sidePanel, WIDTH_LIMITS,
   type Mode, type PaneMode,
 } from '../elements/workspace/layout';
-
-type DialogState =
-  | { kind: 'new-file' | 'new-folder'; dir: string }
-  | { kind: 'rename' | 'delete'; node: TreeNode }
-  | null;
 
 interface Props {
   workspace: Workspace;
@@ -268,30 +266,22 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
       const shortcut = shortcutFor(event);
       if (!shortcut) return;
       // Con le impostazioni aperte restano solo i salvataggi (altrimenti Ctrl+S apre "Salva pagina").
-      if (settingsOpen && shortcut !== 'save' && shortcut !== 'saveAll') return;
+      if (settingsOpen && !allowedInSettings(shortcut)) return;
       event.preventDefault();
-      switch (shortcut) {
-        case 'save':
-          void workspace.saveNow();
-          break;
-        case 'saveAll':
-          void workspace.saveAll();
-          break;
-        case 'search':
+      match(shortcut)
+        .with('save', () => void workspace.saveNow())
+        .with('saveAll', () => void workspace.saveAll())
+        .with('search', () => {
           if (shownMode === 'ai') changeMode(lastPane.current);
           setSidebar(true);
           requestAnimationFrame(() => searchRef.current?.focus());
-          break;
-        case 'toggleAi':
+        })
+        .with('toggleAi', () => {
           if (ai) changeMode(shownMode === 'ai' ? lastPane.current : 'ai');
-          break;
-        case 'toggleSidebar':
-          setSidebar(!sidebarOpen);
-          break;
-        case 'cycleMode':
-          changeMode(nextPaneMode(shownMode));
-          break;
-      }
+        })
+        .with('toggleSidebar', () => setSidebar(!sidebarOpen))
+        .with('cycleMode', () => changeMode(nextPaneMode(shownMode)))
+        .exhaustive();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -330,24 +320,18 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
     writePref(panel === 'ai' ? 'aiSidebarWidth' : 'sidebarWidth', next);
   };
 
-  const onTreeAction = (action: TreeAction, node: TreeNode | null) => {
-    if (action === 'history') {
-      if (node) {
+  const onTreeAction = (action: TreeAction, node: TreeNode | null) =>
+    match(dialogFor(action, node))
+      .with({ kind: 'history' }, ({ path }) => {
         // La cronologia si apre solo se il file richiesto è davvero quello aperto: l'apertura può
         // fallire o essere scavalcata da un'altra, e il pannello mostrerebbe il documento sbagliato.
-        void openFile(node.path).then(() => {
-          if (workspace.getState().doc?.path === node.path) setHistoryOpen(true);
+        void openFile(path).then(() => {
+          if (workspace.getState().doc?.path === path) setHistoryOpen(true);
         });
-      }
-      return;
-    }
-    if (action === 'new-file' || action === 'new-folder') {
-      const dir = node ? (node.kind === 'directory' ? node.path : dirname(node.path)) : '';
-      setDialog({ kind: action, dir });
-    } else if (node) {
-      setDialog({ kind: action, node });
-    }
-  };
+      })
+      .with({ kind: 'dialog' }, ({ dialog }) => setDialog(dialog))
+      .with({ kind: 'none' }, () => {})
+      .exhaustive();
 
   const exists = (path: string) => state.entries.some((e) => e.path.toLowerCase() === path.toLowerCase());
   const taken = t('name.error.taken');

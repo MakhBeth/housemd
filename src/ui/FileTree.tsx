@@ -4,11 +4,12 @@ import { useT } from '../i18n/I18nProvider';
 import { isImage } from '../lib/paths';
 import { Icon } from './Icon';
 import { revealPath, toggleExpanded, type Expanded } from '../elements/file-tree/treeState';
+import type { TreeAction } from '../elements/workspace/dialogFor';
 import type { TreeNode } from './tree';
 import { tabStop, treeKey, visibleItems } from './treeNav';
 import styles from './FileTree.module.css';
 
-export type TreeAction = 'new-file' | 'new-folder' | 'rename' | 'delete' | 'history';
+export type { TreeAction };
 
 interface Props {
   nodes: TreeNode[];
