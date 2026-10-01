@@ -188,7 +188,11 @@ export const test = base.extend<{ flags: Partial<HarnessFlags>; appLocale: E2ELo
     }, appLocale);
     // Con modifiche non salvate l'app chiede conferma prima di uscire: nei test si accetta sempre.
     page.on('dialog', (dialog) => void (dialog.type() === 'beforeunload' ? dialog.accept() : dialog.dismiss()));
+    // Come il vecchio collaudo CDP: qualsiasi eccezione non gestita nella pagina fa fallire il test.
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
     await use(new App(page, appLocale));
+    expect(errors, 'eccezioni non gestite nella pagina').toEqual([]);
   },
 });
 

@@ -22,9 +22,17 @@ salvataggio automatico, ricerca, `[[wikilink]]`. Nessun server: i file restano s
 npm install
 npm run dev      # server di sviluppo
 npm test         # test (tsx --test)
+npm run test:e2e # test end-to-end (Playwright, Chromium); la prima volta: npx playwright install chromium
 npm run lint     # typecheck
 npm run build    # build di produzione in dist/
 ```
+
+I test end-to-end usano una cartella finta nell'Origin Private File System al posto del selettore
+di cartelle (`e2e/support/fsHarness.ts`) e un modello finto al posto di Ollama
+(`e2e/support/aiHarness.ts`): nessun account né API a pagamento. Ogni test gira in un profilo
+temporaneo su disco; i worker sono 2 di default (`E2E_WORKERS=n` per cambiarli). Gli snapshot in
+`e2e/__screenshots__/` sono il riferimento visivo: si rigenerano (`--update-snapshots=all`) solo per
+un cambiamento voluto e approvato.
 
 ## Configurazione per cartella
 
@@ -177,9 +185,9 @@ manualmente un backup sopra il file non equivale a un ripristino.
 
 ### Verifiche AI
 
-`npm test`, `npm run lint`, `npm run build`; `npm run test:browser` richiede Chromium (`CHROMIUM_BIN` per un
-percorso diverso). Il collaudo browser usa un profilo temporaneo, filesystem in memoria e risposte simulate:
-verifica revisione, accettazione anche ripetuta e per blocchi sulla selezione, undo attraverso le viste, snapshot
-e assenza di richieste per immagini ostili
-prima del consenso. Non usa account o API a pagamento. Restano da verificare con servizi reali CORS dall'origine
-pubblicata, autenticazione CLI/API, permessi FSA su due profili Chrome e PWA offline con il server locale.
+`npm test`, `npm run lint`, `npm run build`, `npm run test:e2e`. Le spec AI (`e2e/ai-review.spec.ts`)
+usano un profilo temporaneo, una cartella finta e risposte simulate: verificano revisione,
+accettazione anche ripetuta e per blocchi sulla selezione, undo attraverso le viste, snapshot e
+assenza di richieste per immagini ostili prima del consenso. Non usano account o API a pagamento.
+Restano da verificare con servizi reali CORS dall'origine pubblicata, autenticazione CLI/API,
+permessi FSA su due profili Chrome e PWA offline con il server locale.

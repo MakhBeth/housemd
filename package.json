@@ -12,7 +12,6 @@
     "lint": "tsc --noEmit && tsc --noEmit -p e2e",
     "test": "tsx --test",
     "bridge": "node bridge/claude-bridge.mjs",
-    "test:browser": "node tests/browser/run-ai-smoke.mjs",
     "test:e2e": "playwright test -c e2e/playwright.config.ts"
   },
   "dependencies": {
