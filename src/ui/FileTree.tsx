@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState, type MouseEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
 
 import { useT } from '../i18n/I18nProvider';
 import { isImage } from '../lib/paths';
 import { Icon } from './Icon';
 import { ancestorsOf, type TreeNode } from './tree';
+import { tabStop, treeKey, visibleItems } from './treeNav';
 import styles from './FileTree.module.css';
 
 export type TreeAction = 'new-file' | 'new-folder' | 'rename' | 'delete' | 'history';
@@ -27,6 +28,24 @@ export function FileTree({ nodes, openPath, drafts, onOpen, onAction }: Props) {
   const [menuNode, setMenuNode] = useState<TreeNode | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const anchorRef = useRef<HTMLElement | null>(null);
+  // Un solo tab stop nell'albero (roving tabindex): le frecce spostano il focus tra le righe.
+  const [focused, setFocused] = useState<string | null>(null);
+  const items = useMemo(() => visibleItems(nodes, expanded), [nodes, expanded]);
+  const stop = tabStop(items, focused, openPath);
+  const rows = useRef(new Map<string, HTMLElement>());
+  const byPath = useMemo(() => {
+    const map = new Map<string, TreeNode>();
+    const walk = (list: TreeNode[]) => list.forEach((n) => { map.set(n.path, n); walk(n.children); });
+    walk(nodes);
+    return map;
+  }, [nodes]);
+  const rowProps = (path: string) => ({
+    'data-tree-item': path,
+    'aria-keyshortcuts': 'Shift+F10',
+    tabIndex: stop === path ? 0 : -1,
+    onFocus: () => setFocused(path),
+    ref: (el: HTMLElement | null) => { if (el) rows.current.set(path, el); else rows.current.delete(path); },
+  });
 
   useEffect(() => {
     if (!openPath) return;
@@ -59,6 +78,34 @@ export function FileTree({ nodes, openPath, drafts, onOpen, onAction }: Props) {
     openMenu(node, trigger);
   };
 
+  const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    const current = (event.target as HTMLElement).dataset.treeItem;
+    if (current === undefined) return; // focus nel menu o altrove: tasti normali
+    const move = treeKey(items, current, event);
+    if (!move) return;
+    event.preventDefault();
+    if ('focus' in move) rows.current.get(move.focus)?.focus();
+    else if ('expand' in move) toggle(move.expand, true);
+    else if ('collapse' in move) toggle(move.collapse, false);
+    else {
+      const node = byPath.get(move.menu);
+      const trigger = rows.current.get(move.menu)?.closest('li')?.querySelector<HTMLElement>('[data-menu-trigger]');
+      if (node && trigger) openMenu(node, trigger);
+    }
+  };
+
+  // Chiuso il menu (Esc, clic fuori) col focus perso, torna sulla riga da cui era partito.
+  useEffect(() => {
+    const menu = menuRef.current!;
+    const onToggle = (event: Event) => {
+      if ((event as ToggleEvent).newState !== 'closed' || !menuNode) return;
+      const lost = document.activeElement === document.body || menu.contains(document.activeElement);
+      if (lost) rows.current.get(menuNode.path)?.focus();
+    };
+    menu.addEventListener('toggle', onToggle);
+    return () => menu.removeEventListener('toggle', onToggle);
+  }, [menuNode]);
+
   const act = (action: TreeAction) => {
     menuRef.current?.hidePopover();
     onAction(action, menuNode);
@@ -67,6 +114,7 @@ export function FileTree({ nodes, openPath, drafts, onOpen, onAction }: Props) {
   const menuButton = (node: TreeNode) => (
     <button
       data-menu-trigger
+      tabIndex={-1}
       className={`${styles.menuButton} tooltip`}
       aria-label={t('tree.actions', { name: node.name })}
       data-tooltip={t('tree.actions', { name: node.name })}
@@ -86,7 +134,7 @@ export function FileTree({ nodes, openPath, drafts, onOpen, onAction }: Props) {
         <li key={node.path}>
           {node.kind === 'directory' ? (
             <details open={expanded.has(node.path)} onToggle={(e) => toggle(node.path, e.currentTarget.open)}>
-              <summary className={styles.row} onContextMenu={onContextMenu(node)}>
+              <summary className={styles.row} onContextMenu={onContextMenu(node)} {...rowProps(node.path)}>
                 <Icon name={expanded.has(node.path) ? 'folderOpen' : 'folderClosed'} size={16} />
                 <Icon name="folder" size={16} />
                 <span className={styles.name}>{node.name}</span>
@@ -104,6 +152,7 @@ export function FileTree({ nodes, openPath, drafts, onOpen, onAction }: Props) {
             <div className={styles.row} data-active={node.path === openPath} onContextMenu={onContextMenu(node)}>
               <button
                 className={styles.file}
+                {...rowProps(node.path)}
                 aria-current={node.path === openPath ? 'page' : undefined}
                 onClick={() => onOpen(node.path)}
               >
@@ -124,7 +173,7 @@ export function FileTree({ nodes, openPath, drafts, onOpen, onAction }: Props) {
   );
 
   return (
-    <nav className={styles.tree} aria-label={t('tree.label')}>
+    <nav className={styles.tree} aria-label={t('tree.label')} onKeyDown={onKeyDown}>
       {nodes.length > 0 ? renderNodes(nodes) : <p className={styles.emptyDir}>{t('tree.noFiles')}</p>}
       <div ref={menuRef} {...autoPopover} className={styles.menu}>
         {menuNode?.kind === 'directory' && (

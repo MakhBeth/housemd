@@ -180,6 +180,23 @@ try{
  await press('Preview');await sleep(150);
  assert.equal(await evaluate("(()=>{const p=document.querySelector('[class*=prose]');return Math.abs(p.getBoundingClientRect().width-p.parentElement.clientWidth)<2;})()"),true,'Anteprima senza limite: occupa tutto il pannello');
  await send('Emulation.clearDeviceMetricsOverride');await press('AI');
+ // Albero dei file: un solo tab stop; frecce, destra/sinistra sulle cartelle, Shift+F10 per il menu.
+ const key=async(k,code,vk,modifiers=0)=>{for(const type of ['rawKeyDown','keyUp'])await send('Input.dispatchKeyEvent',{type,key:k,code,windowsVirtualKeyCode:vk,modifiers});await sleep(120);};
+ const focusedItem="document.activeElement?.dataset?.treeItem??null";
+ await press('Editor');await until("!!document.querySelector('[data-tree-item]')");
+ assert.deepEqual(await evaluate("[...document.querySelectorAll('[data-tree-item]')].filter(e=>e.tabIndex===0).map(e=>e.dataset.treeItem)"),['a.md'],'Tab stop sul file aperto');
+ assert.equal(await evaluate("document.querySelectorAll('[data-menu-trigger][tabindex=\"0\"], [data-menu-trigger]:not([tabindex])').length"),0,'I pulsanti ⋯ non sono tab stop');
+ await evaluate("document.querySelector('[data-tree-item=\"a.md\"]').focus()");
+ await key('Home','Home',36);assert.equal(await evaluate(focusedItem),'docs');
+ await key('ArrowRight','ArrowRight',39);await key('ArrowRight','ArrowRight',39);assert.equal(await evaluate(focusedItem),'docs/b.md','Destra apre la cartella, poi entra');
+ await key('ArrowDown','ArrowDown',40);assert.equal(await evaluate(focusedItem),'a.md');
+ await key('End','End',35);assert.equal(await evaluate(focusedItem),'z.md');
+ assert.equal(await evaluate("getComputedStyle(document.activeElement).boxShadow.split('rgb').length-1"),3,'Focus ring oreo a tre fasce');
+ if(process.env.HOUSEMD_SCREENSHOT){const shot=await send('Page.captureScreenshot',{format:'png'});(await import('node:fs')).writeFileSync(process.env.HOUSEMD_SCREENSHOT.replace('.png','-tree.png'),Buffer.from(shot.result.data,'base64'));}
+ await key('F10','F10',121,8);await until("document.querySelector('[popover]:popover-open')?.contains(document.activeElement)");
+ await key('Escape','Escape',27);await until(`${focusedItem}==='z.md'`);
+ await evaluate("document.querySelector('[data-tree-item=\"docs/b.md\"]').focus()");await key('ArrowLeft','ArrowLeft',37);assert.equal(await evaluate(focusedItem),'docs');
+ await key('ArrowLeft','ArrowLeft',37);assert.equal(await evaluate("document.querySelector('[data-tree-item=\"docs/b.md\"]')?.checkVisibility()??false"),false,'Sinistra chiude la cartella');
  assert.deepEqual(errors,[],'Nessuna eccezione runtime');
- console.log('Chromium AI smoke: modalità AI, composer con Invio, proposta, accept-all, blocco, AI→Editor undo, before-ai, chip selezione e accettazione ripetuta e per blocchi, rendering sicuro senza risorse remote, ripristino cronologia, chip dopo selezione in Editor, barra di formattazione e Ctrl+B, impostazioni con focus e conferma su Indietro/Chiudi, larghezza del testo, titolo della scheda e tooltip disegnati: OK');
+ console.log('Chromium AI smoke: modalità AI, composer con Invio, proposta, accept-all, blocco, AI→Editor undo, before-ai, chip selezione e accettazione ripetuta e per blocchi, rendering sicuro senza risorse remote, ripristino cronologia, chip dopo selezione in Editor, barra di formattazione e Ctrl+B, impostazioni con focus e conferma su Indietro/Chiudi, larghezza del testo, albero dei file con un solo tab stop e focus ring oreo: OK');
 }finally{socket?.close();chrome.kill();vite.kill();await Promise.all([new Promise(r=>chrome.exitCode!==null?r():chrome.once('exit',r)),new Promise(r=>vite.exitCode!==null?r():vite.once('exit',r))]);await rm(profile,{recursive:true,force:true,maxRetries:3});}
