@@ -13,6 +13,9 @@
   --c-warning-bg: light-dark(#fef3c7, #422006);
   --c-highlight: light-dark(#fde68a, #854d0e);
   --c-code-bg: light-dark(#f4f2ee, #25252c);
+  /* Focus ring "oreo": scuro-chiaro-scuro, una delle fasce contrasta con qualsiasi sfondo. */
+  --c-focus-dark: #101014;
+  --c-focus-light: #ffffff;
 
   --font-ui: 'Space Grotesk', system-ui, sans-serif;
   --font-prose: 'Space Grotesk', system-ui, sans-serif;
@@ -48,9 +51,25 @@ button {
   color: inherit;
 }
 
+/*
+ * Focus ring "oreo": tre fasce di 2px (scuro, chiaro, scuro) disegnate con box-shadow, che segue i
+ * bordi arrotondati. Il contorno trasparente sopra la fascia centrale serve in forced-colors (Windows
+ * ad alto contrasto), dove le ombre spariscono e il contorno prende il colore di sistema.
+ */
 :focus-visible {
-  outline: 2px solid var(--c-accent);
+  outline: 2px solid transparent;
   outline-offset: 2px;
+  box-shadow:
+    0 0 0 2px var(--c-focus-dark),
+    0 0 0 4px var(--c-focus-light),
+    0 0 0 6px var(--c-focus-dark);
+}
+
+/* Esplicito, senza contare sulla sostituzione del colore trasparente da parte del browser. */
+@media (forced-colors: active) {
+  :focus-visible {
+    outline-color: Highlight;
+  }
 }
 
 ::highlight(housemd-search) {
