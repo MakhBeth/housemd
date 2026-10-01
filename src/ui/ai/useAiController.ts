@@ -12,7 +12,7 @@ export function useAiController(workspace:Workspace):AiController|null{
   let alive=true,controller:AiController|null=null,unregister:(()=>void)|undefined;
   const binding:AiWorkspace={getDoc:()=>{const s=workspace.getState();return s.doc?{path:s.doc.path,textLf:s.doc.text,conflict:s.doc.conflict,updating:s.updating}:null;},snapshotBeforeAi:()=>workspace.snapshotBeforeAi(),openFile:path=>workspace.openFile(path)};
   void(async()=>{
-   try{controller=new AiController(await createIdbAiStores(),binding);await controller.initialize(readPref('aiProfile',''));}
+   try{controller=new AiController(await createIdbAiStores(),binding);await controller.initialize(readPref('aiProfile'));}
    catch{controller?.dispose();controller=new AiController(createMemoryAiStores(),binding);await controller.initialize();controller.report({code:'server'});}
    if(!alive){controller.dispose();return;}unregister=registerUpdateParticipant(controller);setAi(controller);
   })();

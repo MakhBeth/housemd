@@ -1,4 +1,10 @@
+import * as z from 'zod/mini';
+
 import { normalizePath } from '../lib/paths';
+
+/** Valori ammessi nei campi di `.housemd.json`; percorsi normalizzati dopo la validazione. */
+const SAVE_TO = z.string();
+const LINK_PREFIX = z.string().check(z.startsWith('/'));
 
 export const CONFIG_FILE = '.housemd.json';
 
@@ -28,17 +34,16 @@ export function parseConfig(text: string | null): { config: HouseConfig; problem
 
   let saveTo = DEFAULT_CONFIG.images.saveTo;
   if (images.saveTo !== undefined) {
-    if (typeof images.saveTo === 'string' && normalizePath(images.saveTo) !== '') saveTo = normalizePath(images.saveTo);
+    const parsed = SAVE_TO.safeParse(images.saveTo);
+    if (parsed.success && normalizePath(parsed.data) !== '') saveTo = normalizePath(parsed.data);
     else problems.push({ code: 'invalidSaveTo' });
   }
 
   let linkPrefix = DEFAULT_CONFIG.images.linkPrefix;
   if (images.linkPrefix !== undefined && images.linkPrefix !== null) {
-    if (typeof images.linkPrefix === 'string' && images.linkPrefix.startsWith('/')) {
-      linkPrefix = `/${normalizePath(images.linkPrefix)}`;
-    } else {
-      problems.push({ code: 'invalidLinkPrefix' });
-    }
+    const parsed = LINK_PREFIX.safeParse(images.linkPrefix);
+    if (parsed.success) linkPrefix = `/${normalizePath(parsed.data)}`;
+    else problems.push({ code: 'invalidLinkPrefix' });
   }
 
   return { config: { images: { saveTo, linkPrefix } }, problems };

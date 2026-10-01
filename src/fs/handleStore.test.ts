@@ -75,3 +75,46 @@ test('[codex F8] a database from before the known list still finds the current f
   conn.close();
   assert.equal(await findKnownWorkspaceId(picked('vecchia'), db), 'id-vecchio');
 });
+
+test('a corrupt current record means no saved folder', async () => {
+  const dbName = 'hs-corrupt-1';
+  const db = await openDb(dbName);
+  const tx = db.transaction('workspace', 'readwrite');
+  tx.objectStore('workspace').put({ handle: null, workspaceId: '' }, 'current');
+  await transactionDone(tx);
+  db.close();
+  assert.equal(await loadWorkspace(dbName), null);
+});
+
+test('corrupt entries in the known list are skipped, valid ones still match', async () => {
+  const dbName = 'hs-corrupt-2';
+  const a = await saveWorkspace({ name: 'a' }, dbName);
+  const db = await openDb(dbName);
+  const tx = db.transaction('workspace', 'readwrite');
+  const store = tx.objectStore('workspace');
+  store.put(['garbage', { handle: { name: 'x' } }, { handle: { name: 'a' }, workspaceId: a.workspaceId }], 'known');
+  await transactionDone(tx);
+  db.close();
+  assert.equal(await findKnownWorkspaceId(picked('a'), dbName), a.workspaceId);
+  // Il salvataggio successivo riscrive la lista senza le voci illeggibili.
+  await saveWorkspace({ name: 'b' }, dbName);
+  assert.equal(await findKnownWorkspaceId(picked('a'), dbName), a.workspaceId);
+});
+
+test('saving another folder keeps fields this version does not know in the known list', async () => {
+  const dbName = 'hs-unknown-fields';
+  const db = await openDb(dbName);
+  const tx = db.transaction('workspace', 'readwrite');
+  tx.objectStore('workspace').put([{ handle: { name: 'a' }, workspaceId: 'id-a', color: 'blue' }], 'known');
+  await transactionDone(tx);
+  db.close();
+  await saveWorkspace({ name: 'b' }, dbName);
+  const db2 = await openDb(dbName);
+  const known = await new Promise<unknown>((resolve, reject) => {
+    const req = db2.transaction('workspace').objectStore('workspace').get('known');
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+  db2.close();
+  assert.equal((known as Array<{ workspaceId: string; color?: string }>).find((k) => k.workspaceId === 'id-a')?.color, 'blue');
+});

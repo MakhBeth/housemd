@@ -4,6 +4,7 @@ import { parseSseJson } from '../sse';
 import { AiError, mapError } from '../errors';
 import { filterParams } from '../capabilities';
 import { checkResponse, headers, stopReason, type ProviderDeps } from './shared';
+import { ollamaModels, openaiModels, tokens } from './shapes';
 export function openaiCompatible(profile: ModelProfile, secret?: StoredSecret | null, deps: ProviderDeps = {}): ChatProvider {
   const fetcher = deps.fetch ?? fetch;
   return {
@@ -21,7 +22,7 @@ export function openaiCompatible(profile: ModelProfile, secret?: StoredSecret | 
           if (choice?.delta?.content != null && typeof choice.delta.content !== 'string') throw new AiError('badStream');
           if (choice?.delta?.content) yield { type: 'text', text: choice.delta.content };
           if (choice?.delta?.reasoning_content) yield { type: 'thinking' };
-          if (value.usage) yield { type: 'usage', inputTokens: value.usage.prompt_tokens, outputTokens: value.usage.completion_tokens };
+          if (value.usage) yield { type: 'usage', inputTokens: tokens(value.usage.prompt_tokens), outputTokens: tokens(value.usage.completion_tokens) };
           if (choice?.finish_reason) finish = { type: 'done', stop: stopReason(choice.finish_reason) };
         }
         if (!finish) throw new AiError('badStream'); yield finish;
@@ -34,9 +35,8 @@ export function openaiCompatible(profile: ModelProfile, secret?: StoredSecret | 
         let response = await fetcher(base + path, { signal, headers: auth, redirect: 'error' });
         if (profile.kind === 'lmstudio' && response.status === 404) response = await fetcher(base + '/v1/models', { signal, headers: headers(profile, secret), redirect: 'error' });
         await checkResponse(response, profile, secret);
-        const value = await response.json() as { models?: { name: string }[]; data?: { id: string; max_context_length?: number; state?: string; type?: string }[] };
-        if (profile.kind === 'ollama') return (value.models ?? []).map(m => ({ value: m.name, label: m.name }));
-        return (value.data ?? []).filter(m => m.type !== 'embeddings' && m.type !== 'embedding').map(m => ({ value: m.id, label: m.id + (m.state === 'loaded' ? ' ●' : ''), contextTokens: m.max_context_length }));
+        const value: unknown = await response.json();
+        return profile.kind === 'ollama' ? ollamaModels(value) : openaiModels(value);
       } catch (error) { const mapped = mapError(error, profile.kind, secret ? [secret.value] : []); if (mapped.code === 'unreachable') return null; throw mapped; }
     },
   };

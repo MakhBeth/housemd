@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { match } from 'ts-pattern';
 
 import { hasAccess, isSupported, pickFolder, requestAccess, unsupportedReason } from './fs/access';
 import { fsaOps } from './fs/fsaOps';
 import { findKnownWorkspaceId, loadWorkspace, saveWorkspace, type StoredWorkspace } from './fs/handleStore';
 import { createWorkspaceFS } from './fs/workspaceFS';
 import { switchFolder, switchGuard } from './app/switchFolder';
+import { afterSwitch, type Screen as AppScreen } from './elements/app/screens';
 import { useT } from './i18n/I18nProvider';
 import { onDbBlocked } from './lib/db';
 import { readValidPref } from './lib/prefs';
@@ -19,12 +21,7 @@ import { indexedDbBufferStore } from './workspace/buffers';
 import { parseAutosave } from './workspace/autosave';
 import { Workspace } from './workspace/workspace';
 
-type Screen =
-  | { kind: 'boot' }
-  | { kind: 'unsupported' }
-  | { kind: 'start'; error?: string }
-  | { kind: 'resume'; stored: StoredWorkspace }
-  | { kind: 'open'; stored: StoredWorkspace; workspace: Workspace };
+type Screen = AppScreen<StoredWorkspace, Workspace>;
 
 const buffers = indexedDbBufferStore();
 const history = indexedDbHistoryStore();
@@ -121,20 +118,14 @@ export default function App({ updates }: { updates: UpdateFlow }) {
       // messe al sicuro): si resta lì e quella nuova, già caricata, si butta.
       discard: ({ workspace }) => workspace.dispose(),
     });
-    switch (result.kind) {
-      case 'opened':
-        setOpenCount((c) => c + 1);
-        setScreen({ kind: 'open', ...result.value });
-        break;
-      case 'error':
-        // Con una cartella aperta si resta lì e l'errore compare come toast; dall'avvio, come prima.
-        if (current) current.reportFolderError(result.detail);
-        else setScreen({ kind: 'start', error: result.detail });
-        break;
-      case 'cancelled':
-      case 'blocked':
-        break;
-    }
+    match(afterSwitch(result, current !== null))
+      .with({ kind: 'show' }, ({ screen: next }) => {
+        if (next.kind === 'open') setOpenCount((c) => c + 1);
+        setScreen(next);
+      })
+      .with({ kind: 'reportError' }, ({ detail }) => current?.reportFolderError(detail))
+      .with({ kind: 'stay' }, () => {})
+      .exhaustive();
   }), [screen, exclusive]);
 
   const resume = useCallback(() => exclusive(async () => {
@@ -145,32 +136,24 @@ export default function App({ updates }: { updates: UpdateFlow }) {
     setScreen({ kind: 'open', stored: screen.stored, workspace });
   }), [screen, exclusive]);
 
-  let content: ReactNode = null;
-  switch (screen.kind) {
-    case 'boot':
-      break;
-    case 'unsupported':
-      content = <StartScreen mode="unsupported" reason={unsupportedReason(navigator.userAgent)} />;
-      break;
-    case 'start':
-      content = <StartScreen mode="start" error={screen.error} onPick={choose} busy={switching} />;
-      break;
-    case 'resume':
-      content = <StartScreen mode="resume" folderName={screen.stored.handle.name} onResume={resume} onPick={choose} busy={switching} />;
-      break;
-    case 'open':
-      content = (
-        <WorkspaceView
-          key={`${screen.stored.workspaceId}:${openCount}`}
-          workspace={screen.workspace}
-          workspaceId={screen.stored.workspaceId}
-          handle={screen.stored.handle}
-          onChangeFolder={choose}
-          switchingFolder={switching}
-        />
-      );
-      break;
-  }
+  const content: ReactNode = match(screen)
+    .with({ kind: 'boot' }, () => null)
+    .with({ kind: 'unsupported' }, () => <StartScreen mode="unsupported" reason={unsupportedReason(navigator.userAgent)} />)
+    .with({ kind: 'start' }, (s) => <StartScreen mode="start" error={s.error} onPick={choose} busy={switching} />)
+    .with({ kind: 'resume' }, (s) => (
+      <StartScreen mode="resume" folderName={s.stored.handle.name} onResume={resume} onPick={choose} busy={switching} />
+    ))
+    .with({ kind: 'open' }, (s) => (
+      <WorkspaceView
+        key={`${s.stored.workspaceId}:${openCount}`}
+        workspace={s.workspace}
+        workspaceId={s.stored.workspaceId}
+        handle={s.stored.handle}
+        onChangeFolder={choose}
+        switchingFolder={switching}
+      />
+    ))
+    .exhaustive();
 
   return (
     <>

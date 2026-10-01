@@ -3,11 +3,13 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { useT } from '../i18n/I18nProvider';
 import { isImage } from '../lib/paths';
 import { Icon } from './Icon';
-import { ancestorsOf, type TreeNode } from './tree';
+import { revealPath, toggleExpanded, type Expanded } from '../elements/file-tree/treeState';
+import type { TreeAction } from '../elements/workspace/dialogFor';
+import type { TreeNode } from './tree';
 import { tabStop, treeKey, visibleItems } from './treeNav';
 import styles from './FileTree.module.css';
 
-export type TreeAction = 'new-file' | 'new-folder' | 'rename' | 'delete' | 'history';
+export type { TreeAction };
 
 interface Props {
   nodes: TreeNode[];
@@ -24,7 +26,7 @@ const ANCHOR = '--housemd-tree-menu';
 
 export function FileTree({ nodes, openPath, drafts, onOpen, onAction }: Props) {
   const t = useT();
-  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const [expanded, setExpanded] = useState<Expanded>(() => new Set());
   const [menuNode, setMenuNode] = useState<TreeNode | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const anchorRef = useRef<HTMLElement | null>(null);
@@ -49,17 +51,10 @@ export function FileTree({ nodes, openPath, drafts, onOpen, onAction }: Props) {
 
   useEffect(() => {
     if (!openPath) return;
-    setExpanded((prev) => new Set([...prev, ...ancestorsOf(openPath)]));
+    setExpanded((prev) => revealPath(prev, openPath));
   }, [openPath]);
 
-  const toggle = (path: string, open: boolean) =>
-    setExpanded((prev) => {
-      if (prev.has(path) === open) return prev;
-      const next = new Set(prev);
-      if (open) next.add(path);
-      else next.delete(path);
-      return next;
-    });
+  const toggle = (path: string, open: boolean) => setExpanded((prev) => toggleExpanded(prev, path, open));
 
   const openMenu = (node: TreeNode, trigger: HTMLElement) => {
     anchorRef.current?.style.removeProperty('anchor-name');

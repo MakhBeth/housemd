@@ -61,3 +61,20 @@ test('indexedDB: a legacy plain-string buffer (formato precedente) is read as { 
   const store = indexedDbBufferStore(dbName);
   assert.deepEqual(await store.load('ws-1', 'a.md'), { text: 'bozza legacy', base: 'bozza legacy' });
 });
+
+test('indexedDB: a corrupt buffer record loads as null instead of throwing', async () => {
+  const dbName = `buffers-corrupt-${++dbCount}`;
+  const store = indexedDbBufferStore(dbName);
+  await store.save('ws', 'ok.md', 'text', 'base');
+  const db = await openDb(dbName);
+  const tx = db.transaction('buffers', 'readwrite');
+  tx.objectStore('buffers').put({ text: 42 }, 'ws\u0000bad.md');
+  tx.objectStore('buffers').put(null, 'ws\u0000null.md');
+  await transactionDone(tx);
+  db.close();
+  assert.equal(await store.load('ws', 'bad.md'), null);
+  assert.equal(await store.load('ws', 'null.md'), null);
+  assert.deepEqual(await store.load('ws', 'ok.md'), { text: 'text', base: 'base' });
+  // Comportamento attuale: il percorso resta nell'elenco (le bozze orfane lo mostrano, il caricamento dà null).
+  assert.deepEqual((await store.list('ws')).sort(), ['bad.md', 'null.md', 'ok.md']);
+});

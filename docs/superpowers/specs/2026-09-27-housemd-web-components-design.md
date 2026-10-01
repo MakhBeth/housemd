@@ -405,26 +405,34 @@ Regola: `.exhaustive()` sempre. `ts-pattern` entra nella logica pura, così i te
 
 **Regola (decisione 2):** zod valida solo dati che arrivano da **fuori dal processo**: file della
 cartella dell'utente, storage del browser (IndexedDB, `localStorage`, che possono contenere formati
-vecchi, corrotti o modificati a mano) e **risposte JSON dei provider di modelli**. **Mai** sulla
+vecchi, corrotti o modificati a mano) e i campi delle risposte dei modelli che i provider non
+controllavano. **Mai** sulla
 logica interna (stato di `Workspace` e `AiController`, store, proprietà ed eventi degli elementi,
 traduzioni).
 
 Si usa **`zod/mini`**. Criterio: la crescita del bundle principale gzip, misurata con `vite build`
-prima e dopo, va annotata nel commit che introduce zod; oltre 8 KB si rivaluta. Gli schemi dei
-provider vanno nel chunk dei provider, non nel bundle principale.
+prima e dopo, va annotata nel commit che introduce zod; oltre 8 KB si rivaluta. Misura della fase 1:
+bundle principale 400 915 → 410 146 B gzip (+9 231 B in tutto, moduli nuovi compresi); da soli zod/mini con gli schemi
+usati ≈ 6,5 KB e ts-pattern ≈ 1,8 KB. I provider sono importati staticamente (`aiController` →
+`./providers`), quindi anche i loro schemi stanno nel bundle principale: solo l'SDK di Anthropic è un
+chunk a parte.
 
 Contratto: i test esistenti di ciascun confine **non cambiano le asserzioni**. Si aggiungono solo
 casi per i dati corrotti.
 
 | Confine | Oggi | Con zod |
 |---|---|---|
-| Preferenze in `localStorage` (`theme`, `locale`, `mode`, `sidebarOpen`, `sidebarWidth`, `aiSidebarWidth`, `aiProfile`, `autosave`, `textWidth`, `lastFile:<id>`) | `readPref<T>` = `JSON.parse(raw) as T`; validazione solo per alcune chiavi | `state/prefs.schema.ts`: uno schema per chiave; `readPref(key)` tipizzato dalla mappa `PREFS`, default se `safeParse` fallisce. `parseTheme`/`parseLocale`/`parseTextWidth` restano come API. |
+| Preferenze in `localStorage` (`theme`, `locale`, `mode`, `sidebarOpen`, `sidebarWidth`, `aiSidebarWidth`, `aiProfile`, `autosave`, `textWidth`, `lastFile:<id>`) | `readPref<T>` = `JSON.parse(raw) as T`; validazione solo per alcune chiavi | `state/prefs.schema.ts`: uno schema per chiave; `readPref(key)` tipizzato dalla mappa `PREFS`, default se `safeParse` fallisce. `parseTheme`/`parseLocale`/`parseTextWidth`/`parseAutosave` restano come sono (validano già); zod copre le chiavi che non avevano controllo. `lastFile:<id>` ha `readLastFile`/`writeLastFile`. |
 | `.housemd.json` | `parseConfig` a mano | Schemi per campo con `safeParse` per campo (fallback campo per campo, stesso ordine dei `problems`). Contratto: `config.test.ts`. |
-| `housemd-sync.json` (sync AI) | `ai/sync/schema.ts`, validatori a mano che lanciano `syncInvalid` | Stessi vincoli espressi in zod (URL senza credenziali, `effort` in elenco, interi positivi…); `canonical()` resta. Contratto: `sync.test.ts`. |
+| `housemd-sync.json` (sync AI) | `ai/sync/schema.ts`, validatori a mano completi | Resta com'è: è già validato campo per campo e coperto da `sync.test.ts`; zod non aggiunge garanzie. |
 | Buffer di emergenza in IndexedDB | `normalizeStored` con `typeof` | `z.union([z.string(), z.object({ text, base })])`; record corrotto → `null`. |
 | `handleStore` (`{ handle, workspaceId }`, lista `known`) | cast | Solo la forma del record; l'handle resta **opaco** (`z.custom` oggetto non nullo), nessun metodo della FSA nominato. Record non valido = nessuna cartella salvata. |
-| Cronologia e store AI in IndexedDB (`history`, profili, preset, `aiSecrets`) | cast | Forma dei record; record non valido scartato. Per `aiSecrets` l'errore di validazione non riporta mai il valore. |
-| Risposte JSON dei provider (handshake del bridge, elenchi modelli, risposte non in streaming, eventi SSE già parsati) | `as { … }` in `ai/providers/*` | Schemi permissivi (`z.looseObject`) sui soli campi letti; una forma inattesa diventa l'`AiError` di oggi. Il testo generato resta stringa non fidata. Contratto: `providers.test.ts`. |
+| Cronologia in IndexedDB (`history`) | cast | Forma dei record; un record non valido manca dall'elenco e `get` dà `null`. |
+| Risposte dei provider: usage, elenchi modelli, delta di Anthropic | campi non controllati | `ai/providers/shapes.ts`: voci malformate scartate, token non numerici `undefined`, testo non stringa `badStream`. I campi già controllati a mano (testo OpenAI, bridge, fine) restano così; gli esiti visibili non cambiano. Contratto: `providers.test.ts`. |
+
+Store AI in IndexedDB (profili, preset, `aiSecrets`): **rimandati**. `ai/idbStores.ts` riscrive l'intero
+store a ogni scrittura (`clear()` + `put()`), quindi scartare in lettura un record non valido lo
+cancellerebbe. Prima serve decidere cosa fare dei record illeggibili (per esempio una quarantena).
 
 Esclusi di proposito: frontmatter → card (`toCard` è presentazione tollerante dopo il parser
 `yaml`), messaggi di traduzione, stato interno.
@@ -764,8 +772,8 @@ wikilink:
 
 ## 13. Piani di implementazione
 
-1. `docs/superpowers/plans/2026-09-27-housemd-wc-01-e2e-baseline.md`: fase 0 (da riscrivere sulla
-   base di questa revisione).
-2. Fasi 1–3 (logica pura, ts-pattern, zod, store, infrastruttura DOM/CSS, React 19).
+1. `docs/superpowers/plans/2026-09-27-housemd-wc-01-e2e-baseline.md`: fase 0 (fatta, PR #6).
+2. Un piano e una PR per fase: `docs/superpowers/plans/2026-10-01-housemd-wc-02-fase-1-logica-pura.md`
+   (fase 1); fase 2 (infrastruttura DOM/CSS) e fase 3 (React 19) da scrivere.
 3. Fasi 4–6 (elementi in convivenza).
 4. Fasi 7–8 (impostazioni, workspace, via React, rifinitura, richiesta di merge).

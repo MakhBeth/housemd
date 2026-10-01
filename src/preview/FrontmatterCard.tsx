@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-import type { Locale } from '../i18n/i18n';
+import { formatCardDate } from '../elements/preview/cardDate';
 import { useI18n } from '../i18n/I18nProvider';
 import { toCard, type Frontmatter } from './frontmatter';
 import styles from './Preview.module.css';
@@ -10,14 +10,6 @@ interface Props {
   blockedLabel?: (src: string) => string | null;
   onAllowImage?: (src: string) => void;
   resolveImage: (src: string) => Promise<string | null>;
-}
-
-function formatCardDate(value: string, locale: Locale): string {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
-  const date = new Date(`${value}T00:00:00`);
-  return Number.isNaN(date.getTime())
-    ? value
-    : date.toLocaleDateString(locale, { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
 export function FrontmatterCard({ frontmatter, resolveImage, blockedLabel, onAllowImage }: Props) {
