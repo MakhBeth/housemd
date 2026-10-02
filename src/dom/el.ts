@@ -22,7 +22,7 @@ export interface Props {
   [name: string]: unknown;
 }
 
-const FORBIDDEN = new Set(['innerHTML', 'outerHTML', 'srcdoc']);
+const FORBIDDEN = new Set(['innerhtml', 'outerhtml', 'srcdoc']);
 
 export function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -46,7 +46,7 @@ export function el<K extends keyof HTMLElementTagNameMap>(
 }
 
 function setProp(node: HTMLElement, name: string, value: unknown): void {
-  if (FORBIDDEN.has(name) || /^on/i.test(name)) throw new Error(`el(): "${name}" non è ammesso`);
+  if (FORBIDDEN.has(name.toLowerCase()) || /^on/i.test(name)) throw new Error(`el(): "${name}" non è ammesso`);
   if (value === undefined || value === null) return;
   if (name in node) {
     (node as unknown as Record<string, unknown>)[name] = value;

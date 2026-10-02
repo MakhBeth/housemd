@@ -53,7 +53,7 @@ test('listeners in `on` are attached', () => {
 });
 
 test('HTML from strings and inline handlers are refused', () => {
-  for (const props of [{ innerHTML: '<img src=x>' }, { outerHTML: '<p>' }, { srcdoc: '<p>' }, { onclick: 'go()' }, { onClick: 'go()' }]) {
+  for (const props of [{ innerHTML: '<img src=x>' }, { outerHTML: '<p>' }, { srcdoc: '<p>' }, { onclick: 'go()' }, { onClick: 'go()' }, { srcDoc: '<p>' }, { innerhtml: '<p>' }, { OUTERHTML: '<p>' }]) {
     assert.throws(() => el('div', props as unknown as Props), /non è ammesso/, JSON.stringify(props));
   }
 });
