@@ -45,10 +45,16 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
   const suppressUntil = useRef(0);
   // Ultimo ripristino applicato; quello già presente al montaggio conta come applicato.
   const appliedRestore = useRef(initialRestoreSeq(props.restore));
+  // L'EditorView distrutta aveva il focus: la prossima lo riprende. Serve solo a StrictMode (sviluppo), che
+  // distrugge e ricrea l'editor appena montato dopo che il genitore gli ha già dato il focus; in produzione
+  // la pulizia dell'effetto avviene solo allo smontaggio e il valore non viene più letto.
+  const refocus = useRef(false);
 
   useEffect(() => {
     const view = new EditorView({ parent: hostRef.current! });
     viewRef.current = view;
+    if (refocus.current) view.focus();
+    refocus.current = false;
     const onScroll = () => {
       if (performance.now() < suppressUntil.current) return;
       const height = view.scrollDOM.scrollTop;
@@ -61,6 +67,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
     return () => {
       view.scrollDOM.removeEventListener('scroll', onScroll);
       if (callbacks.current.session) saveDocSession(callbacks.current.session, view.state);
+      refocus.current = view.hasFocus;
       view.destroy();
       viewRef.current = null;
     };
