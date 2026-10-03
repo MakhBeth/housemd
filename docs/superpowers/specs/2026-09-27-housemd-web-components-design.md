@@ -3,7 +3,7 @@
 Data: 2026-09-27 · **Revisione: 2026-10-04**
 Base: `main` (HEAD `822f52d`: v1.1, strumenti AI, impostazioni a pagina, barra di formattazione,
 larghezza del testo, tooltip disegnati, albero con un solo tab stop).
-Stato: fasi 0–3 implementate (fase 0 PR #6, fase 1 PR #7, fase 2 sul branch `refactor/fase-2-infrastruttura-dom`, fase 3 sul branch `refactor/fase-3-react-19`); fasi 4–8 ancora piano.
+Stato: fasi 0–3 implementate (fase 0 PR #6, fase 1 PR #7, fase 2 in `main` (merge locale, commit 1b23305), fase 3 sul branch `refactor/fase-3-react-19`); fasi 4–8 ancora piano.
 
 Decisioni (27/09, riviste il 01/10; risposte alle domande aperte, §12):
 
@@ -510,7 +510,7 @@ Non cambia una riga dell'app.
    (ancora supportato, si lascia), doppio montaggio di StrictMode sui ref callback.
 2. Nessun cambio di comportamento: lo provano e2e e snapshot. Se un comportamento cambia, è un bug
    dell'aggiornamento, non della spec.
-3. **Fatta** (piano 4). Cambi reali: `inert` booleano (con la stringa vuota il workspace dietro le impostazioni non sarebbe più stato inerte), `popoverTarget`, `RefObject` al posto di `MutableRefObject`. Ref callback, `useRef` senza argomento e namespace `JSX` non toccavano il codice. Rete aggiunta: `npm run test:e2e:dev` (§8.4) e quattro e2e (workspace inerte, popover del chip del profilo e degli avvisi, tema con le animazioni; quello del tema conta anche le chiamate a `document.startViewTransition` e fallisce se la transizione viene saltata). Riparato un difetto che si vedeva solo con StrictMode: con StrictMode la revisione AI metteva il focus sull'editor appena montato, che StrictMode distruggeva e ricreava subito: il focus cadeva sul body e Ctrl+Z dopo «Accetta tutto» non arrivava a CodeMirror; ora `Editor` ridà il focus alla vista ricreata. Bundle principale gzip: 410 158 → 432 419 B.
+3. **Fatta** (piano 4). Cambi reali: `inert` booleano (con la stringa vuota il workspace dietro le impostazioni non sarebbe più stato inerte), `popoverTarget`, `RefObject` al posto di `MutableRefObject`. Ref callback, `useRef` senza argomento e namespace `JSX` non toccavano il codice. Rete aggiunta: `npm run test:e2e:dev` (§8.4) e quattro e2e (workspace inerte, popover del chip del profilo e degli avvisi, tema con le animazioni; quello del tema conta anche le chiamate a `document.startViewTransition` e fallisce se la transizione viene saltata). Riparato un difetto che si vedeva solo con StrictMode: la revisione AI metteva il focus sull'editor appena montato, che StrictMode distruggeva e ricreava subito: il focus cadeva sul body e Ctrl+Z dopo «Accetta tutto» non arrivava a CodeMirror; ora `Editor` ridà il focus alla vista ricreata. Bundle principale gzip: 410 158 → 432 419 B.
 
 ### Fase 4: foglie come custom element dentro React (branch)
 
@@ -566,7 +566,7 @@ Ordine: `theme-switcher`, `conflict-bar`, `notice`, `update-notice`, `toasts`, d
 ### Fase 8: rifinitura e richiesta di merge
 
 - Bundle e tempo di avvio rispetto al baseline della fase 0 (atteso: −40 KB gzip circa per
-  React/ReactDOM, + zod/mini + ts-pattern).
+  React/ReactDOM, + zod/mini + ts-pattern). Il baseline per misurare la rimozione di React è il bundle della fase 3, 432 419 B gzip con React 19; rispetto alla fase 0 (410 158 B, React 18) il guadagno netto atteso è di circa 22 KB in meno.
 - Passata di accessibilità con l'albero di accessibilità di Chrome sulle schermate principali.
 - Richiesta di approvazione del merge a Davide.
 
