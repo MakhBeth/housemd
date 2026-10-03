@@ -73,6 +73,16 @@ test.describe('with animations on', () => {
   test.use({ reducedMotion: 'no-preference' });
 
   test('the theme cycle runs through the view transition and updates the button each time', async ({ app, page }) => {
+    // Conta le chiamate a startViewTransition: senza, il test passerebbe anche con il ripiego sincrono.
+    await page.addInitScript(() => {
+      const w = window as unknown as { __viewTransitions: number };
+      w.__viewTransitions = 0;
+      const original = document.startViewTransition.bind(document);
+      document.startViewTransition = ((...args: Parameters<typeof original>) => {
+        w.__viewTransitions++;
+        return original(...args);
+      }) as typeof document.startViewTransition;
+    });
     await app.openFolder({ 'note.md': '# Note' });
     const html = page.locator('html');
     await page.getByRole('button', { name: app.t('theme.auto') }).click();
@@ -82,5 +92,8 @@ test.describe('with animations on', () => {
     await page.getByRole('button', { name: app.t('theme.dark') }).click();
     await expect(html).toHaveAttribute('data-theme', 'auto');
     await expect(page.getByRole('button', { name: app.t('theme.auto') })).toBeVisible();
+    await expect
+      .poll(() => page.evaluate(() => (window as unknown as { __viewTransitions: number }).__viewTransitions))
+      .toBe(3);
   });
 });
