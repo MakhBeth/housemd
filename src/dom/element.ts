@@ -7,6 +7,10 @@ export interface Subscribable {
  * Classe base degli elementi `hmd-*` (spec WC §5.1). Il ciclo di vita sta in un AbortController: ogni
  * listener e iscrizione registrati con il `signal` di `connect` spariscono al distacco, senza pulizia a
  * mano. Un elemento spostato nel DOM si stacca e si riattacca: riceve un `signal` nuovo.
+ * Contratto: `connect` gira a ogni connessione (anche dopo uno spostamento), quindi le sottoclassi
+ * costruiscono il DOM solo la prima volta (es. con un campo di guardia) e registrano listener e
+ * iscrizioni solo con il `signal` ricevuto. Chi sovrascrive `connectedCallback`/`disconnectedCallback`
+ * deve chiamare `super`.
  */
 export abstract class HmdElement extends HTMLElement {
   #abort: AbortController | null = null;

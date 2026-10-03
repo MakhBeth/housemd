@@ -3,7 +3,7 @@
 Data: 2026-09-27 · **Revisione: 2026-10-02**
 Base: `main` (HEAD `822f52d`: v1.1, strumenti AI, impostazioni a pagina, barra di formattazione,
 larghezza del testo, tooltip disegnati, albero con un solo tab stop).
-Stato: **solo piano**. Nessun file di implementazione è stato toccato per scrivere questo documento.
+Stato: fasi 0–2 implementate (fase 0 PR #6, fase 1 PR #7, fase 2 sul branch `refactor/fase-2-infrastruttura-dom`); fasi 3–8 ancora piano.
 
 Decisioni (27/09, riviste il 01/10; risposte alle domande aperte, §12):
 
