@@ -4,7 +4,7 @@
 
 **Goal:** Portare l'app da React 18.3 a React 19.3 senza cambi di comportamento, con una rete che copra anche la modalità di sviluppo (StrictMode), così che nella fase 4 React passi da solo proprietà ed eventi ai custom element.
 
-**Architecture:** Prima si allarga la rete, poi si aggiorna. Una suite e2e nuova (`npm run test:e2e:dev`) fa girare le stesse spec contro `vite` in sviluppo, dove React monta due volte gli effetti (StrictMode) e scrive i suoi avvisi in console; un avviso o un errore in console fa fallire il test. Si ripara il solo fallimento che quella suite trova già oggi con React 18, si aggiungono tre e2e sui punti che React 19 cambia (`inert`, `popoverTarget`, `flushSync` dentro la view transition) e solo allora si aggiornano le dipendenze e si correggono i tre punti del codice.
+**Architecture:** Prima si allarga la rete, poi si aggiorna. Una suite e2e nuova (`npm run test:e2e:dev`) fa girare le stesse spec contro `vite` in sviluppo, dove React monta due volte gli effetti (StrictMode) e scrive i suoi avvisi in console; un avviso o un errore in console fa fallire il test. Si ripara il solo fallimento che quella suite trova già oggi con React 18, si aggiungono quattro e2e sui punti che React 19 cambia (`inert`, `popoverTarget`, `flushSync` dentro la view transition) e solo allora si aggiornano le dipendenze e si correggono i tre punti del codice.
 
 **Tech Stack:** React 19.3.0, react-dom 19.3.0, @types/react 19.3.0, @types/react-dom 19.3.0, @vitejs/plugin-react 6.1.1 (invariato), TypeScript 7, Vite 8, Playwright 1.63.0, `tsx --test`.
 
@@ -32,7 +32,7 @@ Provato in worktree usa-e-getta, poi rimossi:
    - React 18: 82 passati, **1 fallito in modo stabile** (4 su 4): `ai-review.spec.ts` › "Ctrl+Z undoes a block accept, a block reject and Accept all", all'ultimo passo (Ctrl+Z dopo "Accept all" non riporta il documento). In produzione lo stesso test passa: è un difetto che si vede solo con StrictMode. Console: **nessun errore né avviso**.
    - React 19: stesso risultato (82 + lo stesso fallimento). Console: **10 errori** `Invalid DOM property 'popovertarget'. Did you mean 'popoverTarget'?` (da `ModelChip.tsx:74` e `ReviewBar.tsx:81`).
 4. Nessuna ref callback nel codice (`ref={(el) => …}`): il doppio montaggio delle ref callback di React 19 (R18) non ha punti d'appoggio oggi. Nessun `useRef()` senza argomento, nessun uso del namespace globale `JSX`, nessun `defaultProps`/`propTypes`/`findDOMNode`.
-5. Un e2e su `inert` (Task 4) passa con React 18 e fallisce togliendo `inert`; uno sul popover del chip del profilo passa e fallisce togliendo `popovertarget`; uno sul ciclo del tema con le animazioni attive passa.
+5. Un e2e su `inert` (Task 4: focus e albero di accessibilità di Chromium via CDP) passa con React 18 e fallisce togliendo `inert`; quelli sui popover del chip del profilo e degli avvisi passano (il primo fallisce togliendo `popovertarget`); uno sul ciclo del tema con le animazioni attive passa. `getByRole` e `ariaSnapshot()` di Playwright includono ancora gli elementi `inert`.
 
 ## Scostamenti dallo spec (da riportare nello spec al Task 6)
 
@@ -44,7 +44,7 @@ Provato in worktree usa-e-getta, poi rimossi:
 ## Review Focus
 
 1. **Impostazioni aperte**: il workspace dietro deve restare inerte (niente focus da tastiera, fuori dall'albero di accessibilità). React 19 lo romperebbe in silenzio con `inert=""`. Task 4, e2e in `settings.spec.ts`; Task 5 lo fa passare con React 19.
-2. **Popover aperti da `popovertarget`** (chip del profilo AI, avvisi della revisione): con React 19 il nome della prop cambia; un errore lascerebbe il pulsante senza effetto. Task 4, e2e sul chip del profilo; Task 5 passa a `popoverTarget`.
+2. **Popover aperti da `popovertarget`** (chip del profilo AI, avvisi della revisione): con React 19 il nome della prop cambia; un errore lascerebbe il pulsante senza effetto. Task 4, e2e sul chip del profilo e sul pulsante degli avvisi; Task 5 passa a `popoverTarget`.
 3. **Ciclo del tema con le animazioni attive**: `useTheme` chiama `flushSync` dentro la callback della view transition; tutta la suite usa `reducedMotion: 'reduce'` e non passa mai da lì. Task 4, e2e con `reducedMotion: 'no-preference'` (in produzione e in sviluppo, dove un avviso di React su `flushSync` farebbe fallire il test).
 4. **Doppio montaggio di StrictMode** su dialog (`NameDialog`, `ConfirmDialog`, accesso perso), editor e MergeView: oggi coperto solo a mano. Task 2 (suite in sviluppo), Task 3 (difetto già presente), Task 5 (stessa suite con React 19).
 5. **Avvisi di React in sviluppo**: React 19 segnala in console prop e attributi che React 18 lasciava passare. Task 2 rende ogni errore o avviso in console un fallimento della suite in sviluppo.
@@ -58,7 +58,7 @@ Provato in worktree usa-e-getta, poi rimossi:
 | `e2e/dev.config.ts` (nuovo) | Suite e2e contro `vite` in sviluppo (porta 5174), console senza errori né avvisi. |
 | `e2e/support/app.ts` | Opzione `failOnConsole` della fixture `app`. |
 | `package.json`, `package-lock.json` | Script `test:e2e:dev`; React 19 e tipi. |
-| `e2e/settings.spec.ts`, `e2e/ai-review.spec.ts`, `e2e/theme-i18n.spec.ts` | Tre e2e sui punti che React 19 cambia. |
+| `e2e/settings.spec.ts`, `e2e/ai-review.spec.ts`, `e2e/theme-i18n.spec.ts` | Quattro e2e sui punti che React 19 cambia. |
 | file dell'app individuati dal Task 3 | Riparazione del Ctrl+Z dopo "Accept all" con StrictMode. |
 | `src/ui/WorkspaceView.tsx`, `src/ui/ai/ModelChip.tsx`, `src/ui/ai/ReviewBar.tsx`, `src/editor/docExtensions.ts` | Le tre correzioni per React 19. |
 | spec, `README.md`, `CLAUDE.md` | Documentazione. |
@@ -261,7 +261,7 @@ Messaggio: `fix: <cosa> (Ctrl+Z dopo "Accetta tutto" con StrictMode)`, con nel c
 **Interfaces:**
 - Consumes: fixture e helper esistenti (`app.treeFile`, `app.openFolder`, `app.openFile`, `app.mode`, `app.t`). In `settings.spec.ts` il `beforeEach` apre già la cartella con `a.md` e apre il file.
 
-Tutti e tre i test passano già con React 18 (verificato il 04/10): servono a garantire che non smettano di passare con React 19.
+Tutti e quattro i test passano già con React 18 (verificato il 04/10): servono a garantire che non smettano di passare con React 19.
 
 - [ ] **Step 1: Workspace inerte a impostazioni aperte**
 
@@ -269,17 +269,28 @@ In fondo a `e2e/settings.spec.ts`:
 
 ```ts
 // React 19 tratta `inert` come booleano: la stringa vuota di React 18 diventerebbe "non inerte".
-test('with the settings open the workspace behind is inert: its controls cannot take the focus', async ({ app, page }) => {
+test('with the settings open the workspace behind is inert: no focus, out of the accessibility tree', async ({ app, page }) => {
   const file = app.treeFile('a.md');
   const takesFocus = () => file.evaluate((el: HTMLElement) => (el.focus(), document.activeElement === el));
+  // L'albero di accessibilità vero di Chromium: quello di Playwright (getByRole, ariaSnapshot) include
+  // anche i sottoalberi inerti.
+  const cdp = await page.context().newCDPSession(page);
+  const treeInAccessibilityTree = async () => {
+    const { nodes } = (await cdp.send('Accessibility.getFullAXTree')) as {
+      nodes: { ignored: boolean; role?: { value: string }; name?: { value: string } }[];
+    };
+    return nodes.some((n) => !n.ignored && n.role?.value === 'navigation' && n.name?.value === app.t('tree.label'));
+  };
   expect(await takesFocus()).toBe(true);
+  expect(await treeInAccessibilityTree()).toBe(true);
   await page.getByRole('button', { name: app.t('toolbar.settings') }).click();
   await expect(page.getByRole('region', { name: app.t('settings.title') })).toBeVisible();
   expect(await takesFocus()).toBe(false);
+  expect(await treeInAccessibilityTree()).toBe(false);
 });
 ```
 
-Nota: i localizzatori per ruolo di Playwright trovano ancora gli elementi `inert`, quindi il test verifica il comportamento (il focus), non la presenza nell'albero.
+Nota: i localizzatori per ruolo di Playwright e `ariaSnapshot()` includono ancora gli elementi `inert` (verificato il 04/10), per questo il test legge l'albero di Chromium con CDP (`Accessibility.getFullAXTree`, nodi `ignored`). Chromium è l'unico browser supportato, quindi CDP è sempre disponibile.
 
 - [ ] **Step 2: Popover del chip del profilo**
 
@@ -299,6 +310,30 @@ test('the profile chip opens its popover with the profile choice', async ({ app,
   await expect(current).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(current).toBeHidden();
+});
+```
+
+- [ ] **Step 2b: Popover degli avvisi della revisione**
+
+Un wikilink cambiato nella proposta produce l'avviso `wikilinks` (`src/ai/checks.ts`). In fondo a `e2e/ai-review.spec.ts`, dopo il test del chip:
+
+```ts
+// Anche il pulsante degli avvisi della revisione apre il suo popover con popovertarget (popoverTarget in React 19).
+test('the warnings button of the review opens its popover', async ({ app, ai, page }) => {
+  ai.reply = 'See [[Other]]';
+  await app.openFolder({ 'a.md': 'See [[Target]]' });
+  await app.openFile('a.md');
+  await expect(app.mode('mode.ai')).toBeVisible();
+  await app.mode('mode.ai').click();
+  const composer = page.getByRole('textbox', { name: app.t('ai.request') });
+  await composer.fill('fix');
+  await composer.press('Enter');
+  const warnings = page.getByRole('button', { name: app.t('ai.warningsCount', { count: 1 }) });
+  const item = page.getByRole('button', { name: app.t('ai.warning.wikilinks') });
+  await expect(warnings).toBeVisible();
+  await expect(item).toBeHidden();
+  await warnings.click();
+  await expect(item).toBeVisible();
 });
 ```
 
@@ -329,21 +364,22 @@ test.describe('with animations on', () => {
 - [ ] **Step 4: Verde con React 18, e sensibilità**
 
 ```bash
-npx playwright test -c e2e/playwright.config.ts settings.spec.ts ai-review.spec.ts theme-i18n.spec.ts -g "inert|profile chip|animations on"   # 3 passed
-npx playwright test -c e2e/dev.config.ts settings.spec.ts ai-review.spec.ts theme-i18n.spec.ts -g "inert|profile chip|animations on"        # 3 passed
+npx playwright test -c e2e/playwright.config.ts settings.spec.ts ai-review.spec.ts theme-i18n.spec.ts -g "inert|profile chip|warnings button|animations on"   # 4 passed
+npx playwright test -c e2e/dev.config.ts settings.spec.ts ai-review.spec.ts theme-i18n.spec.ts -g "inert|profile chip|warnings button|animations on"        # 4 passed
 ```
 
 Prove di sensibilità (ripristinare con `git checkout` dopo ciascuna):
-- in `src/ui/WorkspaceView.tsx:344` sostituire `settingsOpen ? '' : undefined` con `undefined`: il test `inert` deve FALLIRE (`Expected: false, Received: true`);
-- in `src/ui/ai/ModelChip.tsx:74` togliere `{...{ popovertarget: id }}`: il test del chip deve FALLIRE su `toBeVisible`.
+- in `src/ui/WorkspaceView.tsx:344` sostituire `settingsOpen ? '' : undefined` con `undefined`: il test `inert` deve FALLIRE (`Expected: false, Received: true` sul focus o sull'albero di accessibilità);
+- in `src/ui/ai/ModelChip.tsx:74` togliere `{...{ popovertarget: id }}`: il test del chip deve FALLIRE su `toBeVisible`;
+- in `src/ui/ai/ReviewBar.tsx:81` togliere `{...{ popovertarget: id }}`: il test degli avvisi deve FALLIRE su `toBeVisible`.
 
 - [ ] **Step 5: Suite complete e commit**
 
 ```bash
-npm run test:e2e        # 101 passed, nessun PNG modificato
-npm run test:e2e:dev    # 86 passed
+npm run test:e2e        # 102 passed, nessun PNG modificato
+npm run test:e2e:dev    # 87 passed
 git add e2e/settings.spec.ts e2e/ai-review.spec.ts e2e/theme-i18n.spec.ts
-git commit -m "test: e2e su workspace inerte, popover del chip del profilo e ciclo del tema con le animazioni"
+git commit -m "test: e2e su workspace inerte, popover del chip del profilo e degli avvisi, ciclo del tema con le animazioni"
 ```
 
 ---
@@ -354,7 +390,7 @@ git commit -m "test: e2e su workspace inerte, popover del chip del profilo e cic
 - Modify: `package.json`, `package-lock.json`, `src/ui/WorkspaceView.tsx:344`, `src/ui/ai/ModelChip.tsx:74`, `src/ui/ai/ReviewBar.tsx:81`, `src/editor/docExtensions.ts:11,18`
 
 **Interfaces:**
-- Consumes: `npm run test:e2e:dev` (Task 2) e i tre e2e del Task 4.
+- Consumes: `npm run test:e2e:dev` (Task 2) e i quattro e2e del Task 4.
 
 - [ ] **Step 1: Dipendenze**
 
@@ -420,8 +456,8 @@ npm run lint                                  # pulito
 npm test                                      # 602 pass (o di più, se il Task 3 ha aggiunto test)
 npm run build
 gzip -c dist/assets/index-*.js | wc -c        # atteso circa 432 000 (04/10: 432396); annotare
-npm run test:e2e                              # 101 passed, nessun PNG modificato
-npm run test:e2e:dev                          # 86 passed, nessun errore in console
+npm run test:e2e                              # 102 passed, nessun PNG modificato
+npm run test:e2e:dev                          # 87 passed, nessun errore in console
 git status --short                            # solo i file di questo task
 ```
 
@@ -445,7 +481,7 @@ git commit -m "chore: React 19 (inert booleano, popoverTarget, RefObject al post
 
 1. Intestazione: `**Revisione: 2026-10-04**`; nella riga "Stato", le fasi implementate diventano 0–3 (fase 3 sul branch `refactor/fase-3-react-19`).
 2. §1.2, primo punto: "Aggiornate nella fase 3: `react`/`react-dom` 18 → 19.3, con `@types/react*` 19.3 (fatto)."
-3. §7 fase 3, in fondo: "3. **Fatta** (piano 4). Cambi reali: `inert` booleano (con la stringa vuota il workspace dietro le impostazioni non sarebbe più stato inerte), `popoverTarget`, `RefObject` al posto di `MutableRefObject`. Ref callback, `useRef` senza argomento e namespace `JSX` non toccavano il codice. Rete aggiunta: `npm run test:e2e:dev` (§8.4) e tre e2e (workspace inerte, popover del chip del profilo, tema con le animazioni). Riparato un difetto che si vedeva solo con StrictMode: <una riga con la causa trovata al Task 3>. Bundle principale gzip: 410 158 → <numero del Task 5> B."
+3. §7 fase 3, in fondo: "3. **Fatta** (piano 4). Cambi reali: `inert` booleano (con la stringa vuota il workspace dietro le impostazioni non sarebbe più stato inerte), `popoverTarget`, `RefObject` al posto di `MutableRefObject`. Ref callback, `useRef` senza argomento e namespace `JSX` non toccavano il codice. Rete aggiunta: `npm run test:e2e:dev` (§8.4) e quattro e2e (workspace inerte, popover del chip del profilo e degli avvisi, tema con le animazioni). Riparato un difetto che si vedeva solo con StrictMode: <una riga con la causa trovata al Task 3>. Bundle principale gzip: 410 158 → <numero del Task 5> B."
 4. §8.4, paragrafo **Esecuzione**, in fondo: "**Suite in sviluppo** (`npm run test:e2e:dev`, `e2e/dev.config.ts`): le stesse spec contro `vite` in sviluppo (porta 5174), con StrictMode attivo; ogni errore o avviso in console fa fallire il test (`failOnConsole`). Restano fuori gli snapshot e il test che trattiene `assets/index-*.js`."
 5. §10, R18, mitigazione: aggiungere "suite e2e in sviluppo con la console come cancello (fase 3)".
 6. §13, punto 2: aggiungere "`docs/superpowers/plans/2026-10-04-housemd-wc-04-fase-3-react-19.md` (fase 3)"; la fase 3 non è più "da scrivere".
@@ -470,8 +506,8 @@ In `CLAUDE.md`, nella riga sui test end-to-end, dopo "Gli snapshot visivi si rig
 npm test
 npm run lint
 npm run build
-npm run test:e2e -- --repeat-each=2     # 202 passed
-npm run test:e2e:dev                    # 86 passed
+npm run test:e2e -- --repeat-each=2     # 204 passed
+npm run test:e2e:dev                    # 87 passed
 git status --short                      # vuoto dopo il commit
 ```
 
