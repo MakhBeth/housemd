@@ -45,6 +45,31 @@ test('undefined, null and false set no attribute; true sets an empty boolean att
   assert.equal(div.getAttribute('popover'), 'auto');
 });
 
+test('a boolean on a string property (popover in Chromium) is an empty attribute or nothing', () => {
+  const proto = HTMLElement.prototype;
+  Object.defineProperty(proto, 'popover', {
+    configurable: true,
+    get(this: HTMLElement) {
+      return this.getAttribute('popover');
+    },
+    set(this: HTMLElement, v: unknown) {
+      this.setAttribute('popover', String(v));
+    },
+  });
+  try {
+    assert.equal(el('div', { popover: true }).getAttribute('popover'), '');
+    assert.equal(el('div', { popover: false }).hasAttribute('popover'), false);
+    assert.equal(el('div', { popover: 'manual' }).getAttribute('popover'), 'manual');
+  } finally {
+    delete (proto as unknown as Record<string, unknown>).popover;
+  }
+});
+
+test('getter-only properties (list, form) become attributes without throwing', () => {
+  assert.equal(el('input', { list: 'suggestions' }).getAttribute('list'), 'suggestions');
+  assert.equal(el('button', { form: 'f1' }).getAttribute('form'), 'f1');
+});
+
 test('listeners in `on` are attached', () => {
   let clicks = 0;
   const button = el('button', { on: { click: () => clicks++ } });

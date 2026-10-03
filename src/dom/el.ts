@@ -18,7 +18,7 @@ export interface Props {
   innerHTML?: never;
   outerHTML?: never;
   srcdoc?: never;
-  /** Proprietà dell'elemento se esiste (`hidden`, `value`, `disabled`, `role`…), altrimenti attributo. */
+  /** Proprietà scrivibile (`value`, `disabled`, `role`…), altrimenti attributo; booleani non-proprietà: vedi `setProp`. */
   [name: string]: unknown;
 }
 
@@ -45,15 +45,35 @@ export function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
+/**
+ * Regola per le chiavi diverse da class/dataset/on (dopo il rifiuto di quelle vietate):
+ * - `undefined`/`null`: niente;
+ * - booleano e la proprietà non è booleana (o non esiste: `popover` è una stringa in Chromium): è un
+ *   attributo booleano, `true` lo scrive vuoto, `false` non scrive nulla;
+ * - proprietà esistente e scrivibile (anche con setter sul prototipo): assegnata;
+ * - altrimenti (non esiste o è di sola lettura, come `list` e `form`): attributo `String(value)`.
+ */
 function setProp(node: HTMLElement, name: string, value: unknown): void {
   if (FORBIDDEN.has(name.toLowerCase()) || /^on/i.test(name)) throw new Error(`el(): "${name}" non è ammesso`);
   if (value === undefined || value === null) return;
-  if (name in node) {
-    (node as unknown as Record<string, unknown>)[name] = value;
+  const record = node as unknown as Record<string, unknown>;
+  if (typeof value === 'boolean' && typeof record[name] !== 'boolean') {
+    if (value) node.setAttribute(name, '');
     return;
   }
-  if (value === false) return;
-  node.setAttribute(name, value === true ? '' : String(value));
+  if (isWritable(node, name)) {
+    record[name] = value;
+    return;
+  }
+  node.setAttribute(name, String(value));
+}
+
+function isWritable(node: object, name: string): boolean {
+  for (let o: object | null = node; o; o = Object.getPrototypeOf(o)) {
+    const d = Object.getOwnPropertyDescriptor(o, name);
+    if (d) return d.writable === true || d.set !== undefined;
+  }
+  return false;
 }
 
 /** Scrive il testo solo se cambia: niente mutazioni inutili. */
