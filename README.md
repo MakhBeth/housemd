@@ -23,6 +23,7 @@ npm install
 npm run dev      # server di sviluppo
 npm test         # test (tsx --test)
 npm run test:e2e # test end-to-end (Playwright, Chromium); la prima volta: npx playwright install chromium
+npm run test:e2e:audit # stili calcolati uguali a dist-baseline/ (prima: build copiata in dist-baseline/)
 npm run lint     # typecheck
 npm run build    # build di produzione in dist/
 ```
