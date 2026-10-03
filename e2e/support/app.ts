@@ -149,7 +149,7 @@ export const test = base.extend<{ flags: Partial<HarnessFlags>; appLocale: E2ELo
    * la quota quasi vuota: su disco il problema sparisce. Le opzioni di `use` vanno passate a mano.
    */
   context: async (
-    { baseURL, viewport, locale, timezoneId, reducedMotion, serviceWorkers, colorScheme, userAgent, headless, launchOptions },
+    { baseURL, viewport, locale, timezoneId, reducedMotion, forcedColors, serviceWorkers, colorScheme, userAgent, headless, launchOptions },
     use,
     testInfo,
   ) => {
@@ -162,6 +162,7 @@ export const test = base.extend<{ flags: Partial<HarnessFlags>; appLocale: E2ELo
       locale,
       timezoneId,
       reducedMotion,
+      forcedColors,
       serviceWorkers,
       colorScheme,
       userAgent,

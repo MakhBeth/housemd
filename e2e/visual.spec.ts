@@ -1,27 +1,5 @@
 import { expect, test, type App } from './support/app.ts';
-
-const NOTE = [
-  '---',
-  'title: Visual reference',
-  'tags: [alpha, beta]',
-  'date: 2026-01-15',
-  '---',
-  '# Heading',
-  '',
-  'Some *emphasis*, **strong**, `code` and a [[wikilink]].',
-  '',
-  '- one',
-  '- two',
-  '',
-  '> a quote',
-  '',
-  '```ts',
-  'const answer = 42;',
-  '```',
-].join('\n');
-
-/** Data fissa: i tempi relativi della cronologia non cambiano tra un'esecuzione e l'altra. */
-const NOW = new Date('2026-10-01T10:00:00+02:00');
+import { NOTE, NOW } from './support/notes.ts';
 
 async function shot(app: App, name: string, { keepMouse = false } = {}): Promise<void> {
   // Il mouse resta dove è stato l'ultimo clic: un tooltip sotto il puntatore renderebbe lo scatto casuale.
