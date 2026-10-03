@@ -50,6 +50,11 @@ test('the production CSS keeps native light-dark() so the theme switcher works',
   assert.doesNotMatch(appCss, /lightningcss-(light|dark)/);
 });
 
+// Spec WC §4.1: gli stili globali stanno in reset/base, i fogli degli elementi (fase 4) in components.
+test('the production CSS declares the app layers in order: reset, base, components, overrides', () => {
+  assert.deepEqual(layerOrder(appCss), LAYERS);
+});
+
 test('layerOrder reads the order of first appearance, also from the minified shape', () => {
   assert.deepEqual(layerOrder('@layer reset, base, components, overrides;'), LAYERS);
   assert.deepEqual(layerOrder('@layer reset;@layer base{.a{}}@layer components{@scope(x){}}@layer overrides;'), LAYERS);

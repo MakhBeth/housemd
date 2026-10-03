@@ -1,151 +1,161 @@
-:root {
-  color-scheme: light dark;
-
-  --c-bg: light-dark(#fbfaf7, #16161a);
-  --c-surface: light-dark(#ffffff, #1e1e24);
-  --c-sidebar: light-dark(#f3f1ec, #1a1a1f);
-  --c-border: light-dark(#e2ded5, #2e2e36);
-  --c-text: light-dark(#1f1d1a, #e7e5e0);
-  --c-muted: light-dark(#6b665c, #9a978f);
-  --c-accent: light-dark(#0f766e, #2dd4bf);
-  --c-accent-soft: light-dark(#ccfbf1, #134e4a);
-  --c-danger: light-dark(#b91c1c, #f87171);
-  --c-warning-bg: light-dark(#fef3c7, #422006);
-  --c-highlight: light-dark(#fde68a, #854d0e);
-  --c-code-bg: light-dark(#f4f2ee, #25252c);
-  /* Focus ring "oreo": scuro-chiaro-scuro, una delle fasce contrasta con qualsiasi sfondo. */
-  --c-focus-dark: #101014;
-  --c-focus-light: #ffffff;
-
-  --font-ui: 'Space Grotesk', system-ui, sans-serif;
-  --font-prose: 'Space Grotesk', system-ui, sans-serif;
-  --font-mono: 'Space Mono', ui-monospace, monospace;
-  --font-pixel: 'Pixelify Sans', var(--font-ui);
-
-  accent-color: var(--c-accent);
-  scrollbar-color: var(--c-border) transparent;
-}
-
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
-
-html,
-body,
-#root {
-  height: 100%;
-  margin: 0;
-}
-
-body {
-  background: var(--c-bg);
-  color: var(--c-text);
-  font-family: var(--font-ui);
-  font-size: 15px;
-}
-
-button {
-  font: inherit;
-  color: inherit;
-}
-
 /*
- * Focus ring "oreo": tre fasce di 2px (scuro, chiaro, scuro) disegnate con box-shadow, che segue i
- * bordi arrotondati. Il contorno trasparente sopra la fascia centrale serve in forced-colors (Windows
- * ad alto contrasto), dove le ombre spariscono e il contorno prende il colore di sistema.
+ * Ordine dei layer (spec WC §4.1): reset < base < components (fogli @scope degli elementi) < overrides.
+ * I CSS Modules non hanno layer e quindi vincono su tutti e quattro: è voluto fino alla loro migrazione.
  */
-:focus-visible {
-  outline: 2px solid transparent;
-  outline-offset: 2px;
-  box-shadow:
-    0 0 0 2px var(--c-focus-dark),
-    0 0 0 4px var(--c-focus-light),
-    0 0 0 6px var(--c-focus-dark);
-}
+@layer reset, base, components, overrides;
 
-/* Esplicito, senza contare sulla sostituzione del colore trasparente da parte del browser. */
-@media (forced-colors: active) {
-  :focus-visible {
-    outline-color: Highlight;
+@layer reset {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+    margin: 0;
+  }
+
+  button {
+    font: inherit;
+    color: inherit;
   }
 }
 
-/*
- * Campi di testo ed editor soddisfano :focus-visible anche al clic: lì il ring compare solo se il focus
- * è arrivato dalla tastiera (data-focus-source, src/ui/focusSource.ts). Il campo ha già il suo bordo.
- */
-:root[data-focus-source='pointer'] :is(input, textarea, select, [contenteditable]):focus-visible {
-  outline: none;
-  box-shadow: none;
-}
+@layer base {
+  :root {
+    color-scheme: light dark;
 
-::highlight(housemd-search) {
-  background-color: var(--c-highlight);
-  color: inherit;
-}
+    --c-bg: light-dark(#fbfaf7, #16161a);
+    --c-surface: light-dark(#ffffff, #1e1e24);
+    --c-sidebar: light-dark(#f3f1ec, #1a1a1f);
+    --c-border: light-dark(#e2ded5, #2e2e36);
+    --c-text: light-dark(#1f1d1a, #e7e5e0);
+    --c-muted: light-dark(#6b665c, #9a978f);
+    --c-accent: light-dark(#0f766e, #2dd4bf);
+    --c-accent-soft: light-dark(#ccfbf1, #134e4a);
+    --c-danger: light-dark(#b91c1c, #f87171);
+    --c-warning-bg: light-dark(#fef3c7, #422006);
+    --c-highlight: light-dark(#fde68a, #854d0e);
+    --c-code-bg: light-dark(#f4f2ee, #25252c);
+    /* Focus ring "oreo": scuro-chiaro-scuro, una delle fasce contrasta con qualsiasi sfondo. */
+    --c-focus-dark: #101014;
+    --c-focus-light: #ffffff;
 
-.icon {
-  display: inline-block;
-  flex: none;
-  width: var(--icon-size, 20px);
-  height: var(--icon-size, 20px);
-  background-color: currentColor;
-  mask-repeat: no-repeat;
-  mask-position: center;
-  mask-size: 100% 100%;
-  image-rendering: pixelated;
-  vertical-align: middle;
-}
+    --font-ui: 'Space Grotesk', system-ui, sans-serif;
+    --font-prose: 'Space Grotesk', system-ui, sans-serif;
+    --font-mono: 'Space Mono', ui-monospace, monospace;
+    --font-pixel: 'Pixelify Sans', var(--font-ui);
 
-/* Cambio tema: nessuna dissolvenza incrociata; il vecchio tema sta sopra e viene "mangiato" a blocchi
-   dalla maschera animata in src/theme/pixelTransition.ts. */
-::view-transition-old(root),
-::view-transition-new(root) {
-  animation: none;
-  mix-blend-mode: normal;
-}
+    accent-color: var(--c-accent);
+    scrollbar-color: var(--c-border) transparent;
+  }
 
-::view-transition-old(root) {
-  z-index: 1;
-  image-rendering: pixelated;
-}
+  body {
+    background: var(--c-bg);
+    color: var(--c-text);
+    font-family: var(--font-ui);
+    font-size: 15px;
+  }
 
-/*
- * Tooltip con Anchor Positioning: il pulsante porta `class="tooltip"`, `aria-label` (nome accessibile)
- * e `data-tooltip` (testo visibile). `anchor-scope` fa sì che ogni tooltip si ancori al proprio pulsante.
- * Compare anche al focus da tastiera; sotto il pulsante, girato sopra se non c'è spazio.
- */
-.tooltip {
-  anchor-name: --tooltip-anchor;
-  anchor-scope: --tooltip-anchor;
-}
+  /*
+   * Focus ring "oreo": tre fasce di 2px (scuro, chiaro, scuro) disegnate con box-shadow, che segue i
+   * bordi arrotondati. Il contorno trasparente sopra la fascia centrale serve in forced-colors (Windows
+   * ad alto contrasto), dove le ombre spariscono e il contorno prende il colore di sistema.
+   */
+  :focus-visible {
+    outline: 2px solid transparent;
+    outline-offset: 2px;
+    box-shadow:
+      0 0 0 2px var(--c-focus-dark),
+      0 0 0 4px var(--c-focus-light),
+      0 0 0 6px var(--c-focus-dark);
+  }
 
-.tooltip::after {
-  content: attr(data-tooltip);
-  position: fixed;
-  position-anchor: --tooltip-anchor;
-  position-area: block-end;
-  position-try-fallbacks: flip-block;
-  margin-top: 6px;
-  padding: 4px 8px;
-  background: var(--c-surface);
-  color: var(--c-text);
-  border: 1px solid var(--c-border);
-  border-radius: 6px;
-  box-shadow: 0 2px 8px rgb(0 0 0 / 0.2);
-  font: 12px/1.3 var(--font-pixel);
-  white-space: nowrap;
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.15s ease, visibility 0.15s ease;
-  pointer-events: none;
-  z-index: 1000;
-}
+  /* Esplicito, senza contare sulla sostituzione del colore trasparente da parte del browser. */
+  @media (forced-colors: active) {
+    :focus-visible {
+      outline-color: Highlight;
+    }
+  }
 
-.tooltip:hover::after,
-.tooltip:focus-visible::after {
-  opacity: 1;
-  visibility: visible;
+  /*
+   * Campi di testo ed editor soddisfano :focus-visible anche al clic: lì il ring compare solo se il focus
+   * è arrivato dalla tastiera (data-focus-source, src/ui/focusSource.ts). Il campo ha già il suo bordo.
+   */
+  :root[data-focus-source='pointer'] :is(input, textarea, select, [contenteditable]):focus-visible {
+    outline: none;
+    box-shadow: none;
+  }
+
+  ::highlight(housemd-search) {
+    background-color: var(--c-highlight);
+    color: inherit;
+  }
+
+  .icon {
+    display: inline-block;
+    flex: none;
+    width: var(--icon-size, 20px);
+    height: var(--icon-size, 20px);
+    background-color: currentColor;
+    mask-repeat: no-repeat;
+    mask-position: center;
+    mask-size: 100% 100%;
+    image-rendering: pixelated;
+    vertical-align: middle;
+  }
+
+  /* Cambio tema: nessuna dissolvenza incrociata; il vecchio tema sta sopra e viene "mangiato" a blocchi
+     dalla maschera animata in src/theme/pixelTransition.ts. */
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
+    mix-blend-mode: normal;
+  }
+
+  ::view-transition-old(root) {
+    z-index: 1;
+    image-rendering: pixelated;
+  }
+
+  /*
+   * Tooltip con Anchor Positioning: il pulsante porta `class="tooltip"`, `aria-label` (nome accessibile)
+   * e `data-tooltip` (testo visibile). `anchor-scope` fa sì che ogni tooltip si ancori al proprio pulsante.
+   * Compare anche al focus da tastiera; sotto il pulsante, girato sopra se non c'è spazio.
+   */
+  .tooltip {
+    anchor-name: --tooltip-anchor;
+    anchor-scope: --tooltip-anchor;
+  }
+
+  .tooltip::after {
+    content: attr(data-tooltip);
+    position: fixed;
+    position-anchor: --tooltip-anchor;
+    position-area: block-end;
+    position-try-fallbacks: flip-block;
+    margin-top: 6px;
+    padding: 4px 8px;
+    background: var(--c-surface);
+    color: var(--c-text);
+    border: 1px solid var(--c-border);
+    border-radius: 6px;
+    box-shadow: 0 2px 8px rgb(0 0 0 / 0.2);
+    font: 12px/1.3 var(--font-pixel);
+    white-space: nowrap;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.15s ease, visibility 0.15s ease;
+    pointer-events: none;
+    z-index: 1000;
+  }
+
+  .tooltip:hover::after,
+  .tooltip:focus-visible::after {
+    opacity: 1;
+    visibility: visible;
+  }
 }
