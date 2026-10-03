@@ -71,7 +71,7 @@ export function ModelChip({ controller, onManage }: Props) {
         data-tooltip={note}
         aria-label={`${t('ai.profile')}: ${label}`}
         aria-describedby={`${id}-privacy`}
-        {...{ popovertarget: id }}
+        popoverTarget={id}
       >
         {label}
         {changed && ' •'}

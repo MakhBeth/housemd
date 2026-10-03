@@ -341,7 +341,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
   return (
     <>
     <div
-      {...{ inert: settingsOpen ? '' : undefined }}
+      inert={settingsOpen}
       className={styles.layout}
       style={{ gridTemplateColumns: gridColumns(sidebarOpen, shownMode === 'ai' ? aiWidth : sidebarWidth) }}
     >
