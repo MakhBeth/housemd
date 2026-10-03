@@ -21,7 +21,7 @@ File System Access API) si usano **senza polyfill e senza fallback**. Unica ecce
 - Le operazioni del `Workspace` che toccano file passano dalla coda `runExclusive`; dentro la coda si
   chiamano solo le versioni interne `do…` (chiamare quelle pubbliche è un deadlock).
 - Nessun `await` della cronologia nei percorsi che cambiano il documento (snapshot fire-and-forget).
-- I test end-to-end (`e2e/*.spec.ts`, `npm run test:e2e`) trovano gli elementi solo per ruolo e nome accessibile, con i testi da `en.json`: mai classi CSS dell'app. Gli snapshot visivi si rigenerano solo con approvazione.
+- I test end-to-end (`e2e/*.spec.ts`, `npm run test:e2e`) trovano gli elementi solo per ruolo e nome accessibile, con i testi da `en.json`: mai classi CSS dell'app. Gli snapshot visivi si rigenerano solo con approvazione. La suite in sviluppo (`npm run test:e2e:dev`) non ammette errori o avvisi in console.
 - Un cambio alla cascata (layer, `@scope`, fogli spostati) non deve cambiare l'aspetto: prima del cambio
   `npm run build && rm -rf dist-baseline && cp -r dist dist-baseline`, dopo `npm run test:e2e:audit`.
 
