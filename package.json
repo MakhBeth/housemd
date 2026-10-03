@@ -13,7 +13,8 @@
     "test": "tsx --test",
     "bridge": "node bridge/claude-bridge.mjs",
     "test:e2e": "playwright test -c e2e/playwright.config.ts",
-    "test:e2e:audit": "playwright test -c e2e/audit.config.ts"
+    "test:e2e:audit": "playwright test -c e2e/audit.config.ts",
+    "test:e2e:dev": "playwright test -c e2e/dev.config.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",

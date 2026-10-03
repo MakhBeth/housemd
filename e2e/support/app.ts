@@ -142,7 +142,13 @@ export class App {
   }
 }
 
-export const test = base.extend<{ flags: Partial<HarnessFlags>; appLocale: E2ELocale; ai: FakeModel; app: App }>({
+/** Opzioni impostabili dalla configurazione (`use`). */
+export interface AppOptions {
+  /** Ogni errore o avviso in console fa fallire il test: per la suite in sviluppo, dove React avvisa lì. */
+  failOnConsole: boolean;
+}
+
+export const test = base.extend<{ flags: Partial<HarnessFlags>; appLocale: E2ELocale; ai: FakeModel; app: App } & AppOptions>({
   /**
    * Contesto persistente con il profilo su disco, uno nuovo per test. Nei contesti normali (in memoria)
    * Chromium rifiuta le scritture OPFS con QuotaExceededError quando la RAM libera scende, anche con
@@ -179,13 +185,14 @@ export const test = base.extend<{ flags: Partial<HarnessFlags>; appLocale: E2ELo
   },
   flags: [{}, { option: true }],
   appLocale: ['en', { option: true }],
+  failOnConsole: [false, { option: true }],
   // Sempre installato: senza, l'app proverebbe a contattare un Ollama vero sulla macchina che esegue i test.
   ai: async ({ page }, use) => {
     const model = new FakeModel();
     await model.install(page);
     await use(model);
   },
-  app: async ({ page, flags, appLocale, ai }, use) => {
+  app: async ({ page, flags, appLocale, ai, failOnConsole }, use) => {
     void ai;
     await page.addInitScript(harnessScript, { defaults: { ...DEFAULT_FLAGS, ...flags }, key: FLAGS_KEY });
     await page.addInitScript((locale) => {
@@ -196,8 +203,13 @@ export const test = base.extend<{ flags: Partial<HarnessFlags>; appLocale: E2ELo
     // Come il vecchio collaudo CDP: qualsiasi eccezione non gestita nella pagina fa fallire il test.
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
+    const consoleProblems: string[] = [];
+    page.on('console', (message) => {
+      if (message.type() === 'error' || message.type() === 'warning') consoleProblems.push(`${message.type()}: ${message.text()}`);
+    });
     await use(new App(page, appLocale));
     expect(errors, 'eccezioni non gestite nella pagina').toEqual([]);
+    if (failOnConsole) expect(consoleProblems, 'errori o avvisi in console').toEqual([]);
   },
 });
 
