@@ -45,6 +45,13 @@ test('undefined, null and false set no attribute; true sets an empty boolean att
   assert.equal(div.getAttribute('popover'), 'auto');
 });
 
+test('a boolean on an aria-* key is written as the string "true" or "false"', () => {
+  const button = el('button', { 'aria-pressed': false, 'aria-expanded': true, 'ARIA-hidden': false });
+  assert.equal(button.getAttribute('aria-pressed'), 'false');
+  assert.equal(button.getAttribute('aria-expanded'), 'true');
+  assert.equal(button.getAttribute('aria-hidden'), 'false');
+});
+
 test('a boolean on a string property (popover in Chromium) is an empty attribute or nothing', () => {
   const proto = HTMLElement.prototype;
   Object.defineProperty(proto, 'popover', {

@@ -18,7 +18,7 @@ export interface Props {
   innerHTML?: never;
   outerHTML?: never;
   srcdoc?: never;
-  /** Proprietà scrivibile (`value`, `disabled`, `role`…), altrimenti attributo; booleani non-proprietà: vedi `setProp`. */
+  /** Proprietà scrivibile (`value`, `disabled`, `role`…), altrimenti attributo; booleani: vedi `setProp`. */
   [name: string]: unknown;
 }
 
@@ -48,6 +48,8 @@ export function el<K extends keyof HTMLElementTagNameMap>(
 /**
  * Regola per le chiavi diverse da class/dataset/on (dopo il rifiuto di quelle vietate):
  * - `undefined`/`null`: niente;
+ * - booleano su una chiave `aria-*` (senza distinguere maiuscole): gli stati ARIA sono stringhe
+ *   enumerate, quindi si scrive l'attributo `"true"` / `"false"`;
  * - booleano e la proprietà non è booleana (o non esiste: `popover` è una stringa in Chromium): è un
  *   attributo booleano, `true` lo scrive vuoto, `false` non scrive nulla;
  * - proprietà esistente e scrivibile (anche con setter sul prototipo): assegnata;
@@ -56,6 +58,10 @@ export function el<K extends keyof HTMLElementTagNameMap>(
 function setProp(node: HTMLElement, name: string, value: unknown): void {
   if (FORBIDDEN.has(name.toLowerCase()) || /^on/i.test(name)) throw new Error(`el(): "${name}" non è ammesso`);
   if (value === undefined || value === null) return;
+  if (typeof value === 'boolean' && /^aria-/i.test(name)) {
+    node.setAttribute(name, String(value));
+    return;
+  }
   const record = node as unknown as Record<string, unknown>;
   if (typeof value === 'boolean' && typeof record[name] !== 'boolean') {
     if (value) node.setAttribute(name, '');

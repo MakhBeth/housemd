@@ -341,7 +341,8 @@ export abstract class HmdElement extends HTMLElement {
    (`'aria-label'`, `'data-tooltip'`), proprietà (`hidden`, `value`) e listener (`on: { click }`).
    I figli stringa diventano **nodi di testo**, mai HTML. Sostituisce JSX. Chiavi `innerHTML`,
    `outerHTML`, `srcdoc` (in qualsiasi grafia) e `on…` in stringa: errore a runtime (le prime tre anche
-   nei tipi). Ogni altra chiave: `undefined`/`null` = niente; un booleano su una proprietà non
+   nei tipi). Ogni altra chiave: `undefined`/`null` = niente; un booleano su una chiave `aria-*` diventa
+   la stringa `"true"`/`"false"` (gli stati ARIA sono enumerati); un altro booleano su una proprietà non
    booleana (o inesistente, come `popover`) è un attributo booleano (`true` = vuoto, `false` = niente);
    altrimenti è una proprietà se esiste ed è scrivibile, e un attributo se no (`list`, `form`).
 2. `reconcileList(parent, items, key, create, update)`: allinea i figli di `parent` a `items` per
