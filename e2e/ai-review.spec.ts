@@ -191,3 +191,36 @@ test.describe('selection', () => {
     await expect(app.page.getByText(app.t('ai.selectionLines', { count: 3 }), { exact: true })).toHaveCount(0);
   });
 });
+
+// React 19 vuole `popoverTarget`: il chip del profilo deve continuare ad aprire il suo popover.
+test('the profile chip opens its popover with the profile choice', async ({ app, page }) => {
+  await app.openFolder({ 'a.md': 'A' });
+  await app.openFile('a.md');
+  await expect(app.mode('mode.ai')).toBeVisible();
+  await app.mode('mode.ai').click();
+  const chip = page.getByRole('button', { name: new RegExp(`^${app.t('ai.profile')}: `) });
+  const current = page.getByRole('radio', { checked: true });
+  await expect(current).toBeHidden();
+  await chip.click();
+  await expect(current).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(current).toBeHidden();
+});
+
+// Anche il pulsante degli avvisi della revisione apre il suo popover con popovertarget (popoverTarget in React 19).
+test('the warnings button of the review opens its popover', async ({ app, ai, page }) => {
+  ai.reply = 'See [[Other]]';
+  await app.openFolder({ 'a.md': 'See [[Target]]' });
+  await app.openFile('a.md');
+  await expect(app.mode('mode.ai')).toBeVisible();
+  await app.mode('mode.ai').click();
+  const composer = page.getByRole('textbox', { name: app.t('ai.request') });
+  await composer.fill('fix');
+  await composer.press('Enter');
+  const warnings = page.getByRole('button', { name: app.t('ai.warningsCount', { count: 1 }) });
+  const item = page.getByRole('button', { name: app.t('ai.warning.wikilinks') });
+  await expect(warnings).toBeVisible();
+  await expect(item).toBeHidden();
+  await warnings.click();
+  await expect(item).toBeVisible();
+});

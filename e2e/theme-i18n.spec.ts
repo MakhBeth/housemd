@@ -66,3 +66,21 @@ test.describe('unknown saved language', () => {
     await expect(page.getByRole('button', { name: app.t('start.openFolder') })).toBeVisible();
   });
 });
+
+// Con le animazioni attive il cambio passa dalla view transition (src/theme/pixelTransition.ts), dove
+// React deve aggiornare il pulsante in modo sincrono (flushSync): il resto della suite usa reducedMotion.
+test.describe('with animations on', () => {
+  test.use({ reducedMotion: 'no-preference' });
+
+  test('the theme cycle runs through the view transition and updates the button each time', async ({ app, page }) => {
+    await app.openFolder({ 'note.md': '# Note' });
+    const html = page.locator('html');
+    await page.getByRole('button', { name: app.t('theme.auto') }).click();
+    await expect(html).toHaveAttribute('data-theme', 'light');
+    await page.getByRole('button', { name: app.t('theme.light') }).click();
+    await expect(html).toHaveAttribute('data-theme', 'dark');
+    await page.getByRole('button', { name: app.t('theme.dark') }).click();
+    await expect(html).toHaveAttribute('data-theme', 'auto');
+    await expect(page.getByRole('button', { name: app.t('theme.auto') })).toBeVisible();
+  });
+});
