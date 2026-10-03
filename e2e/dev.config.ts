@@ -16,6 +16,7 @@ const PORT = 5174;
 export default defineConfig<AppOptions>({
   ...base,
   outputDir: '../test-results/dev',
+  reporter: [['list'], ['html', { open: 'never', outputFolder: '../playwright-report/dev' }]],
   testIgnore: ['**/visual.spec.ts'],
   grepInvert: /applies dark before the app starts/,
   use: { ...base.use, baseURL: `http://localhost:${PORT}`, failOnConsole: true },

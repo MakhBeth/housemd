@@ -73,16 +73,29 @@ test.describe('with animations on', () => {
   test.use({ reducedMotion: 'no-preference' });
 
   test('the theme cycle runs through the view transition and updates the button each time', async ({ app, page }) => {
-    // Conta le chiamate a startViewTransition: senza, il test passerebbe anche con il ripiego sincrono.
-    await page.addInitScript(() => {
-      const w = window as unknown as { __viewTransitions: number };
+    // Conta le chiamate a startViewTransition (senza, il test passerebbe anche con il ripiego sincrono) e,
+    // appena la callback è tornata (senza attendere microtask), registra l'etichetta del pulsante del tema: deve già essere quella nuova,
+    // cioè React ha aggiornato il DOM in modo sincrono dentro la transizione (flushSync).
+    const labels = [app.t('theme.light'), app.t('theme.dark'), app.t('theme.auto')];
+    await page.addInitScript((themeLabels) => {
+      const w = window as unknown as { __viewTransitions: number; __labelsInTransition: (string | null | undefined)[] };
       w.__viewTransitions = 0;
+      w.__labelsInTransition = [];
       const original = document.startViewTransition.bind(document);
-      document.startViewTransition = ((...args: Parameters<typeof original>) => {
+      document.startViewTransition = ((callback?: ViewTransitionUpdateCallback) => {
         w.__viewTransitions++;
-        return original(...args);
+        const wrapped: ViewTransitionUpdateCallback | undefined = callback && (() => {
+          const result = callback();
+          w.__labelsInTransition.push(
+            [...document.querySelectorAll('button')]
+              .map((b) => b.getAttribute('aria-label'))
+              .find((l) => l !== null && themeLabels.includes(l)),
+          );
+          return result;
+        });
+        return original(wrapped);
       }) as typeof document.startViewTransition;
-    });
+    }, labels);
     await app.openFolder({ 'note.md': '# Note' });
     const html = page.locator('html');
     await page.getByRole('button', { name: app.t('theme.auto') }).click();
@@ -95,5 +108,8 @@ test.describe('with animations on', () => {
     await expect
       .poll(() => page.evaluate(() => (window as unknown as { __viewTransitions: number }).__viewTransitions))
       .toBe(3);
+    expect(
+      await page.evaluate(() => (window as unknown as { __labelsInTransition: unknown[] }).__labelsInTransition),
+    ).toEqual(labels);
   });
 });
