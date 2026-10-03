@@ -198,15 +198,19 @@ for (const state of STATES) {
       await page.setViewportSize({ width: 1280, height: 800 });
       await page.waitForTimeout(100);
       // CodeMirror misura le altezze in modo asincrono (a volte di 1 px): si legge finché due letture
-      // consecutive coincidono, fino a un massimo di dieci tentativi.
+      // consecutive coincidono, fino a un massimo di dieci tentativi. Se non si stabilizza lo stato
+      // fallisce: un audit che confronta una lettura instabile non prova nulla.
       let dump = await page.evaluate(dumpComputedStyles);
-      for (let attempt = 0; attempt < 10; attempt++) {
+      let settled = false;
+      let lastDifferences = 0;
+      for (let attempt = 0; attempt < 10 && !settled; attempt++) {
         await page.waitForTimeout(100);
         const next = await page.evaluate(dumpComputedStyles);
-        const settled = styleDifferences(dump, next).length === 0;
+        lastDifferences = styleDifferences(dump, next).length;
+        settled = lastDifferences === 0;
         dump = next;
-        if (settled) break;
       }
+      expect(settled, `stato "${state.name}" non stabile dopo 10 letture: ${lastDifferences} differenze tra le ultime due`).toBe(true);
 
       const file = join(OUT, `${state.name}.json`);
       if (testInfo.project.name === 'baseline') {
