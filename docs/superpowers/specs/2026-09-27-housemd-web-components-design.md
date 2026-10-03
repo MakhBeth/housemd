@@ -1,9 +1,9 @@
 # HouseMD — migrazione a Web Components e CSS con `@scope` — design
 
-Data: 2026-09-27 · **Revisione: 2026-10-01**
+Data: 2026-09-27 · **Revisione: 2026-10-02**
 Base: `main` (HEAD `822f52d`: v1.1, strumenti AI, impostazioni a pagina, barra di formattazione,
 larghezza del testo, tooltip disegnati, albero con un solo tab stop).
-Stato: **solo piano**. Nessun file di implementazione è stato toccato per scrivere questo documento.
+Stato: fasi 0–2 implementate (fase 0 PR #6, fase 1 PR #7, fase 2 sul branch `refactor/fase-2-infrastruttura-dom`); fasi 3–8 ancora piano.
 
 Decisioni (27/09, riviste il 01/10; risposte alle domande aperte, §12):
 
@@ -176,7 +176,8 @@ src/
     list.ts      list.test.ts      ← reconcileList per liste con chiave
     element.ts   element.test.ts   ← classe base HmdElement (ciclo di vita, AbortController)
     uid.ts       uid.test.ts       ← id unici per aria-* e popovertarget (era useId)
-    icon.ts                        ← icon(name, size?) → <span class="icon">  (era Icon.tsx)
+    maskIcon.ts  maskIcon.test.ts  ← <span class="icon"> da un URL (era Icon.tsx)
+    icon.ts                        ← icon(name, { size, className }): nome → URL (icons.ts) → maskIcon
   state/
     i18nStore.ts  themeStore.ts  routeStore.ts  draftState.ts   (+ test)
     prefs.schema.ts prefs.schema.test.ts
@@ -197,7 +198,7 @@ src/
     events.ts                      ← mappa tipizzata dei CustomEvent
     define.ts                      ← unico punto con customElements.define()
   testing/
-    domEnv.ts                      ← globali jsdom per i test *.dom.test.ts
+    domEnv.ts    domEnv.test.ts    ← globali jsdom per i test *.dom.test.ts
 e2e/                               ← Playwright (fase 0), fuori da src/
   playwright.config.ts  tsconfig.json
   support/  fsHarness.ts  aiHarness.ts  app.ts  i18n.ts
@@ -306,14 +307,18 @@ export abstract class HmdElement extends HTMLElement {
   /** Crea il DOM (la prima volta) e registra listener e iscrizioni legati a `signal`. */
   protected abstract connect(signal: AbortSignal): void;
 
-  /** `store.subscribe` legato al ciclo di vita dell'elemento. */
-  protected watch(subscribe: (fn: () => void) => () => void, fn: () => void, signal: AbortSignal): void {
-    const off = subscribe(fn);
+  /** Iscrizione a uno store legata al ciclo di vita: `fn` gira subito e a ogni notifica. */
+  protected watch(store: Subscribable, fn: () => void, signal: AbortSignal): void {
+    // Un signal già interrotto non emette più 'abort': l'iscrizione resterebbe per sempre.
+    if (signal.aborted) return;
+    const off = store.subscribe(fn);
     signal.addEventListener('abort', off, { once: true });
     fn();
   }
 }
 ```
+
+`watch` riceve lo store, non il metodo `subscribe` staccato: alcuni store lo espongono come metodo di un oggetto (`i18nStore`, `routeStore`, `themeStore`, `UpdateFlow`), altri come arrow function (`Workspace`, `AiController`).
 
 - Tutti i `addEventListener` passano `{ signal }`: niente cleanup a mano.
 - Dove un elemento si sposta senza dover perdere lo stato, `moveBefore()` + `connectedMoveCallback()`.
@@ -334,11 +339,18 @@ export abstract class HmdElement extends HTMLElement {
 
 1. `el(tag, props?, ...children)`: crea un elemento. `props` accetta `class`, `dataset`, attributi
    (`'aria-label'`, `'data-tooltip'`), proprietà (`hidden`, `value`) e listener (`on: { click }`).
-   I figli stringa diventano **nodi di testo**, mai HTML. Sostituisce JSX.
+   I figli stringa diventano **nodi di testo**, mai HTML. Sostituisce JSX. Chiavi `innerHTML`,
+   `outerHTML`, `srcdoc` (in qualsiasi grafia) e `on…` in stringa: errore a runtime (le prime tre anche
+   nei tipi). Ogni altra chiave: `undefined`/`null` = niente; un booleano su una chiave `aria-*` diventa
+   la stringa `"true"`/`"false"` (gli stati ARIA sono enumerati); un altro booleano su una proprietà non
+   booleana (o inesistente, come `popover`) è un attributo booleano (`true` = vuoto, `false` = niente);
+   altrimenti è una proprietà se esiste ed è scrivibile, e un attributo se no (`list`, `form`).
 2. `reconcileList(parent, items, key, create, update)`: allinea i figli di `parent` a `items` per
    chiave: riusa i nodi (così restano focus e selezione), crea i nuovi, rimuove gli altri e riordina
-   con `moveBefore` quando c'è, altrimenti `insertBefore`.
+   con `moveBefore` quando c'è, altrimenti `insertBefore`. `update` gira su ogni nodo, nuovo o
+   riusato; `moveBefore` solo con `parent` connesso.
 3. `setText(node, text)` / `toggleAttr(node, name, on)`: scrivono solo se il valore cambia.
+   `toggleAttr(node, name, on, value = '')`.
 4. `uid(prefix)`: id stabile e unico nel documento, al posto di `useId`.
 
 Regola di rendering: **creare una volta, aggiornare in modo mirato.** `connect()` costruisce lo
@@ -488,6 +500,8 @@ Non cambia una riga dell'app.
 3. Estendere `buildCss.test.ts`: oltre a `light-dark()` verifica che `@layer` e `@scope` arrivino
    intatti nel CSS di produzione (il minificatore ha già trasformato `light-dark()` una volta).
 4. I CSS Modules restano, senza layer, quindi vincono sui layer: nessun cambio visivo (snapshot).
+5. **Fatta** (piano 3). In più: controlli statici `define` e `@scope` di §8.3 attivi da subito; audit
+   degli stili calcolati (`npm run test:e2e:audit`, §8.4).
 
 ### Fase 3: React 19 (PR in `main`)
 
@@ -593,6 +607,8 @@ nulla**. Diventa:
 | `dom/list.test.ts` | `reconcileList`: riusa i nodi per chiave, rimuove, inserisce, riordina; **il focus su un nodo riusato resta**. |
 | `dom/element.test.ts` | `connect` una volta sola; `disconnect` interrompe i listener; `watch` si disiscrive. |
 | `dom/uid.test.ts` | Id unici e con prefisso. |
+| `testing/domEnv.test.ts` | Globali da una sola `window`, signal, custom element. |
+| `dom/maskIcon.test.ts` | Stessa uscita di `Icon.tsx`. |
 | `state/i18nStore.test.ts` | Vince l'ultima richiesta con loader fuori ordine; chunk fallito → si salva `en`; notifiche. |
 | `state/themeStore.test.ts` | Ciclo `auto→light→dark`; salvataggio; `apply` dentro la transizione (finta). |
 | `state/routeStore.test.ts` | Hash → rotta; guardia che blocca la navigazione con modifiche aperte; rotta sconosciuta → workspace. |
@@ -612,9 +628,7 @@ nulla**. Diventa:
 `AbortSignal` di Node in `addEventListener`). Ogni `*.dom.test.ts` lo importa **come primo import**.
 `node:test` esegue ogni file in un processo separato. `npm test` resta `tsx --test`.
 
-Limiti di jsdom da verificare nella fase 2: `showModal()`/`closedby`, Popover, `CSS.highlights`,
-Anchor Positioning, `moveBefore`. Il codice che li usa è già protetto oppure riceve uno stub esplicito
-in `domEnv.ts`. I **comportamenti** reali li verifica Playwright o la checklist manuale.
+Limiti di jsdom 30.1.1, verificati nella fase 2: mancano `moveBefore`, `showModal`/`closedBy`, Popover (`popover`, `showPopover`), `commandForElement`, `CSS.highlights`/`Highlight`, Anchor Positioning. Ci sono `customElements`, `MutationObserver`, `role`/`ariaLabel` come proprietà; `addEventListener` accetta solo l'`AbortSignal` della stessa `window` (quello di Node dà `TypeError`). jsdom, come Chromium, toglie il focus a un nodo spostato con `insertBefore`; che `moveBefore` lo conservi si verifica solo in Chromium, con gli e2e della fase 6 su albero e ricerca. Gli stub entrano nel test che li usa, dalla fase 4; i comportamenti reali li verifica Playwright o la checklist manuale.
 
 ### 8.3 Test statici nuovi (`architecture.test.ts`)
 
@@ -630,6 +644,8 @@ in `domEnv.ts`. I **comportamenti** reali li verifica Playwright o la checklist 
 - l'identificatore `fetch`, `XMLHttpRequest`, `EventSource`, `WebSocket` e gli import di
   `@anthropic-ai/sdk` solo in `src/ai/providers/` (regola AI di `CLAUDE.md`, finora non verificata;
   al 01/10 non ci sono eccezioni).
+
+Il controllo su `customElements.define` e quello sui CSS di `src/elements/` sono attivi dalla fase 2: passano a vuoto finché non esistono elementi, con casi sintetici che provano che scattano.
 
 ### 8.4 End-to-end con Playwright (fase 0)
 
@@ -666,6 +682,8 @@ Ctrl+Z dopo accettazione, voce `before-ai` nella cronologia, stesso carattere ne
 `vite build` + `vite preview` (porta 4173), Chromium, service worker bloccati,
 `reuseExistingServer: false`. Snapshot in `e2e/__screenshots__/`, generati su Linux. `npm test` non
 raccoglie le spec (suffisso `.spec.ts`, cartella `e2e/`).
+
+**Audit degli stili calcolati** (`npm run test:e2e:audit`, `e2e/audit.config.ts`): gli stessi stati sulla build di riferimento in `dist-baseline/` (porta 4174) e sulla build corrente; ogni proprietà calcolata di ogni elemento e pseudo-elemento deve coincidere. Si usa prima e dopo ogni cambio di cascata (layer, `@scope`, spostamento di fogli), finché la struttura del DOM è la stessa. Copre focus da tastiera, `forced-colors` e tooltip al passaggio, che gli snapshot non vedono. Prima di leggere gli stili ogni stato viene stabilizzato: animazioni CSS in pausa, tutti i font caricati, un ridimensionamento della finestra 799/800 e rilettura del dump finché due letture coincidono.
 
 **Copertura** (una spec per area): avvio e browser non supportato; apertura, ripresa accesso e cambio
 cartella; editor con autosalvataggio e `Ctrl+S`; barra di formattazione e scorciatoie (Ctrl+B, Ctrl+I,
@@ -740,7 +758,7 @@ wikilink:
 | R16 | **Snapshot instabili**. | Media / medio | Font nel bundle, animazioni ridotte, Playwright a versione esatta, `maxDiffPixelRatio` dichiarato, rigenerazione solo con approvazione. |
 | R17 | **Suite e2e lenta**. | Media / basso | Accettato; filtro per file durante lo sviluppo. |
 | R18 | **React 19** cambia qualcosa di sottile (StrictMode e ref callback, tipi). | Media / medio | Fase a sé con PR in `main`, coperta da e2e e snapshot prima di qualsiasi custom element. |
-| R19 | **Minificatore CSS** che trasforma `@scope`/`@layer` (è già successo con `light-dark()`). | Bassa / alto | `buildCss.test.ts` esteso nella fase 2, prima che i fogli `@scope` esistano. |
+| R19 | **Minificatore CSS** che trasforma `@scope`/`@layer` (è già successo con `light-dark()`). | Bassa / alto | `buildCss.test.ts` con un foglio di prova `@scope` e l'ordine dei layer calcolato per prima comparsa (il minificatore riscrive la dichiarazione `@layer`), dalla fase 2. |
 | R20 | **`main` che si muove** durante il branch lungo (nuove funzionalità in React). | Alta / medio | Rebase frequente; ogni funzionalità nuova va migrata nel branch prima del merge finale; e2e scritte per ruolo valgono per entrambe. |
 | R21 | **Regole AI violate nella riscrittura** (chiavi in `dataset`, fetch fuori dai provider). | Bassa / critico | Test statico su `fetch`/SDK; chiavi mai negli attributi; review dedicata della fase 6. |
 
@@ -774,6 +792,7 @@ wikilink:
 
 1. `docs/superpowers/plans/2026-09-27-housemd-wc-01-e2e-baseline.md`: fase 0 (fatta, PR #6).
 2. Un piano e una PR per fase: `docs/superpowers/plans/2026-10-01-housemd-wc-02-fase-1-logica-pura.md`
-   (fase 1); fase 2 (infrastruttura DOM/CSS) e fase 3 (React 19) da scrivere.
+   (fase 1, PR #7); `docs/superpowers/plans/2026-10-02-housemd-wc-03-fase-2-infrastruttura-dom.md` (fase 2);
+   fase 3 (React 19) da scrivere.
 3. Fasi 4–6 (elementi in convivenza).
 4. Fasi 7–8 (impostazioni, workspace, via React, rifinitura, richiesta di merge).

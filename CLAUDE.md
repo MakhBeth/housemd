@@ -22,6 +22,8 @@ File System Access API) si usano **senza polyfill e senza fallback**. Unica ecce
   chiamano solo le versioni interne `do…` (chiamare quelle pubbliche è un deadlock).
 - Nessun `await` della cronologia nei percorsi che cambiano il documento (snapshot fire-and-forget).
 - I test end-to-end (`e2e/*.spec.ts`, `npm run test:e2e`) trovano gli elementi solo per ruolo e nome accessibile, con i testi da `en.json`: mai classi CSS dell'app. Gli snapshot visivi si rigenerano solo con approvazione.
+- Un cambio alla cascata (layer, `@scope`, fogli spostati) non deve cambiare l'aspetto: prima del cambio
+  `npm run build && rm -rf dist-baseline && cp -r dist dist-baseline`, dopo `npm run test:e2e:audit`.
 
 ## AI
 

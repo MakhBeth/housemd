@@ -1,0 +1,16 @@
+/* Prova per buildCss.test.ts: le forme dei fogli degli elementi (spec WC §4.1) che il minificatore non deve toccare. */
+@layer reset, base, components, overrides;
+
+@layer components {
+  @scope (hmd-probe) to (hmd-inner, hmd-other) {
+    :scope {
+      display: block;
+      color: light-dark(#000, #fff);
+    }
+
+    .row:hover,
+    .row[data-active='true'] {
+      background: red;
+    }
+  }
+}
