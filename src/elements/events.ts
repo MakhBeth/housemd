@@ -5,6 +5,10 @@
 export interface HmdEvents {
   /** Conflitto con il disco: l'utente sceglie se ricaricare o sovrascrivere. */
   'hmd-conflict': CustomEvent<{ choice: 'reload' | 'overwrite' }>;
+  /** Pulsante d'azione di un avviso (es. "Aggiorna"). */
+  'hmd-notice-action': CustomEvent<null>;
+  /** Chiusura di un avviso. */
+  'hmd-notice-dismiss': CustomEvent<null>;
 }
 
 export function emit<K extends keyof HmdEvents>(target: Element, type: K, detail: HmdEvents[K] extends CustomEvent<infer D> ? D : never): void {

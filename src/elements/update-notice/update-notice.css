@@ -1,0 +1,7 @@
+@layer components {
+  @scope (hmd-update-notice) to (hmd-notice) {
+    :scope {
+      display: contents;
+    }
+  }
+}
