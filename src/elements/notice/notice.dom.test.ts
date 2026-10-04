@@ -52,9 +52,65 @@ test('busy disables the same action button; not dismissible removes the dismiss 
 });
 
 test('detached it does not call hidePopover; attached again it reopens', () => {
-  const { el, box } = mount();
+  const proto = HTMLElement.prototype as unknown as Record<'showPopover' | 'hidePopover', () => void>;
+  const realShow = proto.showPopover;
+  const realHide = proto.hidePopover;
+  const calls = { show: 0, hide: 0 };
+  proto.showPopover = function (this: HTMLElement) {
+    calls.show++;
+    realShow.call(this);
+  };
+  proto.hidePopover = function (this: HTMLElement) {
+    calls.hide++;
+    realHide.call(this);
+  };
+  try {
+    const { el, box } = mount();
+    assert.equal(calls.show, 1);
+    el.remove();
+    assert.equal(calls.hide, 0);
+    box.removeAttribute('data-test-popover-open');
+    document.body.append(el);
+    assert.equal(calls.show, 2);
+    assert.ok(isPopoverOpen(box));
+    el.remove();
+  } finally {
+    proto.showPopover = realShow;
+    proto.hidePopover = realHide;
+  }
+});
+
+const buttonsOf = (box: HTMLElement) => [...box.querySelectorAll('button')];
+
+test('dismiss only (no action): the only button is dismiss, right after the paragraph', () => {
+  const { el, box } = mount({ dismissible: true });
+  const buttons = buttonsOf(box);
+  assert.equal(buttons.length, 1);
+  assert.ok(buttons[0].classList.contains('dismiss'));
+  assert.equal(box.querySelector('p')!.nextElementSibling, buttons[0]);
   el.remove();
-  assert.doesNotThrow(() => document.body.append(el));
-  assert.ok(isPopoverOpen(box));
+});
+
+test('toggling busy and dismissible keeps the order [action, dismiss] and the same action node', () => {
+  const { el, box } = mount({ actionLabel: 'Aggiorna', dismissible: true });
+  const action = box.querySelector('button.action')!;
+  Object.assign(el, { busy: true, dismissible: false });
+  Object.assign(el, { busy: false, dismissible: true });
+  const buttons = buttonsOf(box);
+  assert.equal(buttons.length, 2);
+  assert.ok(buttons[0].classList.contains('action'));
+  assert.ok(buttons[1].classList.contains('dismiss'));
+  assert.equal(buttons[0], action);
+  el.remove();
+});
+
+test('adding an action label later puts the action before the same dismiss node', () => {
+  const { el, box } = mount({ dismissible: true });
+  const dismiss = box.querySelector('button.dismiss')!;
+  el.actionLabel = 'Aggiorna';
+  const buttons = buttonsOf(box);
+  assert.equal(buttons.length, 2);
+  assert.ok(buttons[0].classList.contains('action'));
+  assert.equal(buttons[1], dismiss);
   el.remove();
 });
