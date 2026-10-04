@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
 
 import { writePref } from '../lib/prefs';
-import { createI18nStore } from '../state/i18nStore';
+import { createI18nStore, type I18nStore } from '../state/i18nStore';
 import { translate, type Locale, type Messages, type Params } from './i18n';
 import { loadMessages, type MessageKey } from './messages';
 
@@ -9,6 +9,8 @@ export interface I18nValue {
   locale: Locale;
   setLocale(locale: Locale): void;
   t(key: MessageKey, params?: Params): string;
+  /** Lo store stesso, da passare ai custom element come proprietà. */
+  store: I18nStore;
 }
 
 const I18nContext = createContext<I18nValue | null>(null);
@@ -39,6 +41,7 @@ export function I18nProvider({ initialLocale, initialMessages, children }: Props
       locale: state.locale,
       setLocale: (locale) => void store.setLocale(locale),
       t: (key, params) => translate(state.messages, key, params),
+      store,
     }),
     [state, store],
   );
@@ -53,4 +56,9 @@ export function useI18n(): I18nValue {
 
 export function useT(): I18nValue['t'] {
   return useI18n().t;
+}
+
+/** Lo store della lingua, per i custom element (che non leggono il Context di React). */
+export function useI18nStore(): I18nStore {
+  return useI18n().store;
 }

@@ -26,6 +26,14 @@ export abstract class HmdElement extends HTMLElement {
     this.#abort = null;
   }
 
+  /** Rifà le iscrizioni (per esempio dopo un cambio di store passato come proprietà): come staccare e riattaccare. */
+  protected reconnect(): void {
+    if (!this.#abort) return;
+    this.#abort.abort();
+    this.#abort = new AbortController();
+    this.connect(this.#abort.signal);
+  }
+
   /** Crea il DOM (la prima volta) e registra listener e iscrizioni legati a `signal`. */
   protected abstract connect(signal: AbortSignal): void;
 
