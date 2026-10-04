@@ -149,28 +149,6 @@
   color: var(--c-accent);
 }
 
-.conflict {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  background: var(--c-warning-bg);
-  border-bottom: 1px solid var(--c-border);
-}
-
-.conflict span {
-  flex: 1;
-}
-
-.conflict button {
-  border: 1px solid var(--c-border);
-  background: var(--c-surface);
-  border-radius: 6px;
-  padding: 4px 10px;
-  cursor: pointer;
-}
-
 .panes {
   flex: 1;
   min-height: 0;

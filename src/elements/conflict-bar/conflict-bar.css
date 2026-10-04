@@ -1,0 +1,29 @@
+@layer components {
+  @scope (hmd-conflict-bar) {
+    :scope {
+      display: contents;
+    }
+
+    .bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: var(--c-warning-bg);
+      border-bottom: 1px solid var(--c-border);
+    }
+
+    .bar span {
+      flex: 1;
+    }
+
+    .bar button {
+      border: 1px solid var(--c-border);
+      background: var(--c-surface);
+      border-radius: 6px;
+      padding: 4px 10px;
+      cursor: pointer;
+    }
+  }
+}

@@ -20,7 +20,6 @@ import { Preview, type PreviewHandle } from '../preview/Preview';
 import { getThemeStore, useTheme } from '../theme/useTheme';
 import type { Workspace } from '../workspace/workspace';
 import { ConfirmDialog } from './ConfirmDialog';
-import { ConflictBar } from './ConflictBar';
 import { FileTree, type TreeAction } from './FileTree';
 import { HistoryPanel } from './HistoryPanel';
 import { Icon } from './Icon';
@@ -458,10 +457,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
         </header>
 
         {doc?.conflict && (
-          <ConflictBar
-            onReload={() => void workspace.resolveConflict('reload')}
-            onOverwrite={() => void workspace.resolveConflict('overwrite')}
-          />
+          <hmd-conflict-bar i18n={i18nStore} onhmd-conflict={(event) => void workspace.resolveConflict(event.detail.choice)} />
         )}
 
         {doc && shownMode === 'ai' && ai ? <ReviewView controller={ai} editor={{ path: doc.path, text: doc.text, resetKey: `${doc.path}#${doc.revision}`, session, restore: doc.restore, readOnly: state.updating, getDocs, onChange: text => workspace.edit(text), onTransactions: (changes, texts) => ai.documentChanged(doc.path, changes, false, texts), onImage: file => workspace.saveImage(file, file.name), onTopLine: () => {}, onSelection }} /> : doc ? (

@@ -1,3 +1,4 @@
+import { HmdConflictBar } from './conflict-bar/conflict-bar.element';
 import { HmdThemeSwitcher } from './theme-switcher/theme-switcher.element';
 
 /**
@@ -7,7 +8,10 @@ import { HmdThemeSwitcher } from './theme-switcher/theme-switcher.element';
  */
 type Definitions = readonly (readonly [string, CustomElementConstructor])[];
 
-const ELEMENTS: Definitions = [['hmd-theme-switcher', HmdThemeSwitcher]];
+const ELEMENTS: Definitions = [
+  ['hmd-conflict-bar', HmdConflictBar],
+  ['hmd-theme-switcher', HmdThemeSwitcher],
+];
 
 export function defineElements(elements: Definitions): void {
   for (const [name, ctor] of elements) {

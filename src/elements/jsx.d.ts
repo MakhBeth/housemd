@@ -14,6 +14,7 @@ export type HmdProps<P, E extends keyof HmdEvents = never> = Partial<P> & {
 declare module 'react' {
   namespace JSX {
     interface IntrinsicElements {
+      'hmd-conflict-bar': HmdProps<{ i18n: I18nStore }, 'hmd-conflict'>;
       'hmd-theme-switcher': HmdProps<{ store: ThemeStore; i18n: I18nStore }>;
     }
   }
