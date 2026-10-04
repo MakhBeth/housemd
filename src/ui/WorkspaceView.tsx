@@ -9,7 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, 
 
 import { Editor, type EditorHandle } from '../editor/Editor';
 import { requestAccess } from '../fs/access';
-import { useI18n, useT } from '../i18n/I18nProvider';
+import { useI18n, useI18nStore, useT } from '../i18n/I18nProvider';
 import type { MessageKey } from '../i18n/messages';
 import { dirname, joinPath } from '../lib/paths';
 import { readLastFile, readPref, readValidPref, writeLastFile, writePref } from '../lib/prefs';
@@ -17,7 +17,7 @@ import { parseTextWidth, textWidthVars } from '../lib/textWidth';
 import { APP_TITLE, pageTitle } from '../lib/pageTitle';
 import type { SettingsSection } from '../lib/route';
 import { Preview, type PreviewHandle } from '../preview/Preview';
-import { useTheme } from '../theme/useTheme';
+import { getThemeStore, useTheme } from '../theme/useTheme';
 import type { Workspace } from '../workspace/workspace';
 import { ConfirmDialog } from './ConfirmDialog';
 import { ConflictBar } from './ConflictBar';
@@ -30,7 +30,6 @@ import { SearchPanel } from './SearchPanel';
 import { SettingsView } from './SettingsView';
 import { useRoute } from './useRoute';
 import { shortcutFor } from './shortcuts';
-import { ThemeSwitcher } from './ThemeSwitcher';
 import { Toasts, type ToastItem } from './Toasts';
 import { buildTree, type TreeNode } from './tree';
 import { useWorkspaceState } from './useWorkspace';
@@ -57,6 +56,7 @@ const NO_TERMS: string[] = [];
 
 export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, switchingFolder = false }: Props) {
   const { t, locale } = useI18n();
+  const i18nStore = useI18nStore();
   const state = useWorkspaceState(workspace);
   const doc = state.doc;
   const ai = useAiController(workspace);
@@ -450,7 +450,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
             <button className={`${styles.iconButton} tooltip`} onClick={() => void workspace.saveAll()} aria-label={t('toolbar.saveAll')} data-tooltip={t('toolbar.saveAll')}>
               <Icon name="save" />
             </button>
-            <ThemeSwitcher theme={theme} onChange={setTheme} className={`${styles.iconButton} tooltip`} />
+            <hmd-theme-switcher store={getThemeStore()} i18n={i18nStore} />
             <button className={`${styles.iconButton} tooltip`} onClick={() => openSettings()} aria-label={t('toolbar.settings')} data-tooltip={t('toolbar.settings')}>
               <Icon name="settings" />
             </button>
