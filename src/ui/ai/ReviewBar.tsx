@@ -78,7 +78,7 @@ export function ReviewBar(props: Props) {
             className={`${styles.secondary} tooltip`}
             aria-label={t('ai.warningsCount', { count: props.warnings.length })}
             data-tooltip={t('ai.warningsCount', { count: props.warnings.length })}
-            {...{ popovertarget: id }}
+            popoverTarget={id}
           >
             <Icon name="warning" size={14} /> {props.warnings.length}
           </button>

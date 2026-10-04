@@ -1,9 +1,9 @@
 # HouseMD — migrazione a Web Components e CSS con `@scope` — design
 
-Data: 2026-09-27 · **Revisione: 2026-10-02**
+Data: 2026-09-27 · **Revisione: 2026-10-04**
 Base: `main` (HEAD `822f52d`: v1.1, strumenti AI, impostazioni a pagina, barra di formattazione,
 larghezza del testo, tooltip disegnati, albero con un solo tab stop).
-Stato: fasi 0–2 implementate (fase 0 PR #6, fase 1 PR #7, fase 2 sul branch `refactor/fase-2-infrastruttura-dom`); fasi 3–8 ancora piano.
+Stato: fasi 0–3 implementate (fase 0 PR #6, fase 1 PR #7, fase 2 in `main` (merge locale, commit 1b23305), fase 3 sul branch `refactor/fase-3-react-19`); fasi 4–8 ancora piano.
 
 Decisioni (27/09, riviste il 01/10; risposte alle domande aperte, §12):
 
@@ -77,7 +77,7 @@ farli passare) e la checklist manuale (§9) va a buon fine.
 
 ### 1.2 Dipendenze coinvolte
 
-- Da aggiornare nella fase 3: `react`/`react-dom` 18 → 19, con `@types/react*` allineati.
+- Aggiornate nella fase 3: `react`/`react-dom` 18 → 19.3, con `@types/react*` 19.3 (fatto).
 - Da togliere alla fine: `react`, `react-dom`, `@types/react`, `@types/react-dom`,
   `@vitejs/plugin-react`.
 - Da aggiungere: `ts-pattern`, `zod` (v4, import da `zod/mini`, §6.2); in sviluppo
@@ -510,6 +510,7 @@ Non cambia una riga dell'app.
    (ancora supportato, si lascia), doppio montaggio di StrictMode sui ref callback.
 2. Nessun cambio di comportamento: lo provano e2e e snapshot. Se un comportamento cambia, è un bug
    dell'aggiornamento, non della spec.
+3. **Fatta** (piano 4). Cambi reali: `inert` booleano (con la stringa vuota il workspace dietro le impostazioni non sarebbe più stato inerte), `popoverTarget`, `RefObject` al posto di `MutableRefObject`. Ref callback, `useRef` senza argomento e namespace `JSX` non toccavano il codice. Rete aggiunta: `npm run test:e2e:dev` (§8.4) e quattro e2e (workspace inerte, popover del chip del profilo e degli avvisi, tema con le animazioni; quello del tema conta anche le chiamate a `document.startViewTransition` e fallisce se la transizione viene saltata). Riparato un difetto che si vedeva solo con StrictMode: la revisione AI metteva il focus sull'editor appena montato, che StrictMode distruggeva e ricreava subito: il focus cadeva sul body e Ctrl+Z dopo «Accetta tutto» non arrivava a CodeMirror; ora `Editor` ridà il focus alla vista ricreata. Bundle principale gzip: 410 158 → 432 419 B.
 
 ### Fase 4: foglie come custom element dentro React (branch)
 
@@ -528,7 +529,7 @@ Ordine: `theme-switcher`, `conflict-bar`, `notice`, `update-notice`, `toasts`, d
   cambio selezione (usato dal chip del composer) diventa `hmd-selection`. `docSession.ts`,
   `useDocBinding.ts` (`applyDocRestore`), `formatToolbar.ts` non cambiano.
 - `hmd-ai-diff-pane`: ospita la `MergeView`; resta la regola "mai `setState` sull'editor posseduto
-  da MergeView". Ctrl+Z su accettazioni e rifiuti invariato.
+  da MergeView". Ctrl+Z su accettazioni e rifiuti invariato. Con StrictMode la `MergeView` ricreata perde il focus quando Ctrl+Z fa ricomparire il diff (visto nella fase 3, solo in sviluppo): l'elemento deve ridare il focus alla vista nuova, come fa `Editor` dalla fase 3.
 - `hmd-preview`: debounce, `setSafeHTML`, cache delle immagini, `ResizeObserver`, link,
   `highlightTerms` e larghezza del testo passano dagli effetti a metodi privati chiamati dai setter
   attraverso `scheduleRender()` (un microtask). Si conserva il flag `cancelled`.
@@ -565,7 +566,7 @@ Ordine: `theme-switcher`, `conflict-bar`, `notice`, `update-notice`, `toasts`, d
 ### Fase 8: rifinitura e richiesta di merge
 
 - Bundle e tempo di avvio rispetto al baseline della fase 0 (atteso: −40 KB gzip circa per
-  React/ReactDOM, + zod/mini + ts-pattern).
+  React/ReactDOM, + zod/mini + ts-pattern). Il baseline per misurare la rimozione di React è il bundle della fase 3, 432 419 B gzip con React 19; rispetto alla fase 0 (410 158 B, React 18) il guadagno netto atteso è di circa 22 KB in meno.
 - Passata di accessibilità con l'albero di accessibilità di Chrome sulle schermate principali.
 - Richiesta di approvazione del merge a Davide.
 
@@ -683,6 +684,8 @@ Ctrl+Z dopo accettazione, voce `before-ai` nella cronologia, stesso carattere ne
 `reuseExistingServer: false`. Snapshot in `e2e/__screenshots__/`, generati su Linux. `npm test` non
 raccoglie le spec (suffisso `.spec.ts`, cartella `e2e/`).
 
+**Suite in sviluppo** (`npm run test:e2e:dev`, `e2e/dev.config.ts`): le stesse spec contro `vite` in sviluppo (porta 5174), con StrictMode attivo; ogni errore o avviso in console fa fallire il test (`failOnConsole`). Restano fuori gli snapshot e il test che trattiene `assets/index-*.js`.
+
 **Audit degli stili calcolati** (`npm run test:e2e:audit`, `e2e/audit.config.ts`): gli stessi stati sulla build di riferimento in `dist-baseline/` (porta 4174) e sulla build corrente; ogni proprietà calcolata di ogni elemento e pseudo-elemento deve coincidere. Si usa prima e dopo ogni cambio di cascata (layer, `@scope`, spostamento di fogli), finché la struttura del DOM è la stessa. Copre focus da tastiera, `forced-colors` e tooltip al passaggio, che gli snapshot non vedono. Prima di leggere gli stili ogni stato viene stabilizzato: animazioni CSS in pausa, tutti i font caricati, un ridimensionamento della finestra 799/800 e rilettura del dump finché due letture coincidono.
 
 **Copertura** (una spec per area): avvio e browser non supportato; apertura, ripresa accesso e cambio
@@ -757,7 +760,7 @@ wikilink:
 | R15 | **Harness OPFS** non è il file system reale. | Certa / medio | Selettore e permessi reali nella checklist manuale; maiuscole coperte da `workspaceFS`. |
 | R16 | **Snapshot instabili**. | Media / medio | Font nel bundle, animazioni ridotte, Playwright a versione esatta, `maxDiffPixelRatio` dichiarato, rigenerazione solo con approvazione. |
 | R17 | **Suite e2e lenta**. | Media / basso | Accettato; filtro per file durante lo sviluppo. |
-| R18 | **React 19** cambia qualcosa di sottile (StrictMode e ref callback, tipi). | Media / medio | Fase a sé con PR in `main`, coperta da e2e e snapshot prima di qualsiasi custom element. |
+| R18 | **React 19** cambia qualcosa di sottile (StrictMode e ref callback, tipi). | Media / medio | Fase a sé con PR in `main`, coperta da e2e e snapshot prima di qualsiasi custom element; suite e2e in sviluppo con la console come cancello (fase 3). |
 | R19 | **Minificatore CSS** che trasforma `@scope`/`@layer` (è già successo con `light-dark()`). | Bassa / alto | `buildCss.test.ts` con un foglio di prova `@scope` e l'ordine dei layer calcolato per prima comparsa (il minificatore riscrive la dichiarazione `@layer`), dalla fase 2. |
 | R20 | **`main` che si muove** durante il branch lungo (nuove funzionalità in React). | Alta / medio | Rebase frequente; ogni funzionalità nuova va migrata nel branch prima del merge finale; e2e scritte per ruolo valgono per entrambe. |
 | R21 | **Regole AI violate nella riscrittura** (chiavi in `dataset`, fetch fuori dai provider). | Bassa / critico | Test statico su `fetch`/SDK; chiavi mai negli attributi; review dedicata della fase 6. |
@@ -793,6 +796,6 @@ wikilink:
 1. `docs/superpowers/plans/2026-09-27-housemd-wc-01-e2e-baseline.md`: fase 0 (fatta, PR #6).
 2. Un piano e una PR per fase: `docs/superpowers/plans/2026-10-01-housemd-wc-02-fase-1-logica-pura.md`
    (fase 1, PR #7); `docs/superpowers/plans/2026-10-02-housemd-wc-03-fase-2-infrastruttura-dom.md` (fase 2);
-   fase 3 (React 19) da scrivere.
+   `docs/superpowers/plans/2026-10-04-housemd-wc-04-fase-3-react-19.md` (fase 3).
 3. Fasi 4–6 (elementi in convivenza).
 4. Fasi 7–8 (impostazioni, workspace, via React, rifinitura, richiesta di merge).

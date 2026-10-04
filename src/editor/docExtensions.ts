@@ -8,14 +8,14 @@ import { tags } from '@lezer/highlight';
 
 import { imageFiles, insertImageLinks } from './images';
 import { wikiCompletionSource } from './wikiCompletion';
-import type { MutableRefObject } from 'react';
+import type { RefObject } from 'react';
 import type { EditorProps } from './Editor';
 import { saveDocSession } from './docSession';
 import { formatToolbar, type Translate } from './formatToolbar';
 
 
 /** Props dell'editor più la traduzione (per la barra di formattazione). */
-export type Callbacks = MutableRefObject<EditorProps & { t: Translate }>;
+export type Callbacks = RefObject<EditorProps & { t: Translate }>;
 
 const theme = EditorView.theme({
   '&': { height: '100%', backgroundColor: 'var(--c-surface)', color: 'var(--c-text)' },

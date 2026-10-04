@@ -113,3 +113,24 @@ test('Ctrl+S works with the settings open (no "Save page" dialog)', async ({ app
   await page.keyboard.press('ControlOrMeta+s');
   await expect.poll(() => app.disk('a.md')).toBe('# A\nmore');
 });
+
+// React 19 tratta `inert` come booleano: la stringa vuota di React 18 diventerebbe "non inerte".
+test('with the settings open the workspace behind is inert: no focus, out of the accessibility tree', async ({ app, page }) => {
+  const file = app.treeFile('a.md');
+  const takesFocus = () => file.evaluate((el: HTMLElement) => (el.focus(), document.activeElement === el));
+  // L'albero di accessibilità vero di Chromium: quello di Playwright (getByRole, ariaSnapshot) include
+  // anche i sottoalberi inerti.
+  const cdp = await page.context().newCDPSession(page);
+  const treeInAccessibilityTree = async () => {
+    const { nodes } = (await cdp.send('Accessibility.getFullAXTree')) as {
+      nodes: { ignored: boolean; role?: { value: string }; name?: { value: string } }[];
+    };
+    return nodes.some((n) => !n.ignored && n.role?.value === 'navigation' && n.name?.value === app.t('tree.label'));
+  };
+  expect(await takesFocus()).toBe(true);
+  expect(await treeInAccessibilityTree()).toBe(true);
+  await page.getByRole('button', { name: app.t('toolbar.settings') }).click();
+  await expect(page.getByRole('region', { name: app.t('settings.title') })).toBeVisible();
+  expect(await takesFocus()).toBe(false);
+  expect(await treeInAccessibilityTree()).toBe(false);
+});

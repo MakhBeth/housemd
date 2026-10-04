@@ -15,7 +15,7 @@ interface Props {
   onCancel: () => void;
 }
 
-/** `closedby` non è ancora nei tipi di React 18: lo passiamo come attributo. */
+/** Lo spread come `Record<string, string>` resta da React 18: diventerà una prop normale con il dialog come custom element (fase 4). */
 const lightDismiss = { closedby: 'any' } as Record<string, string>;
 
 export function NameDialog({ title, kind, initial, confirmLabel, validate, onSubmit, onCancel }: Props) {
