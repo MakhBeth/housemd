@@ -29,7 +29,7 @@ import { SearchPanel } from './SearchPanel';
 import { SettingsView } from './SettingsView';
 import { useRoute } from './useRoute';
 import { shortcutFor } from './shortcuts';
-import { Toasts, type ToastItem } from './Toasts';
+import type { ToastItem } from '../elements/toasts/toasts.element';
 import { buildTree, type TreeNode } from './tree';
 import { useWorkspaceState } from './useWorkspace';
 import styles from './WorkspaceView.module.css';
@@ -612,7 +612,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
         />
       )}
 
-      <Toasts items={toastItems} onDismiss={dismissToast} />
+      <hmd-toasts items={toastItems} i18n={i18nStore} onhmd-toast-dismiss={(event) => dismissToast(event.detail.key)} />
     </>
   );
 }

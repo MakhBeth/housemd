@@ -9,6 +9,8 @@ export interface HmdEvents {
   'hmd-notice-action': CustomEvent<null>;
   /** Chiusura di un avviso. */
   'hmd-notice-dismiss': CustomEvent<null>;
+  /** Chiusura di un toast (dal pulsante o dal timer dei toast informativi). */
+  'hmd-toast-dismiss': CustomEvent<{ key: string }>;
 }
 
 export function emit<K extends keyof HmdEvents>(target: Element, type: K, detail: HmdEvents[K] extends CustomEvent<infer D> ? D : never): void {

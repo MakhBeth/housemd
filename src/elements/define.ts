@@ -1,5 +1,6 @@
 import { HmdConflictBar } from './conflict-bar/conflict-bar.element';
 import { HmdNotice } from './notice/notice.element';
+import { HmdToasts } from './toasts/toasts.element';
 import { HmdThemeSwitcher } from './theme-switcher/theme-switcher.element';
 import { HmdUpdateNotice } from './update-notice/update-notice.element';
 
@@ -14,6 +15,7 @@ const ELEMENTS: Definitions = [
   ['hmd-conflict-bar', HmdConflictBar],
   ['hmd-notice', HmdNotice],
   ['hmd-theme-switcher', HmdThemeSwitcher],
+  ['hmd-toasts', HmdToasts],
   ['hmd-update-notice', HmdUpdateNotice],
 ];
 
