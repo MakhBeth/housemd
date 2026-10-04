@@ -7,10 +7,20 @@ export type StyleDump = Record<string, Record<string, string>>;
  */
 export function dumpComputedStyles(): StyleDump {
   const out: StyleDump = {};
+  // I wrapper dei custom element con `display: contents` non hanno un box: si saltano, così l'albero
+  // confrontato è quello di React (spec WC fase 4, host trasparenti).
+  const transparent = (node: Element) => node.localName.startsWith('hmd-') && getComputedStyle(node).display === 'contents';
+  const flatChildren = (node: Element): Element[] => [...node.children].flatMap((child) => (transparent(child) ? flatChildren(child) : [child]));
+  const parentOf = (node: Element): Element | null => {
+    let parent = node.parentElement;
+    while (parent && transparent(parent)) parent = parent.parentElement;
+    return parent;
+  };
   const pathOf = (el: Element): string => {
     const parts: string[] = [];
-    for (let node: Element | null = el; node && node !== document.documentElement; node = node.parentElement) {
-      const index = node.parentElement ? Array.prototype.indexOf.call(node.parentElement.children, node) : 0;
+    for (let node: Element | null = el; node && node !== document.documentElement; node = parentOf(node)) {
+      const parent = parentOf(node);
+      const index = parent ? flatChildren(parent).indexOf(node) : 0;
       parts.unshift(`${node.localName}:${index}`);
     }
     return parts.join('>') || 'html';
@@ -26,6 +36,7 @@ export function dumpComputedStyles(): StyleDump {
   const skip = new Set(['script', 'style', 'template', 'link', 'meta']);
   for (const el of [document.documentElement, ...document.querySelectorAll('body, body *')]) {
     if (skip.has(el.localName)) continue;
+    if (transparent(el)) continue;
     const path = pathOf(el);
     out[path] = read(getComputedStyle(el));
     for (const pseudo of ['::before', '::after']) {
