@@ -86,6 +86,16 @@ const STATES: State[] = [
     },
   },
   {
+    name: 'name-dialog-error',
+    async setup(app, page) {
+      await app.openFolder({ 'note.md': '# Note' });
+      await page.getByRole('button', { name: app.t('file.new') }).first().click();
+      const dialog = page.getByRole('dialog', { name: app.t('file.new') });
+      await dialog.getByRole('button', { name: app.t('dialog.create') }).click();
+      await expect(dialog.getByText(app.t('name.error.empty'))).toBeVisible();
+    },
+  },
+  {
     name: 'confirm-dialog',
     async setup(app, page) {
       await app.openFolder({ 'note.md': '# Note' });
