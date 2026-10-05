@@ -6,7 +6,7 @@
  *
  * Limiti di jsdom 30 (verificati nella fase 2): mancano moveBefore, showModal/closedBy, Popover,
  * commandfor, CSS.highlights e Anchor Positioning. Chi li usa li controlla prima di chiamarli o riceve
- * uno stub nel suo test; il comportamento vero lo verificano Playwright e la checklist manuale.
+ * uno stub nel suo test (`popoverStub.ts`, `dialogStub.ts`); il comportamento vero lo verificano Playwright e la checklist manuale.
  */
 import { JSDOM } from 'jsdom';
 

@@ -3,7 +3,7 @@
 Data: 2026-09-27 · **Revisione: 2026-10-05**
 Base: `main` (HEAD `822f52d`: v1.1, strumenti AI, impostazioni a pagina, barra di formattazione,
 larghezza del testo, tooltip disegnati, albero con un solo tab stop).
-Stato: fasi 0–3 implementate (fase 0 PR #6, fase 1 PR #7, fase 2 in `main` (merge locale, commit 1b23305), fase 3 in `main` (merge locale)); fase 4a sul branch `feat/web-components`; fasi 4b–8 ancora piano.
+Stato: fasi 0–3 implementate (fase 0 PR #6, fase 1 PR #7, fase 2 in `main` (merge locale, commit 1b23305), fase 3 in `main` (merge locale)); fasi 4a e 4b sul branch `feat/web-components`; fasi 4c–8 ancora piano.
 
 Decisioni (27/09, riviste il 01/10; risposte alle domande aperte, §12):
 
@@ -382,9 +382,9 @@ Niente singleton importati dagli elementi: nei test si usa uno store finto.
 ### 5.4 Dialog come funzioni che restituiscono Promise
 
 ```ts
-const name = await showNameDialog({ title, kind, initial, confirmLabel, validate, t });   // string | null
-const ok   = await showConfirmDialog({ title, message, confirmLabel, t });               // boolean
-await showAccessLostDialog({ folderName, onResume, t });                                 // si chiude solo con accesso concesso
+const name = await showNameDialog({ title, kind, initial, confirmLabel, validate, t, signal });   // string | null
+const ok   = await showConfirmDialog({ title, message, confirmLabel, t, signal });               // boolean
+await showAccessLostDialog({ folderName, onResume, t, signal });                                 // si chiude solo con accesso concesso
 ```
 
 Ogni funzione crea un `<dialog closedby="any">` (`closedby="none"` per l'accesso perso), lo aggiunge
@@ -393,6 +393,8 @@ a `document.body`, chiama `showModal()`, risolve la Promise all'evento `close` e
 il dialog. I workaround per StrictMode spariscono. Le conferme oggi sparse (eliminazione, modifiche
 aperte su Indietro/Chiudi delle impostazioni, elimina profilo/preset) passano tutte da
 `showConfirmDialog`.
+
+`signal` (facoltativo) chiude il dialog quando chi l'ha aperto sparisce; la Promise si risolve come un annullamento. Il dialog si rimuove dopo l'evento `close`, così il focus torna all'elemento d'origine anche dopo una conferma (prima della 4b, con React, cadeva sul `body`). La conferma «Scartare le modifiche?» è `showDiscardChangesDialog({ t, signal })`; i dialog dell'albero passano da `runTreeDialog(dialog, deps)` (`elements/workspace/treeDialogs.ts`).
 
 La logica che decide quale dialog aprire per un'azione dell'albero diventa
 `dialogFor(action, node)` con `match(...).exhaustive()`, testata.
@@ -526,6 +528,7 @@ Ordine: `theme-switcher`, `conflict-bar`, `notice`, `update-notice`, `toasts`, d
   direttamente da React 19, §5.1).
 - I dialog diventano le funzioni di §5.4, chiamate da `WorkspaceView`.
 - 4a **fatta**: `hmd-theme-switcher`, `hmd-conflict-bar`, `hmd-notice`, `hmd-update-notice`, `hmd-toasts`; host con `display: contents`; store passati come proprietà (`useI18nStore`, `getThemeStore`); `HmdElement.reconnect()`; test degli elementi in jsdom con `src/testing/assetHooks.ts` e `popoverStub.ts`. I toast conservano il riavvio dei timer a ogni nuovo array (difetto preesistente, visibile: da decidere a parte).
+- 4b **fatta**: `showNameDialog`, `showConfirmDialog`, `showDiscardChangesDialog`, `showAccessLostDialog` in `src/elements/dialogs/` (nucleo `modal.ts`, foglio `dialogs.css`), `runTreeDialog`, hook temporaneo `useUnmountSignal`; via `ConfirmDialog.tsx`, `NameDialog.tsx`, `AccessLostDialog`; `Dialog.module.css` resta per i campi delle impostazioni fino alla fase 7. Audit esteso ai `::backdrop` e agli stati conferma, modifiche aperte, accesso perso. Conservato un difetto: Esc nelle impostazioni con modifiche aperte apre e richiude subito la conferma. Bundle principale gzip: 433 971 → 434 481 B.
 
 ### Fase 5: editor, anteprima, diff (branch)
 
@@ -634,7 +637,7 @@ nulla**. Diventa:
 `AbortSignal` di Node in `addEventListener`). Ogni `*.dom.test.ts` lo importa **come primo import**.
 `node:test` esegue ogni file in un processo separato. `npm test` è `tsx --import ./src/testing/assetHooks.ts --test`: un hook di Node per gli import `?url` delle icone e `.css` (serve Node ≥ 22.15 per `module.registerHooks`; `engines` in `package.json`).
 
-Limiti di jsdom 30.1.1, verificati nella fase 2: mancano `moveBefore`, `showModal`/`closedBy`, Popover (`popover`, `showPopover`), `commandForElement`, `CSS.highlights`/`Highlight`, Anchor Positioning. Ci sono `customElements`, `MutationObserver`, `role`/`ariaLabel` come proprietà; `addEventListener` accetta solo l'`AbortSignal` della stessa `window` (quello di Node dà `TypeError`). jsdom, come Chromium, toglie il focus a un nodo spostato con `insertBefore`; che `moveBefore` lo conservi si verifica solo in Chromium, con gli e2e della fase 6 su albero e ricerca. Gli stub entrano nel test che li usa, dalla fase 4; i comportamenti reali li verifica Playwright o la checklist manuale.
+Limiti di jsdom 30.1.1, verificati nella fase 2: mancano `moveBefore`, `showModal`/`closedBy`, Popover (`popover`, `showPopover`), `commandForElement`, `CSS.highlights`/`Highlight`, Anchor Positioning. Ci sono `customElements`, `MutationObserver`, `role`/`ariaLabel` come proprietà; `addEventListener` accetta solo l'`AbortSignal` della stessa `window` (quello di Node dà `TypeError`). jsdom, come Chromium, toglie il focus a un nodo spostato con `insertBefore`; che `moveBefore` lo conservi si verifica solo in Chromium, con gli e2e della fase 6 su albero e ricerca. Lo stub `src/testing/dialogStub.ts` imita `showModal`/`close`/`returnValue` e `command="close"`. Gli stub entrano nel test che li usa, dalla fase 4; i comportamenti reali li verifica Playwright o la checklist manuale.
 
 ### 8.3 Test statici nuovi (`architecture.test.ts`)
 
@@ -647,6 +650,7 @@ Limiti di jsdom 30.1.1, verificati nella fase 2: mancano `moveBefore`, `showModa
   `@layer components`;
 - `customElements.define` solo in `elements/define.ts`;
 - `showDirectoryPicker`/`requestPermission`/`queryPermission` solo in `fs/fsaOps.ts` e `fs/access.ts`;
+- `showModal(` e `<dialog` solo in `src/elements/dialogs/`;
 - l'identificatore `fetch`, `XMLHttpRequest`, `EventSource`, `WebSocket` e gli import di
   `@anthropic-ai/sdk` solo in `src/ai/providers/` (regola AI di `CLAUDE.md`, finora non verificata;
   al 01/10 non ci sono eccezioni).
@@ -802,6 +806,7 @@ wikilink:
 2. Un piano e una PR per fase: `docs/superpowers/plans/2026-10-01-housemd-wc-02-fase-1-logica-pura.md`
    (fase 1, PR #7); `docs/superpowers/plans/2026-10-02-housemd-wc-03-fase-2-infrastruttura-dom.md` (fase 2);
    `docs/superpowers/plans/2026-10-04-housemd-wc-04-fase-3-react-19.md` (fase 3);
-   `docs/superpowers/plans/2026-10-05-housemd-wc-05-fase-4a-infrastruttura-e-foglie.md` (fase 4a, branch `feat/web-components`); 4b e 4c da scrivere.
+   `docs/superpowers/plans/2026-10-05-housemd-wc-05-fase-4a-infrastruttura-e-foglie.md` (fase 4a, branch `feat/web-components`);
+   `docs/superpowers/plans/2026-10-05-housemd-wc-06-fase-4b-dialog.md` (fase 4b); 4c da scrivere.
 3. Fasi 4–6 (elementi in convivenza).
 4. Fasi 7–8 (impostazioni, workspace, via React, rifinitura, richiesta di merge).
