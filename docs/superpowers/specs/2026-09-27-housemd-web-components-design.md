@@ -3,14 +3,15 @@
 Data: 2026-09-27 · **Revisione: 2026-10-05**
 Base: `main` (HEAD `822f52d`: v1.1, strumenti AI, impostazioni a pagina, barra di formattazione,
 larghezza del testo, tooltip disegnati, albero con un solo tab stop).
-Stato: fasi 0–3 implementate (fase 0 PR #6, fase 1 PR #7, fase 2 in `main` (merge locale, commit 1b23305), fase 3 in `main` (merge locale)); fasi 4a e 4b sul branch `feat/web-components`; fasi 4c–8 ancora piano.
+Stato: fasi 0–3 implementate (fase 0 PR #6, fase 1 PR #7, fase 2 in `main` (merge locale, commit 1b23305), fase 3 in `main` (merge locale)); fasi 4a e 4b in `main` (merge locale del 05/10, dal branch `feat/web-components`); fasi 4c–8 ancora piano.
 
 Decisioni (27/09, riviste il 01/10; risposte alle domande aperte, §12):
 
 1. **Merge in due tempi.** Le fasi 0–3 (e2e, logica pura, zod/ts-pattern, store, infrastruttura
    DOM/CSS, React 19) non cambiano la UI ed entrano in `main` con **PR separate**, una per fase. Le
    fasi 4–8 (convivenza e uscita da React) vivono su un branch di integrazione e arrivano in `main`
-   con **un solo merge**, solo dopo approvazione esplicita di Davide.
+   **a ogni sotto-fase verificata** (suite verdi, review e checklist), decisione di Davide del 05/10;
+   fino al 05/10 era previsto un solo merge alla fine della fase 8.
 2. **zod ridotto**: solo ai confini con dati che il codice non controlla (file system, storage del
    browser, risposte JSON dei provider), mai sulla logica interna (§6.2).
 3. **Playwright** entra nel progetto ed è la **prima parte implementativa**: una suite end-to-end
@@ -463,10 +464,11 @@ Esclusi di proposito: frontmatter → card (`toCard` è presentazione tollerante
   `npm test` verde, `npm run lint` e `npm run build` puliti, `npm run test:e2e` verde (snapshot
   invariati).
 - **Fasi 4–8 → branch di integrazione `feat/web-components`**, creato da `main` dopo il merge della
-  fase 3. Stesso cancello a fine fase più la checklist ridotta di §9. **Un solo merge in `main`**,
-  alla fine della fase 8, dopo l'approvazione esplicita di Davide. Se `main` riceve modifiche, si fa
-  rebase del branch (mai merge di `main` dentro il branch) rilanciando entrambe le suite; una
-  funzionalità nuova arrivata in `main` va migrata nel branch prima del merge finale.
+  fase 3. Stesso cancello a fine fase più la checklist ridotta di §9. **Merge in `main` a ogni
+  sotto-fase che passa il cancello** (rivista il 05/10: prima era un solo merge alla fine della fase
+  8); il primo è 4a+4b. Il branch resta e riparte da `main` per la sotto-fase successiva. Se `main`
+  riceve modifiche, si fa rebase del branch (mai merge di `main` dentro il branch) rilanciando
+  entrambe le suite; una funzionalità nuova arrivata in `main` va migrata nel branch.
 
 ### Fase 0: Playwright e rete di sicurezza (PR in `main`)
 
@@ -792,8 +794,8 @@ wikilink:
 
 ## 12. Domande aperte → decisioni
 
-1. **Un merge solo o per fase?** → In due tempi: fasi 0–3 con PR separate in `main`; fasi 4–8 con un
-   solo merge dopo approvazione esplicita (rivista il 01/10).
+1. **Un merge solo o per fase?** → In due tempi: fasi 0–3 con PR separate in `main`; fasi 4–8 su un
+   branch di integrazione con merge in `main` a ogni sotto-fase verificata (rivista il 01/10 e il 05/10).
 2. **Quanto zod?** → Ridotto: file system, storage del browser, risposte JSON dei provider;
    `zod/mini`.
 3. **Test in browser reale?** → Playwright, prima parte implementativa; il collaudo CDP dell'AI ci
