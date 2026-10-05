@@ -1361,8 +1361,23 @@ test('a new value object with the same number does not rewrite the text the user
   el.remove();
 });
 
-test('a partial number the browser cannot parse ("0.") arrives as an empty value and is not rewritten', () => {
+test('a number the input cannot parse sends the parameter removed, and getting undefined back writes nothing', () => {
   const { el, changes, input } = mount('ollama', { topP: 0.9 });
+  const p = input(EN_MESSAGES['ai.param.topP']);
+  // jsdom, come Chromium, espone value "" per un numero non valido mentre si scrive ("0."): il testo
+  // visibile resta solo se l'elemento non riscrive il campo. Qui si contano le scritture su `value`
+  // (che il testo resti lo verifica in Chromium l'e2e «typing a partial number keeps the text»).
+  p.value = '';
+  p.dispatchEvent(new Event('input', { bubbles: true }));
+  assert.deepEqual(changes.at(-1), { topP: undefined });
+  const proto = Object.getPrototypeOf(p) as object;
+  const desc = Object.getOwnPropertyDescriptor(proto, 'value')!;
+  let writes = 0;
+  Object.defineProperty(p, 'value', { configurable: true, get: () => desc.get!.call(p), set: (v: string) => { writes++; desc.set!.call(p, v); } });
+  el.value = { topP: undefined };
+  assert.equal(writes, 0);
+  el.remove();
+});
   const p = input(EN_MESSAGES['ai.param.topP']);
   // jsdom, come Chromium, dà value "" per un numero non valido mentre si scrive.
   p.value = '0.';
