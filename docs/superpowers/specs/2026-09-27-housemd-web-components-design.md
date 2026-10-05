@@ -3,7 +3,7 @@
 Data: 2026-09-27 · **Revisione: 2026-10-05**
 Base: `main` (HEAD `822f52d`: v1.1, strumenti AI, impostazioni a pagina, barra di formattazione,
 larghezza del testo, tooltip disegnati, albero con un solo tab stop).
-Stato: fasi 0–3 implementate (fase 0 PR #6, fase 1 PR #7, fase 2 in `main` (merge locale, commit 1b23305), fase 3 sul branch `refactor/fase-3-react-19`); fase 4a sul branch `feat/web-components`; fasi 4b–8 ancora piano.
+Stato: fasi 0–3 implementate (fase 0 PR #6, fase 1 PR #7, fase 2 in `main` (merge locale, commit 1b23305), fase 3 in `main` (merge locale)); fase 4a sul branch `feat/web-components`; fasi 4b–8 ancora piano.
 
 Decisioni (27/09, riviste il 01/10; risposte alle domande aperte, §12):
 
@@ -632,7 +632,7 @@ nulla**. Diventa:
 `window`, `document`, `HTMLElement`, `customElements`, `Node`, `CustomEvent`, `Event`,
 `AbortController` e `AbortSignal` **presi dalla `window` di quel `JSDOM`** (jsdom rifiuta un
 `AbortSignal` di Node in `addEventListener`). Ogni `*.dom.test.ts` lo importa **come primo import**.
-`node:test` esegue ogni file in un processo separato. `npm test` resta `tsx --test`.
+`node:test` esegue ogni file in un processo separato. `npm test` è `tsx --import ./src/testing/assetHooks.ts --test`: un hook di Node per gli import `?url` delle icone e `.css` (serve Node ≥ 22.15 per `module.registerHooks`; `engines` in `package.json`).
 
 Limiti di jsdom 30.1.1, verificati nella fase 2: mancano `moveBefore`, `showModal`/`closedBy`, Popover (`popover`, `showPopover`), `commandForElement`, `CSS.highlights`/`Highlight`, Anchor Positioning. Ci sono `customElements`, `MutationObserver`, `role`/`ariaLabel` come proprietà; `addEventListener` accetta solo l'`AbortSignal` della stessa `window` (quello di Node dà `TypeError`). jsdom, come Chromium, toglie il focus a un nodo spostato con `insertBefore`; che `moveBefore` lo conservi si verifica solo in Chromium, con gli e2e della fase 6 su albero e ricerca. Gli stub entrano nel test che li usa, dalla fase 4; i comportamenti reali li verifica Playwright o la checklist manuale.
 
