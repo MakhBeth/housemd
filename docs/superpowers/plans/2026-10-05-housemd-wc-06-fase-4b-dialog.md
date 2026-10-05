@@ -102,9 +102,37 @@ rm -rf dist-baseline && cp -r dist dist-baseline  # riferimento dell'audit: il b
 
 `dist-baseline/` resta per tutto il piano: **non ricostruirla** nei task successivi.
 
-- [ ] **Step 2: Backdrop nell'audit**
+- [ ] **Step 2: Dialog con una chiave indipendente dalla posizione, e backdrop nell'audit**
 
-In `e2e/support/styleAudit.ts`, nel ciclo dei pseudo-elementi (oggi `for (const pseudo of ['::before', '::after'])`), aggiungere il backdrop dei dialog modali. Il ciclo diventa:
+Oggi i dialog React stanno dentro `#root` (fratelli del layout di `WorkspaceView`); con le funzioni stanno in `document.body`. La chiave del dump è il percorso nel DOM (`pathOf`), quindi senza correzione l'audit vedrebbe "elementi spariti e nuovi" anche con stili identici. Un dialog è nel top layer: la sua posizione nel DOM conta solo per l'ereditarietà, e `#root` non imposta proprietà ereditabili (`global.css`: solo `height` e `margin`), quindi la chiave del dialog si rende indipendente dal genitore e il confronto degli stili calcolati resta pieno.
+
+In `e2e/support/styleAudit.ts`, in `pathOf`, il ciclo si ferma al primo `dialog` incontrato e lo chiama per indice tra i dialog del documento:
+
+```ts
+  const pathOf = (el: Element): string => {
+    const parts: string[] = [];
+    for (let node: Element | null = el; node && node !== document.documentElement; node = parentOf(node)) {
+      // Un dialog sta nel top layer: la chiave non dipende da dove è appeso nel DOM (#root o body).
+      if (node.localName === 'dialog') {
+        parts.unshift(`dialog#${[...document.querySelectorAll('dialog')].indexOf(node as HTMLDialogElement)}`);
+        break;
+      }
+      const parent = parentOf(node);
+      const index = parent ? flatChildren(parent).indexOf(node) : 0;
+      parts.unshift(`${node.localName}:${index}`);
+    }
+    return parts.join('>') || 'html';
+  };
+```
+
+Oggi il dialog è anche un figlio di `#root`, e il suo indice sposta quello dei fratelli che lo seguono (impostazioni, `hmd-toasts`): con il dialog in `body` gli indici cambierebbero. Per questo `flatChildren` salta i dialog, che hanno già la loro chiave:
+
+```ts
+  const flatChildren = (node: Element): Element[] =>
+    [...node.children].flatMap((child) => (transparent(child) ? flatChildren(child) : child.localName === 'dialog' ? [] : [child]));
+```
+
+Poi, nel ciclo dei pseudo-elementi (oggi `for (const pseudo of ['::before', '::after'])`), aggiungere il backdrop dei dialog modali. Il ciclo diventa:
 
 ```ts
     for (const pseudo of ['::before', '::after']) {
@@ -115,7 +143,7 @@ In `e2e/support/styleAudit.ts`, nel ciclo dei pseudo-elementi (oggi `for (const 
     if (el.matches('dialog:modal')) out[`${path}::backdrop`] = read(getComputedStyle(el, '::backdrop'));
 ```
 
-(Adattare i nomi `el`, `path`, `out`, `read` a quelli del file se diversi: il blocco va accanto a quello dei pseudo-elementi.) Aggiornare il commento in testa al file: «più `::before`/`::after`» → «più `::before`/`::after` e `::backdrop` dei dialog modali».
+Aggiornare il commento in testa al file: «più `::before`/`::after`» → «più `::before`/`::after` e `::backdrop` dei dialog modali; i dialog hanno la chiave `dialog#<indice>`, qualunque sia il genitore».
 
 - [ ] **Step 3: Stati di audit per i dialog**
 
@@ -414,6 +442,14 @@ test('an abort closes the dialog, resolves with an empty value and leaves no lis
   assert.equal(second.dialog.isConnected, false);
 });
 
+test('an abort after close() but before the close event wins: empty value', async () => {
+  const controller = new AbortController();
+  const { dialog, closed } = openModal({ labelledBy: 'x', closedby: 'any', signal: controller.signal });
+  dialog.close('confirm');
+  controller.abort();
+  assert.equal(await closed, '');
+});
+
 test('an already aborted signal opens nothing', async () => {
   const { dialog, closed } = openModal({ labelledBy: 'x', closedby: 'any', signal: AbortSignal.abort() });
   assert.equal(dialog.isConnected, false);
@@ -614,7 +650,7 @@ Prima di scrivere il CSS, aprire `src/ui/Dialog.module.css` e `src/ui/WorkspaceV
 - [ ] **Step 5: Il nucleo passa**
 
 Run: `npx tsx --import ./src/testing/assetHooks.ts --test src/elements/dialogs/modal.dom.test.ts`
-Expected: PASS (6 test).
+Expected: PASS (7 test).
 
 - [ ] **Step 6: Test della conferma che falliscono**
 
@@ -682,6 +718,14 @@ test('two dialogs open one after the other get different ids', async () => {
   assert.notEqual(dialog().id, firstId);
   buttons()[0].click();
   await second;
+});
+
+test('an abort between the confirm click and the close event resolves false', async () => {
+  const controller = new AbortController();
+  const result = showConfirmDialog({ title: 'T', message: 'M', confirmLabel: 'OK', t, signal: controller.signal });
+  buttons()[1].click();
+  controller.abort();
+  assert.equal(await result, false);
 });
 
 test('an abort resolves false and removes the dialog', async () => {
@@ -759,7 +803,7 @@ Nota: `showModal()` dentro `openModal` mette il focus su `[autofocus]` già pres
 - [ ] **Step 9: La conferma passa, poi tutto**
 
 Run: `npx tsx --import ./src/testing/assetHooks.ts --test src/elements/dialogs/confirmDialog.dom.test.ts`
-Expected: PASS (7 test).
+Expected: PASS (8 test).
 
 Run: `npm test` e `npm run lint`
 Expected: tutto verde; `architecture.test.ts` accetta `dialogs.css` (radice `dialog.hmd-dialog`); `uiText.test.ts` non trova testi letterali.
@@ -888,6 +932,16 @@ test('a valid name resolves with the normalized name and removes the dialog', as
   assert.equal(document.querySelector('dialog'), null);
 });
 
+test('an abort between the submit and the close event discards the name', async () => {
+  const controller = new AbortController();
+  const result = open({ signal: controller.signal });
+  type('late');
+  submit().click();
+  controller.abort();
+  assert.equal(await result, null);
+  assert.equal(document.querySelector('dialog'), null);
+});
+
 test('Cancel, a light dismiss and an abort resolve null', async () => {
   let result = open();
   cancel().click();
@@ -975,22 +1029,22 @@ export async function showNameDialog({ title, kind, initial, confirmLabel, valid
     const problem = validate(checked.name);
     if (problem) return showError(problem);
     result = checked.name;
-    dialog.close();
+    dialog.close('ok');
   });
 
   // Di un file si seleziona il nome senza estensione, così scrivere lo sostituisce lasciando ".md".
   const dot = initial.lastIndexOf('.');
   input.setSelectionRange(0, kind === 'file' && dot > 0 ? dot : initial.length);
 
-  await closed;
-  return result;
+  // Un abort arrivato tra il submit e l'evento close risolve '' (vedi openModal): nome scartato.
+  return (await closed) === 'ok' ? result : null;
 }
 ```
 
 - [ ] **Step 4: Passa, poi tutto**
 
 Run: `npx tsx --import ./src/testing/assetHooks.ts --test src/elements/dialogs/nameDialog.dom.test.ts`
-Expected: PASS (7 test).
+Expected: PASS (8 test).
 
 Run: `npm test` e `npm run lint`
 Expected: verde.
@@ -1511,7 +1565,7 @@ npm run test:e2e:dev
 npm run test:e2e:audit
 ```
 
-Expected: tutto verde; e2e = conteggio del Task 1 + 1. L'audit su `name-dialog`, `confirm-dialog` e `access-lost-dialog` (backdrop compresi) coincide con la baseline. Se l'audit trova differenze, **non toccare i test**: confrontare il CSS di `dialogs.css` con i moduli originali (ordine dei layer, specificità, `:scope.access`) e correggere il CSS.
+Expected: tutto verde; e2e = conteggio del Task 1 + 1. L'audit su `name-dialog`, `confirm-dialog` e `access-lost-dialog` (backdrop compresi) coincide con la baseline: grazie alla chiave `dialog#<indice>` del Task 1 lo spostamento da `#root` a `body` non conta, contano solo gli stili. Se l'audit trova differenze, **non toccare i test**: confrontare il CSS di `dialogs.css` con i moduli originali (ordine dei layer, specificità, `:scope.access`) e correggere il CSS.
 
 - [ ] **Step 9: Commit**
 
