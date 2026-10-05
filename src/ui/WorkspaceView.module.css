@@ -189,24 +189,6 @@
   font-weight: 600;
 }
 
-.accessDialog {
-  border: 1px solid var(--c-border);
-  border-radius: 12px;
-  background: var(--c-surface);
-  color: var(--c-text);
-  padding: 24px;
-  width: min(440px, calc(100vw - 32px));
-}
-
-.accessDialog::backdrop {
-  background: rgb(0 0 0 / 0.45);
-}
-
-.accessError {
-  color: var(--c-danger);
-  font-weight: 600;
-}
-
 .orphans {
   display: flex;
   flex-direction: column;

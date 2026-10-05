@@ -15,6 +15,18 @@ test.describe('dialogs and menu', () => {
     await expect.poll(() => app.exists('città.md')).toBe(true);
   });
 
+  test('after creating from the sidebar button the focus is back on that button', async ({ app, page }) => {
+    const button = page.getByRole('button', { name: app.t('file.new') }).first();
+    await button.click();
+    const dialog = page.getByRole('dialog', { name: app.t('file.new') });
+    await dialog.getByRole('textbox').fill('fresh');
+    await page.keyboard.press('Enter');
+    await expect(dialog).toHaveCount(0);
+    await expect(app.treeFile('fresh.md')).toBeVisible();
+    // Prima della fase 4b il focus cadeva sul body (React staccava il dialog prima di chiuderlo).
+    await expect(button).toBeFocused();
+  });
+
   test('name errors keep the dialog open, Esc closes it', async ({ app, page }) => {
     await page.getByRole('button', { name: app.t('file.new') }).first().click();
     const dialog = page.getByRole('dialog', { name: app.t('file.new') });
