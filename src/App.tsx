@@ -7,14 +7,12 @@ import { findKnownWorkspaceId, loadWorkspace, saveWorkspace, type StoredWorkspac
 import { createWorkspaceFS } from './fs/workspaceFS';
 import { switchFolder, switchGuard } from './app/switchFolder';
 import { afterSwitch, type Screen as AppScreen } from './elements/app/screens';
-import { useT } from './i18n/I18nProvider';
+import { useI18nStore, useT } from './i18n/I18nProvider';
 import { onDbBlocked } from './lib/db';
 import { readValidPref } from './lib/prefs';
 import type { UpdateFlow } from './pwa/updateFlow';
 import { setUpdateWorkspace } from './pwa/updateHost';
-import { Notice } from './ui/Notice';
 import { StartScreen } from './ui/StartScreen';
-import { UpdateNotice } from './ui/UpdateNotice';
 import { WorkspaceView } from './ui/WorkspaceView';
 import { indexedDbHistoryStore } from './history/historyStore';
 import { indexedDbBufferStore } from './workspace/buffers';
@@ -41,6 +39,7 @@ async function openWorkspace(stored: StoredWorkspace): Promise<Workspace> {
 
 export default function App({ updates }: { updates: UpdateFlow }) {
   const t = useT();
+  const i18nStore = useI18nStore();
   const [dbBlocked, setDbBlocked] = useState(false);
   useEffect(() => onDbBlocked(() => setDbBlocked(true)), []);
 
@@ -158,13 +157,14 @@ export default function App({ updates }: { updates: UpdateFlow }) {
   return (
     <>
       {content}
-      <UpdateNotice flow={updates} />
+      <hmd-update-notice flow={updates} i18n={i18nStore} />
       {dbBlocked && (
-        <Notice
+        <hmd-notice
           placement="top"
           message={t('toast.reloadOtherTabs')}
           dismissLabel={t('toast.close')}
-          onDismiss={() => setDbBlocked(false)}
+          dismissible
+          onhmd-notice-dismiss={() => setDbBlocked(false)}
         />
       )}
     </>

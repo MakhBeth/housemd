@@ -1,0 +1,24 @@
+@layer components {
+  @scope (hmd-theme-switcher) {
+    /* Nessun box proprio: il pulsante è un elemento della barra come gli altri. */
+    :scope {
+      display: contents;
+    }
+
+    .button {
+      background: none;
+      border: none;
+      border-radius: 6px;
+      width: 30px;
+      height: 30px;
+      cursor: pointer;
+      display: inline-grid;
+      place-items: center;
+      color: var(--c-text);
+    }
+
+    .button:hover {
+      background: var(--c-accent-soft);
+    }
+  }
+}

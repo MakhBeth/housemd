@@ -1,0 +1,57 @@
+@layer components {
+  @scope (hmd-notice) {
+    :scope {
+      display: contents;
+    }
+
+    .notice {
+      position: fixed;
+      inset: auto auto 16px 16px;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: min(420px, calc(100vw - 32px));
+      padding: 10px 12px;
+      border: 1px solid var(--c-border);
+      border-left: 4px solid var(--c-accent);
+      border-radius: 8px;
+      background: var(--c-surface);
+      color: var(--c-text);
+      box-shadow: 0 6px 20px rgb(0 0 0 / 0.15);
+    }
+
+    .notice[data-placement='top'] {
+      inset: 16px auto auto 16px;
+    }
+
+    .notice p {
+      flex: 1;
+      margin: 0;
+      line-height: 1.4;
+    }
+
+    .action {
+      background: var(--c-accent);
+      color: light-dark(#fff, #042f2e);
+      border: none;
+      border-radius: 6px;
+      padding: 6px 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .action:disabled {
+      opacity: 0.6;
+      cursor: progress;
+    }
+
+    .dismiss {
+      background: none;
+      border: none;
+      color: var(--c-muted);
+      cursor: pointer;
+      display: inline-grid;
+    }
+  }
+}

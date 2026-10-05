@@ -64,6 +64,62 @@ test('Close with unsaved changes asks first; Discard closes', async ({ app, page
   await expect(page).toHaveURL(/\/$/);
 });
 
+test('Back again with the confirmation already open keeps a single dialog', async ({ app, page }) => {
+  await openSettings(app);
+  await dirtyProfile(app);
+  await page.goBack();
+  const dialog = page.getByRole('dialog', { name: app.t('ai.unsavedTitle') });
+  await expect(dialog).toBeVisible();
+  await page.goBack();
+  await page.waitForTimeout(200);
+  await expect(page.getByRole('dialog')).toHaveCount(1);
+  await dialog.getByRole('button', { name: app.t('dialog.cancel') }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(settings(app)).toBeVisible();
+});
+
+test('switching profile with unsaved changes asks first; Cancel keeps the draft, Discard switches', async ({ app, page }) => {
+  await openSettings(app);
+  await dirtyProfile(app);
+  const name = settings(app).getByLabel(app.t('ai.name'), { exact: true }).first();
+  // «+ Create» con una bozza sporca passa da select() come il clic su un altro profilo.
+  const other = settings(app).getByRole('button', { name: `+ ${app.t('ai.create')}` }).first();
+  await other.click();
+  const dialog = page.getByRole('dialog', { name: app.t('ai.unsavedTitle') });
+  await dialog.getByRole('button', { name: app.t('dialog.cancel') }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(name).toHaveValue('Bozza');
+
+  await other.click();
+  await page.getByRole('dialog', { name: app.t('ai.unsavedTitle') }).getByRole('button', { name: app.t('ai.discardChanges') }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(name).not.toHaveValue('Bozza');
+});
+
+test('deleting a preset asks first; Cancel keeps it, Delete removes it', async ({ app, page }) => {
+  await openSettings(app);
+  await settings(app).getByRole('link', { name: app.t('settings.aiPresets') }).click();
+  // Seconda sezione AI (profili, preset, sync): stesso ordine dei link di navigazione.
+  await settings(app).getByRole('button', { name: `+ ${app.t('ai.create')}` }).nth(1).click();
+  // Solo la sezione dei preset ha un elemento aperto: un solo campo «Name» e un solo «Save».
+  await settings(app).getByLabel(app.t('ai.name'), { exact: true }).fill('Temporaneo');
+  await settings(app).getByRole('button', { name: app.t('ai.save'), exact: true }).click();
+  const item = settings(app).getByRole('button', { name: 'Temporaneo', exact: true });
+  await expect(item).toBeVisible();
+
+  const remove = settings(app).getByRole('button', { name: app.t('ai.delete'), exact: true });
+  await remove.click();
+  const dialog = page.getByRole('dialog', { name: app.t('ai.deleteTitle', { name: 'Temporaneo' }) });
+  await expect(dialog.getByText(app.t('ai.deleteMessage'))).toBeVisible();
+  await dialog.getByRole('button', { name: app.t('dialog.cancel') }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(item).toBeVisible();
+
+  await remove.click();
+  await dialog.getByRole('button', { name: app.t('ai.delete'), exact: true }).click();
+  await expect(item).toHaveCount(0);
+});
+
 test('text width: editor limited in characters, preview without limit, both remembered', async ({ app, page }) => {
   await openSettings(app);
   const editorWidth = settings(app).getByLabel(app.t('settings.textWidth.editor'));

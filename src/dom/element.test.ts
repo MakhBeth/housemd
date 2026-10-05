@@ -96,3 +96,27 @@ test('moving the element reconnects it with a fresh signal and no duplicate list
   other.remove();
   assert.equal(store.listeners.size, 0);
 });
+
+class ReconnectProbe extends HmdElement {
+  signals: AbortSignal[] = [];
+  protected connect(signal: AbortSignal): void {
+    this.signals.push(signal);
+  }
+  again(): void {
+    this.reconnect();
+  }
+}
+customElements.define('hmd-reconnect-probe', ReconnectProbe);
+
+test('reconnect aborts the current signal and connects again; detached it does nothing', () => {
+  const el = document.createElement('hmd-reconnect-probe') as ReconnectProbe;
+  el.again();
+  assert.equal(el.signals.length, 0);
+  document.body.append(el);
+  el.again();
+  assert.equal(el.signals.length, 2);
+  assert.equal(el.signals[0].aborted, true);
+  assert.equal(el.signals[1].aborted, false);
+  el.remove();
+  assert.equal(el.signals[1].aborted, true);
+});

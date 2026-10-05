@@ -11,6 +11,11 @@ export interface Subscribable {
  * costruiscono il DOM solo la prima volta (es. con un campo di guardia) e registrano listener e
  * iscrizioni solo con il `signal` ricevuto. Chi sovrascrive `connectedCallback`/`disconnectedCallback`
  * deve chiamare `super`.
+ * Il `signal` si interrompe al distacco e anche a `reconnect()` (cambio di store con l'elemento collegato):
+ * la pulizia che vale solo al distacco (es. dimenticare che un popover è aperto) va in
+ * `disconnectedCallback`, dopo `super`. `connect` può girare più volte e costruisce il DOM una volta sola.
+ * I setter accettano `undefined`/`null` e li riportano al valore di default (React 19 passa `undefined`
+ * quando una prop sparisce); il render aggiorna solo i nodi esistenti.
  */
 export abstract class HmdElement extends HTMLElement {
   #abort: AbortController | null = null;
@@ -24,6 +29,14 @@ export abstract class HmdElement extends HTMLElement {
   disconnectedCallback(): void {
     this.#abort?.abort();
     this.#abort = null;
+  }
+
+  /** Rifà le iscrizioni (per esempio dopo un cambio di store passato come proprietà): come staccare e riattaccare. */
+  protected reconnect(): void {
+    if (!this.#abort) return;
+    this.#abort.abort();
+    this.#abort = new AbortController();
+    this.connect(this.#abort.signal);
   }
 
   /** Crea il DOM (la prima volta) e registra listener e iscrizioni legati a `signal`. */

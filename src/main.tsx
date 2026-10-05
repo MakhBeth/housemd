@@ -8,6 +8,7 @@ import '@fontsource/space-mono/700.css';
 import '@fontsource/pixelify-sans/400.css';
 import '@fontsource/pixelify-sans/700.css';
 import './styles/global.css';
+import './elements/define';
 import App from './App';
 import { detectLocale, parseLocale } from './i18n/i18n';
 import { I18nProvider } from './i18n/I18nProvider';

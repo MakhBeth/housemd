@@ -12,9 +12,10 @@ File System Access API) si usano **senza polyfill e senza fallback**. Unica ecce
 ## Regole
 
 - Mai `innerHTML` / `dangerouslySetInnerHTML` con HTML non sanitizzato (vedi `src/preview/sanitize.ts`).
-- Mai `alert()` / `confirm()` / `prompt()`: usare `<dialog>` con `showModal()` e `closedby="any"`.
+- Mai `alert()` / `confirm()` / `prompt()`: i dialog sono le funzioni di `src/elements/dialogs/`
+  (`showConfirmDialog`, `showNameDialog`, `showAccessLostDialog`), che usano `<dialog>` con `showModal()` e `closedby`.
 - Solo `src/fs/fsaOps.ts` e `src/fs/access.ts` toccano la File System Access API.
-- La logica va in moduli puri testati con `npm test` (`tsx --test`); i componenti React restano sottili.
+- La logica va in moduli puri testati con `npm test` (`tsx --import ./src/testing/assetHooks.ts --test`: hook di Node per gli import `?url` delle icone e `.css`, serve Node ≥ 22.15 per `module.registerHooks`); i componenti React restano sottili.
 - Nessun testo UI scritto a mano nei componenti: tutto passa da `t()` (`src/i18n`). Una chiave nuova va in
   **tutti** i `src/i18n/locales/*.json` (lo controlla `locales.test.ts`); `en.json` è il riferimento.
 - Commenti e messaggi di commit in italiano, identificatori in inglese.

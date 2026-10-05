@@ -1,16 +1,17 @@
 # HouseMD — migrazione a Web Components e CSS con `@scope` — design
 
-Data: 2026-09-27 · **Revisione: 2026-10-04**
+Data: 2026-09-27 · **Revisione: 2026-10-05**
 Base: `main` (HEAD `822f52d`: v1.1, strumenti AI, impostazioni a pagina, barra di formattazione,
 larghezza del testo, tooltip disegnati, albero con un solo tab stop).
-Stato: fasi 0–3 implementate (fase 0 PR #6, fase 1 PR #7, fase 2 in `main` (merge locale, commit 1b23305), fase 3 sul branch `refactor/fase-3-react-19`); fasi 4–8 ancora piano.
+Stato: fasi 0–3 implementate (fase 0 PR #6, fase 1 PR #7, fase 2 in `main` (merge locale, commit 1b23305), fase 3 in `main` (merge locale)); fasi 4a e 4b in `main` (merge locale del 05/10, dal branch `feat/web-components`); fasi 4c–8 ancora piano.
 
 Decisioni (27/09, riviste il 01/10; risposte alle domande aperte, §12):
 
 1. **Merge in due tempi.** Le fasi 0–3 (e2e, logica pura, zod/ts-pattern, store, infrastruttura
    DOM/CSS, React 19) non cambiano la UI ed entrano in `main` con **PR separate**, una per fase. Le
    fasi 4–8 (convivenza e uscita da React) vivono su un branch di integrazione e arrivano in `main`
-   con **un solo merge**, solo dopo approvazione esplicita di Davide.
+   **a ogni sotto-fase verificata** (suite verdi, review e checklist), decisione di Davide del 05/10;
+   fino al 05/10 era previsto un solo merge alla fine della fase 8.
 2. **zod ridotto**: solo ai confini con dati che il codice non controlla (file system, storage del
    browser, risposte JSON dei provider), mai sulla logica interna (§6.2).
 3. **Playwright** entra nel progetto ed è la **prima parte implementativa**: una suite end-to-end
@@ -335,6 +336,8 @@ export abstract class HmdElement extends HTMLElement {
   prop `onhmd-open`); i tipi JSX dei tag `hmd-*` si dichiarano in un solo file temporaneo
   `src/elements/jsx.d.ts`, cancellato nella fase 7.
 
+Host con `display: contents` quando l'elemento sostituisce un componente dentro un layout React: l'albero interno resta quello di React e l'audit degli stili (`e2e/support/styleAudit.ts`) salta il wrapper.
+
 ### 5.2 Quattro helper per il DOM (testati in jsdom)
 
 1. `el(tag, props?, ...children)`: crea un elemento. `props` accetta `class`, `dataset`, attributi
@@ -380,9 +383,9 @@ Niente singleton importati dagli elementi: nei test si usa uno store finto.
 ### 5.4 Dialog come funzioni che restituiscono Promise
 
 ```ts
-const name = await showNameDialog({ title, kind, initial, confirmLabel, validate, t });   // string | null
-const ok   = await showConfirmDialog({ title, message, confirmLabel, t });               // boolean
-await showAccessLostDialog({ folderName, onResume, t });                                 // si chiude solo con accesso concesso
+const name = await showNameDialog({ title, kind, initial, confirmLabel, validate, t, signal });   // string | null
+const ok   = await showConfirmDialog({ title, message, confirmLabel, t, signal });               // boolean
+await showAccessLostDialog({ folderName, onResume, t, signal });                                 // si chiude solo con accesso concesso
 ```
 
 Ogni funzione crea un `<dialog closedby="any">` (`closedby="none"` per l'accesso perso), lo aggiunge
@@ -391,6 +394,8 @@ a `document.body`, chiama `showModal()`, risolve la Promise all'evento `close` e
 il dialog. I workaround per StrictMode spariscono. Le conferme oggi sparse (eliminazione, modifiche
 aperte su Indietro/Chiudi delle impostazioni, elimina profilo/preset) passano tutte da
 `showConfirmDialog`.
+
+`signal` (facoltativo) chiude il dialog quando chi l'ha aperto sparisce; la Promise si risolve come un annullamento. Il dialog si rimuove dopo l'evento `close`, così il focus torna all'elemento d'origine anche dopo una conferma (prima della 4b, con React, cadeva sul `body`). La conferma «Scartare le modifiche?» è `showDiscardChangesDialog({ t, signal })`; i dialog dell'albero passano da `runTreeDialog(dialog, deps)` (`elements/workspace/treeDialogs.ts`).
 
 La logica che decide quale dialog aprire per un'azione dell'albero diventa
 `dialogFor(action, node)` con `match(...).exhaustive()`, testata.
@@ -459,10 +464,11 @@ Esclusi di proposito: frontmatter → card (`toCard` è presentazione tollerante
   `npm test` verde, `npm run lint` e `npm run build` puliti, `npm run test:e2e` verde (snapshot
   invariati).
 - **Fasi 4–8 → branch di integrazione `feat/web-components`**, creato da `main` dopo il merge della
-  fase 3. Stesso cancello a fine fase più la checklist ridotta di §9. **Un solo merge in `main`**,
-  alla fine della fase 8, dopo l'approvazione esplicita di Davide. Se `main` riceve modifiche, si fa
-  rebase del branch (mai merge di `main` dentro il branch) rilanciando entrambe le suite; una
-  funzionalità nuova arrivata in `main` va migrata nel branch prima del merge finale.
+  fase 3. Stesso cancello a fine fase più la checklist ridotta di §9. **Merge in `main` a ogni
+  sotto-fase che passa il cancello** (rivista il 05/10: prima era un solo merge alla fine della fase
+  8); il primo è 4a+4b. Il branch resta e riparte da `main` per la sotto-fase successiva. Se `main`
+  riceve modifiche, si fa rebase del branch (mai merge di `main` dentro il branch) rilanciando
+  entrambe le suite; una funzionalità nuova arrivata in `main` va migrata nel branch.
 
 ### Fase 0: Playwright e rete di sicurezza (PR in `main`)
 
@@ -514,6 +520,8 @@ Non cambia una riga dell'app.
 
 ### Fase 4: foglie come custom element dentro React (branch)
 
+Divisa in tre piani: 4a (piano 5: infrastruttura, tema, conflitto, avvisi, toast), 4b (dialog), 4c (start screen e foglie AI).
+
 Ordine: `theme-switcher`, `conflict-bar`, `notice`, `update-notice`, `toasts`, dialog (funzioni),
 `start-screen`, `ai-suggestions`, `ai-effort-chip`, `ai-parameters`.
 
@@ -521,6 +529,8 @@ Ordine: `theme-switcher`, `conflict-bar`, `notice`, `update-notice`, `toasts`, d
   `@layer components`, il `.tsx` si cancella, chi lo usava monta il tag (proprietà ed eventi passati
   direttamente da React 19, §5.1).
 - I dialog diventano le funzioni di §5.4, chiamate da `WorkspaceView`.
+- 4a **fatta**: `hmd-theme-switcher`, `hmd-conflict-bar`, `hmd-notice`, `hmd-update-notice`, `hmd-toasts`; host con `display: contents`; store passati come proprietà (`useI18nStore`, `getThemeStore`); `HmdElement.reconnect()`; test degli elementi in jsdom con `src/testing/assetHooks.ts` e `popoverStub.ts`. I toast conservano il riavvio dei timer a ogni nuovo array (difetto preesistente, visibile: da decidere a parte).
+- 4b **fatta**: `showNameDialog`, `showConfirmDialog`, `showDiscardChangesDialog`, `showAccessLostDialog` in `src/elements/dialogs/` (nucleo `modal.ts`, foglio `dialogs.css`), `runTreeDialog`, hook temporaneo `useUnmountSignal`; via `ConfirmDialog.tsx`, `NameDialog.tsx`, `AccessLostDialog`; `Dialog.module.css` resta per i campi delle impostazioni fino alla fase 7. Audit esteso ai `::backdrop` e agli stati conferma, modifiche aperte, accesso perso. Conservato un difetto: Esc nelle impostazioni con modifiche aperte apre e richiude subito la conferma. Bundle principale gzip: 433 971 → 434 481 B.
 
 ### Fase 5: editor, anteprima, diff (branch)
 
@@ -627,9 +637,9 @@ nulla**. Diventa:
 `window`, `document`, `HTMLElement`, `customElements`, `Node`, `CustomEvent`, `Event`,
 `AbortController` e `AbortSignal` **presi dalla `window` di quel `JSDOM`** (jsdom rifiuta un
 `AbortSignal` di Node in `addEventListener`). Ogni `*.dom.test.ts` lo importa **come primo import**.
-`node:test` esegue ogni file in un processo separato. `npm test` resta `tsx --test`.
+`node:test` esegue ogni file in un processo separato. `npm test` è `tsx --import ./src/testing/assetHooks.ts --test`: un hook di Node per gli import `?url` delle icone e `.css` (serve Node ≥ 22.15 per `module.registerHooks`; `engines` in `package.json`).
 
-Limiti di jsdom 30.1.1, verificati nella fase 2: mancano `moveBefore`, `showModal`/`closedBy`, Popover (`popover`, `showPopover`), `commandForElement`, `CSS.highlights`/`Highlight`, Anchor Positioning. Ci sono `customElements`, `MutationObserver`, `role`/`ariaLabel` come proprietà; `addEventListener` accetta solo l'`AbortSignal` della stessa `window` (quello di Node dà `TypeError`). jsdom, come Chromium, toglie il focus a un nodo spostato con `insertBefore`; che `moveBefore` lo conservi si verifica solo in Chromium, con gli e2e della fase 6 su albero e ricerca. Gli stub entrano nel test che li usa, dalla fase 4; i comportamenti reali li verifica Playwright o la checklist manuale.
+Limiti di jsdom 30.1.1, verificati nella fase 2: mancano `moveBefore`, `showModal`/`closedBy`, Popover (`popover`, `showPopover`), `commandForElement`, `CSS.highlights`/`Highlight`, Anchor Positioning. Ci sono `customElements`, `MutationObserver`, `role`/`ariaLabel` come proprietà; `addEventListener` accetta solo l'`AbortSignal` della stessa `window` (quello di Node dà `TypeError`). jsdom, come Chromium, toglie il focus a un nodo spostato con `insertBefore`; che `moveBefore` lo conservi si verifica solo in Chromium, con gli e2e della fase 6 su albero e ricerca. Lo stub `src/testing/dialogStub.ts` imita `showModal`/`close`/`returnValue` e `command="close"`. Gli stub entrano nel test che li usa, dalla fase 4; i comportamenti reali li verifica Playwright o la checklist manuale.
 
 ### 8.3 Test statici nuovi (`architecture.test.ts`)
 
@@ -642,6 +652,7 @@ Limiti di jsdom 30.1.1, verificati nella fase 2: mancano `moveBefore`, `showModa
   `@layer components`;
 - `customElements.define` solo in `elements/define.ts`;
 - `showDirectoryPicker`/`requestPermission`/`queryPermission` solo in `fs/fsaOps.ts` e `fs/access.ts`;
+- `showModal(` e `<dialog` solo in `src/elements/dialogs/`;
 - l'identificatore `fetch`, `XMLHttpRequest`, `EventSource`, `WebSocket` e gli import di
   `@anthropic-ai/sdk` solo in `src/ai/providers/` (regola AI di `CLAUDE.md`, finora non verificata;
   al 01/10 non ci sono eccezioni).
@@ -686,7 +697,7 @@ raccoglie le spec (suffisso `.spec.ts`, cartella `e2e/`).
 
 **Suite in sviluppo** (`npm run test:e2e:dev`, `e2e/dev.config.ts`): le stesse spec contro `vite` in sviluppo (porta 5174), con StrictMode attivo; ogni errore o avviso in console fa fallire il test (`failOnConsole`). Restano fuori gli snapshot e il test che trattiene `assets/index-*.js`.
 
-**Audit degli stili calcolati** (`npm run test:e2e:audit`, `e2e/audit.config.ts`): gli stessi stati sulla build di riferimento in `dist-baseline/` (porta 4174) e sulla build corrente; ogni proprietà calcolata di ogni elemento e pseudo-elemento deve coincidere. Si usa prima e dopo ogni cambio di cascata (layer, `@scope`, spostamento di fogli), finché la struttura del DOM è la stessa. Copre focus da tastiera, `forced-colors` e tooltip al passaggio, che gli snapshot non vedono. Prima di leggere gli stili ogni stato viene stabilizzato: animazioni CSS in pausa, tutti i font caricati, un ridimensionamento della finestra 799/800 e rilettura del dump finché due letture coincidono.
+**Audit degli stili calcolati** (`npm run test:e2e:audit`, `e2e/audit.config.ts`): gli stessi stati sulla build di riferimento in `dist-baseline/` (porta 4174) e sulla build corrente; ogni proprietà calcolata di ogni elemento e pseudo-elemento deve coincidere. Si usa prima e dopo ogni cambio di cascata (layer, `@scope`, spostamento di fogli), finché la struttura del DOM è la stessa. Copre focus da tastiera, `forced-colors` e tooltip al passaggio, che gli snapshot non vedono. Prima di leggere gli stili ogni stato viene stabilizzato: animazioni CSS in pausa, tutti i font caricati, un ridimensionamento della finestra 799/800 e rilettura del dump finché due letture coincidono. Dalla fase 4 l'audit salta i wrapper `hmd-*` con `display: contents`.
 
 **Copertura** (una spec per area): avvio e browser non supportato; apertura, ripresa accesso e cambio
 cartella; editor con autosalvataggio e `Ctrl+S`; barra di formattazione e scorciatoie (Ctrl+B, Ctrl+I,
@@ -783,8 +794,8 @@ wikilink:
 
 ## 12. Domande aperte → decisioni
 
-1. **Un merge solo o per fase?** → In due tempi: fasi 0–3 con PR separate in `main`; fasi 4–8 con un
-   solo merge dopo approvazione esplicita (rivista il 01/10).
+1. **Un merge solo o per fase?** → In due tempi: fasi 0–3 con PR separate in `main`; fasi 4–8 su un
+   branch di integrazione con merge in `main` a ogni sotto-fase verificata (rivista il 01/10 e il 05/10).
 2. **Quanto zod?** → Ridotto: file system, storage del browser, risposte JSON dei provider;
    `zod/mini`.
 3. **Test in browser reale?** → Playwright, prima parte implementativa; il collaudo CDP dell'AI ci
@@ -796,6 +807,8 @@ wikilink:
 1. `docs/superpowers/plans/2026-09-27-housemd-wc-01-e2e-baseline.md`: fase 0 (fatta, PR #6).
 2. Un piano e una PR per fase: `docs/superpowers/plans/2026-10-01-housemd-wc-02-fase-1-logica-pura.md`
    (fase 1, PR #7); `docs/superpowers/plans/2026-10-02-housemd-wc-03-fase-2-infrastruttura-dom.md` (fase 2);
-   `docs/superpowers/plans/2026-10-04-housemd-wc-04-fase-3-react-19.md` (fase 3).
+   `docs/superpowers/plans/2026-10-04-housemd-wc-04-fase-3-react-19.md` (fase 3);
+   `docs/superpowers/plans/2026-10-05-housemd-wc-05-fase-4a-infrastruttura-e-foglie.md` (fase 4a, branch `feat/web-components`);
+   `docs/superpowers/plans/2026-10-05-housemd-wc-06-fase-4b-dialog.md` (fase 4b); 4c da scrivere.
 3. Fasi 4–6 (elementi in convivenza).
 4. Fasi 7–8 (impostazioni, workspace, via React, rifinitura, richiesta di merge).

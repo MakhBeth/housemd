@@ -15,6 +15,18 @@ test.describe('dialogs and menu', () => {
     await expect.poll(() => app.exists('città.md')).toBe(true);
   });
 
+  test('after creating from the sidebar button the focus is back on that button', async ({ app, page }) => {
+    const button = page.getByRole('button', { name: app.t('file.new') }).first();
+    await button.click();
+    const dialog = page.getByRole('dialog', { name: app.t('file.new') });
+    await dialog.getByRole('textbox').fill('fresh');
+    await page.keyboard.press('Enter');
+    await expect(dialog).toHaveCount(0);
+    await expect(app.treeFile('fresh.md')).toBeVisible();
+    // Prima della fase 4b il focus cadeva sul body (React staccava il dialog prima di chiuderlo).
+    await expect(button).toBeFocused();
+  });
+
   test('name errors keep the dialog open, Esc closes it', async ({ app, page }) => {
     await page.getByRole('button', { name: app.t('file.new') }).first().click();
     const dialog = page.getByRole('dialog', { name: app.t('file.new') });
@@ -82,6 +94,34 @@ test.describe('dialogs and menu', () => {
     await dialog.getByRole('button', { name: app.t('dialog.delete.confirm') }).click();
     await expect(app.treeFile('note.md')).toHaveCount(0);
     await expect.poll(() => app.exists('note.md')).toBe(false);
+  });
+
+  test('closing a dialog opened from the ⋯ menu brings the focus back to the ⋯ button', async ({ app, page }) => {
+    const trigger = page.getByRole('button', { name: app.t('tree.actions', { name: 'note.md' }) });
+    await trigger.click();
+    await app.tree().getByRole('button', { name: app.t('tree.rename'), exact: true }).click();
+    const rename = page.getByRole('dialog', { name: app.t('dialog.rename.title', { name: 'note.md' }) });
+    await expect(rename.getByRole('textbox')).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(rename).toHaveCount(0);
+    await expect(trigger).toBeFocused();
+
+    await trigger.click();
+    await page.getByRole('button', { name: app.t('tree.delete'), exact: true }).click();
+    const remove = page.getByRole('dialog', { name: app.t('dialog.delete.title', { name: 'note.md' }) });
+    // La scelta sicura ha il focus: Invio non elimina.
+    await expect(remove.getByRole('button', { name: app.t('dialog.cancel') })).toBeFocused();
+    await remove.getByRole('button', { name: app.t('dialog.cancel') }).click();
+    await expect(remove).toHaveCount(0);
+    await expect(trigger).toBeFocused();
+  });
+
+  test('the rename dialog selects the name without the extension', async ({ app, page }) => {
+    await page.getByRole('button', { name: app.t('tree.actions', { name: 'note.md' }) }).click();
+    await app.tree().getByRole('button', { name: app.t('tree.rename'), exact: true }).click();
+    const input = page.getByRole('dialog', { name: app.t('dialog.rename.title', { name: 'note.md' }) }).getByRole('textbox');
+    await expect(input).toHaveValue('note.md');
+    expect(await input.evaluate((i: HTMLInputElement) => [i.selectionStart, i.selectionEnd])).toEqual([0, 4]);
   });
 
   test('deleting a folder warns that its content goes too', async ({ app, page }) => {

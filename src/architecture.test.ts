@@ -42,6 +42,10 @@ const NETWORK_ALLOWED = (path: string) => path.startsWith('ai/providers/');
 const DEFINE = /\bcustomElements\.define\s*\(/;
 const DEFINE_ALLOWED = new Set(['elements/define.ts']);
 
+/** Dialog nativi: solo le funzioni di elements/dialogs/ li creano e li aprono (spec WC §5.4). */
+const DIALOG = /\.showModal\s*\(|<dialog\b|createElement\(\s*['"]dialog['"]|\bel\(\s*['"]dialog['"]/;
+const DIALOG_ALLOWED = (path: string) => path.startsWith('elements/dialogs/');
+
 /** Percorsi dei file che usano `pattern` senza esserne autorizzati. */
 function offenders(pattern: RegExp, allowed: (path: string) => boolean, list: SourceFile[] = sources): string[] {
   return list.filter(({ path, source }) => !allowed(path) && pattern.test(source)).map(({ path }) => path);
@@ -69,6 +73,10 @@ test('customElements.define appears only in elements/define.ts', () => {
   assert.deepEqual(offenders(DEFINE, inSet(DEFINE_ALLOWED)), []);
 });
 
+test('native dialogs are created and opened only in elements/dialogs/', () => {
+  assert.deepEqual(offenders(DIALOG, DIALOG_ALLOWED), []);
+});
+
 test('the patterns fire on what they must and ignore what they must', () => {
   for (const bad of ['el.innerHTML = html', 'el.outerHTML = x', "el.insertAdjacentHTML('beforeend', x)", 'document.write(x)']) {
     assert.ok(UNSAFE_DOM.test(bad), bad);
@@ -90,6 +98,12 @@ test('the patterns fire on what they must and ignore what they must', () => {
   }
   assert.ok(DEFINE.test("customElements.define('hmd-file-tree', HmdFileTree)"));
   assert.ok(!DEFINE.test("customElements.get('hmd-file-tree')"));
+  for (const bad of ['dialog.showModal()', '<dialog ref={ref}>', "document.createElement('dialog')", "el('dialog', { class: 'x' })"]) {
+    assert.ok(DIALOG.test(bad), bad);
+  }
+  for (const ok of ["document.querySelector('dialog[open]')", 'showConfirmDialog({ t })', "getByRole('dialog')"]) {
+    assert.ok(!DIALOG.test(ok), ok);
+  }
 });
 
 test('offending files are reported by path and allowed files are not (synthetic sources)', () => {
@@ -102,11 +116,14 @@ test('offending files are reported by path and allowed files are not (synthetic 
     { path: 'ai/providers/anthropic.ts', source: "await fetch('https://api.anthropic.com')" },
     { path: 'dom/element.ts', source: "customElements.define('hmd-x', X);" },
     { path: 'elements/define.ts', source: "customElements.define('hmd-x', X);" },
+    { path: 'ui/Probe.tsx', source: 'ref.current?.showModal();' },
+    { path: 'elements/dialogs/modal.ts', source: 'dialog.showModal();' },
   ];
   assert.deepEqual(offenders(UNSAFE_DOM, inSet(UNSAFE_DOM_ALLOWED), probes), ['ui/Icon.tsx']);
   assert.deepEqual(offenders(FSA, inSet(FSA_ALLOWED), probes), ['workspace/probe.ts']);
   assert.deepEqual(offenders(NETWORK, NETWORK_ALLOWED, probes), ['ai/aiController.ts']);
   assert.deepEqual(offenders(DEFINE, inSet(DEFINE_ALLOWED), probes), ['dom/element.ts']);
+  assert.deepEqual(offenders(DIALOG, DIALOG_ALLOWED, probes), ['ui/Probe.tsx']);
 });
 
 interface Block {

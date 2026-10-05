@@ -9,34 +9,31 @@ import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, 
 
 import { Editor, type EditorHandle } from '../editor/Editor';
 import { requestAccess } from '../fs/access';
-import { useI18n, useT } from '../i18n/I18nProvider';
+import { useI18n, useI18nStore } from '../i18n/I18nProvider';
 import type { MessageKey } from '../i18n/messages';
-import { dirname, joinPath } from '../lib/paths';
 import { readLastFile, readPref, readValidPref, writeLastFile, writePref } from '../lib/prefs';
 import { parseTextWidth, textWidthVars } from '../lib/textWidth';
 import { APP_TITLE, pageTitle } from '../lib/pageTitle';
 import type { SettingsSection } from '../lib/route';
 import { Preview, type PreviewHandle } from '../preview/Preview';
-import { useTheme } from '../theme/useTheme';
+import { getThemeStore, useTheme } from '../theme/useTheme';
 import type { Workspace } from '../workspace/workspace';
-import { ConfirmDialog } from './ConfirmDialog';
-import { ConflictBar } from './ConflictBar';
 import { FileTree, type TreeAction } from './FileTree';
 import { HistoryPanel } from './HistoryPanel';
 import { Icon } from './Icon';
-import { NameDialog } from './NameDialog';
-import { renameTaken } from './names';
 import { SearchPanel } from './SearchPanel';
 import { SettingsView } from './SettingsView';
 import { useRoute } from './useRoute';
 import { shortcutFor } from './shortcuts';
-import { ThemeSwitcher } from './ThemeSwitcher';
-import { Toasts, type ToastItem } from './Toasts';
+import type { ToastItem } from '../elements/toasts/toasts.element';
 import { buildTree, type TreeNode } from './tree';
 import { useWorkspaceState } from './useWorkspace';
 import styles from './WorkspaceView.module.css';
 import { match } from 'ts-pattern';
-import { dialogFor, type DialogState } from '../elements/workspace/dialogFor';
+import { showAccessLostDialog } from '../elements/dialogs/accessLostDialog';
+import { dialogFor } from '../elements/workspace/dialogFor';
+import { runTreeDialog } from '../elements/workspace/treeDialogs';
+import { useUnmountSignal } from './useUnmountSignal';
 import { allowedInSettings } from '../elements/workspace/keymap';
 import { saveIndicator } from '../elements/workspace/saveIndicator';
 import {
@@ -57,6 +54,7 @@ const NO_TERMS: string[] = [];
 
 export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, switchingFolder = false }: Props) {
   const { t, locale } = useI18n();
+  const i18nStore = useI18nStore();
   const state = useWorkspaceState(workspace);
   const doc = state.doc;
   const ai = useAiController(workspace);
@@ -75,7 +73,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
   const lastPane = useRef<PaneMode>(mode === 'ai' ? 'split' : mode);
   const [sidebarOpen, setSidebarOpen] = useState(() => readPref('sidebarOpen'));
   const [sidebarWidth, setSidebarWidth] = useState(() => clampWidth('sidebar', readPref('sidebarWidth')));
-  const [dialog, setDialog] = useState<DialogState>(null);
+  const dialogSignal = useUnmountSignal();
   const [highlight, setHighlight] = useState<string[]>(NO_TERMS);
   const [theme, setTheme] = useTheme();
   const [textWidth, setTextWidth] = useState(() => readValidPref('textWidth', parseTextWidth));
@@ -329,12 +327,31 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
           if (workspace.getState().doc?.path === path) setHistoryOpen(true);
         });
       })
-      .with({ kind: 'dialog' }, ({ dialog }) => setDialog(dialog))
+      .with({ kind: 'dialog' }, ({ dialog }) =>
+        void runTreeDialog(dialog, { t, signal: dialogSignal(), paths: () => workspace.getState().entries.map((e) => e.path), workspace }),
+      )
       .with({ kind: 'none' }, () => {})
       .exhaustive();
 
-  const exists = (path: string) => state.entries.some((e) => e.path.toLowerCase() === path.toLowerCase());
-  const taken = t('name.error.taken');
+  // Accesso perso: dialog bloccante finché il permesso non torna. Se lo stato cambia per altre vie (o il
+  // componente si smonta, anche per StrictMode), l'abort lo chiude.
+  const accessLost = state.status === 'access-lost';
+  useEffect(() => {
+    if (!accessLost) return;
+    const controller = new AbortController();
+    void showAccessLostDialog({
+      folderName: workspace.getState().name,
+      t: i18nStore.t,
+      signal: controller.signal,
+      onResume: async () => {
+        const granted = await requestAccess(handle);
+        if (granted) await workspace.resume();
+        return granted;
+      },
+    });
+    return () => controller.abort();
+  }, [accessLost, workspace, handle, i18nStore]);
+
   const sidebarLabel = sidebarOpen ? t('sidebar.hide') : t('sidebar.show');
   const indicator = saveIndicator(doc);
 
@@ -450,7 +467,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
             <button className={`${styles.iconButton} tooltip`} onClick={() => void workspace.saveAll()} aria-label={t('toolbar.saveAll')} data-tooltip={t('toolbar.saveAll')}>
               <Icon name="save" />
             </button>
-            <ThemeSwitcher theme={theme} onChange={setTheme} className={`${styles.iconButton} tooltip`} />
+            <hmd-theme-switcher store={getThemeStore()} i18n={i18nStore} />
             <button className={`${styles.iconButton} tooltip`} onClick={() => openSettings()} aria-label={t('toolbar.settings')} data-tooltip={t('toolbar.settings')}>
               <Icon name="settings" />
             </button>
@@ -458,10 +475,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
         </header>
 
         {doc?.conflict && (
-          <ConflictBar
-            onReload={() => void workspace.resolveConflict('reload')}
-            onOverwrite={() => void workspace.resolveConflict('overwrite')}
-          />
+          <hmd-conflict-bar i18n={i18nStore} onhmd-conflict={(event) => void workspace.resolveConflict(event.detail.choice)} />
         )}
 
         {doc && shownMode === 'ai' && ai ? <ReviewView controller={ai} editor={{ path: doc.path, text: doc.text, resetKey: `${doc.path}#${doc.revision}`, session, restore: doc.restore, readOnly: state.updating, getDocs, onChange: text => workspace.edit(text), onTransactions: (changes, texts) => ai.documentChanged(doc.path, changes, false, texts), onImage: file => workspace.saveImage(file, file.name), onTopLine: () => {}, onSelection }} /> : doc ? (
@@ -532,54 +546,6 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
       </main>
     </div>
 
-      {dialog && (dialog.kind === 'new-file' || dialog.kind === 'new-folder') && (
-        <NameDialog
-          title={dialog.kind === 'new-file' ? t('file.new') : t('folder.new')}
-          kind={dialog.kind === 'new-file' ? 'file' : 'directory'}
-          initial=""
-          confirmLabel={t('dialog.create')}
-          validate={(name) => (exists(joinPath(dialog.dir, name)) ? taken : null)}
-          onSubmit={(name) => {
-            const path = joinPath(dialog.dir, name);
-            setDialog(null);
-            void (dialog.kind === 'new-file' ? workspace.createFile(path) : workspace.createFolder(path));
-          }}
-          onCancel={() => setDialog(null)}
-        />
-      )}
-      {dialog?.kind === 'rename' && (
-        <NameDialog
-          title={t('dialog.rename.title', { name: dialog.node.name })}
-          kind={dialog.node.kind === 'directory' ? 'directory' : 'file'}
-          initial={dialog.node.name}
-          confirmLabel={t('dialog.rename.confirm')}
-          validate={(name) => {
-            const to = joinPath(dirname(dialog.node.path), name);
-            const paths = state.entries.map((e) => e.path);
-            return renameTaken(dialog.node.path, to, paths) ? taken : null;
-          }}
-          onSubmit={(name) => {
-            const to = joinPath(dirname(dialog.node.path), name);
-            setDialog(null);
-            void workspace.rename(dialog.node.path, to);
-          }}
-          onCancel={() => setDialog(null)}
-        />
-      )}
-      {dialog?.kind === 'delete' && (
-        <ConfirmDialog
-          title={t('dialog.delete.title', { name: dialog.node.name })}
-          message={dialog.node.kind === 'directory' ? t('dialog.delete.folder') : t('dialog.delete.file')}
-          confirmLabel={t('dialog.delete.confirm')}
-          onConfirm={() => {
-            const path = dialog.node.path;
-            setDialog(null);
-            void workspace.remove(path);
-          }}
-          onCancel={() => setDialog(null)}
-        />
-      )}
-
       {settingsOpen && (
         <SettingsView
           section={route.section}
@@ -605,73 +571,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
         />
       )}
 
-      {state.status === 'access-lost' && (
-        <AccessLostDialog
-          folderName={state.name}
-          onResume={async () => {
-            const granted = await requestAccess(handle);
-            if (granted) await workspace.resume();
-            return granted;
-          }}
-        />
-      )}
-
-      <Toasts items={toastItems} onDismiss={dismissToast} />
+      <hmd-toasts items={toastItems} i18n={i18nStore} onhmd-toast-dismiss={(event) => dismissToast(event.detail.key)} />
     </>
-  );
-}
-
-/** Nessun modo per l'utente di chiudere il dialog: niente Esc, niente clic sul backdrop. */
-const noDismiss = { closedby: 'none' } as Record<string, string>;
-
-/** Dialog bloccante: l'accesso va ripreso con un clic (Chrome richiede un gesto dell'utente). */
-function AccessLostDialog({ folderName, onResume }: { folderName: string; onResume: () => Promise<boolean> }) {
-  const t = useT();
-  const ref = useRef<HTMLDialogElement>(null);
-  const mounted = useRef(true);
-  const [denied, setDenied] = useState(false);
-
-  useEffect(() => {
-    mounted.current = true;
-    const dialog = ref.current!;
-    dialog.showModal();
-    return () => {
-      mounted.current = false;
-      dialog.close();
-    };
-  }, []);
-
-  const resume = async () => {
-    setDenied(false);
-    try {
-      const granted = await onResume();
-      if (!granted) setDenied(true);
-    } catch {
-      setDenied(true);
-    }
-  };
-
-  return (
-    <dialog
-      ref={ref}
-      className={styles.accessDialog}
-      {...noDismiss}
-      onCancel={(e) => e.preventDefault()}
-      onClose={() => {
-        // closedby="none" dovrebbe già impedire ogni chiusura non voluta; questo è solo un
-        // ripiego, mentre il componente resta montato, contro un'eventuale chiusura sfuggita.
-        // Come in NameDialog/ConfirmDialog, si ignora l'evento "fantasma" di StrictMode: se il
-        // dialog risulta già riaperto, chiamare di nuovo showModal() lancerebbe InvalidStateError.
-        if (mounted.current && !ref.current?.open) ref.current?.showModal();
-      }}
-      aria-labelledby="access-title"
-    >
-      <h2 id="access-title">{t('access.title')}</h2>
-      <p>{t('access.body', { folder: folderName })}</p>
-      {denied && <p className={styles.accessError}>{t('access.denied')}</p>}
-      <button className={styles.primary} onClick={resume}>
-        {t('access.resume')}
-      </button>
-    </dialog>
   );
 }

@@ -1,0 +1,102 @@
+/* Dialog nativi aggiunti a document.body da modal.ts (spec WC §4.2: radice dialog.hmd-dialog). */
+@layer components {
+  @scope (dialog.hmd-dialog) {
+    :scope {
+      border: 1px solid var(--c-border);
+      border-radius: 12px;
+      background: var(--c-surface);
+      color: var(--c-text);
+      padding: 20px;
+      width: min(420px, calc(100vw - 32px));
+    }
+
+    :scope::backdrop {
+      background: rgb(0 0 0 / 0.35);
+    }
+
+    /* Accesso perso (era .accessDialog di WorkspaceView.module.css). */
+    :scope.access {
+      padding: 24px;
+      width: min(440px, calc(100vw - 32px));
+    }
+
+    :scope.access::backdrop {
+      background: rgb(0 0 0 / 0.45);
+    }
+
+    .title {
+      font-size: 17px;
+      margin: 0 0 12px;
+    }
+
+    .message {
+      margin: 0 0 8px;
+      color: var(--c-muted);
+    }
+
+    .input {
+      width: 100%;
+      font: inherit;
+      padding: 8px 10px;
+      border: 1px solid var(--c-border);
+      border-radius: 8px;
+      background: var(--c-bg);
+      color: var(--c-text);
+    }
+
+    .error {
+      color: var(--c-danger);
+      margin: 8px 0 0;
+      font-size: 14px;
+    }
+
+    .actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 16px;
+    }
+
+    .primary,
+    .secondary,
+    .danger {
+      border-radius: 8px;
+      padding: 8px 14px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    .primary {
+      background: var(--c-accent);
+      color: light-dark(#fff, #042f2e);
+      border: none;
+    }
+
+    .danger {
+      background: var(--c-danger);
+      color: light-dark(#fff, #450a0a);
+      border: none;
+    }
+
+    .secondary {
+      background: transparent;
+      border: 1px solid var(--c-border);
+    }
+
+    /* Pulsante dell'accesso perso (era .primary di WorkspaceView.module.css: padding diverso). */
+    .resume {
+      background: var(--c-accent);
+      color: light-dark(#fff, #042f2e);
+      border: none;
+      border-radius: 8px;
+      padding: 8px 16px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    .access-error {
+      color: var(--c-danger);
+      font-weight: 600;
+    }
+  }
+}

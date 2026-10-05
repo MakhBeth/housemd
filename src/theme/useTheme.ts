@@ -9,8 +9,11 @@ import { parseTheme, type ThemePref } from './theme';
 
 let store: ThemeStore | null = null;
 
-/** Un solo store per pagina, creato al primo uso (legge la preferenza salvata). */
-function themeStore(): ThemeStore {
+/**
+ * Un solo store per pagina, creato al primo uso (legge la preferenza salvata). Esportato per i custom
+ * element, che lo ricevono come proprietà.
+ */
+export function getThemeStore(): ThemeStore {
   store ??= createThemeStore({
     initial: readValidPref('theme', parseTheme),
     persist: (theme) => writePref('theme', theme),
@@ -26,7 +29,7 @@ function themeStore(): ThemeStore {
 }
 
 export function useTheme(): [ThemePref, (next: ThemePref) => void] {
-  const s = themeStore();
+  const s = getThemeStore();
   // L'avviso arriva dentro la view transition: flushSync fa sì che React aggiorni il DOM prima che
   // la transizione lo fotografi (come faceva prima flushSync attorno a setState).
   const subscribe = useCallback((onChange: () => void) => s.subscribe(() => flushSync(onChange)), [s]);

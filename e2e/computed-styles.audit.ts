@@ -86,6 +86,50 @@ const STATES: State[] = [
     },
   },
   {
+    name: 'name-dialog-error',
+    async setup(app, page) {
+      await app.openFolder({ 'note.md': '# Note' });
+      await page.getByRole('button', { name: app.t('file.new') }).first().click();
+      const dialog = page.getByRole('dialog', { name: app.t('file.new') });
+      await dialog.getByRole('button', { name: app.t('dialog.create') }).click();
+      await expect(dialog.getByText(app.t('name.error.empty'))).toBeVisible();
+    },
+  },
+  {
+    name: 'confirm-dialog',
+    async setup(app, page) {
+      await app.openFolder({ 'note.md': '# Note' });
+      await page.getByRole('button', { name: app.t('tree.actions', { name: 'note.md' }) }).click();
+      await page.getByRole('button', { name: app.t('tree.delete'), exact: true }).click();
+      await expect(page.getByRole('dialog', { name: app.t('dialog.delete.title', { name: 'note.md' }) })).toBeVisible();
+    },
+  },
+  {
+    name: 'unsaved-dialog',
+    async setup(app, page) {
+      await app.openFolder({ 'note.md': '# Note' });
+      await page.getByRole('button', { name: app.t('toolbar.settings') }).click();
+      const settings = page.getByRole('region', { name: app.t('settings.title') });
+      await settings.getByRole('link', { name: app.t('settings.aiProfiles') }).click();
+      await settings.getByRole('button', { name: `+ ${app.t('ai.create')}` }).first().click();
+      await settings.getByLabel(app.t('ai.name'), { exact: true }).first().fill('Bozza');
+      await settings.getByRole('button', { name: app.t('settings.close') }).click();
+      await expect(page.getByRole('dialog', { name: app.t('ai.unsavedTitle') })).toBeVisible();
+    },
+  },
+  {
+    name: 'access-lost-dialog',
+    async setup(app, page) {
+      await app.openFolder({ 'note.md': '# Note' });
+      await app.openFile('note.md');
+      await app.setFlags({ denyWrites: true, request: 'denied' });
+      await app.typeAtEnd('x');
+      const dialog = page.getByRole('dialog', { name: app.t('access.title') });
+      await dialog.getByRole('button', { name: app.t('access.resume') }).click();
+      await expect(dialog.getByText(app.t('access.denied'))).toBeVisible();
+    },
+  },
+  {
     name: 'toast',
     async setup(app) {
       await app.openFolder({ 'note.md': '# Note', '.housemd.json': '{ images: ' });
