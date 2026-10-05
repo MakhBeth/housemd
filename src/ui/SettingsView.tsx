@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { AiController } from '../ai/aiController';
+import { showDiscardChangesDialog } from '../elements/dialogs/confirmDialog';
 import { LOCALE_NAMES, SUPPORTED_LOCALES, type Locale } from '../i18n/i18n';
 import { useI18n } from '../i18n/I18nProvider';
 import type { MessageKey } from '../i18n/messages';
@@ -12,10 +13,10 @@ import { AUTOSAVE_MODES, clampDelay, MAX_DELAY_MS, MIN_DELAY_MS, type AutosaveSe
 import { AiPresetsSection } from './ai/settings/AiPresetsSection';
 import { AiProfilesSection } from './ai/settings/AiProfilesSection';
 import { AiSyncSection, type SyncBinding } from './ai/settings/AiSyncSection';
-import { ConfirmDialog } from './ConfirmDialog';
 import dialog from './Dialog.module.css';
 import { Icon } from './Icon';
 import styles from './SettingsView.module.css';
+import { useUnmountSignal } from './useUnmountSignal';
 
 interface Props {
   section: SettingsSection;
@@ -50,7 +51,8 @@ export function SettingsView({ section, onSection, onClose, onDirtyChange, close
   const widthText = (pane: TextWidthPane) => String(textWidth[pane] ?? '');
   const [widths, setWidths] = useState<Record<TextWidthPane, string>>(() => ({ editor: widthText('editor'), preview: widthText('preview') }));
   const [dirty, setDirty] = useState<Set<SettingsSection>>(() => new Set());
-  const [confirmClose, setConfirmClose] = useState(false);
+  const confirming = useRef(false);
+  const dialogSignal = useUnmountSignal();
   const [visible, setVisible] = useState<SettingsSection>(section);
   const content = useRef<HTMLDivElement>(null);
   const title = useRef<HTMLHeadingElement>(null);
@@ -84,8 +86,17 @@ export function SettingsView({ section, onSection, onClose, onDirtyChange, close
   const close = () => {
     commitDelay();
     commitWidths();
-    if (dirty.size > 0) setConfirmClose(true);
-    else onClose();
+    if (dirty.size === 0) return onClose();
+    // Una conferma alla volta: «Indietro» con la conferma già aperta richiama close() (closeRequest).
+    if (confirming.current) return;
+    confirming.current = true;
+    void showDiscardChangesDialog({ t, signal: dialogSignal() }).then((discard) => {
+      confirming.current = false;
+      if (!discard) return;
+      // Prima di uscire: altrimenti la guardia di useRoute bloccherebbe di nuovo la cronologia.
+      onDirtyChange(false);
+      onClose();
+    });
   };
 
   // Aprendo, il focus va sul titolo: il resto dell'app è inerte e il focus precedente andrebbe perso.
@@ -250,20 +261,6 @@ export function SettingsView({ section, onSection, onClose, onDirtyChange, close
           </>
         )}
       </div>
-      {confirmClose && (
-        <ConfirmDialog
-          title={t('ai.unsavedTitle')}
-          message={t('ai.unsavedMessage')}
-          confirmLabel={t('ai.discardChanges')}
-          onConfirm={() => {
-            setConfirmClose(false);
-            // Prima di uscire: altrimenti la guardia di useRoute bloccherebbe di nuovo la cronologia.
-            onDirtyChange(false);
-            onClose();
-          }}
-          onCancel={() => setConfirmClose(false)}
-        />
-      )}
     </div>
   );
 }

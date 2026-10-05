@@ -1,13 +1,14 @@
 // src/ui/ai/settings/AiProfilesSection.tsx
 import { useState, useSyncExternalStore } from 'react';
 
+import { showConfirmDialog, showDiscardChangesDialog } from '../../../elements/dialogs/confirmDialog';
 import type { AiController } from '../../../ai/aiController';
 import { changeProvider } from '../../../ai/models';
 import { DEFAULT_URLS, defaultProfile, PROVIDER_KINDS, validateProfile } from '../../../ai/profiles';
 import type { ModelProfile, ProviderKind } from '../../../ai/types';
 import { useT } from '../../../i18n/I18nProvider';
 import type { MessageKey } from '../../../i18n/messages';
-import { ConfirmDialog } from '../../ConfirmDialog';
+import { useUnmountSignal } from '../../useUnmountSignal';
 import { ModelSelect } from '../ModelSelect';
 import { Parameters } from '../Parameters';
 import { ItemList, useDraft } from './ItemList';
@@ -16,17 +17,23 @@ import styles from './Settings.module.css';
 export function AiProfilesSection({ controller, onDirty }: { controller: AiController; onDirty?: (dirty: boolean) => void }) {
   const t = useT();
   const state = useSyncExternalStore(controller.subscribe, controller.getState);
-  const { draft, setDraft, markSaved, select, pending, confirmSwitch, cancelSwitch } = useDraft<ModelProfile>(onDirty);
+  const { draft, dirty, setDraft, markSaved, select, confirmSwitch, cancelSwitch } = useDraft<ModelProfile>(onDirty);
   const [key, setKey] = useState('');
   const [remember, setRemember] = useState(false);
   const [connected, setConnected] = useState(false);
-  const [deleting, setDeleting] = useState(false);
+  const dialogSignal = useUnmountSignal();
   const run = (job: Promise<unknown>) => void job.catch((e) => controller.report(e));
   const pick = (profile: ModelProfile | null) => {
     select(profile && { ...profile, params: { ...profile.params } });
     setKey('');
     setConnected(false);
+    // Con modifiche aperte select() lascia la scelta in sospeso: si chiede se scartarle.
+    if (dirty) void showDiscardChangesDialog({ t, signal: dialogSignal() }).then((discard) => (discard ? confirmSwitch() : cancelSwitch()));
   };
+  const remove = (profile: ModelProfile) =>
+    void showConfirmDialog({ title: t('ai.deleteTitle', { name: profile.name }), message: t('ai.deleteMessage'), confirmLabel: t('ai.delete'), t, signal: dialogSignal() }).then((ok) => {
+      if (ok) run(controller.deleteProfile(profile.id).then(() => markSaved(null)));
+    });
 
   const testConnection = (profile: ModelProfile) => {
     setConnected(false);
@@ -130,7 +137,7 @@ export function AiProfilesSection({ controller, onDirty }: { controller: AiContr
             <button type="button" onClick={() => setDraft({ ...draft, id: crypto.randomUUID(), secretId: null })}>
               {t('ai.duplicate')}
             </button>
-            <button type="button" onClick={() => setDeleting(true)}>
+            <button type="button" onClick={() => remove(draft)}>
               {t('ai.delete')}
             </button>
             <button
@@ -145,21 +152,6 @@ export function AiProfilesSection({ controller, onDirty }: { controller: AiContr
           </div>
           {connected && <p role="status">{t('ai.connected')}</p>}
         </div>
-      )}
-      {deleting && draft && (
-        <ConfirmDialog
-          title={t('ai.deleteTitle', { name: draft.name })}
-          message={t('ai.deleteMessage')}
-          confirmLabel={t('ai.delete')}
-          onConfirm={() => {
-            setDeleting(false);
-            run(controller.deleteProfile(draft.id).then(() => markSaved(null)));
-          }}
-          onCancel={() => setDeleting(false)}
-        />
-      )}
-      {pending && (
-        <ConfirmDialog title={t('ai.unsavedTitle')} message={t('ai.unsavedMessage')} confirmLabel={t('ai.discardChanges')} onConfirm={confirmSwitch} onCancel={cancelSwitch} />
       )}
     </div>
   );

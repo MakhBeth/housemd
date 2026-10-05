@@ -1,13 +1,14 @@
 // src/ui/ai/settings/AiPresetsSection.tsx
-import { useState, useSyncExternalStore } from 'react';
+import { useSyncExternalStore } from 'react';
 
+import { showConfirmDialog, showDiscardChangesDialog } from '../../../elements/dialogs/confirmDialog';
 import type { AiController } from '../../../ai/aiController';
 import { presetLabel } from '../../../ai/presetName';
 import { builtInPresets, restorePreset } from '../../../ai/presets';
 import { defaultProfile } from '../../../ai/profiles';
 import type { PromptPreset } from '../../../ai/types';
 import { useT } from '../../../i18n/I18nProvider';
-import { ConfirmDialog } from '../../ConfirmDialog';
+import { useUnmountSignal } from '../../useUnmountSignal';
 import { Parameters } from '../Parameters';
 import { ItemList, useDraft } from './ItemList';
 import styles from './Settings.module.css';
@@ -15,11 +16,19 @@ import styles from './Settings.module.css';
 export function AiPresetsSection({ controller, onDirty }: { controller: AiController; onDirty?: (dirty: boolean) => void }) {
   const t = useT();
   const state = useSyncExternalStore(controller.subscribe, controller.getState);
-  const { draft, setDraft, markSaved, select, pending, confirmSwitch, cancelSwitch } = useDraft<PromptPreset>(onDirty);
-  const [deleting, setDeleting] = useState(false);
+  const { draft, dirty, setDraft, markSaved, select, confirmSwitch, cancelSwitch } = useDraft<PromptPreset>(onDirty);
+  const dialogSignal = useUnmountSignal();
   const run = (job: Promise<unknown>) => void job.catch((e) => controller.report(e));
   const name = (p: PromptPreset) => presetLabel(p, t);
   const sorted = [...state.presets].sort((a, b) => a.order - b.order);
+  const choose = (preset: PromptPreset) => {
+    select(preset);
+    if (dirty) void showDiscardChangesDialog({ t, signal: dialogSignal() }).then((discard) => (discard ? confirmSwitch() : cancelSwitch()));
+  };
+  const remove = (preset: PromptPreset) =>
+    void showConfirmDialog({ title: t('ai.deleteTitle', { name: name(preset) }), message: t('ai.deleteMessage'), confirmLabel: t('ai.delete'), t, signal: dialogSignal() }).then((ok) => {
+      if (ok) run(controller.deletePreset(preset.id).then(() => markSaved(null)));
+    });
 
   return (
     <div className={styles.split}>
@@ -27,9 +36,9 @@ export function AiPresetsSection({ controller, onDirty }: { controller: AiContro
         items={sorted}
         selectedId={draft?.id ?? null}
         label={name}
-        onSelect={(p) => select({ ...p })}
+        onSelect={(p) => choose({ ...p })}
         onCreate={() =>
-          select({ ...builtInPresets()[0], id: crypto.randomUUID(), builtInId: undefined, name: '', instructions: '', order: state.presets.length })
+          choose({ ...builtInPresets()[0], id: crypto.randomUUID(), builtInId: undefined, name: '', instructions: '', order: state.presets.length })
         }
       />
       {draft && (
@@ -84,7 +93,7 @@ export function AiPresetsSection({ controller, onDirty }: { controller: AiContro
                 {t('ai.restoreOriginal')}
               </button>
             ) : (
-              <button type="button" onClick={() => setDeleting(true)}>
+              <button type="button" onClick={() => remove(draft)}>
                 {t('ai.delete')}
               </button>
             )}
@@ -93,21 +102,6 @@ export function AiPresetsSection({ controller, onDirty }: { controller: AiContro
             </button>
           </div>
         </div>
-      )}
-      {deleting && draft && (
-        <ConfirmDialog
-          title={t('ai.deleteTitle', { name: name(draft) })}
-          message={t('ai.deleteMessage')}
-          confirmLabel={t('ai.delete')}
-          onConfirm={() => {
-            setDeleting(false);
-            run(controller.deletePreset(draft.id).then(() => markSaved(null)));
-          }}
-          onCancel={() => setDeleting(false)}
-        />
-      )}
-      {pending && (
-        <ConfirmDialog title={t('ai.unsavedTitle')} message={t('ai.unsavedMessage')} confirmLabel={t('ai.discardChanges')} onConfirm={confirmSwitch} onCancel={cancelSwitch} />
       )}
     </div>
   );

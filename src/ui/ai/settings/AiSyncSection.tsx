@@ -1,12 +1,13 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 
+import { showConfirmDialog } from '../../../elements/dialogs/confirmDialog';
 import type { AiController } from '../../../ai/aiController';
 import { AiSync } from '../../../ai/aiSync';
 import { hasAccess, pickFolder, requestAccess } from '../../../fs/access';
 import { fsaOps } from '../../../fs/fsaOps';
 import { useT } from '../../../i18n/I18nProvider';
 import type { MessageKey } from '../../../i18n/messages';
-import { ConfirmDialog } from '../../ConfirmDialog';
+import { useUnmountSignal } from '../../useUnmountSignal';
 import styles from './Settings.module.css';
 
 export function useAiSync(controller: AiController | null) {
@@ -79,7 +80,7 @@ function SyncDetails({ sync, controller }: { sync: AiSync; controller: AiControl
   const t = useT();
   const state = useSyncExternalStore(sync.subscribe, sync.getState);
   const [backups, setBackups] = useState<string[]>([]);
-  const [restore, setRestore] = useState<{ path: string; profiles: number; presets: number } | null>(null);
+  const dialogSignal = useUnmountSignal();
 
   useEffect(() => {
     void sync
@@ -114,7 +115,16 @@ function SyncDetails({ sync, controller }: { sync: AiSync; controller: AiControl
               onClick={() =>
                 void sync
                   .backupCounts(path)
-                  .then((counts) => setRestore({ path, ...counts }))
+                  .then((counts) =>
+                    showConfirmDialog({
+                      title: t('ai.restoreTitle'),
+                      message: t('ai.syncCounts', { profiles: counts.profiles, presets: counts.presets }) + '\n' + t('ai.syncRestoreWarning'),
+                      confirmLabel: t('ai.restoreBackup'),
+                      t,
+                      signal: dialogSignal(),
+                    }),
+                  )
+                  .then((ok) => (ok ? sync.restore(path).then(() => controller.reload()) : undefined))
                   .catch((e) => controller.report(e))
               }
             >
@@ -123,22 +133,6 @@ function SyncDetails({ sync, controller }: { sync: AiSync; controller: AiControl
           </p>
         ))}
       </details>
-      {restore && (
-        <ConfirmDialog
-          title={t('ai.restoreTitle')}
-          message={t('ai.syncCounts', { profiles: restore.profiles, presets: restore.presets }) + '\n' + t('ai.syncRestoreWarning')}
-          confirmLabel={t('ai.restoreBackup')}
-          onConfirm={() => {
-            const path = restore.path;
-            setRestore(null);
-            void sync
-              .restore(path)
-              .then(() => controller.reload())
-              .catch((e) => controller.report(e));
-          }}
-          onCancel={() => setRestore(null)}
-        />
-      )}
     </>
   );
 }

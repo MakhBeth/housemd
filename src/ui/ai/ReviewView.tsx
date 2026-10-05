@@ -4,9 +4,10 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { AiController } from '../../ai/aiController';
 import { isBusy, reviewStatus } from '../../ai/reviewStatus';
 import type { CheckWarning } from '../../ai/types';
+import { showConfirmDialog } from '../../elements/dialogs/confirmDialog';
 import { Editor, type EditorHandle, type EditorProps } from '../../editor/Editor';
 import { useT } from '../../i18n/I18nProvider';
-import { ConfirmDialog } from '../ConfirmDialog';
+import { useUnmountSignal } from '../useUnmountSignal';
 import { DiffPane, type DiffHandle } from './DiffPane';
 import { ReviewBar } from './ReviewBar';
 import styles from './ReviewView.module.css';
@@ -23,7 +24,7 @@ export function ReviewView({ controller, editor }: Props) {
   const plain = useRef<EditorHandle>(null);
   const section = useRef<HTMLElement>(null);
   const shownView = useRef<'plain' | 'diff' | null>(null);
-  const [confirm, setConfirm] = useState(false);
+  const dialogSignal = useUnmountSignal();
   const [elapsed, setElapsed] = useState(0);
   const p = state.proposals.get(editor.path);
 
@@ -61,8 +62,10 @@ export function ReviewView({ controller, editor }: Props) {
     if (!p || !controller.beforeAccept(p, true)) return;
     const next = controller.proposalText(p);
     if (next !== null) diff.current?.replace(next);
-    setConfirm(false);
   };
+  // La conferma risponde dopo qualche render: si accetta con la proposta dell'ultimo, come faceva onConfirm.
+  const acceptRef = useRef(accept);
+  acceptRef.current = accept;
   const edit = (next: string) => {
     if (!p) return;
     if (!p.scope) return controller.edited(p.path, next);
@@ -118,7 +121,12 @@ export function ReviewView({ controller, editor }: Props) {
         onWarning={(w) => diff.current?.scrollToLine((w as { line?: number }).line ?? 0)}
         canAccept={controller.canAccept(p, true)}
         canDiscard={!isBusy(status)}
-        onAcceptAll={() => (editor.text !== p.baseText && !p.scope ? setConfirm(true) : accept())}
+        onAcceptAll={() => {
+          if (editor.text === p.baseText || p.scope) return accept();
+          void showConfirmDialog({ title: t('ai.acceptAll'), message: t('ai.changedWarning'), confirmLabel: t('ai.acceptAll'), t, signal: dialogSignal() }).then(
+            (ok) => ok && acceptRef.current(),
+          );
+        }}
         onDiscard={() => controller.discard(p.path)}
         onContinue={() => void controller.continue(p.path)}
       />
@@ -141,9 +149,6 @@ export function ReviewView({ controller, editor }: Props) {
         rejectLabel={t('ai.rejectBlock')}
         onAllRejected={() => controller.discard(p.path)}
       />
-      {confirm && (
-        <ConfirmDialog title={t('ai.acceptAll')} message={t('ai.changedWarning')} confirmLabel={t('ai.acceptAll')} onConfirm={accept} onCancel={() => setConfirm(false)} />
-      )}
     </section>
   );
 }
