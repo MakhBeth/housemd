@@ -1,9 +1,9 @@
 # HouseMD — migrazione a Web Components e CSS con `@scope` — design
 
-Data: 2026-09-27 · **Revisione: 2026-10-04**
+Data: 2026-09-27 · **Revisione: 2026-10-05**
 Base: `main` (HEAD `822f52d`: v1.1, strumenti AI, impostazioni a pagina, barra di formattazione,
 larghezza del testo, tooltip disegnati, albero con un solo tab stop).
-Stato: fasi 0–3 implementate (fase 0 PR #6, fase 1 PR #7, fase 2 in `main` (merge locale, commit 1b23305), fase 3 sul branch `refactor/fase-3-react-19`); fasi 4–8 ancora piano.
+Stato: fasi 0–3 implementate (fase 0 PR #6, fase 1 PR #7, fase 2 in `main` (merge locale, commit 1b23305), fase 3 sul branch `refactor/fase-3-react-19`); fase 4a sul branch `feat/web-components`; fasi 4b–8 ancora piano.
 
 Decisioni (27/09, riviste il 01/10; risposte alle domande aperte, §12):
 
@@ -335,6 +335,8 @@ export abstract class HmdElement extends HTMLElement {
   prop `onhmd-open`); i tipi JSX dei tag `hmd-*` si dichiarano in un solo file temporaneo
   `src/elements/jsx.d.ts`, cancellato nella fase 7.
 
+Host con `display: contents` quando l'elemento sostituisce un componente dentro un layout React: l'albero interno resta quello di React e l'audit degli stili (`e2e/support/styleAudit.ts`) salta il wrapper.
+
 ### 5.2 Quattro helper per il DOM (testati in jsdom)
 
 1. `el(tag, props?, ...children)`: crea un elemento. `props` accetta `class`, `dataset`, attributi
@@ -514,6 +516,8 @@ Non cambia una riga dell'app.
 
 ### Fase 4: foglie come custom element dentro React (branch)
 
+Divisa in tre piani: 4a (piano 5: infrastruttura, tema, conflitto, avvisi, toast), 4b (dialog), 4c (start screen e foglie AI).
+
 Ordine: `theme-switcher`, `conflict-bar`, `notice`, `update-notice`, `toasts`, dialog (funzioni),
 `start-screen`, `ai-suggestions`, `ai-effort-chip`, `ai-parameters`.
 
@@ -521,6 +525,7 @@ Ordine: `theme-switcher`, `conflict-bar`, `notice`, `update-notice`, `toasts`, d
   `@layer components`, il `.tsx` si cancella, chi lo usava monta il tag (proprietà ed eventi passati
   direttamente da React 19, §5.1).
 - I dialog diventano le funzioni di §5.4, chiamate da `WorkspaceView`.
+- 4a **fatta**: `hmd-theme-switcher`, `hmd-conflict-bar`, `hmd-notice`, `hmd-update-notice`, `hmd-toasts`; host con `display: contents`; store passati come proprietà (`useI18nStore`, `getThemeStore`); `HmdElement.reconnect()`; test degli elementi in jsdom con `src/testing/assetHooks.ts` e `popoverStub.ts`. I toast conservano il riavvio dei timer a ogni nuovo array (difetto preesistente, visibile: da decidere a parte).
 
 ### Fase 5: editor, anteprima, diff (branch)
 
@@ -686,7 +691,7 @@ raccoglie le spec (suffisso `.spec.ts`, cartella `e2e/`).
 
 **Suite in sviluppo** (`npm run test:e2e:dev`, `e2e/dev.config.ts`): le stesse spec contro `vite` in sviluppo (porta 5174), con StrictMode attivo; ogni errore o avviso in console fa fallire il test (`failOnConsole`). Restano fuori gli snapshot e il test che trattiene `assets/index-*.js`.
 
-**Audit degli stili calcolati** (`npm run test:e2e:audit`, `e2e/audit.config.ts`): gli stessi stati sulla build di riferimento in `dist-baseline/` (porta 4174) e sulla build corrente; ogni proprietà calcolata di ogni elemento e pseudo-elemento deve coincidere. Si usa prima e dopo ogni cambio di cascata (layer, `@scope`, spostamento di fogli), finché la struttura del DOM è la stessa. Copre focus da tastiera, `forced-colors` e tooltip al passaggio, che gli snapshot non vedono. Prima di leggere gli stili ogni stato viene stabilizzato: animazioni CSS in pausa, tutti i font caricati, un ridimensionamento della finestra 799/800 e rilettura del dump finché due letture coincidono.
+**Audit degli stili calcolati** (`npm run test:e2e:audit`, `e2e/audit.config.ts`): gli stessi stati sulla build di riferimento in `dist-baseline/` (porta 4174) e sulla build corrente; ogni proprietà calcolata di ogni elemento e pseudo-elemento deve coincidere. Si usa prima e dopo ogni cambio di cascata (layer, `@scope`, spostamento di fogli), finché la struttura del DOM è la stessa. Copre focus da tastiera, `forced-colors` e tooltip al passaggio, che gli snapshot non vedono. Prima di leggere gli stili ogni stato viene stabilizzato: animazioni CSS in pausa, tutti i font caricati, un ridimensionamento della finestra 799/800 e rilettura del dump finché due letture coincidono. Dalla fase 4 l'audit salta i wrapper `hmd-*` con `display: contents`.
 
 **Copertura** (una spec per area): avvio e browser non supportato; apertura, ripresa accesso e cambio
 cartella; editor con autosalvataggio e `Ctrl+S`; barra di formattazione e scorciatoie (Ctrl+B, Ctrl+I,
@@ -796,6 +801,7 @@ wikilink:
 1. `docs/superpowers/plans/2026-09-27-housemd-wc-01-e2e-baseline.md`: fase 0 (fatta, PR #6).
 2. Un piano e una PR per fase: `docs/superpowers/plans/2026-10-01-housemd-wc-02-fase-1-logica-pura.md`
    (fase 1, PR #7); `docs/superpowers/plans/2026-10-02-housemd-wc-03-fase-2-infrastruttura-dom.md` (fase 2);
-   `docs/superpowers/plans/2026-10-04-housemd-wc-04-fase-3-react-19.md` (fase 3).
+   `docs/superpowers/plans/2026-10-04-housemd-wc-04-fase-3-react-19.md` (fase 3);
+   `docs/superpowers/plans/2026-10-05-housemd-wc-05-fase-4a-infrastruttura-e-foglie.md` (fase 4a, branch `feat/web-components`); 4b e 4c da scrivere.
 3. Fasi 4–6 (elementi in convivenza).
 4. Fasi 7–8 (impostazioni, workspace, via React, rifinitura, richiesta di merge).
