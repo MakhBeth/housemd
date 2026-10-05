@@ -1378,15 +1378,6 @@ test('a number the input cannot parse sends the parameter removed, and getting u
   assert.equal(writes, 0);
   el.remove();
 });
-  const p = input(EN_MESSAGES['ai.param.topP']);
-  // jsdom, come Chromium, dà value "" per un numero non valido mentre si scrive.
-  p.value = '0.';
-  p.dispatchEvent(new Event('input', { bubbles: true }));
-  assert.deepEqual(changes.at(-1), { topP: undefined });
-  el.value = { topP: undefined };
-  assert.equal(p.value, '');
-  el.remove();
-});
 
 test('the inputs stay the same nodes across value updates and profile changes with the same fields', () => {
   const { el, input } = mount('ollama');
