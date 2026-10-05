@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 
 import { showConfirmDialog } from '../../../elements/dialogs/confirmDialog';
 import type { AiController } from '../../../ai/aiController';
@@ -81,6 +81,7 @@ function SyncDetails({ sync, controller }: { sync: AiSync; controller: AiControl
   const state = useSyncExternalStore(sync.subscribe, sync.getState);
   const [backups, setBackups] = useState<string[]>([]);
   const dialogSignal = useUnmountSignal();
+  const restoring = useRef(false);
 
   useEffect(() => {
     void sync
@@ -112,7 +113,10 @@ function SyncDetails({ sync, controller }: { sync: AiSync; controller: AiControl
             {path}
             <button
               type="button"
-              onClick={() =>
+              onClick={() => {
+                // Una sola conferma di ripristino alla volta, anche durante backupCounts
+                if (restoring.current) return;
+                restoring.current = true;
                 void sync
                   .backupCounts(path)
                   .then((counts) =>
@@ -126,7 +130,10 @@ function SyncDetails({ sync, controller }: { sync: AiSync; controller: AiControl
                   )
                   .then((ok) => (ok ? sync.restore(path).then(() => controller.reload()) : undefined))
                   .catch((e) => controller.report(e))
-              }
+                  .finally(() => {
+                    restoring.current = false;
+                  });
+              }}
             >
               {t('ai.restoreBackup')}
             </button>

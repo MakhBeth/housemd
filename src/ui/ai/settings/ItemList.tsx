@@ -44,7 +44,6 @@ export function useDraft<T>(onDirty?: (dirty: boolean) => void) {
     /** Dopo un salvataggio riuscito: la bozza corrente diventa il riferimento. */
     markSaved: (item: T | null) => setState((s) => openDraft(s, item)),
     select: (item: T | null) => setState((s) => selectDraft(s, item)),
-    pending: state.pending !== null,
     confirmSwitch: () => setState(confirmSwitch),
     cancelSwitch: () => setState(cancelSwitch),
   };
