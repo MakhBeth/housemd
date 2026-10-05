@@ -48,3 +48,26 @@ test('a language change relabels the buttons without recreating them', async () 
   assert.equal(reload.textContent, 'RICARICA');
   el.remove();
 });
+
+test('detached, a language change no longer relabels the buttons', async () => {
+  const { el, i18n } = mount();
+  const reload = el.querySelector('button')!;
+  el.remove();
+  await i18n.setLocale('it');
+  assert.equal(reload.textContent, EN_MESSAGES['conflict.reload']);
+});
+
+test('a new i18n store while connected keeps the buttons and relabels from the new store', () => {
+  const { el } = mount();
+  const buttons = [...el.querySelectorAll('button')];
+  const other = createI18nStore({
+    locale: 'en',
+    messages: { ...EN_MESSAGES, 'conflict.reload': 'ALTRO', 'conflict.overwrite': 'SOVRASCRIVI' },
+    load: async (locale) => ({ locale, messages: EN_MESSAGES }),
+    persist() {},
+  });
+  el.i18n = other;
+  assert.deepEqual([...el.querySelectorAll('button')], buttons);
+  assert.deepEqual(buttons.map((b) => b.textContent), ['ALTRO', 'SOVRASCRIVI']);
+  el.remove();
+});
