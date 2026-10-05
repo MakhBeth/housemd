@@ -7,6 +7,10 @@ import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 
 import { icon } from '../dom/icon';
+import { installPopoverStub } from '../testing/popoverStub';
+import './define';
+
+installPopoverStub();
 
 /** Elemento di prova: le proprietà esistono sull'istanza prima del render, come vuole React 19 (spec WC §5.1). */
 class HmdInteropProbe extends HTMLElement {
@@ -39,4 +43,16 @@ test('React 19 assigns properties to a defined hmd-* tag and listens to its hmd-
 
 test('modules that import icons load under tsx (assetHooks)', () => {
   assert.equal(icon('close').localName, 'span');
+});
+
+test('React 19 sends undefined when a prop disappears: hmd-notice drops the action button', () => {
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  flushSync(() => root.render(createElement('hmd-notice', { message: 'msg', actionLabel: 'Go' })));
+  const notice = host.querySelector('hmd-notice')!;
+  assert.equal(notice.querySelectorAll('button').length, 1);
+  flushSync(() => root.render(createElement('hmd-notice', { message: 'msg' })));
+  assert.equal(notice.querySelectorAll('button').length, 0);
+  flushSync(() => root.unmount());
 });

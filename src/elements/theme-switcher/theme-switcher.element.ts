@@ -24,6 +24,7 @@ export class HmdThemeSwitcher extends HmdElement {
     return this.#store;
   }
   set store(value: ThemeStore | null) {
+    value ??= null;
     if (value === this.#store) return;
     this.#store = value;
     this.reconnect();
@@ -33,6 +34,7 @@ export class HmdThemeSwitcher extends HmdElement {
     return this.#i18n;
   }
   set i18n(value: I18nStore | null) {
+    value ??= null;
     if (value === this.#i18n) return;
     this.#i18n = value;
     this.reconnect();

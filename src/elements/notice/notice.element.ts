@@ -21,19 +21,19 @@ export class HmdNotice extends HmdElement {
   #open = false;
 
   get message(): string { return this.#message; }
-  set message(value: string) { this.#message = value; this.#render(); }
+  set message(value: string) { this.#message = value ?? ''; this.#render(); }
   get actionLabel(): string { return this.#actionLabel; }
-  set actionLabel(value: string) { this.#actionLabel = value; this.#render(); }
+  set actionLabel(value: string) { this.#actionLabel = value ?? ''; this.#render(); }
   get busy(): boolean { return this.#busy; }
-  set busy(value: boolean) { this.#busy = value; this.#render(); }
+  set busy(value: boolean) { this.#busy = value ?? false; this.#render(); }
   get dismissLabel(): string { return this.#dismissLabel; }
-  set dismissLabel(value: string) { this.#dismissLabel = value; this.#render(); }
+  set dismissLabel(value: string) { this.#dismissLabel = value ?? ''; this.#render(); }
   get dismissible(): boolean { return this.#dismissible; }
-  set dismissible(value: boolean) { this.#dismissible = value; this.#render(); }
+  set dismissible(value: boolean) { this.#dismissible = value ?? false; this.#render(); }
   get placement(): Placement { return this.#placement; }
-  set placement(value: Placement) { this.#placement = value; this.#render(); }
+  set placement(value: Placement) { this.#placement = value ?? 'bottom'; this.#render(); }
 
-  protected connect(signal: AbortSignal): void {
+  protected connect(_signal: AbortSignal): void {
     if (!this.#parts) {
       const text = el('p');
       const action = el('button', { class: 'action', on: { click: () => emit(this, 'hmd-notice-action', null) } });
@@ -43,12 +43,17 @@ export class HmdNotice extends HmdElement {
       this.#parts = { box, text, action, dismiss };
     }
     this.#render();
-    // Un popover staccato dal documento si chiude da solo: niente hidePopover() su un nodo staccato.
+    // Un popover staccato dal documento si chiude da solo (vedi disconnectedCallback): niente hidePopover() su un nodo staccato.
     if (!this.#open) {
       this.#parts.box.showPopover();
       this.#open = true;
     }
-    signal.addEventListener('abort', () => (this.#open = false), { once: true });
+  }
+
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    // Solo il distacco chiude il popover (il signal si interrompe anche al reconnect, che non lo chiude).
+    this.#open = false;
   }
 
   #render(): void {

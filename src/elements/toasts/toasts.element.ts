@@ -3,13 +3,14 @@ import { el, setText, toggleAttr } from '../../dom/el';
 import { icon } from '../../dom/icon';
 import { reconcileList } from '../../dom/list';
 import type { I18nStore } from '../../state/i18nStore';
+import type { Toast } from '../../workspace/toasts';
 import { emit } from '../events';
 import './toasts.css';
 
 /** Un toast già tradotto: il Workspace e il controller AI hanno codici diversi, qui arriva solo testo. */
 export interface ToastItem {
   key: string;
-  kind: 'info' | 'error';
+  kind: Toast['kind'];
   text: string;
 }
 
@@ -28,12 +29,13 @@ export class HmdToasts extends HmdElement {
 
   get items(): readonly ToastItem[] { return this.#items; }
   set items(value: readonly ToastItem[]) {
-    this.#items = value;
+    this.#items = value ?? [];
     this.#render();
     if (this.isConnected) this.#restartTimers();
   }
   get i18n(): I18nStore | null { return this.#i18n; }
   set i18n(value: I18nStore | null) {
+    value ??= null;
     if (value === this.#i18n) return;
     this.#i18n = value;
     this.reconnect();
@@ -44,17 +46,20 @@ export class HmdToasts extends HmdElement {
     if (this.#i18n) this.watch(this.#i18n, () => this.#render(), signal);
     else this.#render();
     this.#restartTimers();
-    signal.addEventListener('abort', () => {
-      this.#clearTimers();
-      // Staccato, il popover si è già chiuso: si dimentica lo stato, senza hidePopover().
-      this.#open = false;
-    }, { once: true });
+    // Il signal si interrompe al distacco e al reconnect: i timer ripartono in entrambi i casi.
+    signal.addEventListener('abort', () => this.#clearTimers(), { once: true });
+  }
+
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    // Solo il distacco chiude il popover (al reconnect resta aperto): si dimentica lo stato, senza hidePopover().
+    this.#open = false;
   }
 
   #render(): void {
     const box = this.#box;
     if (!box) return;
-    const close = this.#i18n?.t('toast.close') ?? '';
+    const close = this.#i18n?.t('toast.close');
     reconcileList(
       box,
       this.#items,
@@ -66,8 +71,8 @@ export class HmdToasts extends HmdElement {
         toggleAttr(node, 'role', true, item.kind === 'error' ? 'alert' : 'status');
         setText(node.querySelector('p')!, item.text);
         const button = node.querySelector('button')!;
-        toggleAttr(button, 'aria-label', true, close);
-        toggleAttr(button, 'data-tooltip', true, close);
+        toggleAttr(button, 'aria-label', close !== undefined, close);
+        toggleAttr(button, 'data-tooltip', close !== undefined, close);
       },
     );
     if (!this.isConnected) return;

@@ -13,12 +13,14 @@ export class HmdUpdateNotice extends HmdElement {
 
   get flow(): UpdateFlow | null { return this.#flow; }
   set flow(value: UpdateFlow | null) {
+    value ??= null;
     if (value === this.#flow) return;
     this.#flow = value;
     this.reconnect();
   }
   get i18n(): I18nStore | null { return this.#i18n; }
   set i18n(value: I18nStore | null) {
+    value ??= null;
     if (value === this.#i18n) return;
     this.#i18n = value;
     this.reconnect();
