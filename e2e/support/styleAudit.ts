@@ -1,4 +1,4 @@
-/** Stili calcolati per elemento: chiave = percorso nel DOM (più `::before`/`::after`), valore = proprietà → valore. */
+/** Stili calcolati per elemento: chiave = percorso nel DOM (più `::before`/`::after` e `::backdrop` dei dialog modali; i dialog hanno la chiave `dialog#<indice>`, qualunque sia il genitore), valore = proprietà → valore. */
 export type StyleDump = Record<string, Record<string, string>>;
 
 /**
@@ -10,7 +10,7 @@ export function dumpComputedStyles(): StyleDump {
   // I wrapper dei custom element con `display: contents` non hanno un box: si saltano, così l'albero
   // confrontato è quello di React (spec WC fase 4, host trasparenti).
   const transparent = (node: Element) => node.localName.startsWith('hmd-') && getComputedStyle(node).display === 'contents';
-  const flatChildren = (node: Element): Element[] => [...node.children].flatMap((child) => (transparent(child) ? flatChildren(child) : [child]));
+  const flatChildren = (node: Element): Element[] => [...node.children].flatMap((child) => (transparent(child) ? flatChildren(child) : child.localName === 'dialog' ? [] : [child]));
   const parentOf = (node: Element): Element | null => {
     let parent = node.parentElement;
     while (parent && transparent(parent)) parent = parent.parentElement;
@@ -19,6 +19,11 @@ export function dumpComputedStyles(): StyleDump {
   const pathOf = (el: Element): string => {
     const parts: string[] = [];
     for (let node: Element | null = el; node && node !== document.documentElement; node = parentOf(node)) {
+      // Un dialog sta nel top layer: la chiave non dipende da dove è appeso nel DOM (#root o body).
+      if (node.localName === 'dialog') {
+        parts.unshift(`dialog#${[...document.querySelectorAll('dialog')].indexOf(node as HTMLDialogElement)}`);
+        break;
+      }
       const parent = parentOf(node);
       const index = parent ? flatChildren(parent).indexOf(node) : 0;
       parts.unshift(`${node.localName}:${index}`);
@@ -43,6 +48,8 @@ export function dumpComputedStyles(): StyleDump {
       const style = getComputedStyle(el, pseudo);
       if (style.content !== 'none' && style.content !== 'normal') out[`${path}${pseudo}`] = read(style);
     }
+    // Il backdrop non ha `content`: esiste solo per i dialog modali (top layer).
+    if (el.matches('dialog:modal')) out[`${path}::backdrop`] = read(getComputedStyle(el, '::backdrop'));
   }
   return out;
 }
