@@ -73,9 +73,10 @@ export class HmdAiParameters extends HmdElement {
         }
         const input = label.querySelector('input')!;
         const next = value[field.key];
-        // Come React con gli input numerici: si riscrive solo se il numero cambia, così "0." resta.
+        // Si riscrive solo se il numero cambia e il campo non ha il focus: chi sta scrivendo è la fonte del valore,
+        // e un commit in ritardo del genitore cancellerebbe il testo parziale ("0.").
         const current = input.value === '' ? undefined : Number(input.value);
-        if (current !== next) input.value = next === undefined ? '' : String(next);
+        if (current !== next && input !== this.ownerDocument.activeElement) input.value = next === undefined ? '' : String(next);
       },
     );
   }
