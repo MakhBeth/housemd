@@ -116,3 +116,15 @@ test('language change relabels in place', async () => {
   assert.equal(span.textContent, 'TOP P');
   el.remove();
 });
+
+test('a value changed from outside while the field has focus shows up once the focus leaves', () => {
+  const { el, input } = mount('ollama', { topP: 0.5 });
+  const p = input(EN_MESSAGES['ai.param.topP']);
+  p.focus();
+  assert.equal(document.activeElement, p);
+  el.value = { topP: 0.9 };
+  assert.equal(p.value, '0.5');
+  p.blur();
+  assert.equal(p.value, '0.9');
+  el.remove();
+});

@@ -32,6 +32,8 @@ export class HmdAiParameters extends HmdElement {
 
   protected connect(signal: AbortSignal): void {
     this.#section ??= this.appendChild(el('div', { class: 'section' }));
+    // Un cambio esterno arrivato mentre il campo aveva il focus si mostra quando il focus esce.
+    this.#section.addEventListener('focusout', () => this.#render(), { signal });
     if (this.#i18n) this.watch(this.#i18n, () => this.#render(), signal);
   }
 

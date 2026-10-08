@@ -15,7 +15,7 @@ export class HmdStartScreen extends HmdElement {
   #folderName = '';
   #busy = false;
   #i18n: I18nStore | null = null;
-  #parts: { panel: HTMLDivElement; title: HTMLHeadingElement; tagline: HTMLParagraphElement; message: HTMLParagraphElement; pick: HTMLButtonElement; resume: HTMLButtonElement; other: HTMLButtonElement } | null = null;
+  #parts: { title: HTMLHeadingElement; tagline: HTMLParagraphElement; message: HTMLParagraphElement; pick: HTMLButtonElement; resume: HTMLButtonElement; other: HTMLButtonElement } | null = null;
 
   get mode(): StartMode { return this.#mode; }
   set mode(value: StartMode) { this.#mode = value ?? 'start'; this.#render(); }
@@ -50,7 +50,6 @@ export class HmdStartScreen extends HmdElement {
       );
       this.append(el('main', { class: 'start' }, panel));
       this.#parts = {
-        panel,
         title,
         tagline,
         message: el('p', { class: 'message' }),
@@ -60,7 +59,6 @@ export class HmdStartScreen extends HmdElement {
       };
     }
     if (this.#i18n) this.watch(this.#i18n, () => this.#render(), signal);
-    this.#render();
   }
 
   #render(): void {
