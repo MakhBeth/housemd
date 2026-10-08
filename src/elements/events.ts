@@ -3,6 +3,8 @@
  * trattino. In React 19 si ascoltano con la prop `on<nome>` (es. `onhmd-toast-dismiss`).
  */
 export interface HmdEvents {
+  /** Suggerimento scelto sotto il composer: invia il preset. */
+  'hmd-ai-suggestion': CustomEvent<{ presetId: string }>;
   /** Conflitto con il disco: l'utente sceglie se ricaricare o sovrascrivere. */
   'hmd-conflict': CustomEvent<{ choice: 'reload' | 'overwrite' }>;
   /** Pulsante d'azione di un avviso (es. "Aggiorna"). */
