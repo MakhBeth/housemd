@@ -9,6 +9,10 @@ export interface HmdEvents {
   'hmd-notice-action': CustomEvent<null>;
   /** Chiusura di un avviso. */
   'hmd-notice-dismiss': CustomEvent<null>;
+  /** Schermata iniziale: scegliere una cartella (anche «Apri un'altra cartella»). */
+  'hmd-start-pick': CustomEvent<null>;
+  /** Schermata iniziale: riprendere l'accesso alla cartella ricordata. */
+  'hmd-start-resume': CustomEvent<null>;
   /** Chiusura di un toast (dal pulsante o dal timer dei toast informativi). */
   'hmd-toast-dismiss': CustomEvent<{ key: string }>;
 }
