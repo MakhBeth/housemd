@@ -1,3 +1,5 @@
+import type { GenParams } from '../ai/types';
+
 /**
  * Eventi che gli elementi mandano verso chi li usa (spec WC §5.1): `bubbles: true`, nomi minuscoli con
  * trattino. In React 19 si ascoltano con la prop `on<nome>` (es. `onhmd-toast-dismiss`).
@@ -7,6 +9,8 @@ export interface HmdEvents {
   'hmd-ai-suggestion': CustomEvent<{ presetId: string }>;
   /** Conflitto con il disco: l'utente sceglie se ricaricare o sovrascrivere. */
   'hmd-conflict': CustomEvent<{ choice: 'reload' | 'overwrite' }>;
+  /** Parametri di generazione modificati (popover del modello, impostazioni di profili e preset). */
+  'hmd-params-change': CustomEvent<{ params: GenParams }>;
   /** Pulsante d'azione di un avviso (es. "Aggiorna"). */
   'hmd-notice-action': CustomEvent<null>;
   /** Chiusura di un avviso. */

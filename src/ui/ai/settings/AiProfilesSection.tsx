@@ -6,16 +6,16 @@ import type { AiController } from '../../../ai/aiController';
 import { changeProvider } from '../../../ai/models';
 import { DEFAULT_URLS, defaultProfile, PROVIDER_KINDS, validateProfile } from '../../../ai/profiles';
 import type { ModelProfile, ProviderKind } from '../../../ai/types';
-import { useT } from '../../../i18n/I18nProvider';
+import { useI18nStore, useT } from '../../../i18n/I18nProvider';
 import type { MessageKey } from '../../../i18n/messages';
 import { useUnmountSignal } from '../../useUnmountSignal';
 import { ModelSelect } from '../ModelSelect';
-import { Parameters } from '../Parameters';
 import { ItemList, useDraft } from './ItemList';
 import styles from './Settings.module.css';
 
 export function AiProfilesSection({ controller, onDirty }: { controller: AiController; onDirty?: (dirty: boolean) => void }) {
   const t = useT();
+  const i18nStore = useI18nStore();
   const state = useSyncExternalStore(controller.subscribe, controller.getState);
   const { draft, dirty, setDraft, markSaved, select, confirmSwitch, cancelSwitch } = useDraft<ModelProfile>(onDirty);
   const [key, setKey] = useState('');
@@ -83,7 +83,7 @@ export function AiProfilesSection({ controller, onDirty }: { controller: AiContr
           </label>
           <p className={styles.help}>{t(`ai.help.${draft.kind}` as MessageKey)}</p>
           <ModelSelect controller={controller} profile={draft} onChange={(selection) => setDraft({ ...draft, ...selection })} />
-          <Parameters profile={draft} value={draft.params} onChange={(params) => setDraft({ ...draft, params })} />
+          <hmd-ai-parameters profile={draft} value={draft.params} i18n={i18nStore} onhmd-params-change={(event) => setDraft({ ...draft, params: event.detail.params })} />
           <label>
             <span>{t('ai.contextTokens')}</span>
             <input

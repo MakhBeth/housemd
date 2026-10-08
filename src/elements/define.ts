@@ -1,4 +1,5 @@
 import { HmdAiEffortChip } from './ai/effort-chip.element';
+import { HmdAiParameters } from './ai/parameters.element';
 import { HmdAiSuggestions } from './ai/suggestions.element';
 import { HmdConflictBar } from './conflict-bar/conflict-bar.element';
 import { HmdNotice } from './notice/notice.element';
@@ -16,6 +17,7 @@ type Definitions = readonly (readonly [string, CustomElementConstructor])[];
 
 const ELEMENTS: Definitions = [
   ['hmd-ai-effort-chip', HmdAiEffortChip],
+  ['hmd-ai-parameters', HmdAiParameters],
   ['hmd-ai-suggestions', HmdAiSuggestions],
   ['hmd-conflict-bar', HmdConflictBar],
   ['hmd-notice', HmdNotice],

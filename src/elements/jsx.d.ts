@@ -2,6 +2,7 @@
  * Tipi JSX dei tag `hmd-*` usati da React durante la convivenza (fasi 4–7). File temporaneo: sparisce con
  * React nella fase 7 (spec WC §5.1).
  */
+import type { GenParams, ModelProfile } from '../ai/types';
 import type { UnsupportedReason } from '../fs/access';
 import type { UpdateFlow } from '../pwa/updateFlow';
 import type { I18nStore } from '../state/i18nStore';
@@ -20,6 +21,7 @@ declare module 'react' {
   namespace JSX {
     interface IntrinsicElements {
       'hmd-ai-effort-chip': HmdProps<{ controller: AiChipController; i18n: I18nStore }>;
+      'hmd-ai-parameters': HmdProps<{ profile: ModelProfile; value: GenParams; hideEffort: boolean; i18n: I18nStore }, 'hmd-params-change'>;
       'hmd-ai-suggestions': HmdProps<{ controller: AiChipController; i18n: I18nStore }, 'hmd-ai-suggestion'>;
       'hmd-conflict-bar': HmdProps<{ i18n: I18nStore }, 'hmd-conflict'>;
       'hmd-notice': HmdProps<
