@@ -45,6 +45,25 @@ async function searchFromKeyboard(app: App, page: Page): Promise<void> {
 const STATES: State[] = [
   { name: 'start-light', setup: (app) => app.start() },
   { name: 'start-dark', scheme: 'dark', setup: (app) => app.start() },
+  {
+    name: 'start-theme-light',
+    scheme: 'dark',
+    async setup(app, page) {
+      // Tema chiaro esplicito con il sistema scuro: deve vedersi il logo in negativo.
+      await page.addInitScript(() => localStorage.setItem('housemd:theme', JSON.stringify('light')));
+      await app.start();
+      await expect(page.getByRole('button', { name: app.t('start.openFolder') })).toBeVisible();
+    },
+  },
+  {
+    name: 'start-resume',
+    async setup(app, page) {
+      await app.openFolder({ 'a.md': 'alpha' });
+      await app.setFlags({ query: 'prompt', request: 'granted' });
+      await page.reload();
+      await expect(page.getByRole('button', { name: app.t('start.openOther') })).toBeVisible();
+    },
+  },
   { name: 'workspace-light', setup: workspace },
   { name: 'workspace-dark', scheme: 'dark', setup: workspace },
   {
@@ -53,6 +72,53 @@ const STATES: State[] = [
       await app.openFolder({ 'note.md': '# Note' });
       await page.getByRole('button', { name: app.t('toolbar.settings') }).click();
       await expect(page.getByRole('region', { name: app.t('settings.title') })).toBeVisible();
+    },
+  },
+  {
+    name: 'settings-profile',
+    async setup(app, page) {
+      await app.openFolder({ 'note.md': '# Note' });
+      await page.getByRole('button', { name: app.t('toolbar.settings') }).click();
+      const settings = page.getByRole('region', { name: app.t('settings.title') });
+      await settings.getByRole('link', { name: app.t('settings.aiProfiles') }).click();
+      await settings.getByRole('button', { name: 'ollama', exact: true }).click();
+      await expect(settings.getByRole('spinbutton', { name: app.t('ai.param.temperature') })).toBeVisible();
+    },
+  },
+  {
+    name: 'model-popover',
+    async setup(app, page) {
+      await app.openFolder({ 'a.md': 'Alpha' });
+      await app.openFile('a.md');
+      await expect(app.mode('mode.ai')).toBeVisible();
+      await app.mode('mode.ai').click();
+      await page.getByRole('button', { name: new RegExp(`^${app.t('ai.profile')}: `) }).click();
+      await expect(page.getByRole('spinbutton', { name: app.t('ai.param.temperature') })).toBeVisible();
+    },
+  },
+  {
+    name: 'ai-suggestions',
+    async setup(app, page) {
+      await app.openFolder({ 'a.md': 'Alpha' });
+      await app.openFile('a.md');
+      await expect(app.mode('mode.ai')).toBeVisible();
+      await app.mode('mode.ai').click();
+      await expect(page.getByRole('group', { name: app.t('ai.suggestions') })).toBeVisible();
+    },
+  },
+  {
+    name: 'effort-chip',
+    async setup(app, page) {
+      await page.route('https://api.anthropic.com/**', (route) => route.abort());
+      await app.openFolder({ 'a.md': 'Alpha' });
+      await app.openFile('a.md');
+      await expect(app.mode('mode.ai')).toBeVisible();
+      await app.createProfile('anthropic', 'Cloud');
+      await app.mode('mode.ai').click();
+      await page.getByRole('button', { name: new RegExp(`^${app.t('ai.profile')}: `) }).click();
+      await page.getByRole('radio', { name: 'Cloud' }).check();
+      await page.keyboard.press('Escape');
+      await expect(page.getByRole('combobox', { name: app.t('ai.param.effort') })).toBeVisible();
     },
   },
   {
