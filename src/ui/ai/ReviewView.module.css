@@ -95,49 +95,6 @@
   white-space: pre-wrap;
 }
 
-.diff {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-}
-
-.diff :global(.cm-mergeView) {
-  height: 100%;
-}
-
-.diff :global(.cm-editor) {
-  min-width: 0;
-}
-
-.diff :global(.cm-content) {
-  padding-bottom: 40vh;
-}
-
-/* Controlli per blocco: ← accetta, → rifiuta, uno sotto l'altro nella colonna centrale del diff. */
-.diff :global(.cm-merge-revert) .revert {
-  position: absolute;
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-}
-
-.diff :global(.cm-merge-revert) .revert button {
-  position: static;
-  padding: 2px 0;
-  border-radius: 4px;
-  color: var(--c-muted);
-}
-
-.diff :global(.cm-merge-revert) .revert button:hover:not(:disabled) {
-  background: var(--c-accent-soft);
-  color: var(--c-text);
-}
-
-.diff :global(.cm-merge-revert) .revert button:disabled {
-  opacity: 0.35;
-  cursor: default;
-}
-
 .editor {
   flex: 1;
   min-height: 0;

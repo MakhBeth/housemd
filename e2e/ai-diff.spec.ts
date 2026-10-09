@@ -59,20 +59,12 @@ test.describe('blocks', () => {
     await expect.poll(() => docText(app)).toBe('A2\n\nB\n\nC');
   });
 
-  test('Ctrl+Z that brings the diff back leaves the focus in the document: the next shortcut reaches it', async ({ app, page, failOnConsole }) => {
+  test('Ctrl+Z that brings the diff back leaves the focus in the document: the next shortcut reaches it', async ({ app, page }) => {
     await acceptAll(app).click();
     await expect(mergeView(app)).toHaveCount(0);
     await page.keyboard.press('ControlOrMeta+z');
     await expect(mergeView(app)).toBeVisible();
-    if (failOnConsole) {
-      // Difetto noto, solo in sviluppo (`failOnConsole` è vero solo in e2e/dev.config.ts; misurato il 09/10):
-      // StrictMode distrugge e ricrea la MergeView di DiffPane.tsx e il focus cade sul body. Lo si afferma
-      // esplicitamente; il clic serve solo a proseguire. Il Task 5 della fase 5b toglie questo ramo.
-      await expect.poll(() => page.evaluate(() => document.activeElement === document.body)).toBe(true);
-      await documentSide(app).click();
-    } else {
-      await expect(documentSide(app)).toBeFocused();
-    }
+    await expect(documentSide(app)).toBeFocused();
     await page.keyboard.press('ControlOrMeta+Shift+z');
     await expect(mergeView(app)).toHaveCount(0);
     await expect.poll(() => docText(app)).toBe('A2\n\nB\n\nC2');

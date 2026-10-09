@@ -8,8 +8,12 @@ import type { GenParams } from '../ai/types';
  * trattino. In React 19 si ascoltano con la prop `on<nome>` (es. `onhmd-toast-dismiss`).
  */
 export interface HmdEvents {
+  /** Diff della revisione AI: rifiutato l'ultimo blocco rimasto (equivale a scartare la proposta). */
+  'hmd-ai-all-rejected': CustomEvent<null>;
   /** Chat AI: aprire il documento di un messaggio. */
   'hmd-ai-open-file': CustomEvent<{ path: string }>;
+  /** Diff della revisione AI: proposta modificata a mano (anche da un rifiuto), testo intero del lato destro. */
+  'hmd-ai-proposal-edit': CustomEvent<{ text: string }>;
   /** Chat AI: ripetere un messaggio fallito (`removeRejected`: senza i parametri che il provider ha rifiutato). */
   'hmd-ai-retry': CustomEvent<{ id: string; removeRejected: boolean }>;
   /** Suggerimento scelto sotto il composer: invia il preset. */

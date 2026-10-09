@@ -1,0 +1,52 @@
+@layer components {
+  @scope (hmd-ai-diff-pane) {
+    :scope {
+      display: contents;
+    }
+
+    :scope > .diff {
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+    }
+
+    .cm-mergeView {
+      height: 100%;
+    }
+
+    .cm-editor {
+      min-width: 0;
+    }
+
+    /* Controlli per blocco: ← accetta, → rifiuta, uno sotto l'altro nella colonna centrale del diff. */
+    .cm-merge-revert > .revert {
+      position: absolute;
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+    }
+
+    /*
+     * @codemirror/merge inietta `.cm-merge-revert button { position: absolute; background: none;
+     * cursor: pointer; … }` fuori da ogni layer, e uno stile fuori dai layer vince su ogni regola
+     * normale di un layer. Le proprietà in comune si dichiarano !important: dentro un layer,
+     * !important vince sugli stili normali fuori dai layer (prima vinceva la specificità del CSS Module).
+     */
+    .cm-merge-revert > .revert > button {
+      position: static !important;
+      padding: 2px 0;
+      border-radius: 4px;
+      color: var(--c-muted);
+    }
+
+    .cm-merge-revert > .revert > button:hover:not(:disabled) {
+      background: var(--c-accent-soft) !important;
+      color: var(--c-text);
+    }
+
+    .cm-merge-revert > .revert > button:disabled {
+      opacity: 0.35;
+      cursor: default !important;
+    }
+  }
+}
