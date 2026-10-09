@@ -114,10 +114,15 @@ export function docExtensions(host: DocHost) {
       autocompletion({ override: [wikiCompletionSource(() => host.getDocs())] }),
       formatToolbar(() => host.t()),
       EditorView.updateListener.of((update) => {
-        if (update.docChanged) host.docChanged(update.changes, { before: update.startState.doc.toString(), after: update.state.doc.toString() });
-        if (update.selectionSet || update.docChanged) host.selectionChanged(mainSelectionRange(update.state));
+        // La sessione si salva prima di emettere: un listener sincrono può cambiare documento (anche staccare
+        // e ricollegare l'elemento), e da lì host.session() sarebbe la sessione del documento nuovo.
         const session = host.session();
         if (session) saveDocSession(session, update.state);
+        const life = update.view.plugin(lifecycle);
+        if (update.docChanged) host.docChanged(update.changes, { before: update.startState.doc.toString(), after: update.state.doc.toString() });
+        // Un update superato (vista distrutta, stato sostituito o già più avanti) non annuncia la sua selezione.
+        const current = life?.alive && update.view.state === update.state;
+        if (current && (update.selectionSet || update.docChanged)) host.selectionChanged(mainSelectionRange(update.state));
       }),
       EditorView.domEventHandlers({
         paste(event, view) {

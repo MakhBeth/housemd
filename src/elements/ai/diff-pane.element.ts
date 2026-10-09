@@ -166,6 +166,7 @@ export class HmdAiDiffPane extends HmdDocElement {
   #flush(): void {
     let merge = this.#merge;
     if (!merge) return;
+    const generation = this.docGeneration;
     if (this.#applied.resetKey !== this.resetKey) {
       const hadFocus = merge.a.hasFocus || merge.b.hasFocus;
       this.#destroy();
@@ -176,6 +177,8 @@ export class HmdAiDiffPane extends HmdDocElement {
     if (this.#announce) {
       this.#announce = false;
       emit(this, 'hmd-selection', { range: mainSelectionRange(merge.a.state) });
+      // Un listener ha cambiato documento o vista: proposta, pulsanti e ripristino nuovi tocca al flush dopo.
+      if (this.docGeneration !== generation || this.#merge !== merge) return;
     }
     if (this.#applied.proposal !== this.#proposal) {
       this.#applied.proposal = this.#proposal;

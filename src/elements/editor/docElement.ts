@@ -36,6 +36,7 @@ export abstract class HmdDocElement extends HmdElement {
    * quella del documento nuovo (la sostituzione arriva nel microtask dopo).
    */
   #shownSession: DocSession | null = null;
+  #docGeneration = 0;
 
   /** Le estensioni del documento leggono da qui a ogni uso: valori sempre attuali, senza ricrearle. */
   protected readonly docHost: DocHost = {
@@ -58,6 +59,7 @@ export abstract class HmdDocElement extends HmdElement {
     value ??= '';
     if (value === this.#resetKey) return;
     this.#resetKey = value;
+    this.#docGeneration++;
     this.docInputChanged();
   }
   get session(): DocSession | null { return this.#session; }
@@ -91,6 +93,12 @@ export abstract class HmdDocElement extends HmdElement {
   protected translator(): Translate {
     return this.#i18n?.t ?? KEY_ONLY;
   }
+
+  /**
+   * Cresce a ogni cambio di `resetKey`. Un microtask che emette eventi la riconfronta dopo ogni emit: se un
+   * listener sincrono ha cambiato documento, si ferma e lascia tutto al microtask già pianificato dal setter.
+   */
+  protected get docGeneration(): number { return this.#docGeneration; }
 
   /** `resetKey`, `restore` o `readOnly` assegnati: da applicare in un microtask. */
   protected abstract docInputChanged(): void;

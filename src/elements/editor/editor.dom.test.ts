@@ -220,6 +220,46 @@ test('an image still saving when the editor is detached goes nowhere, even if it
   assert.equal(session.textLf, 'ab');
 });
 
+test('a listener that swaps the document while typing: each session keeps its own text, no stale selection', async () => {
+  const { el, session, events, view } = mount('old');
+  await tick();
+  const next = createDocSession('b.md#1', 'new');
+  // Un listener sincrono stacca l'editor, gli dà il documento B e lo ricollega, dentro l'update di A.
+  el.addEventListener('hmd-doc-change', () => {
+    el.remove();
+    Object.assign(el, { resetKey: 'b.md#1', text: 'new', session: next });
+    document.body.append(el);
+  }, { once: true });
+  events.length = 0;
+  view().dispatch({ changes: { from: 3, insert: '!' }, selection: EditorSelection.single(0, 4), userEvent: 'input.type' });
+  assert.equal(session.textLf, 'old!');
+  assert.deepEqual([next.textLf, next.selection, next.history], ['new', undefined, undefined]);
+  await tick();
+  assert.equal(view().state.doc.toString(), 'new');
+  assert.equal(undo(view()), false);
+  // Solo la selezione di B, annunciata nel microtask: nessuna selezione di A dall'update superato.
+  assert.deepEqual(events.filter(([type]) => type === 'hmd-selection'), [['hmd-selection', { range: null }]]);
+  el.remove();
+});
+
+test('a listener that assigns another document while a new one is announced: the restore goes to its own document', async () => {
+  const { el, events, view } = mount('A');
+  await tick();
+  const b = createDocSession('b.md#1', 'B');
+  const c = createDocSession('c.md#1', 'C');
+  el.addEventListener('hmd-selection', () => {
+    Object.assign(el, { resetKey: 'c.md#1', text: 'C', session: c, restore: { seq: 2, textLf: 'C restored' } });
+  }, { once: true });
+  events.length = 0;
+  Object.assign(el, { resetKey: 'b.md#1', text: 'B', session: b });
+  await tick();
+  assert.equal(view().state.doc.toString(), 'C restored');
+  assert.equal(c.textLf, 'C restored');
+  assert.equal(b.textLf, 'B');
+  assert.deepEqual(events.map(([type]) => type), ['hmd-selection', 'hmd-selection', 'hmd-doc-change', 'hmd-selection']);
+  el.remove();
+});
+
 test('under React StrictMode: properties (also saveImage) set before connecting, the view is never recreated', () => {
   const host = document.createElement('div');
   document.body.append(host);

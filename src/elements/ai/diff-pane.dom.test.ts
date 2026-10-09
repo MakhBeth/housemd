@@ -317,6 +317,24 @@ test('an image pasted in the document side and still saving when the diff goes a
   assert.equal(session.textLf, 'A\n\nB\n\nC');
 });
 
+test('a listener that assigns another document while a new one is announced: the restore goes to its own document', async () => {
+  const { el, events, a } = await mount();
+  const b = createDocSession('b.md#1', 'B');
+  const c = createDocSession('c.md#1', 'C');
+  el.addEventListener('hmd-selection', () => {
+    Object.assign(el, { resetKey: 'c.md#1', text: 'C', session: c, restore: { seq: 2, textLf: 'C restored' } });
+  }, { once: true });
+  events.length = 0;
+  Object.assign(el, { resetKey: 'b.md#1', text: 'B', session: b });
+  await tick();
+  assert.equal(el.querySelectorAll('.cm-mergeView').length, 1);
+  assert.equal(a().state.doc.toString(), 'C restored');
+  assert.equal(c.textLf, 'C restored');
+  assert.equal(b.textLf, 'B');
+  assert.deepEqual(events.map(([type]) => type), ['hmd-selection', 'hmd-selection', 'hmd-doc-change', 'hmd-selection']);
+  el.remove();
+});
+
 test('under React StrictMode the MergeView is not recreated: the focus given by the parent stays', async () => {
   const host = document.createElement('div');
   document.body.append(host);

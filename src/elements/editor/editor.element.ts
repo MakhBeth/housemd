@@ -77,6 +77,7 @@ export class HmdEditor extends HmdDocElement {
   #flush(): void {
     const view = this.#view;
     if (!view) return;
+    const generation = this.docGeneration;
     if (this.#applied.resetKey !== this.resetKey) {
       view.setState(EditorState.create(this.docConfig()));
       this.#applied.resetKey = this.resetKey;
@@ -86,6 +87,8 @@ export class HmdEditor extends HmdDocElement {
     if (this.#announce) {
       this.#announce = false;
       emit(this, 'hmd-selection', { range: mainSelectionRange(view.state) });
+      // Un listener ha cambiato documento o vista: ripristino e sola lettura nuovi tocca al flush dopo.
+      if (this.docGeneration !== generation || this.#view !== view) return;
     }
     // Non passa da resetKey: la sostituzione resta nella cronologia di annullamento. Una volta sola.
     this.#applied.restore = applyDocRestore(view, this.#applied.restore, this.restore);
