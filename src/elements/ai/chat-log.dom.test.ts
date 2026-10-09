@@ -126,3 +126,23 @@ test('a language change relabels in place; detached, pending frames are cancelle
   await i18n.setLocale('en');
   assert.equal(retry.textContent, 'RIPROVA');
 });
+
+test('a Retry button that goes away with the focus hands it to its message; focus elsewhere stays put', () => {
+  for (const label of ['retry', 'reset']) {
+    const { el, articles } = mount([msg({ id: 'a', status: 'error', error: 'paramRejected' })]);
+    const index = label === 'retry' ? 0 : 1;
+    articles()[0].querySelectorAll('button')[index].focus();
+    el.messages = [msg({ id: 'a', status: 'error', error: 'paramRejected', retried: true })];
+    assert.equal(articles()[0].querySelectorAll('button').length, 0);
+    assert.equal(document.activeElement, articles()[0], label);
+    el.remove();
+  }
+  const outside = document.createElement('input');
+  document.body.append(outside);
+  const { el } = mount([msg({ id: 'a', status: 'error', error: 'server' })]);
+  outside.focus();
+  el.messages = [msg({ id: 'a', status: 'error', error: 'server', retried: true })];
+  assert.equal(document.activeElement, outside);
+  el.remove();
+  outside.remove();
+});

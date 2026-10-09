@@ -13,7 +13,7 @@ export interface ChatEntry {
   text: string;
   /** Riepilogo del preset, errore, avvisi dei controlli, in quest'ordine. */
   notices: string[];
-  /** Etichetta di «Riprova» (richiesta fallita), null se il pulsante non c'è. */
+  /** Etichetta di «Riprova» (richiesta fallita e non ancora ritentata), null se il pulsante non c'è. */
   retry: string | null;
   /** Etichetta di «Reimposta · Riprova» (parametro rifiutato), null se il pulsante non c'è. */
   reset: string | null;
@@ -26,14 +26,15 @@ export function chatEntries(messages: readonly ChatMessage[], t: Translate): Cha
     id: m.id,
     file: m.docPath && m.docPath !== messages[i - 1]?.docPath ? m.docPath : null,
     role: m.role,
-    text: m.role === 'user' ? m.text : m.text || t(m.status === 'done' ? 'ai.proposalReady' : 'ai.working'),
+    // Segnaposto solo mentre lavora o a risposta pronta: su un errore o un'interruzione parla l'avviso.
+    text: m.role === 'user' ? m.text : m.text || (m.status === 'done' ? t('ai.proposalReady') : m.status === 'streaming' ? t('ai.working') : ''),
     notices: [
       ...(m.summary ? [`${m.summary.parts} · ${m.summary.originalWords} → ${m.summary.proposalWords} ${t('ai.words')}`] : []),
       ...(m.error ? [t(`ai.error.${m.error}`)] : []),
       ...(m.warnings ?? []).map((w) => t(`ai.warning.${w.code}`)),
     ],
-    retry: m.status === 'error' ? t('ai.retry') : null,
-    reset: m.error === 'paramRejected' ? `${t('ai.reset')} · ${t('ai.retry')}` : null,
+    retry: m.status === 'error' && !m.retried ? t('ai.retry') : null,
+    reset: m.error === 'paramRejected' && !m.retried ? `${t('ai.reset')} · ${t('ai.retry')}` : null,
     meta:
       m.role === 'assistant'
         ? [m.profileName, m.model, m.usage?.inputTokens !== undefined ? `${m.usage.inputTokens} → ${m.usage.outputTokens ?? 0}` : ''].filter(Boolean).join(' · ')

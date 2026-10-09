@@ -217,3 +217,23 @@ test('selezione: accetta blocchi a righe senza incorporare il contesto esterno a
   assert.equal(f.world.doc.textLf, 'prefisso GOOD\ncentro\nGOOD suffisso');
   assert.equal(f.controller.hasPendingWork(), false); assert.equal(f.world.snapshots, 1);
 });
+
+test('Riprova segna il messaggio fallito come già ritentato: un secondo Riprova sullo stesso messaggio non riparte', async () => {
+  let calls = 0;
+  const f = await fixture(async function* (_req, _signal, call) {
+    calls = call;
+    if (call === 1) throw new AiError('server');
+    yield { type: 'text', text: '<housemd-proposal>NEW</housemd-proposal>' };
+    yield { type: 'done', stop: 'end' };
+  });
+  await f.controller.send('Correggi');
+  const failed = f.controller.getState().chat.messages.at(-1)!;
+  assert.equal(failed.status, 'error');
+  await f.controller.retry(failed.id);
+  const after = f.controller.getState().chat.messages.find((m) => m.id === failed.id)!;
+  assert.equal(after.status, 'error');
+  assert.equal(after.retried, true);
+  assert.equal(calls, 2);
+  await f.controller.retry(failed.id);
+  assert.equal(calls, 2);
+});
