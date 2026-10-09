@@ -1,3 +1,4 @@
+import { HmdAiChatLog } from './ai/chat-log.element';
 import { HmdAiEffortChip } from './ai/effort-chip.element';
 import { HmdAiParameters } from './ai/parameters.element';
 import { HmdAiSuggestions } from './ai/suggestions.element';
@@ -18,6 +19,7 @@ import { HmdUpdateNotice } from './update-notice/update-notice.element';
 type Definitions = readonly (readonly [string, CustomElementConstructor])[];
 
 const ELEMENTS: Definitions = [
+  ['hmd-ai-chat-log', HmdAiChatLog],
   ['hmd-ai-effort-chip', HmdAiEffortChip],
   ['hmd-ai-parameters', HmdAiParameters],
   ['hmd-ai-suggestions', HmdAiSuggestions],

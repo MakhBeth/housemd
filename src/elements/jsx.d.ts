@@ -3,7 +3,7 @@
  * React nella fase 7 (spec WC §5.1).
  */
 import type { Ref } from 'react';
-import type { GenParams, ModelProfile } from '../ai/types';
+import type { ChatMessage, GenParams, ModelProfile } from '../ai/types';
 import type { HouseConfig } from '../config/config';
 import type { UnsupportedReason } from '../fs/access';
 import type { UpdateFlow } from '../pwa/updateFlow';
@@ -23,6 +23,7 @@ export type HmdProps<P, E extends keyof HmdEvents = never> = Partial<P> & {
 declare module 'react' {
   namespace JSX {
     interface IntrinsicElements {
+      'hmd-ai-chat-log': HmdProps<{ messages: readonly ChatMessage[]; i18n: I18nStore }, 'hmd-ai-open-file' | 'hmd-ai-retry'>;
       'hmd-ai-effort-chip': HmdProps<{ controller: AiChipController; i18n: I18nStore }>;
       'hmd-ai-parameters': HmdProps<{ profile: ModelProfile; value: GenParams; hideEffort: boolean; i18n: I18nStore }, 'hmd-params-change'>;
       'hmd-ai-suggestions': HmdProps<{ controller: AiChipController; i18n: I18nStore }, 'hmd-ai-suggestion'>;

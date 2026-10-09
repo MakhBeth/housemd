@@ -6,7 +6,6 @@ import type { SelectionScope } from '../../ai/types';
 import { useI18nStore, useT } from '../../i18n/I18nProvider';
 import type { SettingsSection } from '../../lib/route';
 import { Icon } from '../Icon';
-import { ChatLog } from './ChatLog';
 import { Composer, type ComposerHandle } from './Composer';
 import styles from './AiSidebar.module.css';
 
@@ -39,10 +38,11 @@ export function AiSidebar({ controller, text, selection, getSelection, onSetting
           <Icon name="newFile" />
         </button>
       </div>
-      <ChatLog
+      <hmd-ai-chat-log
         messages={state.chat.messages}
-        onOpen={(path) => void controller.workspace.openFile(path)}
-        onRetry={(id, remove) => void controller.retry(id, remove)}
+        i18n={i18nStore}
+        onhmd-ai-open-file={(event) => void controller.workspace.openFile(event.detail.path)}
+        onhmd-ai-retry={(event) => void controller.retry(event.detail.id, event.detail.removeRejected)}
       />
       <div className={styles.bottom}>
         {syncNeedsPermission && (
