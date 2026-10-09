@@ -3,7 +3,7 @@
 Data: 2026-09-27 · **Revisione: 2026-10-05**
 Base: `main` (HEAD `822f52d`: v1.1, strumenti AI, impostazioni a pagina, barra di formattazione,
 larghezza del testo, tooltip disegnati, albero con un solo tab stop).
-Stato: fasi 0–3 implementate (fase 0 PR #6, fase 1 PR #7, fase 2 in `main` (merge locale, commit 1b23305), fase 3 in `main` (merge locale)); fasi 4a–4c in `main` (merge del 05/10 per 4a+4b e dell'08/10 per la 4c, dal branch `feat/web-components`); fasi 5–8 ancora piano.
+Stato: fasi 0–3 implementate (fase 0 PR #6, fase 1 PR #7, fase 2 in `main` (merge locale, commit 1b23305), fase 3 in `main` (merge locale)); fasi 4a–4c in `main` (merge del 05/10 per 4a+4b e dell'08/10 per la 4c, dal branch `feat/web-components`); fase 5a in `main` (merge del 09/10, dal branch `feat/web-components`); fasi 5b–8 ancora piano.
 
 Decisioni (27/09, riviste il 01/10; risposte alle domande aperte, §12):
 
@@ -535,6 +535,8 @@ Ordine: `theme-switcher`, `conflict-bar`, `notice`, `update-notice`, `toasts`, d
 
 ### Fase 5: editor, anteprima, diff (branch)
 
+Divisa in due piani: 5a (piano 8: scheda del frontmatter, anteprima, chat AI), 5b (editor e diff, CodeMirror).
+
 - `hmd-editor`: sposta `Editor.tsx` quasi uguale; `resetKey` diventa un setter che chiama
   `view.setState(...)` solo quando cambia; `scrollToLine`/`focus` metodi pubblici; l'evento di
   cambio selezione (usato dal chip del composer) diventa `hmd-selection`. `docSession.ts`,
@@ -546,8 +548,9 @@ Ordine: `theme-switcher`, `conflict-bar`, `notice`, `update-notice`, `toasts`, d
   attraverso `scheduleRender()` (un microtask). Si conserva il flag `cancelled`.
   `hmd-frontmatter-card` è separato.
 - `hmd-ai-chat-log`: messaggi via `safeRender` + `setSafeHTML`, metadati al passaggio del mouse,
-  immagini remote solo su clic.
+  immagini remote mai caricate (`safeRender` le rende come etichetta con l'host).
 - Scroll sincronizzato (`suppressUntil` 150 ms) identico; lo copre `sync-scroll.spec.ts`.
+- 5a **fatta**: `hmd-frontmatter-card`, `hmd-preview` (`scrollToLine()`, eventi `hmd-open`, `hmd-open-wiki`, `hmd-top-line`; render in un microtask con debounce di 150 ms solo sul testo; flag `cancelled`; cache delle immagini revocata al distacco), `hmd-ai-chat-log` (eventi `hmd-ai-open-file`, `hmd-ai-retry`); logica in `preview/previewView.ts` e `ai/chatLogView.ts`; aiuti di test `countListeners`, `waitFor`. Non portato il ramo `untrusted` dell'anteprima (nessun chiamante dal 71bf326; `ai.loadImage` resta nei locali fino alla fase 8). Cornice dell'anteprima ancorata a `:scope >` perché le classi di una nota non la stilizzino. Audit esteso a scheda completa, frontmatter non valido, errore e riepilogo della chat. Bundle principale gzip: 435 675 → 435 909 B.
 
 ### Fase 6: pannelli e AI (branch)
 
@@ -811,6 +814,7 @@ wikilink:
    `docs/superpowers/plans/2026-10-04-housemd-wc-04-fase-3-react-19.md` (fase 3);
    `docs/superpowers/plans/2026-10-05-housemd-wc-05-fase-4a-infrastruttura-e-foglie.md` (fase 4a, branch `feat/web-components`);
    `docs/superpowers/plans/2026-10-05-housemd-wc-06-fase-4b-dialog.md` (fase 4b);
-   `docs/superpowers/plans/2026-10-05-housemd-wc-07-fase-4c-start-e-foglie-ai.md` (fase 4c).
+   `docs/superpowers/plans/2026-10-05-housemd-wc-07-fase-4c-start-e-foglie-ai.md` (fase 4c);
+   `docs/superpowers/plans/2026-10-09-housemd-wc-08-fase-5a-anteprima-e-chat.md` (fase 5a).
 3. Fasi 4–6 (elementi in convivenza).
 4. Fasi 7–8 (impostazioni, workspace, via React, rifinitura, richiesta di merge).
