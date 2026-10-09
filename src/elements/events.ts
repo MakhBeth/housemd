@@ -5,6 +5,10 @@ import type { GenParams } from '../ai/types';
  * trattino. In React 19 si ascoltano con la prop `on<nome>` (es. `onhmd-toast-dismiss`).
  */
 export interface HmdEvents {
+  /** Chat AI: aprire il documento di un messaggio. */
+  'hmd-ai-open-file': CustomEvent<{ path: string }>;
+  /** Chat AI: ripetere un messaggio fallito (`removeRejected`: senza i parametri che il provider ha rifiutato). */
+  'hmd-ai-retry': CustomEvent<{ id: string; removeRejected: boolean }>;
   /** Suggerimento scelto sotto il composer: invia il preset. */
   'hmd-ai-suggestion': CustomEvent<{ presetId: string }>;
   /** Conflitto con il disco: l'utente sceglie se ricaricare o sovrascrivere. */
@@ -15,6 +19,12 @@ export interface HmdEvents {
   'hmd-notice-action': CustomEvent<null>;
   /** Chiusura di un avviso. */
   'hmd-notice-dismiss': CustomEvent<null>;
+  /** Anteprima: aprire un file markdown (link relativo nel testo). */
+  'hmd-open': CustomEvent<{ path: string }>;
+  /** Anteprima: seguire un wikilink (crea la nota se manca). */
+  'hmd-open-wiki': CustomEvent<{ target: string }>;
+  /** Riga sorgente (0-based, frazionaria) in cima al pannello, per lo scroll sincronizzato (anteprima; editor dalla 5b). */
+  'hmd-top-line': CustomEvent<{ line: number }>;
   /** Schermata iniziale: scegliere una cartella (anche «Apri un'altra cartella»). */
   'hmd-start-pick': CustomEvent<null>;
   /** Schermata iniziale: riprendere l'accesso alla cartella ricordata. */

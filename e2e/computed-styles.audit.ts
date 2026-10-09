@@ -6,6 +6,7 @@ import type { Page } from '@playwright/test';
 
 import type { FakeModel } from './support/aiHarness.ts';
 import { expect, test, type App } from './support/app.ts';
+import { PIXEL_PNG_BASE64 } from './support/fsHarness.ts';
 import { NOTE, NOW } from './support/notes.ts';
 import { dumpComputedStyles, styleDifferences, type StyleDump } from './support/styleAudit.ts';
 
@@ -66,6 +67,33 @@ const STATES: State[] = [
   },
   { name: 'workspace-light', setup: workspace },
   { name: 'workspace-dark', scheme: 'dark', setup: workspace },
+  {
+    name: 'preview-card',
+    async setup(app) {
+      await app.openFolder({
+        'note.md': [
+          '---', 'title: Card', 'date: 2026-01-15', 'tags: [alpha, beta]', 'description: A short description',
+          'image: assets/pixel.png', 'author: Ada', '---', '# Heading', '', '![pixel](assets/pixel.png)', '',
+          '![missing](missing.png)', '', '| a | b |', '|---|---|', '| 1 | 2 |', '', '---', '', '[outside](https://example.com)',
+        ].join('\n'),
+        'assets/pixel.png': { base64: PIXEL_PNG_BASE64 },
+      });
+      await app.openFile('note.md');
+      const preview = app.previewPane();
+      await expect(preview.getByRole('heading', { name: 'Heading' })).toBeVisible();
+      await expect(preview.getByRole('img', { name: 'missing' })).toHaveAttribute('title', app.t('preview.imageMissing', { path: 'missing.png' }));
+      await expect(preview.locator('img[src^="blob:"]')).toHaveCount(2);
+    },
+  },
+  {
+    name: 'preview-frontmatter-invalid',
+    async setup(app) {
+      await app.openFolder({ 'bad.md': '---\ntitle: [\n---\nbody' });
+      await app.openFile('bad.md');
+      const prefix = app.t('preview.frontmatterInvalid', { detail: '' }).trim();
+      await expect(app.previewPane().getByText(prefix)).toBeVisible();
+    },
+  },
   {
     name: 'settings',
     async setup(app, page) {
@@ -133,6 +161,36 @@ const STATES: State[] = [
       await composer.fill('fix');
       await composer.press('Enter');
       await expect(page.getByRole('button', { name: app.t('ai.acceptAll'), exact: true })).toBeEnabled();
+    },
+  },
+  {
+    name: 'ai-chat-error',
+    async setup(app, page, ai) {
+      ai.status = 500;
+      await app.openFolder({ 'a.md': 'Alpha' });
+      await app.openFile('a.md');
+      await expect(app.mode('mode.ai')).toBeVisible();
+      await app.mode('mode.ai').click();
+      const composer = page.getByRole('textbox', { name: app.t('ai.request') });
+      await composer.fill('fix');
+      await composer.press('Enter');
+      const log = page.getByRole('log');
+      await expect(log.getByRole('button', { name: app.t('ai.retry'), exact: true })).toBeVisible();
+      // Metadati della risposta visibili con il focus sul messaggio (:focus-within).
+      await log.getByRole('article').last().focus();
+    },
+  },
+  {
+    name: 'ai-chat-summary',
+    async setup(app, page) {
+      await app.openFolder({ 'a.md': 'Alpha' });
+      await app.openFile('a.md');
+      await expect(app.mode('mode.ai')).toBeVisible();
+      await app.mode('mode.ai').click();
+      await page.getByRole('group', { name: app.t('ai.suggestions') }).getByRole('button').first().click();
+      await expect(page.getByRole('button', { name: app.t('ai.acceptAll'), exact: true })).toBeEnabled();
+      // Il riepilogo di un preset: «parti · parole → parole words».
+      await expect(page.getByRole('log').getByText(new RegExp(`${app.t('ai.words')}$`))).toBeVisible();
     },
   },
   {

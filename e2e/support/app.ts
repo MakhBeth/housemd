@@ -164,6 +164,11 @@ export class App {
 export interface AppOptions {
   /** Ogni errore o avviso in console fa fallire il test: per la suite in sviluppo, dove React avvisa lì. */
   failOnConsole: boolean;
+  /**
+   * Errori di console attesi dal test (confronto sul testo, solo per i messaggi di tipo `error`). Vuoto per
+   * default: si imposta con `test.use` solo nei test che simulano un errore HTTP del provider.
+   */
+  expectedConsole: RegExp[];
 }
 
 export const test = base.extend<{ flags: Partial<HarnessFlags>; appLocale: E2ELocale; ai: FakeModel; app: App } & AppOptions>({
@@ -204,13 +209,14 @@ export const test = base.extend<{ flags: Partial<HarnessFlags>; appLocale: E2ELo
   flags: [{}, { option: true }],
   appLocale: ['en', { option: true }],
   failOnConsole: [false, { option: true }],
+  expectedConsole: [[], { option: true }],
   // Sempre installato: senza, l'app proverebbe a contattare un Ollama vero sulla macchina che esegue i test.
   ai: async ({ page }, use) => {
     const model = new FakeModel();
     await model.install(page);
     await use(model);
   },
-  app: async ({ page, flags, appLocale, ai, failOnConsole }, use) => {
+  app: async ({ page, flags, appLocale, ai, failOnConsole, expectedConsole }, use) => {
     void ai;
     await page.addInitScript(harnessScript, { defaults: { ...DEFAULT_FLAGS, ...flags }, key: FLAGS_KEY });
     await page.addInitScript((locale) => {
@@ -223,6 +229,7 @@ export const test = base.extend<{ flags: Partial<HarnessFlags>; appLocale: E2ELo
     page.on('pageerror', (error) => errors.push(error.message));
     const consoleProblems: string[] = [];
     page.on('console', (message) => {
+      if (message.type() === 'error' && expectedConsole.some((pattern) => pattern.test(message.text()))) return;
       if (message.type() === 'error' || message.type() === 'warning') consoleProblems.push(`${message.type()}: ${message.text()}`);
     });
     await use(new App(page, appLocale));

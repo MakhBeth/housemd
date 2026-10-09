@@ -142,7 +142,7 @@ test('text width: editor limited in characters, preview without limit, both reme
     .poll(async () => {
       const pane = await app.previewPane().evaluate((el) => el.clientWidth);
       const box = await heading.boundingBox();
-      // Tolleranza per il padding del contenitore (64px in Preview.module.css).
+      // Tolleranza per il padding del contenitore (64px in preview.css).
       return box !== null && pane - box.width <= 80;
     })
     .toBe(true);

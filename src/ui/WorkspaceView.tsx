@@ -15,7 +15,7 @@ import { readLastFile, readPref, readValidPref, writeLastFile, writePref } from 
 import { parseTextWidth, textWidthVars } from '../lib/textWidth';
 import { APP_TITLE, pageTitle } from '../lib/pageTitle';
 import type { SettingsSection } from '../lib/route';
-import { Preview, type PreviewHandle } from '../preview/Preview';
+import type { HmdPreview } from '../elements/preview/preview.element';
 import { getThemeStore, useTheme } from '../theme/useTheme';
 import type { Workspace } from '../workspace/workspace';
 import { FileTree, type TreeAction } from './FileTree';
@@ -116,7 +116,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
     if (!hasDoc) setHistoryOpen(false);
   }, [hasDoc]);
   const editorRef = useRef<EditorHandle>(null);
-  const previewRef = useRef<PreviewHandle>(null);
+  const previewRef = useRef<HmdPreview>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const reopened = useRef(false);
   const [orphans, setOrphans] = useState<string[]>([]);
@@ -514,7 +514,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
             ) : (
               shownMode !== 'editor' && (
                 <section className={styles.pane} aria-label={t('pane.preview')}>
-                  <Preview
+                  <hmd-preview
                     ref={previewRef}
                     text={doc.text}
                     path={doc.path}
@@ -522,14 +522,15 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
                     config={state.config}
                     readBlob={readBlob}
                     highlight={highlight}
-                    onTopLine={(line) => {
-                      if (shownMode === 'split') editorRef.current?.scrollToLine(line);
+                    i18n={i18nStore}
+                    onhmd-top-line={(event) => {
+                      if (shownMode === 'split') editorRef.current?.scrollToLine(event.detail.line);
                     }}
-                    onOpenWiki={(target) => {
+                    onhmd-open-wiki={(event) => {
                       setHighlight(NO_TERMS);
-                      void workspace.followWikiLink(target);
+                      void workspace.followWikiLink(event.detail.target);
                     }}
-                    onOpenPath={(path) => openFile(path)}
+                    onhmd-open={(event) => void openFile(event.detail.path)}
                   />
                 </section>
               )

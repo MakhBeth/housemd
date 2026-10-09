@@ -37,43 +37,6 @@
   background: var(--c-accent-soft);
 }
 
-.log {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  padding: 10px;
-  overflow-wrap: anywhere;
-}
-
-.message {
-  margin: 0 0 12px;
-}
-
-.user {
-  margin-inline-start: 15%;
-  padding: 8px 10px;
-  border-radius: 10px;
-  background: var(--c-accent-soft);
-  white-space: pre-wrap;
-}
-
-.assistant pre {
-  white-space: pre-wrap;
-}
-
-/* Metadati (profilo, modello, token): visibili al passaggio del mouse o al focus del messaggio. */
-.meta {
-  display: block;
-  color: var(--c-muted);
-  font-size: 11px;
-  visibility: hidden;
-}
-
-.message:hover .meta,
-.message:focus-within .meta {
-  visibility: visible;
-}
-
 .file {
   display: block;
   width: 100%;
@@ -86,12 +49,6 @@
   font-size: 12px;
   text-align: start;
   cursor: pointer;
-}
-
-.notice {
-  margin: 4px 0;
-  color: var(--c-muted);
-  font-size: 13px;
 }
 
 .bottom {

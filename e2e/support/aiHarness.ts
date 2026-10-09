@@ -12,6 +12,9 @@ export class FakeModel {
   comment = 'Fixed';
   /** Richieste di chat ricevute (non conta l'elenco dei modelli). */
   requests = 0;
+  /** Stato HTTP delle risposte di chat: diverso da 200 = errore del provider, con `errorBody` come corpo. */
+  status = 200;
+  errorBody = '';
 
   async install(page: Page): Promise<void> {
     // Un reload interrompe le richieste in volo (l'app chiede l'elenco dei modelli all'avvio): la route
@@ -39,6 +42,10 @@ export class FakeModel {
       return;
     }
     this.requests++;
+    if (this.status !== 200) {
+      await route.fulfill({ status: this.status, headers: cors, contentType: 'text/plain', body: this.errorBody });
+      return;
+    }
     const content = `${this.comment}<housemd-proposal>${this.reply}</housemd-proposal>`;
     const event = JSON.stringify({ choices: [{ delta: { content }, finish_reason: 'stop' }] });
     await route.fulfill({ headers: cors, contentType: 'text/event-stream', body: `data: ${event}\n\ndata: [DONE]\n\n` });

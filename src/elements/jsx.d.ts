@@ -2,13 +2,16 @@
  * Tipi JSX dei tag `hmd-*` usati da React durante la convivenza (fasi 4–7). File temporaneo: sparisce con
  * React nella fase 7 (spec WC §5.1).
  */
-import type { GenParams, ModelProfile } from '../ai/types';
+import type { Ref } from 'react';
+import type { ChatMessage, GenParams, ModelProfile } from '../ai/types';
+import type { HouseConfig } from '../config/config';
 import type { UnsupportedReason } from '../fs/access';
 import type { UpdateFlow } from '../pwa/updateFlow';
 import type { I18nStore } from '../state/i18nStore';
 import type { ThemeStore } from '../state/themeStore';
 import type { AiChipController } from './ai/aiChips';
 import type { HmdEvents } from './events';
+import type { HmdPreview } from './preview/preview.element';
 import type { StartMode } from './start-screen/startView';
 import type { ToastItem } from './toasts/toasts.element';
 
@@ -20,6 +23,7 @@ export type HmdProps<P, E extends keyof HmdEvents = never> = Partial<P> & {
 declare module 'react' {
   namespace JSX {
     interface IntrinsicElements {
+      'hmd-ai-chat-log': HmdProps<{ messages: readonly ChatMessage[]; i18n: I18nStore }, 'hmd-ai-open-file' | 'hmd-ai-retry'>;
       'hmd-ai-effort-chip': HmdProps<{ controller: AiChipController; i18n: I18nStore }>;
       'hmd-ai-parameters': HmdProps<{ profile: ModelProfile; value: GenParams; hideEffort: boolean; i18n: I18nStore }, 'hmd-params-change'>;
       'hmd-ai-suggestions': HmdProps<{ controller: AiChipController; i18n: I18nStore }, 'hmd-ai-suggestion'>;
@@ -28,6 +32,10 @@ declare module 'react' {
         { message: string; actionLabel: string; busy: boolean; dismissLabel: string; dismissible: boolean; placement: 'top' | 'bottom' },
         'hmd-notice-action' | 'hmd-notice-dismiss'
       >;
+      'hmd-preview': HmdProps<
+        { text: string; path: string; files: string[]; config: HouseConfig; readBlob: (path: string) => Promise<Blob>; highlight: string[]; i18n: I18nStore },
+        'hmd-open' | 'hmd-open-wiki' | 'hmd-top-line'
+      > & { ref?: Ref<HmdPreview> };
       'hmd-start-screen': HmdProps<
         { mode: StartMode; reason: UnsupportedReason; error: string; folderName: string; busy: boolean; i18n: I18nStore },
         'hmd-start-pick' | 'hmd-start-resume'
