@@ -92,6 +92,8 @@ export class AiController {
   async continue(path:string){const pending=this.resumeData.get(path),p=this.state.proposals.get(path);if(!pending||!p||this.state.running||this.updating||this.workspace.getDoc()?.updating)return;await this.execute(pending.input,pending.cursor,p.baseText,pending.scope);}
   async retry(messageId:string,removeRejected=false){
     const previous=this.retries.get(messageId);if(!previous||this.state.running||this.updating||this.workspace.getDoc()?.updating)return;
+    // Un Riprova si usa una volta: il messaggio fallito resta con il suo errore, senza pulsante.
+    this.retries.delete(messageId);this.set({chat:{...this.state.chat,messages:this.state.chat.messages.map(m=>m.id===messageId?{...m,retried:true}:m)}});
     const input={...previous.input,params:{...previous.input.params}};
     if(removeRejected&&previous.rejected){const names:Record<string,keyof typeof input.params>={temperature:'temperature',top_p:'topP',max_tokens:'maxOutputTokens',effort:'effort',reasoning_effort:'effort'};for(const [name,key]of Object.entries(names))if(previous.rejected.includes(name))delete input.params[key];}
     const cursor=createCursor(input);this.resumeData.set(input.path,{input,cursor,scope:previous.scope});await this.execute(input,cursor,previous.baseText,previous.scope);

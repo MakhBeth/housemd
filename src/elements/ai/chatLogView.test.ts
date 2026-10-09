@@ -60,3 +60,16 @@ test('reply metadata: profile, model and tokens, skipping what is missing (empty
   ).map((e) => e.meta);
   assert.deepEqual(metas, ['ollama · qwen · 12 → 34', 'ollama · 5 → 0', 'qwen', '']);
 });
+
+test('a failed or aborted reply with no text shows no placeholder (the error notice is enough)', () => {
+  const [failed, aborted] = chatEntries([msg({ status: 'error', error: 'server' }), msg({ status: 'aborted', error: 'aborted' })], t);
+  assert.equal(failed.text, '');
+  assert.equal(aborted.text, '');
+});
+
+test('a reply already retried keeps its error but no longer offers Retry or Reset · Retry', () => {
+  const [entry] = chatEntries([msg({ status: 'error', error: 'paramRejected', retried: true })], t);
+  assert.deepEqual(entry.notices, [EN_MESSAGES['ai.error.paramRejected']]);
+  assert.equal(entry.retry, null);
+  assert.equal(entry.reset, null);
+});

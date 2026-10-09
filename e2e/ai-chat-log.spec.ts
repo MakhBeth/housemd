@@ -42,6 +42,10 @@ test.describe('provider errors', () => {
     await retry.click();
     await expect(acceptAll(app)).toBeEnabled();
     expect(ai.requests).toBe(2);
+    // Il messaggio fallito tiene il suo errore, ma Riprova si usa una volta sola.
+    await expect(log(app).getByText(app.t('ai.error.server'), { exact: true })).toBeVisible();
+    await expect(retry).toHaveCount(0);
+    await expect(log(app).getByText(app.t('ai.working'), { exact: true })).toHaveCount(0);
   });
 
   test('a rejected parameter offers Reset · Retry next to Retry', async ({ app, ai }) => {
