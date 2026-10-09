@@ -8,6 +8,7 @@ import { docAppearance, docExtensions, editable, mainSelectionRange, readOnlyExt
 import { docStateConfig, saveDocSession } from '../../editor/docSession';
 import { applyDocRestore } from '../../editor/useDocBinding';
 import { initialRestoreSeq } from '../../editor/restoreCommand';
+import { refDocHost } from '../../editor/refDocHost';
 import { useT } from '../../i18n/I18nProvider';
 import styles from './ReviewView.module.css';
 export interface DiffHandle extends EditorHandle { next():void; previous():void; }
@@ -42,7 +43,7 @@ export const DiffPane=forwardRef<DiffHandle,Props>(function DiffPane(props,ref){
  };
  useEffect(()=>{
  const session=props.editor.session!;
- const m=new MergeView({parent:host.current!,a:docStateConfig(session,docExtensions(callbacks)),b:{doc:latest.current.proposal,extensions:[basicSetup,EditorState.transactionFilter.of(tr=>{if(remote.current||!tr.docChanged||!latest.current.range)return tr;let valid=true;tr.changes.iterChangedRanges((from,to)=>{if(from<latest.current.range!.from||to>latest.current.range!.to)valid=false;});return valid?tr:[];}),docAppearance(),rightEditable.current.of(readOnlyExtensions(props.streaming)),EditorView.updateListener.of(u=>{if(u.docChanged&&!remote.current)latest.current.onEdit(u.state.doc.toString());})]},revertControls:'b-to-a',renderRevertControl:renderControls});
+ const m=new MergeView({parent:host.current!,a:docStateConfig(session,docExtensions(refDocHost(callbacks))),b:{doc:latest.current.proposal,extensions:[basicSetup,EditorState.transactionFilter.of(tr=>{if(remote.current||!tr.docChanged||!latest.current.range)return tr;let valid=true;tr.changes.iterChangedRanges((from,to)=>{if(from<latest.current.range!.from||to>latest.current.range!.to)valid=false;});return valid?tr:[];}),docAppearance(),rightEditable.current.of(readOnlyExtensions(props.streaming)),EditorView.updateListener.of(u=>{if(u.docChanged&&!remote.current)latest.current.onEdit(u.state.doc.toString());})]},revertControls:'b-to-a',renderRevertControl:renderControls});
  merge.current=m;
  // Lo stato creato dalla sessione non passa dall'updateListener: si annuncia la selezione ripristinata.
  callbacks.current.onSelection?.(mainSelectionRange(m.a.state));

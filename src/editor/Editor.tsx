@@ -6,6 +6,7 @@ import { initialRestoreSeq, type RestoreCommand } from './restoreCommand';
 import { applyDocRestore } from './useDocBinding';
 import { docExtensions, editable, mainSelectionRange, readOnlyExtensions } from './docExtensions';
 import { docStateConfig, saveDocSession, type DocSession } from './docSession';
+import { refDocHost } from './refDocHost';
 import { useT } from '../i18n/I18nProvider';
 import styles from './Editor.module.css';
 
@@ -20,7 +21,6 @@ export interface EditorProps {
   text: string;
   session?: DocSession;
   onTransactions?: (changes: ChangeDesc, texts: { before: string; after: string }) => void;
-  canChange?: (changes: ChangeDesc) => boolean;
   /** Quando cambia, il contenuto viene sostituito e la cronologia azzerata (altro file, ricarica). */
   resetKey: string;
   getDocs: () => DocTitle[];
@@ -79,7 +79,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
     if (session && session.resetKey !== props.resetKey) { session.resetKey = props.resetKey; session.textLf = props.text; session.history = undefined; session.selection = undefined; }
     const view = viewRef.current;
     if (!view) return;
-    view.setState(EditorState.create(session ? docStateConfig(session, docExtensions(callbacks)) : { doc: props.text, extensions: docExtensions(callbacks) }));
+    view.setState(EditorState.create(session ? docStateConfig(session, docExtensions(refDocHost(callbacks))) : { doc: props.text, extensions: docExtensions(refDocHost(callbacks)) }));
     // setState non passa dall'updateListener: la selezione ripristinata dalla sessione va annunciata qui.
     callbacks.current.onSelection?.(mainSelectionRange(view.state));
   }, [props.resetKey]);
