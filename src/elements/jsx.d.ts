@@ -4,11 +4,13 @@
  */
 import type { GenParams, ModelProfile } from '../ai/types';
 import type { UnsupportedReason } from '../fs/access';
+import type { Frontmatter } from '../preview/frontmatter';
 import type { UpdateFlow } from '../pwa/updateFlow';
 import type { I18nStore } from '../state/i18nStore';
 import type { ThemeStore } from '../state/themeStore';
 import type { AiChipController } from './ai/aiChips';
 import type { HmdEvents } from './events';
+import type { ResolveImage } from './preview/previewView';
 import type { StartMode } from './start-screen/startView';
 import type { ToastItem } from './toasts/toasts.element';
 
@@ -24,6 +26,7 @@ declare module 'react' {
       'hmd-ai-parameters': HmdProps<{ profile: ModelProfile; value: GenParams; hideEffort: boolean; i18n: I18nStore }, 'hmd-params-change'>;
       'hmd-ai-suggestions': HmdProps<{ controller: AiChipController; i18n: I18nStore }, 'hmd-ai-suggestion'>;
       'hmd-conflict-bar': HmdProps<{ i18n: I18nStore }, 'hmd-conflict'>;
+      'hmd-frontmatter-card': HmdProps<{ frontmatter: Frontmatter; resolveImage: ResolveImage; i18n: I18nStore }>;
       'hmd-notice': HmdProps<
         { message: string; actionLabel: string; busy: boolean; dismissLabel: string; dismissible: boolean; placement: 'top' | 'bottom' },
         'hmd-notice-action' | 'hmd-notice-dismiss'

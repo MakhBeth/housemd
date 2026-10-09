@@ -3,12 +3,11 @@ import {
   type MouseEvent, type UIEvent,
 } from 'react';
 
-import { safeRender, allowedImage, resourceHost, type UntrustedOptions } from '../ai/safeRender';
+import { safeRender, allowedImage, type UntrustedOptions } from '../ai/safeRender';
 import type { HouseConfig } from '../config/config';
 import { resolveImageSrc } from '../config/images';
-import { useT } from '../i18n/I18nProvider';
+import { useI18nStore, useT } from '../i18n/I18nProvider';
 import { isMarkdown, normalizePath, resolveRelative } from '../lib/paths';
-import { FrontmatterCard } from './FrontmatterCard';
 import { splitFrontmatter, toCard, type SplitDocument } from './frontmatter';
 import { highlightTerms } from './highlight';
 import { ImageUrlCache } from './imageCache';
@@ -40,6 +39,7 @@ const EXTERNAL = /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i;
 export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(props, ref) {
   const { text, path, files, config, readBlob, highlight, onTopLine, onOpenWiki, onOpenPath } = props;
   const t = useT();
+  const i18nStore = useI18nStore();
   const [approved, setApproved] = useState<Set<string>>(new Set());
   useEffect(() => setApproved(new Set()), [path]);
   const untrusted = useMemo(() => props.untrusted ? { ...props.untrusted, allowedUrls: new Set([...props.untrusted.allowedUrls, ...approved]), isLocal: (src: string) => !!resolveImageSrc(src, path, config), imageLabel: (host: string) => t('ai.loadImage', { host }) } : undefined, [props.untrusted, approved, path, config, t]);
@@ -185,7 +185,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
   return (
     <div ref={scrollRef} className={styles.scroller} onScroll={onScroll} onClick={onClick}>
       <article className={styles.prose}>
-        {doc.split.frontmatter && <FrontmatterCard frontmatter={doc.split.frontmatter} resolveImage={resolveImage} blockedLabel={untrusted ? (src) => allowedImage(src, untrusted) ? null : t('ai.loadImage', { host: resourceHost(src) }) : undefined} onAllowImage={(src) => setApproved(previous => new Set([...previous, src]))} />}
+        {doc.split.frontmatter && <hmd-frontmatter-card frontmatter={doc.split.frontmatter} resolveImage={resolveImage} i18n={i18nStore} />}
         <div ref={bodyRef} />
       </article>
     </div>
