@@ -3,6 +3,7 @@ import { HmdAiEffortChip } from './ai/effort-chip.element';
 import { HmdAiParameters } from './ai/parameters.element';
 import { HmdAiSuggestions } from './ai/suggestions.element';
 import { HmdConflictBar } from './conflict-bar/conflict-bar.element';
+import { HmdEditor } from './editor/editor.element';
 import { HmdNotice } from './notice/notice.element';
 import { HmdFrontmatterCard } from './preview/frontmatter-card.element';
 import { HmdPreview } from './preview/preview.element';
@@ -24,6 +25,7 @@ const ELEMENTS: Definitions = [
   ['hmd-ai-parameters', HmdAiParameters],
   ['hmd-ai-suggestions', HmdAiSuggestions],
   ['hmd-conflict-bar', HmdConflictBar],
+  ['hmd-editor', HmdEditor],
   ['hmd-frontmatter-card', HmdFrontmatterCard],
   ['hmd-notice', HmdNotice],
   ['hmd-preview', HmdPreview],

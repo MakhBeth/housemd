@@ -5,23 +5,26 @@ import type { AiController } from '../../ai/aiController';
 import { isBusy, reviewStatus } from '../../ai/reviewStatus';
 import type { CheckWarning } from '../../ai/types';
 import { showConfirmDialog } from '../../elements/dialogs/confirmDialog';
-import { Editor, type EditorHandle, type EditorProps } from '../../editor/Editor';
-import { useT } from '../../i18n/I18nProvider';
+import type { HmdEditor } from '../../elements/editor/editor.element';
+import type { HmdEvents } from '../../elements/events';
+import { useI18nStore, useT } from '../../i18n/I18nProvider';
 import { useUnmountSignal } from '../useUnmountSignal';
 import { DiffPane, type DiffHandle } from './DiffPane';
 import { ReviewBar } from './ReviewBar';
 import styles from './ReviewView.module.css';
+import type { ReviewDoc } from './reviewDoc';
 
 interface Props {
   controller: AiController;
-  editor: EditorProps & { path: string };
+  editor: ReviewDoc;
 }
 
 export function ReviewView({ controller, editor }: Props) {
   const t = useT();
+  const i18nStore = useI18nStore();
   const state = useSyncExternalStore(controller.subscribe, controller.getState);
   const diff = useRef<DiffHandle>(null);
-  const plain = useRef<EditorHandle>(null);
+  const plain = useRef<HmdEditor>(null);
   const section = useRef<HTMLElement>(null);
   const shownView = useRef<'plain' | 'diff' | null>(null);
   const dialogSignal = useUnmountSignal();
@@ -58,6 +61,20 @@ export function ReviewView({ controller, editor }: Props) {
     else diff.current?.focus();
   }, [view]);
 
+  // Le stesse proprietà per l'editor semplice e per il lato documento del diff.
+  const docProps = {
+    text: editor.text,
+    resetKey: editor.resetKey,
+    session: editor.session,
+    restore: editor.restore,
+    readOnly: editor.readOnly,
+    getDocs: editor.getDocs,
+    saveImage: editor.saveImage,
+    i18n: i18nStore,
+    'onhmd-doc-change': (event: HmdEvents['hmd-doc-change']) => editor.docChanged(event.detail.changes, event.detail),
+    'onhmd-selection': (event: HmdEvents['hmd-selection']) => editor.selectionChanged(event.detail.range),
+  };
+
   const accept = () => {
     if (!p || !controller.beforeAccept(p, true)) return;
     const next = controller.proposalText(p);
@@ -93,7 +110,7 @@ export function ReviewView({ controller, editor }: Props) {
           <p className={styles.hint}>{t('ai.emptyProposal')}</p>
         )}
         <div className={styles.editor}>
-          <Editor ref={plain} {...editor} />
+          <hmd-editor ref={plain} {...docProps} />
         </div>
       </section>
     );
@@ -105,7 +122,7 @@ export function ReviewView({ controller, editor }: Props) {
     return (
       <section ref={section} className={styles.review}>
         <div className={styles.editor}>
-          <Editor ref={plain} {...editor} />
+          <hmd-editor ref={plain} {...docProps} />
         </div>
       </section>
     );

@@ -1,3 +1,6 @@
+import type { ChangeDesc } from '@codemirror/state';
+
+import type { TextRange } from '../ai/selectionChip';
 import type { GenParams } from '../ai/types';
 
 /**
@@ -13,6 +16,8 @@ export interface HmdEvents {
   'hmd-ai-suggestion': CustomEvent<{ presetId: string }>;
   /** Conflitto con il disco: l'utente sceglie se ricaricare o sovrascrivere. */
   'hmd-conflict': CustomEvent<{ choice: 'reload' | 'overwrite' }>;
+  /** Editor e lato documento del diff: testo cambiato (`changes` e `before` per la proposta AI, `after` da salvare). */
+  'hmd-doc-change': CustomEvent<{ changes: ChangeDesc; before: string; after: string }>;
   /** Parametri di generazione modificati (popover del modello, impostazioni di profili e preset). */
   'hmd-params-change': CustomEvent<{ params: GenParams }>;
   /** Pulsante d'azione di un avviso (es. "Aggiorna"). */
@@ -23,8 +28,13 @@ export interface HmdEvents {
   'hmd-open': CustomEvent<{ path: string }>;
   /** Anteprima: seguire un wikilink (crea la nota se manca). */
   'hmd-open-wiki': CustomEvent<{ target: string }>;
-  /** Riga sorgente (0-based, frazionaria) in cima al pannello, per lo scroll sincronizzato (anteprima; editor dalla 5b). */
+  /**
+   * Riga sorgente (0-based, frazionaria) in cima al pannello, per lo scroll sincronizzato (anteprima ed
+   * editor). Va ascoltato sull'elemento che lo manda, mai su un antenato comune: risale da entrambi.
+   */
   'hmd-top-line': CustomEvent<{ line: number }>;
+  /** Editor e lato documento del diff: selezione principale cambiata (null se vuota), per il chip del composer AI. */
+  'hmd-selection': CustomEvent<{ range: TextRange | null }>;
   /** Schermata iniziale: scegliere una cartella (anche «Apri un'altra cartella»). */
   'hmd-start-pick': CustomEvent<null>;
   /** Schermata iniziale: riprendere l'accesso alla cartella ricordata. */

@@ -1,8 +1,0 @@
-.editor {
-  height: 100%;
-  overflow: hidden;
-}
-
-.editor :global(.cm-editor) {
-  height: 100%;
-}
