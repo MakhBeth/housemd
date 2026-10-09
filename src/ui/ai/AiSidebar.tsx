@@ -3,12 +3,11 @@ import { useRef, useSyncExternalStore } from 'react';
 import type { AiController } from '../../ai/aiController';
 import type { TextRange } from '../../ai/selectionChip';
 import type { SelectionScope } from '../../ai/types';
-import { useT } from '../../i18n/I18nProvider';
+import { useI18nStore, useT } from '../../i18n/I18nProvider';
 import type { SettingsSection } from '../../lib/route';
 import { Icon } from '../Icon';
 import { ChatLog } from './ChatLog';
 import { Composer, type ComposerHandle } from './Composer';
-import { Suggestions } from './Suggestions';
 import styles from './AiSidebar.module.css';
 
 interface Props {
@@ -22,6 +21,7 @@ interface Props {
 
 export function AiSidebar({ controller, text, selection, getSelection, onSettings, syncNeedsPermission }: Props) {
   const t = useT();
+  const i18nStore = useI18nStore();
   const state = useSyncExternalStore(controller.subscribe, controller.getState);
   const composer = useRef<ComposerHandle>(null);
   return (
@@ -51,7 +51,7 @@ export function AiSidebar({ controller, text, selection, getSelection, onSetting
           </button>
         )}
         <Composer ref={composer} controller={controller} text={text} selection={selection} getSelection={getSelection} onManage={() => onSettings('ai-profiles')} />
-        <Suggestions controller={controller} onSend={(id) => composer.current?.sendPreset(id)} />
+        <hmd-ai-suggestions controller={controller} i18n={i18nStore} onhmd-ai-suggestion={(event) => composer.current?.sendPreset(event.detail.presetId)} />
       </div>
     </div>
   );

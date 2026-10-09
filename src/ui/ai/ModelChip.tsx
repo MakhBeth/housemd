@@ -4,11 +4,10 @@ import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react'
 import type { AiController } from '../../ai/aiController';
 import { effectiveProfile, isLocalProfile } from '../../ai/profiles';
 import type { ModelProfile } from '../../ai/types';
-import { useT } from '../../i18n/I18nProvider';
+import { useI18nStore, useT } from '../../i18n/I18nProvider';
 import { writePref } from '../../lib/prefs';
 import { Icon } from '../Icon';
 import { ModelSelect } from './ModelSelect';
-import { Parameters } from './Parameters';
 import styles from './Composer.module.css';
 
 interface Props {
@@ -33,6 +32,7 @@ function privacyNote(t: ReturnType<typeof useT>, profile: ModelProfile): string 
 
 export function ModelChip({ controller, onManage }: Props) {
   const t = useT();
+  const i18nStore = useI18nStore();
   const state = useSyncExternalStore(controller.subscribe, controller.getState);
   const id = useId();
   const popover = useRef<HTMLDivElement>(null);
@@ -106,11 +106,12 @@ export function ModelChip({ controller, onManage }: Props) {
           );
         })}
         {opened && <ModelSelect controller={controller} profile={effective} onChange={(selection) => controller.override({ ...overrides, ...selection })} />}
-        <Parameters
+        <hmd-ai-parameters
           profile={effective}
           value={{ ...profile.params, ...overrides }}
-          onChange={(params) => controller.override({ ...overrides, ...params })}
           hideEffort
+          i18n={i18nStore}
+          onhmd-params-change={(event) => controller.override({ ...overrides, ...event.detail.params })}
         />
         <div className={styles.popoverActions}>
           <button type="button" onClick={() => run(controller.saveOverrides())}>

@@ -5,9 +5,8 @@ import { composerAction } from '../../ai/composerKeys';
 import { presetLabel } from '../../ai/presetName';
 import { sameRange, selectionLabel, type TextRange } from '../../ai/selectionChip';
 import type { SelectionScope } from '../../ai/types';
-import { useT } from '../../i18n/I18nProvider';
+import { useI18nStore, useT } from '../../i18n/I18nProvider';
 import { Icon } from '../Icon';
-import { EffortChip } from './EffortChip';
 import { ModelChip } from './ModelChip';
 import styles from './Composer.module.css';
 
@@ -27,6 +26,7 @@ interface Props {
 
 export const Composer = forwardRef<ComposerHandle, Props>(function Composer({ controller, text, selection, getSelection, onManage }, ref) {
   const t = useT();
+  const i18nStore = useI18nStore();
   const state = useSyncExternalStore(controller.subscribe, controller.getState);
   const [request, setRequest] = useState('');
   const [ignored, setIgnored] = useState<TextRange | null>(null);
@@ -86,7 +86,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer({ co
       />
       <div className={styles.row}>
         <ModelChip controller={controller} onManage={onManage} />
-        <EffortChip controller={controller} />
+        <hmd-ai-effort-chip controller={controller} i18n={i18nStore} />
         {running ? (
           <button type="button" className={`${styles.send} tooltip`} aria-label={t('ai.stop')} data-tooltip={t('ai.stop')} onClick={() => controller.stop()}>
             <Icon name="stop" size={16} />

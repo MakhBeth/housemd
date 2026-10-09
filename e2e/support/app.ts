@@ -68,6 +68,24 @@ export class App {
     await this.expectOpen(name);
   }
 
+  /**
+   * Crea e salva un profilo AI dalle impostazioni, poi le chiude. Il profilo non viene selezionato:
+   * si sceglie dal chip del modello. Un profilo Anthropic senza chiave basta per i chip (niente rete).
+   */
+  async createProfile(kind: 'anthropic' | 'ollama', name: string): Promise<void> {
+    const settings = this.page.getByRole('region', { name: this.t('settings.title') });
+    await this.page.getByRole('button', { name: this.t('toolbar.settings') }).click();
+    await settings.getByRole('link', { name: this.t('settings.aiProfiles') }).click();
+    // La sezione dei profili è la prima sezione AI: «+ Create» e i campi sono i primi.
+    await settings.getByRole('button', { name: `+ ${this.t('ai.create')}` }).first().click();
+    await settings.getByLabel(this.t('ai.name'), { exact: true }).first().fill(name);
+    await settings.getByRole('combobox', { name: this.t('ai.provider'), exact: true }).first().selectOption(kind);
+    await settings.getByRole('button', { name: this.t('ai.save'), exact: true }).first().click();
+    await expect(settings.getByRole('button', { name, exact: true })).toBeVisible();
+    await settings.getByRole('button', { name: this.t('settings.close') }).click();
+    await expect(settings).toHaveCount(0);
+  }
+
   /** Il file aperto è quello con aria-current="page" nell'albero. */
   async expectOpen(name: string): Promise<void> {
     await expect(this.treeFile(name)).toHaveAttribute('aria-current', 'page');

@@ -1,0 +1,33 @@
+@layer components {
+  @scope (hmd-ai-parameters) {
+    :scope {
+      display: contents;
+    }
+
+    /* Valori copiati da .popoverSection di Composer.module.css. */
+    .section {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin: 0 0 10px;
+      padding: 0;
+      border: none;
+    }
+
+    .section label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .section label > span {
+      flex: 0 0 45%;
+    }
+
+    .section input:not([type='radio']),
+    .section select {
+      flex: 1;
+      min-width: 0;
+    }
+  }
+}

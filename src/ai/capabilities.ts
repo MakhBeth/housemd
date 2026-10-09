@@ -1,4 +1,8 @@
 import type { GenParams, ProviderKind } from './types';
+
+/** Livelli di effort di GenParams, nell'ordine dei menu. */
+export const EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max'] as const satisfies readonly NonNullable<GenParams['effort']>[];
+
 export function capabilities(kind: ProviderKind, model: string, info?: { effort?: boolean }) {
   const cli = kind === 'claude-code';
   const recent = /(?:opus|sonnet)-(?:5|[6-9])|opus-4-[7-9]/.test(model);

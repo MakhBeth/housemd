@@ -3,7 +3,7 @@
 Data: 2026-09-27 · **Revisione: 2026-10-05**
 Base: `main` (HEAD `822f52d`: v1.1, strumenti AI, impostazioni a pagina, barra di formattazione,
 larghezza del testo, tooltip disegnati, albero con un solo tab stop).
-Stato: fasi 0–3 implementate (fase 0 PR #6, fase 1 PR #7, fase 2 in `main` (merge locale, commit 1b23305), fase 3 in `main` (merge locale)); fasi 4a e 4b in `main` (merge locale del 05/10, dal branch `feat/web-components`); fasi 4c–8 ancora piano.
+Stato: fasi 0–3 implementate (fase 0 PR #6, fase 1 PR #7, fase 2 in `main` (merge locale, commit 1b23305), fase 3 in `main` (merge locale)); fasi 4a–4c in `main` (merge del 05/10 per 4a+4b e dell'08/10 per la 4c, dal branch `feat/web-components`); fasi 5–8 ancora piano.
 
 Decisioni (27/09, riviste il 01/10; risposte alle domande aperte, §12):
 
@@ -531,6 +531,7 @@ Ordine: `theme-switcher`, `conflict-bar`, `notice`, `update-notice`, `toasts`, d
 - I dialog diventano le funzioni di §5.4, chiamate da `WorkspaceView`.
 - 4a **fatta**: `hmd-theme-switcher`, `hmd-conflict-bar`, `hmd-notice`, `hmd-update-notice`, `hmd-toasts`; host con `display: contents`; store passati come proprietà (`useI18nStore`, `getThemeStore`); `HmdElement.reconnect()`; test degli elementi in jsdom con `src/testing/assetHooks.ts` e `popoverStub.ts`. I toast conservano il riavvio dei timer a ogni nuovo array (difetto preesistente, visibile: da decidere a parte).
 - 4b **fatta**: `showNameDialog`, `showConfirmDialog`, `showDiscardChangesDialog`, `showAccessLostDialog` in `src/elements/dialogs/` (nucleo `modal.ts`, foglio `dialogs.css`), `runTreeDialog`, hook temporaneo `useUnmountSignal`; via `ConfirmDialog.tsx`, `NameDialog.tsx`, `AccessLostDialog`; `Dialog.module.css` resta per i campi delle impostazioni fino alla fase 7. Audit esteso ai `::backdrop` e agli stati conferma, modifiche aperte, accesso perso. Conservato un difetto: Esc nelle impostazioni con modifiche aperte apre e richiude subito la conferma. Bundle principale gzip: 433 971 → 434 481 B.
+- 4c **fatta**: `hmd-start-screen`, `hmd-ai-suggestions`, `hmd-ai-effort-chip`, `hmd-ai-parameters`; logica in `start-screen/startView.ts` e `ai/aiChips.ts` (`AiChipController`: gli elementi AI ricevono il controller con un'interfaccia minima, `src/testing/fakeAi.ts` nei test); `EFFORT_LEVELS` in `ai/capabilities.ts`. Regole del tema dentro `@scope` con `:root[…] :scope …`. Audit esteso a start con tema esplicito, ripresa, dettaglio del profilo, popover del modello, suggerimenti, chip dell'effort. Bundle principale gzip: 434 502 → 435 469 B.
 
 ### Fase 5: editor, anteprima, diff (branch)
 
@@ -809,6 +810,7 @@ wikilink:
    (fase 1, PR #7); `docs/superpowers/plans/2026-10-02-housemd-wc-03-fase-2-infrastruttura-dom.md` (fase 2);
    `docs/superpowers/plans/2026-10-04-housemd-wc-04-fase-3-react-19.md` (fase 3);
    `docs/superpowers/plans/2026-10-05-housemd-wc-05-fase-4a-infrastruttura-e-foglie.md` (fase 4a, branch `feat/web-components`);
-   `docs/superpowers/plans/2026-10-05-housemd-wc-06-fase-4b-dialog.md` (fase 4b); 4c da scrivere.
+   `docs/superpowers/plans/2026-10-05-housemd-wc-06-fase-4b-dialog.md` (fase 4b);
+   `docs/superpowers/plans/2026-10-05-housemd-wc-07-fase-4c-start-e-foglie-ai.md` (fase 4c).
 3. Fasi 4–6 (elementi in convivenza).
 4. Fasi 7–8 (impostazioni, workspace, via React, rifinitura, richiesta di merge).

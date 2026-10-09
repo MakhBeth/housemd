@@ -12,7 +12,6 @@ import { onDbBlocked } from './lib/db';
 import { readValidPref } from './lib/prefs';
 import type { UpdateFlow } from './pwa/updateFlow';
 import { setUpdateWorkspace } from './pwa/updateHost';
-import { StartScreen } from './ui/StartScreen';
 import { WorkspaceView } from './ui/WorkspaceView';
 import { indexedDbHistoryStore } from './history/historyStore';
 import { indexedDbBufferStore } from './workspace/buffers';
@@ -137,10 +136,10 @@ export default function App({ updates }: { updates: UpdateFlow }) {
 
   const content: ReactNode = match(screen)
     .with({ kind: 'boot' }, () => null)
-    .with({ kind: 'unsupported' }, () => <StartScreen mode="unsupported" reason={unsupportedReason(navigator.userAgent)} />)
-    .with({ kind: 'start' }, (s) => <StartScreen mode="start" error={s.error} onPick={choose} busy={switching} />)
+    .with({ kind: 'unsupported' }, () => <hmd-start-screen mode="unsupported" reason={unsupportedReason(navigator.userAgent)} i18n={i18nStore} />)
+    .with({ kind: 'start' }, (s) => <hmd-start-screen mode="start" error={s.error} busy={switching} i18n={i18nStore} onhmd-start-pick={choose} />)
     .with({ kind: 'resume' }, (s) => (
-      <StartScreen mode="resume" folderName={s.stored.handle.name} onResume={resume} onPick={choose} busy={switching} />
+      <hmd-start-screen mode="resume" folderName={s.stored.handle.name} busy={switching} i18n={i18nStore} onhmd-start-resume={resume} onhmd-start-pick={choose} />
     ))
     .with({ kind: 'open' }, (s) => (
       <WorkspaceView

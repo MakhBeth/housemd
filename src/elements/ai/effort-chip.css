@@ -1,0 +1,31 @@
+@layer components {
+  @scope (hmd-ai-effort-chip) {
+    :scope {
+      display: contents;
+    }
+
+    /* Valori copiati da .chip di Composer.module.css. */
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      max-width: 100%;
+      min-width: 0;
+      padding: 3px 8px;
+      border: 1px solid transparent;
+      border-radius: 999px;
+      background: none;
+      color: var(--c-muted);
+      font: 13px/1.3 var(--font-ui);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      cursor: pointer;
+    }
+
+    .chip:hover {
+      background: var(--c-accent-soft);
+      color: var(--c-text);
+    }
+  }
+}

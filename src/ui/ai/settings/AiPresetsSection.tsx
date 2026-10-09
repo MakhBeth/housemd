@@ -7,14 +7,14 @@ import { presetLabel } from '../../../ai/presetName';
 import { builtInPresets, restorePreset } from '../../../ai/presets';
 import { defaultProfile } from '../../../ai/profiles';
 import type { PromptPreset } from '../../../ai/types';
-import { useT } from '../../../i18n/I18nProvider';
+import { useI18nStore, useT } from '../../../i18n/I18nProvider';
 import { useUnmountSignal } from '../../useUnmountSignal';
-import { Parameters } from '../Parameters';
 import { ItemList, useDraft } from './ItemList';
 import styles from './Settings.module.css';
 
 export function AiPresetsSection({ controller, onDirty }: { controller: AiController; onDirty?: (dirty: boolean) => void }) {
   const t = useT();
+  const i18nStore = useI18nStore();
   const state = useSyncExternalStore(controller.subscribe, controller.getState);
   const { draft, dirty, setDraft, markSaved, select, confirmSwitch, cancelSwitch } = useDraft<PromptPreset>(onDirty);
   const dialogSignal = useUnmountSignal();
@@ -83,7 +83,7 @@ export function AiPresetsSection({ controller, onDirty }: { controller: AiContro
             <input type="checkbox" checked={draft.hidden} onChange={(e) => setDraft({ ...draft, hidden: e.target.checked })} />
             {t('ai.hidden')}
           </label>
-          <Parameters profile={defaultProfile()} value={draft.params ?? {}} onChange={(params) => setDraft({ ...draft, params })} />
+          <hmd-ai-parameters profile={defaultProfile()} value={draft.params ?? {}} i18n={i18nStore} onhmd-params-change={(event) => setDraft({ ...draft, params: event.detail.params })} />
           <div className={styles.actions}>
             <button type="button" onClick={() => setDraft({ ...draft, id: crypto.randomUUID(), builtInId: undefined, name: name(draft) })}>
               {t('ai.duplicate')}

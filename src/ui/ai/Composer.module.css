@@ -164,28 +164,6 @@
   cursor: pointer;
 }
 
-.suggestions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 8px 2px 0;
-}
-
-.suggestion {
-  padding: 3px 10px;
-  border: 1px solid var(--c-border);
-  border-radius: 999px;
-  background: none;
-  color: var(--c-muted);
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.suggestion:hover:not(:disabled) {
-  border-color: var(--c-accent);
-  color: var(--c-text);
-}
-
 .link {
   align-self: flex-start;
   padding: 0;
