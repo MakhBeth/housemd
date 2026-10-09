@@ -76,7 +76,10 @@ export class HmdAiChatLog extends HmdElement {
       ...(entry.reset ? ['reset'] : []),
       ...(entry.meta !== null ? ['meta'] : []),
     ];
+    const hadFocus = article.contains(document.activeElement);
     reconcileList(article, keys, (key) => key, (key) => this.#create(key, entry), (node, key) => this.#update(node, key, entry));
+    // Riprova usato sparisce: se aveva il focus, lo prende il messaggio (che è già nel giro del Tab) e non il body.
+    if (hadFocus && !article.contains(document.activeElement)) article.focus({ preventScroll: true });
   }
 
   #create(key: string, entry: ChatEntry): HTMLElement {
