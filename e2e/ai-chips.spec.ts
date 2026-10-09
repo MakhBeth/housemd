@@ -72,3 +72,18 @@ test('typing a partial number keeps the text in the field', async ({ app }) => {
   await expect(topP).toHaveValue('0.5');
   await expect(topP).toBeFocused();
 });
+
+test('choosing Default in the focused effort select removes the field without crashing the app', async ({ app }) => {
+  await app.page.getByRole('button', { name: app.t('toolbar.settings') }).click();
+  await settings(app).getByRole('link', { name: app.t('settings.aiProfiles') }).click();
+  await settings(app).getByRole('button', { name: 'ollama', exact: true }).click();
+  await settings(app).getByRole('checkbox', { name: app.t('ai.enableEffort') }).check();
+  const select = settings(app).getByRole('combobox', { name: app.t('ai.param.effort') });
+  await expect(select).toBeVisible();
+  await select.focus();
+  // Default toglie l'effort dal profilo: il campo sparisce mentre ha il focus.
+  await select.selectOption({ label: app.t('ai.default') });
+  await expect(select).toHaveCount(0);
+  await expect(settings(app)).toBeVisible();
+  await expect(settings(app).getByRole('spinbutton', { name: app.t('ai.param.temperature') })).toBeVisible();
+});

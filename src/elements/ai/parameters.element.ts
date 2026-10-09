@@ -15,6 +15,7 @@ export class HmdAiParameters extends HmdElement {
   #hideEffort = false;
   #i18n: I18nStore | null = null;
   #section: HTMLDivElement | null = null;
+  #rendering = false;
 
   get profile(): ModelProfile | null { return this.#profile; }
   set profile(value: ModelProfile | null) { this.#profile = value ?? null; this.#render(); }
@@ -33,7 +34,12 @@ export class HmdAiParameters extends HmdElement {
   protected connect(signal: AbortSignal): void {
     this.#section ??= this.appendChild(el('div', { class: 'section' }));
     // Un cambio esterno arrivato mentre il campo aveva il focus si mostra quando il focus esce.
-    this.#section.addEventListener('focusout', () => this.#render(), { signal });
+    // Il focusout parte anche quando la riconciliazione toglie il campo col focus: lì non si rientra, e il
+    // render si rimanda a dopo (solo se l'elemento è ancora collegato).
+    this.#section.addEventListener('focusout', () => {
+      if (this.#rendering) return;
+      queueMicrotask(() => { if (!signal.aborted) this.#render(); });
+    }, { signal });
     if (this.#i18n) this.watch(this.#i18n, () => this.#render(), signal);
   }
 
@@ -59,9 +65,19 @@ export class HmdAiParameters extends HmdElement {
     const i18n = this.#i18n;
     if (!section || !i18n || !this.#profile) return;
     const value = this.#value;
+    if (this.#rendering) return;
+    this.#rendering = true;
+    try {
+      this.#reconcile(section, i18n, this.#profile, value);
+    } finally {
+      this.#rendering = false;
+    }
+  }
+
+  #reconcile(section: HTMLDivElement, i18n: I18nStore, profile: ModelProfile, value: GenParams): void {
     reconcileList(
       section,
-      parameterFields(this.#profile, this.#hideEffort),
+      parameterFields(profile, this.#hideEffort),
       (field) => field.key,
       (field) => this.#create(field),
       (label, field) => {

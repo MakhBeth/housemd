@@ -117,7 +117,7 @@ test('language change relabels in place', async () => {
   el.remove();
 });
 
-test('a value changed from outside while the field has focus shows up once the focus leaves', () => {
+test('a value changed from outside while the field has focus shows up once the focus leaves', async () => {
   const { el, input } = mount('ollama', { topP: 0.5 });
   const p = input(EN_MESSAGES['ai.param.topP']);
   p.focus();
@@ -125,6 +125,20 @@ test('a value changed from outside while the field has focus shows up once the f
   el.value = { topP: 0.9 };
   assert.equal(p.value, '0.5');
   p.blur();
+  // Il render del focusout è rimandato a un microtask: non rientra mai in una riconciliazione in corso.
+  assert.equal(p.value, '0.5');
+  await Promise.resolve();
   assert.equal(p.value, '0.9');
   el.remove();
+});
+
+test('a focusout that arrives while the element is being removed does not render afterwards', async () => {
+  const { el, input } = mount('ollama', { topP: 0.5 });
+  const p = input(EN_MESSAGES['ai.param.topP']);
+  p.focus();
+  el.value = { topP: 0.9 };
+  p.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+  el.remove();
+  await Promise.resolve();
+  assert.equal(p.value, '0.5');
 });
