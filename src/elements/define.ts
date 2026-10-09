@@ -4,6 +4,7 @@ import { HmdAiSuggestions } from './ai/suggestions.element';
 import { HmdConflictBar } from './conflict-bar/conflict-bar.element';
 import { HmdNotice } from './notice/notice.element';
 import { HmdFrontmatterCard } from './preview/frontmatter-card.element';
+import { HmdPreview } from './preview/preview.element';
 import { HmdStartScreen } from './start-screen/start-screen.element';
 import { HmdToasts } from './toasts/toasts.element';
 import { HmdThemeSwitcher } from './theme-switcher/theme-switcher.element';
@@ -23,6 +24,7 @@ const ELEMENTS: Definitions = [
   ['hmd-conflict-bar', HmdConflictBar],
   ['hmd-frontmatter-card', HmdFrontmatterCard],
   ['hmd-notice', HmdNotice],
+  ['hmd-preview', HmdPreview],
   ['hmd-start-screen', HmdStartScreen],
   ['hmd-theme-switcher', HmdThemeSwitcher],
   ['hmd-toasts', HmdToasts],

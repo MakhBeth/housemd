@@ -15,6 +15,12 @@ export interface HmdEvents {
   'hmd-notice-action': CustomEvent<null>;
   /** Chiusura di un avviso. */
   'hmd-notice-dismiss': CustomEvent<null>;
+  /** Anteprima: aprire un file markdown (link relativo nel testo). */
+  'hmd-open': CustomEvent<{ path: string }>;
+  /** Anteprima: seguire un wikilink (crea la nota se manca). */
+  'hmd-open-wiki': CustomEvent<{ target: string }>;
+  /** Riga sorgente (0-based, frazionaria) in cima al pannello, per lo scroll sincronizzato (anteprima; editor dalla 5b). */
+  'hmd-top-line': CustomEvent<{ line: number }>;
   /** Schermata iniziale: scegliere una cartella (anche «Apri un'altra cartella»). */
   'hmd-start-pick': CustomEvent<null>;
   /** Schermata iniziale: riprendere l'accesso alla cartella ricordata. */
