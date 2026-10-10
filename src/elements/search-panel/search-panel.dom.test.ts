@@ -230,3 +230,44 @@ test('language change relabels the field and the "none" row, keeping what was ty
   assert.equal(el.querySelector('input'), input);
   assert.equal(input.value, 'zzz');
 });
+
+test('a focusout listener that asks another render and then drops the i18n store: no render without the store', () => {
+  const { el, type, buttons, fake, key } = mount();
+  type('fox');
+  mock.timers.tick(120);
+  const b = buttons()[1];
+  b.focus();
+  focusoutOnRemove(b.closest('li')!);
+  let once = false;
+  el.addEventListener('focusout', () => {
+    if (once) return;
+    once = true;
+    key('Escape');
+    el.i18n = null;
+  });
+  fake.table.fox = [result('a.md')];
+  el.indexRevision = 2;
+  assert.doesNotThrow(() => mock.timers.tick(120));
+});
+
+test('the query emptied by a listener while the focus stays on a result: the list goes and the focus goes back to the field', () => {
+  const { el, type, buttons, fake, key, input } = mount();
+  type('fox');
+  mock.timers.tick(120);
+  const b = buttons()[1];
+  b.focus();
+  // Un listener sincrono durante la riconciliazione (qui alla rimozione di un altro risultato) svuota la query:
+  // la seconda passata toglie l'elenco con il risultato che ha il focus.
+  focusoutOnRemove(buttons()[0].closest('li')!);
+  let once = false;
+  el.addEventListener('focusout', () => {
+    if (once) return;
+    once = true;
+    key('Escape');
+  });
+  fake.table.fox = [result('b.md')];
+  el.indexRevision = 2;
+  mock.timers.tick(120);
+  assert.equal(el.querySelector('ul'), null);
+  assert.equal(document.activeElement, input);
+});

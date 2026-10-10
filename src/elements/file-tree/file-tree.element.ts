@@ -33,6 +33,11 @@ interface Row {
   name: HTMLSpanElement;
   /** Cartella: <details>, icona aperta/chiusa, elenco dei figli o nota «cartella vuota». */
   details?: HTMLDetailsElement;
+  /**
+   * Ultimo `open` scritto sul <details>: si riscrive solo quando cambia lo stato, come la prop di React. Il
+   * clic sul <summary> apre subito ma il toggle arriva dopo: un render nel mezzo non la richiude.
+   */
+  open?: boolean;
   folderIcon?: HTMLSpanElement;
   list?: HTMLUListElement;
   empty?: HTMLParagraphElement;
@@ -118,21 +123,31 @@ export class HmdFileTree extends HmdElement {
       this.#again = true;
       return;
     }
+    const { nav } = this.#parts;
+    // Il focus si guarda prima della prima passata e si recupera dopo l'ultima: la riga col tab stop può
+    // esistere solo nell'albero finale, e dopo la passata che l'ha tolto il focus è già sul body.
+    const hadFocus = nav.contains(document.activeElement);
     this.#rendering = true;
     try {
+      // Un listener sincrono può aver tolto lo store o staccato l'elemento: nessuna passata senza.
       do {
         this.#again = false;
         this.#render(this.#parts, this.#i18n);
-      } while (this.#again);
+      } while (this.#again && this.#parts && this.#i18n && this.isConnected);
     } finally {
       this.#rendering = false;
+    }
+    // La riga con il focus è sparita (file eliminato o rinominato): il focus va sulla riga col tab stop
+    // (il suo focusin ricalcola i tab stop).
+    if (hadFocus && this.isConnected && !nav.contains(document.activeElement)) {
+      const stop = tabStop(this.#items, this.#focused, this.#openPath);
+      if (stop !== null) this.#focusables.get(stop)?.focus();
     }
   }
 
   #render(parts: Parts, i18n: I18nStore): void {
     const { nav, root, none, menu } = parts;
     const t = i18n.t;
-    const hadFocus = nav.contains(document.activeElement);
     toggleAttr(nav, 'aria-label', true, t('tree.label'));
     this.#focusables.clear();
     this.#triggers.clear();
@@ -148,11 +163,6 @@ export class HmdFileTree extends HmdElement {
     }
     this.#renderMenu(menu, i18n);
     this.#items = visibleItems(this.#nodes as TreeNode[], this.#expanded);
-    // La riga con il focus è sparita (file eliminato o rinominato): il focus va sulla riga col tab stop.
-    if (hadFocus && !nav.contains(document.activeElement)) {
-      const stop = tabStop(this.#items, this.#focused, this.#openPath);
-      if (stop !== null) this.#focusables.get(stop)?.focus();
-    }
     this.#applyTabStops();
   }
 
@@ -226,7 +236,10 @@ export class HmdFileTree extends HmdElement {
     }
     if (row.details && row.folderIcon && row.list && row.empty) {
       const open = this.#expanded.has(node.path);
-      if (row.details.open !== open) row.details.open = open;
+      if (row.open !== open) {
+        row.open = open;
+        row.details.open = open;
+      }
       row.folderIcon.style.setProperty('mask-image', `url("${ICONS[open ? 'folderOpen' : 'folderClosed']}")`);
       if (node.children.length > 0) {
         row.empty.remove();
@@ -313,8 +326,12 @@ export class HmdFileTree extends HmdElement {
     // Come ogni altro cambio di stato: un render alla volta (#update disegna anche il menu). Un render
     // chiesto da un listener mentre questo è in corso si ripete alla fine, mai annidato.
     this.#update();
+    // Un listener del render può aver staccato l'albero o aperto un altro menu (che si è già mostrato).
+    if (!this.isConnected || this.#menuNode !== node) return;
     if (!parts.menu.matches(':popover-open')) parts.menu.showPopover();
-    requestAnimationFrame(() => parts.menu.querySelector('button')?.focus());
+    requestAnimationFrame(() => {
+      if (this.isConnected) parts.menu.querySelector('button')?.focus();
+    });
   }
 
   /** Chiuso il menu (Esc, clic fuori) col focus perso, il focus torna sulla riga da cui era partito. */

@@ -242,3 +242,29 @@ test('close sends hmd-history-close; language change relabels title and Restore'
   // Il cambio di lingua non richiede di nuovo l'elenco.
   assert.equal(ws.requests.length, 1);
 });
+
+/** Come nell'albero: il `focusout` sincrono di Chromium alla rimozione del nodo con il focus, dentro reconcileList. */
+function focusoutOnRemove(node: Element): void {
+  node.remove = function (this: Element) {
+    this.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+    Element.prototype.remove.call(this);
+  };
+}
+
+test('a focusout listener that asks another render and then drops the i18n store: no render without the store', async () => {
+  const { el, ws, versions } = mount();
+  ws.requests[0].resolve([snap(2, 'v2'), snap(1, 'v1')]);
+  await tick();
+  const version = versions()[1];
+  version.focus();
+  focusoutOnRemove(version.closest('li')!);
+  let once = false;
+  el.addEventListener('focusout', () => {
+    if (once) return;
+    once = true;
+    el.currentText = 'v3';
+    el.i18n = null;
+  });
+  // Un altro file: l'elenco torna a «caricamento» e la versione con il focus sparisce.
+  assert.doesNotThrow(() => (el.path = 'other.md'));
+});

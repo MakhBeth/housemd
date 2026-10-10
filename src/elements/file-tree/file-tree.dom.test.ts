@@ -270,3 +270,75 @@ test('language change relabels the tree and the menu; detached, no listener left
   assert.equal(listeners(), 0);
   await tick();
 });
+
+test('the focused row disappears and a focusout listener changes the nodes again: the focus goes to the tab stop of the final tree', () => {
+  const { el, row } = mount([file('a.md'), file('b.md')]);
+  row('b.md')!.focus();
+  focusoutOnRemove(row('b.md')!.closest('li')!);
+  let once = false;
+  el.addEventListener('focusout', () => {
+    if (once) return;
+    once = true;
+    el.nodes = [file('c.md')];
+  });
+  el.nodes = [file('a.md')];
+  // La riga di c.md esiste solo dopo la seconda passata: il recupero va fatto lì, non nella prima.
+  assert.equal(row('c.md')!.tabIndex, 0);
+  assert.equal(document.activeElement, row('c.md'));
+});
+
+test('a focusout listener that asks another render and then drops the i18n store: no render without the store', () => {
+  const { el, row } = mount(NODES, 'a.md');
+  row('z.md')!.focus();
+  focusoutOnRemove(row('z.md')!.closest('li')!);
+  let once = false;
+  el.addEventListener('focusout', () => {
+    if (once) return;
+    once = true;
+    el.nodes = [file('a.md')];
+    el.i18n = null;
+  });
+  assert.doesNotThrow(() => (el.nodes = [NODES[0], NODES[1]]));
+});
+
+test('a focusout listener that detaches the tree while a menu opens: no popover, no focus scheduled', () => {
+  const { el, trigger, menu } = mount(NODES, 'a.md');
+  trigger('a.md')!.click();
+  flushFrames();
+  const history = menu.querySelector('button')!;
+  assert.equal(document.activeElement, history);
+  focusoutOnRemove(history);
+  el.addEventListener('focusout', () => el.remove(), { once: true });
+  // Un'eccezione in un listener di click jsdom non la rilancia: la segnala con un ErrorEvent su window.
+  const errors: unknown[] = [];
+  const onError = (event: ErrorEvent) => {
+    event.preventDefault();
+    errors.push(event.error);
+  };
+  window.addEventListener('error', onError);
+  let shown = 0;
+  const show = menu.showPopover;
+  menu.showPopover = function (this: HTMLElement) {
+    shown++;
+    show.call(this);
+  };
+  // Il menu di una cartella toglie «Cronologia» (che ha il focus): il listener stacca l'albero.
+  trigger('docs')!.click();
+  window.removeEventListener('error', onError);
+  assert.deepEqual(errors, []);
+  assert.equal(el.isConnected, false);
+  assert.equal(shown, 0);
+  assert.equal(frames.length, 0);
+});
+
+test('a folder opened by a click keeps open if a render arrives before its toggle event', () => {
+  const { el, row } = mount();
+  const details = row('docs')!.parentElement as HTMLDetailsElement;
+  // Il clic sul <summary> apre subito; il toggle arriva in un task dopo, e nel mezzo una notifica ridisegna.
+  details.open = true;
+  el.nodes = [...NODES];
+  assert.equal(details.open, true);
+  details.dispatchEvent(new Event('toggle'));
+  el.nodes = [...NODES];
+  assert.equal(details.open, true);
+});

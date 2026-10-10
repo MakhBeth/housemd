@@ -163,21 +163,27 @@ export class HmdHistoryPanel extends HmdElement {
       this.#again = true;
       return;
     }
+    const { panel, close } = this.#parts;
+    // Il focus si guarda prima della prima passata e si recupera dopo l'ultima (come nell'albero).
+    const hadFocus = panel.contains(document.activeElement);
     this.#rendering = true;
     try {
+      // Un listener sincrono può aver tolto lo store o staccato l'elemento: nessuna passata senza.
       do {
         this.#again = false;
         this.#render(this.#parts, this.#i18n);
-      } while (this.#again);
+      } while (this.#again && this.#parts && this.#i18n && this.isConnected);
     } finally {
       this.#rendering = false;
     }
+    // Il nodo con il focus è sparito («Ripristina» dopo un ripristino, che rende il testo identico):
+    // il focus va sulla versione scelta, o sul pulsante di chiusura.
+    if (hadFocus && this.isConnected && !panel.contains(document.activeElement)) (this.#versionButtons.get(this.#selected ?? NaN) ?? close).focus();
   }
 
   #render(parts: Parts, i18n: I18nStore): void {
     const { panel, title, close, empty, list, diff, note, lines, restore } = parts;
     const t = i18n.t;
-    const hadFocus = panel.contains(document.activeElement);
     setText(title, t('history.title', { path: this.#path }));
     toggleAttr(close, 'aria-label', true, t('history.close'));
     toggleAttr(close, 'data-tooltip', true, t('history.close'));
@@ -220,10 +226,6 @@ export class HmdHistoryPanel extends HmdElement {
     const children = view.kind === 'diff' ? [note, lines, restore] : [note];
     // Solo se cambia la forma: riappendere «Ripristina» gli toglierebbe il focus.
     if (diff.children.length !== children.length || children.some((child, i) => diff.children[i] !== child)) diff.replaceChildren(...children);
-
-    // Il nodo con il focus è sparito («Ripristina» dopo un ripristino, che rende il testo identico):
-    // il focus va sulla versione scelta, o sul pulsante di chiusura.
-    if (hadFocus && !panel.contains(document.activeElement)) (this.#versionButtons.get(this.#selected ?? NaN) ?? close).focus();
   }
 
   #createRow(item: VersionItem): HTMLLIElement {

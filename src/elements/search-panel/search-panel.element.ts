@@ -139,15 +139,22 @@ export class HmdSearchPanel extends HmdElement {
       this.#again = true;
       return;
     }
+    const { input, list } = this.#parts;
+    // Il focus si guarda prima della prima passata e si recupera dopo l'ultima (come nell'albero): anche
+    // quando l'ultima toglie l'elenco intero (query svuotata).
+    const hadFocus = list.contains(document.activeElement);
     this.#rendering = true;
     try {
+      // Un listener sincrono può aver tolto lo store o staccato l'elemento: nessuna passata senza.
       do {
         this.#again = false;
         this.#render(this.#parts, this.#i18n);
-      } while (this.#again);
+      } while (this.#again && this.#parts && this.#i18n && this.isConnected);
     } finally {
       this.#rendering = false;
     }
+    // Il risultato con il focus è sparito (file eliminato o non più trovato): il focus torna nella casella.
+    if (hadFocus && this.isConnected && !list.contains(document.activeElement)) input.focus();
   }
 
   #onKeyDown(event: KeyboardEvent): void {
@@ -172,12 +179,9 @@ export class HmdSearchPanel extends HmdElement {
       list.remove();
       return;
     }
-    const hadFocus = list.contains(document.activeElement);
     toggleAttr(list, 'aria-label', true, t('search.results'));
     reconcileList(list, items, searchItemKey, (item) => this.#createRow(item), (li, item) => this.#updateRow(li, item, i18n));
     if (list.parentNode !== box) box.append(list);
-    // Il risultato con il focus è sparito (file eliminato o non più trovato): il focus torna nella casella.
-    if (hadFocus && !list.contains(document.activeElement)) input.focus();
   }
 
   #createRow(item: SearchItem): HTMLLIElement {
