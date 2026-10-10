@@ -167,6 +167,8 @@ test('a save reloads the list (new version on top); a notification without a sav
   const { ws, versions } = mount();
   ws.requests[0].resolve([snap(1, 'v1')]);
   await tick();
+  ws.poke();
+  assert.equal(ws.requests.length, 1);
   ws.save();
   assert.equal(ws.requests.length, 2);
   ws.requests[1].resolve([snap(2, 'v2'), snap(1, 'v1')]);
