@@ -2,7 +2,7 @@
  * Tipi JSX dei tag `hmd-*` usati da React durante la convivenza (fasi 4–7). File temporaneo: sparisce con
  * React nella fase 7 (spec WC §5.1).
  */
-import type { Ref } from 'react';
+import type { Key, Ref } from 'react';
 import type { TextRange } from '../ai/selectionChip';
 import type { ChatMessage, GenParams, ModelProfile } from '../ai/types';
 import type { HouseConfig } from '../config/config';
@@ -19,6 +19,7 @@ import type { HmdAiDiffPane } from './ai/diff-pane.element';
 import type { SaveImage } from './editor/docElement';
 import type { HmdEditor } from './editor/editor.element';
 import type { HmdEvents } from './events';
+import type { HistorySource } from './history-panel/history-panel.element';
 import type { HmdPreview } from './preview/preview.element';
 import type { HmdSearchPanel, SearchSource } from './search-panel/search-panel.element';
 import type { StartMode } from './start-screen/startView';
@@ -55,6 +56,10 @@ declare module 'react' {
         { nodes: readonly TreeNode[]; openPath: string | null; drafts: ReadonlySet<string>; i18n: I18nStore },
         'hmd-open' | 'hmd-tree-action'
       >;
+      'hmd-history-panel': HmdProps<
+        { workspace: HistorySource; path: string; currentText: string; i18n: I18nStore },
+        'hmd-history-close' | 'hmd-history-restore'
+      > & { key?: Key };
       'hmd-notice': HmdProps<
         { message: string; actionLabel: string; busy: boolean; dismissLabel: string; dismissible: boolean; placement: 'top' | 'bottom' },
         'hmd-notice-action' | 'hmd-notice-dismiss'

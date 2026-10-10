@@ -25,6 +25,10 @@ export interface HmdEvents {
   /** Editor e lato documento del diff: testo cambiato (`changes` e `before` per la proposta AI, `after` da salvare). */
   'hmd-doc-change': CustomEvent<{ changes: ChangeDesc; before: string; after: string }>;
   /** Parametri di generazione modificati (popover del modello, impostazioni di profili e preset). */
+  /** Cronologia: chiudere il pannello. */
+  'hmd-history-close': CustomEvent<null>;
+  /** Cronologia: ripristinare la versione `id` (il workspace la applica come transazione dell'editor, annullabile). */
+  'hmd-history-restore': CustomEvent<{ id: number }>;
   'hmd-params-change': CustomEvent<{ params: GenParams }>;
   /** Pulsante d'azione di un avviso (es. "Aggiorna"). */
   'hmd-notice-action': CustomEvent<null>;

@@ -6,6 +6,7 @@ import { HmdAiSuggestions } from './ai/suggestions.element';
 import { HmdConflictBar } from './conflict-bar/conflict-bar.element';
 import { HmdEditor } from './editor/editor.element';
 import { HmdFileTree } from './file-tree/file-tree.element';
+import { HmdHistoryPanel } from './history-panel/history-panel.element';
 import { HmdNotice } from './notice/notice.element';
 import { HmdFrontmatterCard } from './preview/frontmatter-card.element';
 import { HmdPreview } from './preview/preview.element';
@@ -32,6 +33,7 @@ const ELEMENTS: Definitions = [
   ['hmd-editor', HmdEditor],
   ['hmd-file-tree', HmdFileTree],
   ['hmd-frontmatter-card', HmdFrontmatterCard],
+  ['hmd-history-panel', HmdHistoryPanel],
   ['hmd-notice', HmdNotice],
   ['hmd-preview', HmdPreview],
   ['hmd-search-panel', HmdSearchPanel],

@@ -19,7 +19,6 @@ import type { HmdPreview } from '../elements/preview/preview.element';
 import type { HmdSearchPanel } from '../elements/search-panel/search-panel.element';
 import { getThemeStore, useTheme } from '../theme/useTheme';
 import type { Workspace } from '../workspace/workspace';
-import { HistoryPanel } from './HistoryPanel';
 import { Icon } from './Icon';
 import { SettingsView } from './SettingsView';
 import { useRoute } from './useRoute';
@@ -537,13 +536,14 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
             )}
             {historyOpen ? (
               <section className={styles.pane} aria-label={t('toolbar.history')}>
-                <HistoryPanel
+                <hmd-history-panel
                   key={doc.path}
                   workspace={workspace}
                   path={doc.path}
                   currentText={doc.text}
-                  onRestore={restoreVersion}
-                  onClose={() => setHistoryOpen(false)}
+                  i18n={i18nStore}
+                  onhmd-history-restore={(event) => restoreVersion(event.detail.id)}
+                  onhmd-history-close={() => setHistoryOpen(false)}
                 />
               </section>
             ) : (

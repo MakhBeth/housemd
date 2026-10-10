@@ -69,12 +69,12 @@ test('the history panel follows the interface language', async ({ app, page }) =
   await expect(region.getByRole('button', { name: it('history.close') })).toBeVisible();
 });
 
-test('after Restore the button disappears (identical text): where the focus goes', async ({ app, page }) => {
+test('after Restore the button disappears (identical text): the focus goes to the chosen version', async ({ app }) => {
   await openWithTwoVersions(app);
   await versions(app).nth(1).click();
   await panel(app).getByRole('button', { name: app.t('history.restore') }).click();
   await expect(app.editor()).toHaveText('v1');
   await expect(panel(app).getByText(app.t('history.identical'))).toBeVisible();
-  // Difetto di oggi (React): il pulsante sparisce con il focus e il focus cade sul body. Il Task 4 lo rovescia (decisione 3).
-  await expect.poll(() => page.evaluate(() => document.activeElement === document.body)).toBe(true);
+  // Decisione 3: il focus va sulla versione scelta, non sul body.
+  await expect(versions(app).nth(1)).toBeFocused();
 });
