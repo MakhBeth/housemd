@@ -164,6 +164,70 @@ const STATES: State[] = [
     },
   },
   {
+    name: 'editor-mode',
+    async setup(app) {
+      await app.openFolder({ 'note.md': NOTE });
+      await app.openFile('note.md');
+      await app.mode('mode.editor').click();
+      await expect(app.previewPane()).toHaveCount(0);
+      await expect(app.editor()).toBeVisible();
+    },
+  },
+  {
+    name: 'ai-review-empty',
+    async setup(app, page) {
+      await app.openFolder({ 'a.md': 'A\n\nB' });
+      await app.openFile('a.md');
+      await expect(app.mode('mode.ai')).toBeVisible();
+      await app.mode('mode.ai').click();
+      await expect(page.getByText(app.t('ai.emptyProposal'))).toBeVisible();
+    },
+  },
+  {
+    name: 'ai-review-hover',
+    keepMouse: true,
+    async setup(app, page, ai) {
+      ai.reply = 'A2\n\nB\n\nC2';
+      await app.openFolder({ 'a.md': 'A\n\nB\n\nC' });
+      await app.openFile('a.md');
+      await expect(app.mode('mode.ai')).toBeVisible();
+      await app.mode('mode.ai').click();
+      const composer = page.getByRole('textbox', { name: app.t('ai.request') });
+      await composer.fill('fix');
+      await composer.press('Enter');
+      // Pulsante «rifiuta» del primo blocco (eccezione .cm-merge-revert della spec §8.4): sfondo e tooltip al passaggio.
+      const reject = page.locator('.cm-merge-revert button[data-action=reject]').first();
+      await reject.hover();
+      await expect.poll(() => reject.evaluate((b) => getComputedStyle(b, '::after').visibility)).toBe('visible');
+    },
+  },
+  {
+    name: 'ai-review-conflict',
+    async setup(app, page, ai) {
+      ai.reply = 'A2\n\nB\n\nC2';
+      await page.clock.install();
+      await app.openFolder({ 'a.md': 'A\n\nB\n\nC' });
+      await app.openFile('a.md');
+      await expect(app.mode('mode.ai')).toBeVisible();
+      await app.mode('mode.ai').click();
+      const composer = page.getByRole('textbox', { name: app.t('ai.request') });
+      await composer.fill('fix');
+      await composer.press('Enter');
+      await expect(page.getByRole('button', { name: app.t('ai.acceptAll'), exact: true })).toBeEnabled();
+      // Modifica locale non salvata nel documento (lato sinistro del diff) e modifica esterna: conflitto,
+      // e i pulsanti «accetta» dei blocchi si disattivano (stile :disabled).
+      await page.clock.pauseAt(new Date(Date.now() + 10_000));
+      await page.locator('.cm-mergeView .cm-content').first().click();
+      await page.keyboard.press('ControlOrMeta+End');
+      await page.keyboard.type('!');
+      await page.clock.runFor(100);
+      await app.writeExternal('a.md', 'theirs');
+      await app.windowFocus();
+      await expect(page.getByRole('alert').filter({ hasText: app.t('conflict.message') })).toBeVisible();
+      await expect(page.locator('.cm-merge-revert button[data-action=accept]').first()).toBeDisabled();
+    },
+  },
+  {
     name: 'ai-chat-error',
     async setup(app, page, ai) {
       ai.status = 500;

@@ -1,21 +1,38 @@
 import { basicSetup } from 'codemirror';
-import { Compartment, EditorState } from '@codemirror/state';
-import { EditorView } from '@codemirror/view';
+import { Compartment, EditorState, type ChangeDesc } from '@codemirror/state';
+import { EditorView, ViewPlugin } from '@codemirror/view';
 import { markdown } from '@codemirror/lang-markdown';
 import { autocompletion } from '@codemirror/autocomplete';
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { tags } from '@lezer/highlight';
 
+import type { TextRange } from '../ai/selectionChip';
+import type { DocTitle } from '../search/searchIndex';
 import { imageFiles, insertImageLinks } from './images';
 import { wikiCompletionSource } from './wikiCompletion';
-import type { RefObject } from 'react';
-import type { EditorProps } from './Editor';
-import { saveDocSession } from './docSession';
+import { saveDocSession, type DocSession } from './docSession';
 import { formatToolbar, type Translate } from './formatToolbar';
 
-
-/** Props dell'editor più la traduzione (per la barra di formattazione). */
-export type Callbacks = RefObject<EditorProps & { t: Translate }>;
+/**
+ * Ciò che le estensioni del documento chiedono a chi ospita l'editor (hmd-editor, lato documento di
+ * hmd-ai-diff-pane). Ogni valore si legge al momento dell'uso, mai copiato: l'ospite cambia sotto
+ * (altro file, sola lettura, lingua) senza ricreare le estensioni.
+ */
+export interface DocHost {
+  /** Chiave del documento mostrato: un'immagine salvata dopo un cambio di documento non si inserisce. */
+  resetKey(): string;
+  readOnly(): boolean;
+  /** Sessione in cui salvare testo, selezione e cronologia a ogni aggiornamento (null = nessuna). */
+  session(): DocSession | null;
+  t(): Translate;
+  getDocs(): DocTitle[];
+  /** Salva un'immagine incollata o trascinata; restituisce il link relativo, null se non salvata. */
+  saveImage(file: File): Promise<string | null>;
+  /** Il testo è cambiato: prima e dopo, con le modifiche (per la proposta AI e per il salvataggio). */
+  docChanged(changes: ChangeDesc, texts: { before: string; after: string }): void;
+  /** Selezione principale cambiata (null se vuota): chip della selezione del composer AI. */
+  selectionChanged(range: TextRange | null): void;
+}
 
 const theme = EditorView.theme({
   '&': { height: '100%', backgroundColor: 'var(--c-surface)', color: 'var(--c-text)' },
@@ -49,11 +66,27 @@ const highlight = HighlightStyle.define([
 export const editable = new Compartment();
 export const readOnlyExtensions = (readOnly: boolean) => [EditorState.readOnly.of(readOnly), EditorView.editable.of(!readOnly)];
 
-function insertImages(view: EditorView, files: File[], pos: number, callbacks: Callbacks): void {
-  // insertImageLinks legge il resetKey subito (al momento dell'incolla/trascinamento) e dopo ogni
-  // salvataggio lo riconfronta: se l'editor è passato a un altro documento, non lo tocca.
-  void insertImageLinks(files, pos, (file) => callbacks.current.onImage(file), {
-    key: () => callbacks.current.resetKey,
+/**
+ * Vita di una vista con il suo stato: `alive` torna false quando la vista viene distrutta (distacco
+ * dell'elemento) o il suo stato sostituito (`setState`, che reinizializza i plugin).
+ */
+const lifecycle = ViewPlugin.define(() => ({
+  alive: true,
+  destroy() {
+    this.alive = false;
+  },
+}));
+
+/** Chiave di una vista che non c'è più: diversa da qualsiasi resetKey. */
+const GONE = '\u0000gone';
+
+function insertImages(view: EditorView, files: File[], pos: number, host: DocHost): void {
+  // insertImageLinks legge la chiave subito (al momento dell'incolla/trascinamento) e dopo ogni
+  // salvataggio la riconfronta: se l'editor è passato a un altro documento, o questa vista è stata
+  // distrutta (anche se l'elemento è tornato con lo stesso resetKey), non salva altro e non la tocca.
+  const life = view.plugin(lifecycle);
+  void insertImageLinks(files, pos, (file) => host.saveImage(file), {
+    key: () => (life?.alive ? host.resetKey() : GONE),
     length: () => view.state.doc.length,
     insert(at, insert) {
       view.dispatch({ changes: { from: at, insert }, selection: { anchor: at + insert.length } });
@@ -72,29 +105,31 @@ export function docAppearance() {
   return [markdown(), syntaxHighlighting(highlight), EditorView.lineWrapping, theme];
 }
 
-export function docExtensions(callbacks: Callbacks) {
+export function docExtensions(host: DocHost) {
   return [
       basicSetup,
-      EditorState.transactionFilter.of(tr => !tr.docChanged || tr.isUserEvent('input.restore') || callbacks.current.canChange?.(tr.changes) !== false ? tr : []),
+      lifecycle,
       docAppearance(),
-      editable.of(readOnlyExtensions(callbacks.current.readOnly ?? false)),
-      autocompletion({ override: [wikiCompletionSource(() => callbacks.current.getDocs())] }),
-      formatToolbar(() => callbacks.current.t),
+      editable.of(readOnlyExtensions(host.readOnly())),
+      autocompletion({ override: [wikiCompletionSource(() => host.getDocs())] }),
+      formatToolbar(() => host.t()),
       EditorView.updateListener.of((update) => {
-        if (update.docChanged) {
-          const after = update.state.doc.toString();
-          callbacks.current.onTransactions?.(update.changes, { before: update.startState.doc.toString(), after });
-          callbacks.current.onChange(after);
-        }
-        if (update.selectionSet || update.docChanged) callbacks.current.onSelection?.(mainSelectionRange(update.state));
-        if (callbacks.current.session) saveDocSession(callbacks.current.session, update.state);
+        // La sessione si salva prima di emettere: un listener sincrono può cambiare documento (anche staccare
+        // e ricollegare l'elemento), e da lì host.session() sarebbe la sessione del documento nuovo.
+        const session = host.session();
+        if (session) saveDocSession(session, update.state);
+        const life = update.view.plugin(lifecycle);
+        if (update.docChanged) host.docChanged(update.changes, { before: update.startState.doc.toString(), after: update.state.doc.toString() });
+        // Un update superato (vista distrutta, stato sostituito o già più avanti) non annuncia la sua selezione.
+        const current = life?.alive && update.view.state === update.state;
+        if (current && (update.selectionSet || update.docChanged)) host.selectionChanged(mainSelectionRange(update.state));
       }),
       EditorView.domEventHandlers({
         paste(event, view) {
           const files = imageFiles(event.clipboardData?.files);
           if (files.length === 0) return false;
           event.preventDefault();
-          insertImages(view, files, view.state.selection.main.head, callbacks);
+          insertImages(view, files, view.state.selection.main.head, host);
           return true;
         },
         drop(event, view) {
@@ -102,7 +137,7 @@ export function docExtensions(callbacks: Callbacks) {
           if (files.length === 0) return false;
           event.preventDefault();
           const pos = view.posAtCoords({ x: event.clientX, y: event.clientY }) ?? view.state.selection.main.head;
-          insertImages(view, files, pos, callbacks);
+          insertImages(view, files, pos, host);
           return true;
         },
       }),

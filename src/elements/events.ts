@@ -1,3 +1,6 @@
+import type { ChangeDesc } from '@codemirror/state';
+
+import type { TextRange } from '../ai/selectionChip';
 import type { GenParams } from '../ai/types';
 
 /**
@@ -5,14 +8,20 @@ import type { GenParams } from '../ai/types';
  * trattino. In React 19 si ascoltano con la prop `on<nome>` (es. `onhmd-toast-dismiss`).
  */
 export interface HmdEvents {
+  /** Diff della revisione AI: rifiutato l'ultimo blocco rimasto (equivale a scartare la proposta). */
+  'hmd-ai-all-rejected': CustomEvent<null>;
   /** Chat AI: aprire il documento di un messaggio. */
   'hmd-ai-open-file': CustomEvent<{ path: string }>;
+  /** Diff della revisione AI: proposta modificata a mano (anche da un rifiuto), testo intero del lato destro. */
+  'hmd-ai-proposal-edit': CustomEvent<{ text: string }>;
   /** Chat AI: ripetere un messaggio fallito (`removeRejected`: senza i parametri che il provider ha rifiutato). */
   'hmd-ai-retry': CustomEvent<{ id: string; removeRejected: boolean }>;
   /** Suggerimento scelto sotto il composer: invia il preset. */
   'hmd-ai-suggestion': CustomEvent<{ presetId: string }>;
   /** Conflitto con il disco: l'utente sceglie se ricaricare o sovrascrivere. */
   'hmd-conflict': CustomEvent<{ choice: 'reload' | 'overwrite' }>;
+  /** Editor e lato documento del diff: testo cambiato (`changes` e `before` per la proposta AI, `after` da salvare). */
+  'hmd-doc-change': CustomEvent<{ changes: ChangeDesc; before: string; after: string }>;
   /** Parametri di generazione modificati (popover del modello, impostazioni di profili e preset). */
   'hmd-params-change': CustomEvent<{ params: GenParams }>;
   /** Pulsante d'azione di un avviso (es. "Aggiorna"). */
@@ -23,8 +32,13 @@ export interface HmdEvents {
   'hmd-open': CustomEvent<{ path: string }>;
   /** Anteprima: seguire un wikilink (crea la nota se manca). */
   'hmd-open-wiki': CustomEvent<{ target: string }>;
-  /** Riga sorgente (0-based, frazionaria) in cima al pannello, per lo scroll sincronizzato (anteprima; editor dalla 5b). */
+  /**
+   * Riga sorgente (0-based, frazionaria) in cima al pannello, per lo scroll sincronizzato (anteprima ed
+   * editor). Va ascoltato sull'elemento che lo manda, mai su un antenato comune: risale da entrambi.
+   */
   'hmd-top-line': CustomEvent<{ line: number }>;
+  /** Editor e lato documento del diff: selezione principale cambiata (null se vuota), per il chip del composer AI. */
+  'hmd-selection': CustomEvent<{ range: TextRange | null }>;
   /** Schermata iniziale: scegliere una cartella (anche «Apri un'altra cartella»). */
   'hmd-start-pick': CustomEvent<null>;
   /** Schermata iniziale: riprendere l'accesso alla cartella ricordata. */

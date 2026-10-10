@@ -5,23 +5,26 @@ import type { AiController } from '../../ai/aiController';
 import { isBusy, reviewStatus } from '../../ai/reviewStatus';
 import type { CheckWarning } from '../../ai/types';
 import { showConfirmDialog } from '../../elements/dialogs/confirmDialog';
-import { Editor, type EditorHandle, type EditorProps } from '../../editor/Editor';
-import { useT } from '../../i18n/I18nProvider';
+import type { HmdAiDiffPane } from '../../elements/ai/diff-pane.element';
+import type { HmdEditor } from '../../elements/editor/editor.element';
+import type { HmdEvents } from '../../elements/events';
+import { useI18nStore, useT } from '../../i18n/I18nProvider';
 import { useUnmountSignal } from '../useUnmountSignal';
-import { DiffPane, type DiffHandle } from './DiffPane';
 import { ReviewBar } from './ReviewBar';
 import styles from './ReviewView.module.css';
+import type { ReviewDoc } from './reviewDoc';
 
 interface Props {
   controller: AiController;
-  editor: EditorProps & { path: string };
+  editor: ReviewDoc;
 }
 
 export function ReviewView({ controller, editor }: Props) {
   const t = useT();
+  const i18nStore = useI18nStore();
   const state = useSyncExternalStore(controller.subscribe, controller.getState);
-  const diff = useRef<DiffHandle>(null);
-  const plain = useRef<EditorHandle>(null);
+  const diff = useRef<HmdAiDiffPane>(null);
+  const plain = useRef<HmdEditor>(null);
   const section = useRef<HTMLElement>(null);
   const shownView = useRef<'plain' | 'diff' | null>(null);
   const dialogSignal = useUnmountSignal();
@@ -42,7 +45,7 @@ export function ReviewView({ controller, editor }: Props) {
   const applied = !!p && p.status !== 'streaming' && text === editor.text;
   const status = reviewStatus({ path: editor.path, proposal: p, running: state.running, elapsedSeconds: elapsed, applied });
   const streaming = !p || status.kind === 'generating' || status.kind === 'scopeLost';
-  const range = p?.scope ? { from: p.scope.from, to: p.scope.from + p.text.length } : undefined;
+  const range = p?.scope ? { from: p.scope.from, to: p.scope.from + p.text.length } : null;
   const view: 'plain' | 'diff' = !p || (applied && status.kind === 'applied') ? 'plain' : 'diff';
 
   // Passando tra diff ed editor normale (accettato tutto, Ctrl+Z che fa ricomparire il diff…) il focus
@@ -57,6 +60,20 @@ export function ReviewView({ controller, editor }: Props) {
     if (view === 'plain') plain.current?.focus();
     else diff.current?.focus();
   }, [view]);
+
+  // Le stesse proprietà per l'editor semplice e per il lato documento del diff.
+  const docProps = {
+    text: editor.text,
+    resetKey: editor.resetKey,
+    session: editor.session,
+    restore: editor.restore,
+    readOnly: editor.readOnly,
+    getDocs: editor.getDocs,
+    saveImage: editor.saveImage,
+    i18n: i18nStore,
+    'onhmd-doc-change': (event: HmdEvents['hmd-doc-change']) => editor.docChanged(event.detail.changes, event.detail),
+    'onhmd-selection': (event: HmdEvents['hmd-selection']) => editor.selectionChanged(event.detail.range),
+  };
 
   const accept = () => {
     if (!p || !controller.beforeAccept(p, true)) return;
@@ -93,7 +110,7 @@ export function ReviewView({ controller, editor }: Props) {
           <p className={styles.hint}>{t('ai.emptyProposal')}</p>
         )}
         <div className={styles.editor}>
-          <Editor ref={plain} {...editor} />
+          <hmd-editor ref={plain} {...docProps} />
         </div>
       </section>
     );
@@ -105,7 +122,7 @@ export function ReviewView({ controller, editor }: Props) {
     return (
       <section ref={section} className={styles.review}>
         <div className={styles.editor}>
-          <Editor ref={plain} {...editor} />
+          <hmd-editor ref={plain} {...docProps} />
         </div>
       </section>
     );
@@ -136,18 +153,16 @@ export function ReviewView({ controller, editor }: Props) {
           <pre>{state.streamingPreview}</pre>
         </details>
       )}
-      <DiffPane
+      <hmd-ai-diff-pane
         ref={diff}
-        editor={editor}
+        {...docProps}
         range={range}
         proposal={text}
         canAccept={controller.canAccept(p)}
         streaming={streaming}
         beforeAccept={() => controller.beforeAccept(p)}
-        onEdit={edit}
-        acceptLabel={t('ai.acceptBlock')}
-        rejectLabel={t('ai.rejectBlock')}
-        onAllRejected={() => controller.discard(p.path)}
+        onhmd-ai-proposal-edit={(event) => edit(event.detail.text)}
+        onhmd-ai-all-rejected={() => controller.discard(p.path)}
       />
     </section>
   );

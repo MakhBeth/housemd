@@ -1,8 +1,10 @@
 import { HmdAiChatLog } from './ai/chat-log.element';
+import { HmdAiDiffPane } from './ai/diff-pane.element';
 import { HmdAiEffortChip } from './ai/effort-chip.element';
 import { HmdAiParameters } from './ai/parameters.element';
 import { HmdAiSuggestions } from './ai/suggestions.element';
 import { HmdConflictBar } from './conflict-bar/conflict-bar.element';
+import { HmdEditor } from './editor/editor.element';
 import { HmdNotice } from './notice/notice.element';
 import { HmdFrontmatterCard } from './preview/frontmatter-card.element';
 import { HmdPreview } from './preview/preview.element';
@@ -20,10 +22,12 @@ type Definitions = readonly (readonly [string, CustomElementConstructor])[];
 
 const ELEMENTS: Definitions = [
   ['hmd-ai-chat-log', HmdAiChatLog],
+  ['hmd-ai-diff-pane', HmdAiDiffPane],
   ['hmd-ai-effort-chip', HmdAiEffortChip],
   ['hmd-ai-parameters', HmdAiParameters],
   ['hmd-ai-suggestions', HmdAiSuggestions],
   ['hmd-conflict-bar', HmdConflictBar],
+  ['hmd-editor', HmdEditor],
   ['hmd-frontmatter-card', HmdFrontmatterCard],
   ['hmd-notice', HmdNotice],
   ['hmd-preview', HmdPreview],

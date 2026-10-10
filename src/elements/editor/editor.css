@@ -1,0 +1,17 @@
+@layer components {
+  @scope (hmd-editor) {
+    :scope {
+      display: contents;
+    }
+
+    :scope > .editor {
+      height: 100%;
+      overflow: hidden;
+    }
+
+    /* Lo stesso valore lo mette il tema di docExtensions (stile di CodeMirror, fuori dai layer). */
+    :scope > .editor > .cm-editor {
+      height: 100%;
+    }
+  }
+}

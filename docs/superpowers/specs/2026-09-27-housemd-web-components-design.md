@@ -3,7 +3,7 @@
 Data: 2026-09-27 · **Revisione: 2026-10-05**
 Base: `main` (HEAD `822f52d`: v1.1, strumenti AI, impostazioni a pagina, barra di formattazione,
 larghezza del testo, tooltip disegnati, albero con un solo tab stop).
-Stato: fasi 0–3 implementate (fase 0 PR #6, fase 1 PR #7, fase 2 in `main` (merge locale, commit 1b23305), fase 3 in `main` (merge locale)); fasi 4a–4c in `main` (merge del 05/10 per 4a+4b e dell'08/10 per la 4c, dal branch `feat/web-components`); fase 5a in `main` (merge del 09/10, dal branch `feat/web-components`); fasi 5b–8 ancora piano.
+Stato: fasi 0–3 implementate (fase 0 PR #6, fase 1 PR #7, fase 2 in `main` (merge locale, commit 1b23305), fase 3 in `main` (merge locale)); fasi 4a–4c in `main` (merge del 05/10 per 4a+4b e dell'08/10 per la 4c, dal branch `feat/web-components`); fasi 5a e 5b in `main` (merge del 09/10, dal branch `feat/web-components`); fasi 6–8 ancora piano.
 
 Decisioni (27/09, riviste il 01/10; risposte alle domande aperte, §12):
 
@@ -328,7 +328,10 @@ export abstract class HmdElement extends HTMLElement {
   stringa. Gli attributi riflettono solo lo stato che serve al CSS (`data-mode`, `data-state`, `aria-*`).
 - Output come `CustomEvent` tipizzati con `bubbles: true` (`hmd-open`, `hmd-tree-action`), dichiarati
   in `src/elements/events.ts`, oppure callback passate come proprietà dove l'evento non serve ad
-  altri (es. `onImage` dell'editor, che restituisce una Promise).
+  altri (es. `saveImage` dell'editor, che restituisce una Promise). Il nome di una
+  callback-proprietà non comincia mai con `on`: React 19 tratta ogni prop funzione `on…` di un
+  custom element come un listener dell'evento omonimo, anche se la proprietà esiste (misurato
+  nella fase 5b).
 - **Convivenza con React 19 (fasi 4–7).** React 19 assegna come proprietà ogni prop il cui nome
   esiste sull'istanza dell'elemento e registra come listener le prop `on<nome-evento>`. Quindi:
   `define.ts` va importato **prima** del primo render (altrimenti React vede un elemento non
@@ -535,7 +538,7 @@ Ordine: `theme-switcher`, `conflict-bar`, `notice`, `update-notice`, `toasts`, d
 
 ### Fase 5: editor, anteprima, diff (branch)
 
-Divisa in due piani: 5a (piano 8: scheda del frontmatter, anteprima, chat AI), 5b (editor e diff, CodeMirror).
+Divisa in due piani: 5a (piano 8: scheda del frontmatter, anteprima, chat AI), 5b (piano 9: editor e diff, CodeMirror).
 
 - `hmd-editor`: sposta `Editor.tsx` quasi uguale; `resetKey` diventa un setter che chiama
   `view.setState(...)` solo quando cambia; `scrollToLine`/`focus` metodi pubblici; l'evento di
@@ -551,6 +554,7 @@ Divisa in due piani: 5a (piano 8: scheda del frontmatter, anteprima, chat AI), 5
   immagini remote mai caricate (`safeRender` le rende come etichetta con l'host).
 - Scroll sincronizzato (`suppressUntil` 150 ms) identico; lo copre `sync-scroll.spec.ts`.
 - 5a **fatta**: `hmd-frontmatter-card`, `hmd-preview` (`scrollToLine()`, eventi `hmd-open`, `hmd-open-wiki`, `hmd-top-line`; render in un microtask con debounce di 150 ms solo sul testo; flag `cancelled`; cache delle immagini revocata al distacco), `hmd-ai-chat-log` (eventi `hmd-ai-open-file`, `hmd-ai-retry`); logica in `preview/previewView.ts` e `ai/chatLogView.ts`; aiuti di test `countListeners`, `waitFor`. Non portato il ramo `untrusted` dell'anteprima (nessun chiamante dal 71bf326; `ai.loadImage` resta nei locali fino alla fase 8). Cornice dell'anteprima ancorata a `:scope >` perché le classi di una nota non la stilizzino. Audit esteso a scheda completa, frontmatter non valido, errore e riepilogo della chat. Bundle principale gzip: 435 675 → 435 909 B.
+- 5b **fatta**: `hmd-editor` (`scrollToLine()`, `focus()`; eventi `hmd-doc-change`, `hmd-selection`, `hmd-top-line`) e `hmd-ai-diff-pane` (`next()`, `previous()`, `scrollToLine()`, `replace()`, `focus()`; eventi `hmd-ai-proposal-edit`, `hmd-ai-all-rejected`) sulla base comune `HmdDocElement` (`editor/docElement.ts`: proprietà del documento, `saveImage`, sessione da cui è nata la vista); `resetKey`, ripristino, sola lettura e proposta applicati in un microtask nell'ordine degli effetti di React; `docExtensions.ts` su `DocHost`, senza React; logica in `editor/editorLogic.ts` e `ai/diffLogic.ts`; aiuto di test `codemirrorEnv.ts`. StrictMode non ricrea più le viste: corretto il focus perso in sviluppo quando Ctrl+Z fa ricomparire il diff; la MergeView ricreata da un `resetKey` nuovo ridà il focus alla vista nuova. Non portati `canChange` (nessun chiamante), `getView` e `replace` dell'editor, il ref `refocus` della fase 3. Echi delle modifiche alla proposta riconosciuti (una conferma in ritardo non riporta indietro il lato destro); immagini salvate dopo la fine della vista scartate (plugin `lifecycle`). Pulsanti dei blocchi: tre proprietà `!important` dentro `@layer components` contro il foglio fuori dai layer di `@codemirror/merge`; etichette aggiornate al cambio di lingua. Audit esteso a modalità editor, revisione senza proposta, pulsanti dei blocchi al passaggio e disattivati. Bundle principale gzip: 436 004 → 435 435 B.
 
 ### Fase 6: pannelli e AI (branch)
 
@@ -643,7 +647,7 @@ nulla**. Diventa:
 `AbortSignal` di Node in `addEventListener`). Ogni `*.dom.test.ts` lo importa **come primo import**.
 `node:test` esegue ogni file in un processo separato. `npm test` è `tsx --import ./src/testing/assetHooks.ts --test`: un hook di Node per gli import `?url` delle icone e `.css` (serve Node ≥ 22.15 per `module.registerHooks`; `engines` in `package.json`).
 
-Limiti di jsdom 30.1.1, verificati nella fase 2: mancano `moveBefore`, `showModal`/`closedBy`, Popover (`popover`, `showPopover`), `commandForElement`, `CSS.highlights`/`Highlight`, Anchor Positioning. Ci sono `customElements`, `MutationObserver`, `role`/`ariaLabel` come proprietà; `addEventListener` accetta solo l'`AbortSignal` della stessa `window` (quello di Node dà `TypeError`). jsdom, come Chromium, toglie il focus a un nodo spostato con `insertBefore`; che `moveBefore` lo conservi si verifica solo in Chromium, con gli e2e della fase 6 su albero e ricerca. Lo stub `src/testing/dialogStub.ts` imita `showModal`/`close`/`returnValue` e `command="close"`. Gli stub entrano nel test che li usa, dalla fase 4; i comportamenti reali li verifica Playwright o la checklist manuale.
+Limiti di jsdom 30.1.1, verificati nella fase 2: mancano `moveBefore`, `showModal`/`closedBy`, Popover (`popover`, `showPopover`), `commandForElement`, `CSS.highlights`/`Highlight`, Anchor Positioning. Ci sono `customElements`, `MutationObserver`, `role`/`ariaLabel` come proprietà; `addEventListener` accetta solo l'`AbortSignal` della stessa `window` (quello di Node dà `TypeError`). jsdom, come Chromium, toglie il focus a un nodo spostato con `insertBefore`; che `moveBefore` lo conservi si verifica solo in Chromium, con gli e2e della fase 6 su albero e ricerca. Lo stub `src/testing/dialogStub.ts` imita `showModal`/`close`/`returnValue` e `command="close"`. Gli stub entrano nel test che li usa, dalla fase 4; i comportamenti reali li verifica Playwright o la checklist manuale. CodeMirror e MergeView girano in jsdom con `src/testing/codemirrorEnv.ts` (`requestAnimationFrame`, `Window` globale, rettangoli dei Range a zero; fase 5b); altezze e scroll veri li verifica Playwright.
 
 ### 8.3 Test statici nuovi (`architecture.test.ts`)
 
@@ -815,6 +819,7 @@ wikilink:
    `docs/superpowers/plans/2026-10-05-housemd-wc-05-fase-4a-infrastruttura-e-foglie.md` (fase 4a, branch `feat/web-components`);
    `docs/superpowers/plans/2026-10-05-housemd-wc-06-fase-4b-dialog.md` (fase 4b);
    `docs/superpowers/plans/2026-10-05-housemd-wc-07-fase-4c-start-e-foglie-ai.md` (fase 4c);
-   `docs/superpowers/plans/2026-10-09-housemd-wc-08-fase-5a-anteprima-e-chat.md` (fase 5a).
+   `docs/superpowers/plans/2026-10-09-housemd-wc-08-fase-5a-anteprima-e-chat.md` (fase 5a);
+   `docs/superpowers/plans/2026-10-09-housemd-wc-09-fase-5b-editor-e-diff.md` (fase 5b).
 3. Fasi 4–6 (elementi in convivenza).
 4. Fasi 7–8 (impostazioni, workspace, via React, rifinitura, richiesta di merge).

@@ -7,7 +7,6 @@ import { ReviewView } from './ai/ReviewView';
 import { useAiSync } from './ai/settings/AiSyncSection';
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 
-import { Editor, type EditorHandle } from '../editor/Editor';
 import { requestAccess } from '../fs/access';
 import { useI18n, useI18nStore } from '../i18n/I18nProvider';
 import type { MessageKey } from '../i18n/messages';
@@ -15,6 +14,7 @@ import { readLastFile, readPref, readValidPref, writeLastFile, writePref } from 
 import { parseTextWidth, textWidthVars } from '../lib/textWidth';
 import { APP_TITLE, pageTitle } from '../lib/pageTitle';
 import type { SettingsSection } from '../lib/route';
+import type { HmdEditor } from '../elements/editor/editor.element';
 import type { HmdPreview } from '../elements/preview/preview.element';
 import { getThemeStore, useTheme } from '../theme/useTheme';
 import type { Workspace } from '../workspace/workspace';
@@ -115,7 +115,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
   useEffect(() => {
     if (!hasDoc) setHistoryOpen(false);
   }, [hasDoc]);
-  const editorRef = useRef<EditorHandle>(null);
+  const editorRef = useRef<HmdEditor>(null);
   const previewRef = useRef<HmdPreview>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const reopened = useRef(false);
@@ -125,6 +125,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
   const files = useMemo(() => state.entries.filter((e) => e.kind === 'file').map((e) => e.path), [state.entries]);
   const getDocs = useCallback(() => workspace.search.titles(), [workspace]);
   const readBlob = useCallback((path: string) => workspace.readBlob(path), [workspace]);
+  const saveImage = useCallback((file: File) => workspace.saveImage(file, file.name), [workspace]);
   const toastItems = useMemo<ToastItem[]>(
     () => [
       ...state.toasts.map((toast) => ({ key: `ws-${toast.id}`, kind: toast.kind, text: t(`toast.${toast.code}`, toast.params) })),
@@ -478,25 +479,47 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
           <hmd-conflict-bar i18n={i18nStore} onhmd-conflict={(event) => void workspace.resolveConflict(event.detail.choice)} />
         )}
 
-        {doc && shownMode === 'ai' && ai ? <ReviewView controller={ai} editor={{ path: doc.path, text: doc.text, resetKey: `${doc.path}#${doc.revision}`, session, restore: doc.restore, readOnly: state.updating, getDocs, onChange: text => workspace.edit(text), onTransactions: (changes, texts) => ai.documentChanged(doc.path, changes, false, texts), onImage: file => workspace.saveImage(file, file.name), onTopLine: () => {}, onSelection }} /> : doc ? (
+        {doc && shownMode === 'ai' && ai ? (
+          <ReviewView
+            controller={ai}
+            editor={{
+              path: doc.path,
+              text: doc.text,
+              resetKey: `${doc.path}#${doc.revision}`,
+              session,
+              restore: doc.restore,
+              readOnly: state.updating,
+              getDocs,
+              saveImage,
+              docChanged: (changes, texts) => {
+                ai.documentChanged(doc.path, changes, false, texts);
+                workspace.edit(texts.after);
+              },
+              selectionChanged: onSelection,
+            }}
+          />
+        ) : doc ? (
           <div className={styles.panes} data-mode={panesMode(shownMode, historyOpen)}>
             {shownMode !== 'preview' && (
               <section className={styles.pane} aria-label={t('pane.editor')}>
-                <Editor
+                <hmd-editor
                   ref={editorRef}
-                  session={session}
-                  onTransactions={(changes, texts) => ai?.documentChanged(doc.path, changes, false, texts)}
                   text={doc.text}
                   resetKey={`${doc.path}#${doc.revision}`}
+                  session={session}
                   restore={doc.restore}
                   readOnly={state.updating}
                   getDocs={getDocs}
-                  onChange={(text) => workspace.edit(text)}
-                  onImage={(file) => workspace.saveImage(file, file.name)}
-                  onTopLine={(line) => {
-                    if (shownMode === 'split') previewRef.current?.scrollToLine(line);
+                  saveImage={saveImage}
+                  i18n={i18nStore}
+                  onhmd-doc-change={(event) => {
+                    ai?.documentChanged(doc.path, event.detail.changes, false, event.detail);
+                    workspace.edit(event.detail.after);
                   }}
-                  onSelection={onSelection}
+                  onhmd-selection={(event) => onSelection(event.detail.range)}
+                  onhmd-top-line={(event) => {
+                    if (shownMode === 'split') previewRef.current?.scrollToLine(event.detail.line);
+                  }}
                 />
               </section>
             )}
