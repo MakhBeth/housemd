@@ -361,6 +361,111 @@ const STATES: State[] = [
     },
   },
   {
+    name: 'tree-rows',
+    async setup(app, page) {
+      // Bozza (autosalvataggio spento e cambio file), immagine, cartella vuota aperta, file annidato aperto.
+      await page.addInitScript(() => localStorage.setItem('housemd:autosave', JSON.stringify({ mode: 'off', delayMs: 1000 })));
+      await app.openFolder({ 'a.md': 'A', 'b.md': 'B', 'docs/guide.md': '# Guide', 'pic.png': { base64: PIXEL_PNG_BASE64 } });
+      await app.openFile('a.md');
+      await app.typeAtEnd(' edited');
+      await app.tree().locator('summary').filter({ hasText: 'docs' }).click();
+      await app.openFile('guide.md');
+      await expect(app.treeFileWithDraft('a.md')).toBeVisible();
+      await page.getByRole('button', { name: app.t('folder.new') }).first().click();
+      await page.getByRole('dialog', { name: app.t('folder.new') }).getByRole('textbox').fill('empty');
+      await page.keyboard.press('Enter');
+      await app.tree().locator('summary').filter({ hasText: 'empty' }).click();
+      await expect(app.tree().getByText(app.t('tree.emptyFolder'), { exact: true })).toBeVisible();
+    },
+  },
+  {
+    name: 'tree-row-hover',
+    keepMouse: true,
+    async setup(app, page) {
+      await app.openFolder({ 'a.md': 'A', 'b.md': 'B', 'docs/guide.md': '# Guide' });
+      await app.openFile('a.md');
+      // Al passaggio sulla riga compare il pulsante ⋯ (opacità 1) e la riga si colora.
+      await app.treeFile('b.md').hover();
+      const more = page.getByRole('button', { name: app.t('tree.actions', { name: 'b.md' }) });
+      await expect.poll(() => more.evaluate((b) => getComputedStyle(b).opacity)).toBe('1');
+    },
+  },
+  {
+    name: 'tree-focus-keyboard',
+    async setup(app, page) {
+      await app.openFolder({ 'a.md': 'A', 'b.md': 'B', 'docs/guide.md': '# Guide' });
+      await app.openFile('a.md');
+      // Come focus-ring.spec.ts: l'ultima interazione è la tastiera; poi Tab fino alla riga del file aperto.
+      await page.getByRole('button', { name: app.t('folder.new') }).first().click();
+      await page.keyboard.press('Escape');
+      await page.keyboard.press('Tab'); // ricerca
+      await page.keyboard.press('Tab'); // albero: il file aperto
+      await expect(app.treeFile('a.md')).toBeFocused();
+      await page.keyboard.press('ArrowUp'); // la cartella: il ⋯ dentro il <summary> compare con :focus-within
+      await expect(app.tree().locator('summary').filter({ hasText: 'docs' })).toBeFocused();
+    },
+  },
+  {
+    name: 'search-results',
+    async setup(app, page) {
+      await app.openFolder({ 'alpha.md': '# Alpha\n\nThe quick brown fox jumps.', 'sub/gamma.md': '# Gamma\n\nAnother fox story.' });
+      await page.getByRole('searchbox', { name: app.t('search.label') }).fill('fox');
+      const results = page.getByRole('list', { name: app.t('search.results') });
+      await expect(results.getByRole('button')).toHaveCount(2);
+      await expect(results.locator('mark').first()).toBeVisible();
+    },
+  },
+  {
+    name: 'search-result-hover',
+    keepMouse: true,
+    async setup(app, page) {
+      await app.openFolder({ 'alpha.md': '# Alpha\n\nThe quick brown fox jumps.', 'sub/gamma.md': '# Gamma\n\nAnother fox story.' });
+      await page.getByRole('searchbox', { name: app.t('search.label') }).fill('fox');
+      const first = page.getByRole('list', { name: app.t('search.results') }).getByRole('button').first();
+      await first.hover();
+      await expect.poll(() => first.evaluate((b) => getComputedStyle(b).backgroundColor)).not.toBe('rgba(0, 0, 0, 0)');
+    },
+  },
+  {
+    name: 'search-none',
+    async setup(app, page) {
+      await app.openFolder({ 'alpha.md': '# Alpha' });
+      await page.getByRole('searchbox', { name: app.t('search.label') }).fill('zzzzqqq');
+      await expect(page.getByText(app.t('search.none'), { exact: true })).toBeVisible();
+    },
+  },
+  {
+    name: 'history-empty',
+    async setup(app, page) {
+      await page.clock.install({ time: NOW });
+      await app.openFolder({ 'note.md': 'v0' });
+      await app.openFile('note.md');
+      await page.getByRole('button', { name: app.t('toolbar.history') }).click();
+      await expect(page.getByRole('region', { name: app.t('toolbar.history') }).getByText(app.t('history.empty'))).toBeVisible();
+    },
+  },
+  {
+    name: 'history-identical',
+    async setup(app, page) {
+      await page.clock.install({ time: NOW });
+      await app.openFolder({ 'note.md': 'v0' });
+      await app.openFile('note.md');
+      await app.editor().click();
+      await page.keyboard.press('ControlOrMeta+a');
+      // Come lo stato `history`: il livello della selezione di CodeMirror si disegna nel fotogramma dopo.
+      await page.waitForTimeout(100);
+      await page.keyboard.type('v1');
+      await page.waitForTimeout(100);
+      await page.keyboard.press('ControlOrMeta+s');
+      await expect.poll(() => app.disk('note.md')).toBe('v1');
+      await page.getByRole('button', { name: app.t('toolbar.history') }).click();
+      const panel = page.getByRole('region', { name: app.t('toolbar.history') });
+      await panel.getByRole('button', { name: new RegExp(app.t('history.reason.save')) }).first().click();
+      await expect(panel.getByText(app.t('history.identical'))).toBeVisible();
+      await page.clock.pauseAt(NOW.getTime() + 60_000);
+    },
+  },
+  {
     name: 'tooltip-hover',
     keepMouse: true,
     async setup(app, page) {
