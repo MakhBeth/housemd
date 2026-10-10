@@ -88,15 +88,15 @@ test('the sidebar hidden and shown again starts with an empty search', async ({ 
   await expect(results(app)).toHaveCount(0);
 });
 
-test('a result that disappears while it has the focus: where the focus goes', async ({ app, page }) => {
+test('a result that disappears while it has the focus: the focus goes back to the box', async ({ app }) => {
   await app.openFolder(FILES);
   await box(app).fill('fox');
   await results(app).getByRole('button').focus();
   await app.removeExternal('alpha.md');
   await app.windowFocus();
   await expect(app.page.getByText(app.t('search.none'), { exact: true })).toBeVisible();
-  // Difetto di oggi (React): il pulsante sparisce con il focus e il focus cade sul body. Il Task 3 lo rovescia (decisione 3).
-  await expect.poll(() => page.evaluate(() => document.activeElement === document.body)).toBe(true);
+  // Decisione 3: il focus torna nella casella, non sul body.
+  await expect(box(app)).toBeFocused();
 });
 
 test('a focused result that moves up (the index changed) keeps the focus', async ({ app }) => {

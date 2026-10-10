@@ -16,11 +16,11 @@ import { APP_TITLE, pageTitle } from '../lib/pageTitle';
 import type { SettingsSection } from '../lib/route';
 import type { HmdEditor } from '../elements/editor/editor.element';
 import type { HmdPreview } from '../elements/preview/preview.element';
+import type { HmdSearchPanel } from '../elements/search-panel/search-panel.element';
 import { getThemeStore, useTheme } from '../theme/useTheme';
 import type { Workspace } from '../workspace/workspace';
 import { HistoryPanel } from './HistoryPanel';
 import { Icon } from './Icon';
-import { SearchPanel } from './SearchPanel';
 import { SettingsView } from './SettingsView';
 import { useRoute } from './useRoute';
 import { shortcutFor } from './shortcuts';
@@ -116,7 +116,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
   }, [hasDoc]);
   const editorRef = useRef<HmdEditor>(null);
   const previewRef = useRef<HmdPreview>(null);
-  const searchRef = useRef<HTMLInputElement>(null);
+  const searchRef = useRef<HmdSearchPanel>(null);
   const reopened = useRef(false);
   const [orphans, setOrphans] = useState<string[]>([]);
 
@@ -272,7 +272,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
         .with('search', () => {
           if (shownMode === 'ai') changeMode(lastPane.current);
           setSidebar(true);
-          requestAnimationFrame(() => searchRef.current?.focus());
+          requestAnimationFrame(() => searchRef.current?.focusInput());
         })
         .with('toggleAi', () => {
           if (ai) changeMode(shownMode === 'ai' ? lastPane.current : 'ai');
@@ -392,7 +392,13 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
                 <Icon name="newFolder" />
               </button>
             </div>
-            <SearchPanel ref={searchRef} index={workspace.search} indexRevision={state.indexRevision} onOpen={openFile} />
+            <hmd-search-panel
+              ref={searchRef}
+              index={workspace.search}
+              indexRevision={state.indexRevision}
+              i18n={i18nStore}
+              onhmd-search-open={(event) => void openFile(event.detail.path, event.detail.terms)}
+            />
             {orphans.length > 0 && (
               <section className={styles.orphans} aria-label={t('orphans.title')}>
                 <h2 className={styles.orphansTitle}>{t('orphans.title')}</h2>

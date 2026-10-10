@@ -41,13 +41,15 @@ export interface HmdEvents {
   'hmd-top-line': CustomEvent<{ line: number }>;
   /** Editor e lato documento del diff: selezione principale cambiata (null se vuota), per il chip del composer AI. */
   'hmd-selection': CustomEvent<{ range: TextRange | null }>;
+  /** Ricerca: aprire un risultato (clic o Invio sul primo), con i termini da evidenziare nell'anteprima. */
+  'hmd-search-open': CustomEvent<{ path: string; terms: string[] }>;
   /** Schermata iniziale: scegliere una cartella (anche «Apri un'altra cartella»). */
   'hmd-start-pick': CustomEvent<null>;
   /** Schermata iniziale: riprendere l'accesso alla cartella ricordata. */
   'hmd-start-resume': CustomEvent<null>;
-  /** Chiusura di un toast (dal pulsante o dal timer dei toast informativi). */
   /** Albero dei file: voce del menu ⋯ scelta (`node`: la riga del menu; null solo prima di aprirlo). */
   'hmd-tree-action': CustomEvent<{ action: TreeAction; node: TreeNode | null }>;
+  /** Chiusura di un toast (dal pulsante o dal timer dei toast informativi). */
   'hmd-toast-dismiss': CustomEvent<{ key: string }>;
 }
 

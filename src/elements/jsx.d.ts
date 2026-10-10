@@ -20,6 +20,7 @@ import type { SaveImage } from './editor/docElement';
 import type { HmdEditor } from './editor/editor.element';
 import type { HmdEvents } from './events';
 import type { HmdPreview } from './preview/preview.element';
+import type { HmdSearchPanel, SearchSource } from './search-panel/search-panel.element';
 import type { StartMode } from './start-screen/startView';
 import type { ToastItem } from './toasts/toasts.element';
 
@@ -62,6 +63,9 @@ declare module 'react' {
         { text: string; path: string; files: string[]; config: HouseConfig; readBlob: (path: string) => Promise<Blob>; highlight: string[]; i18n: I18nStore },
         'hmd-open' | 'hmd-open-wiki' | 'hmd-top-line'
       > & { ref?: Ref<HmdPreview> };
+      'hmd-search-panel': HmdProps<{ index: SearchSource; indexRevision: number; i18n: I18nStore }, 'hmd-search-open'> & {
+        ref?: Ref<HmdSearchPanel>;
+      };
       'hmd-start-screen': HmdProps<
         { mode: StartMode; reason: UnsupportedReason; error: string; folderName: string; busy: boolean; i18n: I18nStore },
         'hmd-start-pick' | 'hmd-start-resume'
