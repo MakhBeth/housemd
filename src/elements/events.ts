@@ -2,6 +2,8 @@ import type { ChangeDesc } from '@codemirror/state';
 
 import type { TextRange } from '../ai/selectionChip';
 import type { GenParams } from '../ai/types';
+import type { TreeNode } from '../ui/tree';
+import type { TreeAction } from './workspace/dialogFor';
 
 /**
  * Eventi che gli elementi mandano verso chi li usa (spec WC §5.1): `bubbles: true`, nomi minuscoli con
@@ -28,7 +30,7 @@ export interface HmdEvents {
   'hmd-notice-action': CustomEvent<null>;
   /** Chiusura di un avviso. */
   'hmd-notice-dismiss': CustomEvent<null>;
-  /** Anteprima: aprire un file markdown (link relativo nel testo). */
+  /** Anteprima (link relativo nel testo) e albero dei file (clic su un file): aprire un file markdown. */
   'hmd-open': CustomEvent<{ path: string }>;
   /** Anteprima: seguire un wikilink (crea la nota se manca). */
   'hmd-open-wiki': CustomEvent<{ target: string }>;
@@ -44,6 +46,8 @@ export interface HmdEvents {
   /** Schermata iniziale: riprendere l'accesso alla cartella ricordata. */
   'hmd-start-resume': CustomEvent<null>;
   /** Chiusura di un toast (dal pulsante o dal timer dei toast informativi). */
+  /** Albero dei file: voce del menu ⋯ scelta (`node`: la riga del menu; null solo prima di aprirlo). */
+  'hmd-tree-action': CustomEvent<{ action: TreeAction; node: TreeNode | null }>;
   'hmd-toast-dismiss': CustomEvent<{ key: string }>;
 }
 

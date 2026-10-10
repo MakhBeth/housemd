@@ -13,6 +13,7 @@ import type { DocTitle } from '../search/searchIndex';
 import type { UpdateFlow } from '../pwa/updateFlow';
 import type { I18nStore } from '../state/i18nStore';
 import type { ThemeStore } from '../state/themeStore';
+import type { TreeNode } from '../ui/tree';
 import type { AiChipController } from './ai/aiChips';
 import type { HmdAiDiffPane } from './ai/diff-pane.element';
 import type { SaveImage } from './editor/docElement';
@@ -49,6 +50,10 @@ declare module 'react' {
       'hmd-ai-suggestions': HmdProps<{ controller: AiChipController; i18n: I18nStore }, 'hmd-ai-suggestion'>;
       'hmd-conflict-bar': HmdProps<{ i18n: I18nStore }, 'hmd-conflict'>;
       'hmd-editor': HmdDocProps<'hmd-top-line'> & { ref?: Ref<HmdEditor> };
+      'hmd-file-tree': HmdProps<
+        { nodes: readonly TreeNode[]; openPath: string | null; drafts: ReadonlySet<string>; i18n: I18nStore },
+        'hmd-open' | 'hmd-tree-action'
+      >;
       'hmd-notice': HmdProps<
         { message: string; actionLabel: string; busy: boolean; dismissLabel: string; dismissible: boolean; placement: 'top' | 'bottom' },
         'hmd-notice-action' | 'hmd-notice-dismiss'

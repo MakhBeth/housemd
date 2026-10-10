@@ -90,7 +90,7 @@ test('the tree follows the interface language', async ({ app, page }) => {
   await expect(tree.getByRole('button', { name: it('tree.rename'), exact: true })).toBeVisible();
 });
 
-test('deleting the file whose row has the focus: where the focus goes', async ({ app, page }) => {
+test('deleting the file whose row has the focus: the focus goes to the open file', async ({ app, page }) => {
   await app.openFolder({ 'a.md': 'A', 'b.md': 'B' });
   await app.openFile('a.md');
   await app.treeFile('b.md').focus();
@@ -99,11 +99,11 @@ test('deleting the file whose row has the focus: where the focus goes', async ({
   const dialog = page.getByRole('dialog', { name: app.t('dialog.delete.title', { name: 'b.md' }) });
   await dialog.getByRole('button', { name: app.t('dialog.delete.confirm') }).click();
   await expect(app.treeFile('b.md')).toHaveCount(0);
-  // Difetto di oggi (React): la riga sparisce con il focus e il focus cade sul body. Il Task 2 lo rovescia (decisione 3).
-  await expect.poll(() => page.evaluate(() => document.activeElement === document.body)).toBe(true);
+  // Decisione 3: il focus va sulla riga col tab stop (il file aperto), non sul body.
+  await expect(app.treeFile('a.md')).toBeFocused();
 });
 
-test('renaming the open file from its row: where the focus goes', async ({ app, page }) => {
+test('renaming the open file from its row: the focus goes to the renamed row', async ({ app, page }) => {
   await app.openFolder({ 'a.md': 'A', 'b.md': 'B', 'c.md': 'C' });
   await app.openFile('b.md');
   await app.treeFile('b.md').focus();
@@ -112,6 +112,6 @@ test('renaming the open file from its row: where the focus goes', async ({ app, 
   await page.keyboard.type('renamed');
   await page.keyboard.press('Enter');
   await app.expectOpen('renamed.md');
-  // Difetto di oggi (React): la riga di prima sparisce con il focus e il focus cade sul body. Il Task 2 lo rovescia (decisione 3).
-  await expect.poll(() => page.evaluate(() => document.activeElement === document.body)).toBe(true);
+  // Decisione 3: la riga di prima è sparita; il tab stop è il file aperto, cioè la riga rinominata.
+  await expect(app.treeFile('renamed.md')).toBeFocused();
 });

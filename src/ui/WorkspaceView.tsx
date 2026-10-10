@@ -18,7 +18,6 @@ import type { HmdEditor } from '../elements/editor/editor.element';
 import type { HmdPreview } from '../elements/preview/preview.element';
 import { getThemeStore, useTheme } from '../theme/useTheme';
 import type { Workspace } from '../workspace/workspace';
-import { FileTree, type TreeAction } from './FileTree';
 import { HistoryPanel } from './HistoryPanel';
 import { Icon } from './Icon';
 import { SearchPanel } from './SearchPanel';
@@ -31,7 +30,7 @@ import { useWorkspaceState } from './useWorkspace';
 import styles from './WorkspaceView.module.css';
 import { match } from 'ts-pattern';
 import { showAccessLostDialog } from '../elements/dialogs/accessLostDialog';
-import { dialogFor } from '../elements/workspace/dialogFor';
+import { dialogFor, type TreeAction } from '../elements/workspace/dialogFor';
 import { runTreeDialog } from '../elements/workspace/treeDialogs';
 import { useUnmountSignal } from './useUnmountSignal';
 import { allowedInSettings } from '../elements/workspace/keymap';
@@ -410,7 +409,14 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
                 ))}
               </section>
             )}
-            <FileTree nodes={tree} openPath={doc?.path ?? null} drafts={drafts} onOpen={(path) => openFile(path)} onAction={onTreeAction} />
+            <hmd-file-tree
+              nodes={tree}
+              openPath={doc?.path ?? null}
+              drafts={drafts}
+              i18n={i18nStore}
+              onhmd-open={(event) => void openFile(event.detail.path)}
+              onhmd-tree-action={(event) => onTreeAction(event.detail.action, event.detail.node)}
+            />
             </>}
           </aside>
           <div
