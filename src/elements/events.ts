@@ -2,6 +2,8 @@ import type { ChangeDesc } from '@codemirror/state';
 
 import type { TextRange } from '../ai/selectionChip';
 import type { GenParams } from '../ai/types';
+import type { TreeNode } from '../ui/tree';
+import type { TreeAction } from './workspace/dialogFor';
 
 /**
  * Eventi che gli elementi mandano verso chi li usa (spec WC §5.1): `bubbles: true`, nomi minuscoli con
@@ -22,13 +24,17 @@ export interface HmdEvents {
   'hmd-conflict': CustomEvent<{ choice: 'reload' | 'overwrite' }>;
   /** Editor e lato documento del diff: testo cambiato (`changes` e `before` per la proposta AI, `after` da salvare). */
   'hmd-doc-change': CustomEvent<{ changes: ChangeDesc; before: string; after: string }>;
+  /** Cronologia: chiudere il pannello. */
+  'hmd-history-close': CustomEvent<null>;
+  /** Cronologia: ripristinare la versione `id` (il workspace la applica come transazione dell'editor, annullabile). */
+  'hmd-history-restore': CustomEvent<{ id: number }>;
   /** Parametri di generazione modificati (popover del modello, impostazioni di profili e preset). */
   'hmd-params-change': CustomEvent<{ params: GenParams }>;
   /** Pulsante d'azione di un avviso (es. "Aggiorna"). */
   'hmd-notice-action': CustomEvent<null>;
   /** Chiusura di un avviso. */
   'hmd-notice-dismiss': CustomEvent<null>;
-  /** Anteprima: aprire un file markdown (link relativo nel testo). */
+  /** Anteprima (link relativo nel testo) e albero dei file (clic su un file): aprire un file markdown. */
   'hmd-open': CustomEvent<{ path: string }>;
   /** Anteprima: seguire un wikilink (crea la nota se manca). */
   'hmd-open-wiki': CustomEvent<{ target: string }>;
@@ -39,10 +45,14 @@ export interface HmdEvents {
   'hmd-top-line': CustomEvent<{ line: number }>;
   /** Editor e lato documento del diff: selezione principale cambiata (null se vuota), per il chip del composer AI. */
   'hmd-selection': CustomEvent<{ range: TextRange | null }>;
+  /** Ricerca: aprire un risultato (clic o Invio sul primo), con i termini da evidenziare nell'anteprima. */
+  'hmd-search-open': CustomEvent<{ path: string; terms: string[] }>;
   /** Schermata iniziale: scegliere una cartella (anche «Apri un'altra cartella»). */
   'hmd-start-pick': CustomEvent<null>;
   /** Schermata iniziale: riprendere l'accesso alla cartella ricordata. */
   'hmd-start-resume': CustomEvent<null>;
+  /** Albero dei file: voce del menu ⋯ scelta (`node`: la riga del menu; null solo prima di aprirlo). */
+  'hmd-tree-action': CustomEvent<{ action: TreeAction; node: TreeNode | null }>;
   /** Chiusura di un toast (dal pulsante o dal timer dei toast informativi). */
   'hmd-toast-dismiss': CustomEvent<{ key: string }>;
 }

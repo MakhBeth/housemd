@@ -3,7 +3,7 @@
 Data: 2026-09-27 · **Revisione: 2026-10-05**
 Base: `main` (HEAD `822f52d`: v1.1, strumenti AI, impostazioni a pagina, barra di formattazione,
 larghezza del testo, tooltip disegnati, albero con un solo tab stop).
-Stato: fasi 0–3 implementate (fase 0 PR #6, fase 1 PR #7, fase 2 in `main` (merge locale, commit 1b23305), fase 3 in `main` (merge locale)); fasi 4a–4c in `main` (merge del 05/10 per 4a+4b e dell'08/10 per la 4c, dal branch `feat/web-components`); fasi 5a e 5b in `main` (merge del 09/10, dal branch `feat/web-components`); fasi 6–8 ancora piano.
+Stato: fasi 0–3 implementate (fase 0 PR #6, fase 1 PR #7, fase 2 in `main` (merge locale, commit 1b23305), fase 3 in `main` (merge locale)); fasi 4a–4c in `main` (merge del 05/10 per 4a+4b e dell'08/10 per la 4c, dal branch `feat/web-components`); fasi 5a e 5b in `main` (merge del 09/10, dal branch `feat/web-components`); fase 6a sul branch `feat/web-components`, in `main` al merge della sotto-fase; fasi 6b–8 ancora piano.
 
 Decisioni (27/09, riviste il 01/10; risposte alle domande aperte, §12):
 
@@ -558,6 +558,8 @@ Divisa in due piani: 5a (piano 8: scheda del frontmatter, anteprima, chat AI), 5
 
 ### Fase 6: pannelli e AI (branch)
 
+Divisa in tre piani: 6a (piano 10: albero, ricerca, cronologia), 6b (selettore e chip del modello, composer, sidebar AI: condividono `Composer.module.css`), 6c (barra e vista della revisione: condividono `ReviewView.module.css`; corregge il focus perso da «Scarta» dopo un «Accetta tutto» completo).
+
 - `hmd-file-tree`: `treeState.ts` + `treeNav.ts` (un solo tab stop, frecce, menu da tastiera);
   `reconcileList` per livello; `<details>` nativo; menu `popover="auto"` ancorato.
 - `hmd-search-panel`: debounce 120 ms, Invio, Esc; `segments()` → `<mark>`; il campo non viene mai
@@ -566,6 +568,7 @@ Divisa in due piani: 5a (piano 8: scheda del frontmatter, anteprima, chat AI), 5
 - AI: `hmd-ai-composer` (`composerKeys`, chip della selezione, `focus()` pubblico),
   `hmd-ai-model-chip`/`model-select` (popover, nota privacy), `hmd-ai-review-bar`
   (`reviewStatus`), `hmd-ai-review`, `hmd-ai-sidebar`.
+- 6a **fatta**: `hmd-file-tree` (eventi `hmd-open`, `hmd-tree-action`; `<details>` nativo, tutte le righe nel DOM anche nelle cartelle chiuse, un solo tab stop e menu da tastiera con `ui/treeNav.ts` com'era, menu ⋯ `popover="auto"` ancorato al pulsante con `anchor-name`; logica in `file-tree/treeView.ts`), `hmd-search-panel` (`focusInput()`, evento `hmd-search-open` con i termini; campo creato una volta e mai riscritto, pausa di 120 ms, `segments()` → `<mark>`; `search-panel/searchView.ts`), `hmd-history-panel` (eventi `hmd-history-restore`, `hmd-history-close`; ingresso `workspace` come `HistorySource`; risposte di `listHistory` superate o tardive scartate; `history-panel/historyView.ts`). I setter disegnano subito, con un render alla volta (`#update()` e `#rendering`); la pausa della ricerca interrotta dal distacco riparte al ricollegamento; il diff della cronologia è memorizzato come con `useMemo`. Cambiato di proposito (decisione 3 del piano 10): quando il nodo con il focus sparisce il focus va sulla riga col tab stop, nel campo di ricerca o sulla versione scelta, non più sul `body`. Audit esteso a righe con bozza/asset/cartella vuota, passaggio e focus da tastiera sulle righe, risultati, nessun risultato, cronologia vuota e identica. Bundle principale gzip: 435 509 → 436 972 B.
 
 ### Fase 7: impostazioni, `hmd-workspace`, `hmd-app`, via React (branch)
 
@@ -647,7 +650,7 @@ nulla**. Diventa:
 `AbortSignal` di Node in `addEventListener`). Ogni `*.dom.test.ts` lo importa **come primo import**.
 `node:test` esegue ogni file in un processo separato. `npm test` è `tsx --import ./src/testing/assetHooks.ts --test`: un hook di Node per gli import `?url` delle icone e `.css` (serve Node ≥ 22.15 per `module.registerHooks`; `engines` in `package.json`).
 
-Limiti di jsdom 30.1.1, verificati nella fase 2: mancano `moveBefore`, `showModal`/`closedBy`, Popover (`popover`, `showPopover`), `commandForElement`, `CSS.highlights`/`Highlight`, Anchor Positioning. Ci sono `customElements`, `MutationObserver`, `role`/`ariaLabel` come proprietà; `addEventListener` accetta solo l'`AbortSignal` della stessa `window` (quello di Node dà `TypeError`). jsdom, come Chromium, toglie il focus a un nodo spostato con `insertBefore`; che `moveBefore` lo conservi si verifica solo in Chromium, con gli e2e della fase 6 su albero e ricerca. Lo stub `src/testing/dialogStub.ts` imita `showModal`/`close`/`returnValue` e `command="close"`. Gli stub entrano nel test che li usa, dalla fase 4; i comportamenti reali li verifica Playwright o la checklist manuale. CodeMirror e MergeView girano in jsdom con `src/testing/codemirrorEnv.ts` (`requestAnimationFrame`, `Window` globale, rettangoli dei Range a zero; fase 5b); altezze e scroll veri li verifica Playwright.
+Limiti di jsdom 30.1.1, verificati nella fase 2: mancano `moveBefore`, `showModal`/`closedBy`, Popover (`popover`, `showPopover`), `commandForElement`, `CSS.highlights`/`Highlight`, Anchor Positioning. Ci sono `customElements`, `MutationObserver`, `role`/`ariaLabel` come proprietà; `addEventListener` accetta solo l'`AbortSignal` della stessa `window` (quello di Node dà `TypeError`). jsdom, come Chromium, toglie il focus a un nodo spostato con `insertBefore`; che `moveBefore` lo conservi si verifica solo in Chromium: lo prova `e2e/search-live.spec.ts` («a focused result that moves up…», che senza `moveBefore` fallisce; fase 6a); nell'albero le righe esistenti non si riordinano mai con il focus dentro. Lo stub `src/testing/dialogStub.ts` imita `showModal`/`close`/`returnValue` e `command="close"`. Gli stub entrano nel test che li usa, dalla fase 4; i comportamenti reali li verifica Playwright o la checklist manuale. CodeMirror e MergeView girano in jsdom con `src/testing/codemirrorEnv.ts` (`requestAnimationFrame`, `Window` globale, rettangoli dei Range a zero; fase 5b); altezze e scroll veri li verifica Playwright.
 
 ### 8.3 Test statici nuovi (`architecture.test.ts`)
 
@@ -820,6 +823,7 @@ wikilink:
    `docs/superpowers/plans/2026-10-05-housemd-wc-06-fase-4b-dialog.md` (fase 4b);
    `docs/superpowers/plans/2026-10-05-housemd-wc-07-fase-4c-start-e-foglie-ai.md` (fase 4c);
    `docs/superpowers/plans/2026-10-09-housemd-wc-08-fase-5a-anteprima-e-chat.md` (fase 5a);
-   `docs/superpowers/plans/2026-10-09-housemd-wc-09-fase-5b-editor-e-diff.md` (fase 5b).
+   `docs/superpowers/plans/2026-10-09-housemd-wc-09-fase-5b-editor-e-diff.md` (fase 5b);
+   `docs/superpowers/plans/2026-10-10-housemd-wc-10-fase-6a-pannelli-del-workspace.md` (fase 6a).
 3. Fasi 4–6 (elementi in convivenza).
 4. Fasi 7–8 (impostazioni, workspace, via React, rifinitura, richiesta di merge).

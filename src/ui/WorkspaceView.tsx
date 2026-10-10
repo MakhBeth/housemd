@@ -16,12 +16,10 @@ import { APP_TITLE, pageTitle } from '../lib/pageTitle';
 import type { SettingsSection } from '../lib/route';
 import type { HmdEditor } from '../elements/editor/editor.element';
 import type { HmdPreview } from '../elements/preview/preview.element';
+import type { HmdSearchPanel } from '../elements/search-panel/search-panel.element';
 import { getThemeStore, useTheme } from '../theme/useTheme';
 import type { Workspace } from '../workspace/workspace';
-import { FileTree, type TreeAction } from './FileTree';
-import { HistoryPanel } from './HistoryPanel';
 import { Icon } from './Icon';
-import { SearchPanel } from './SearchPanel';
 import { SettingsView } from './SettingsView';
 import { useRoute } from './useRoute';
 import { shortcutFor } from './shortcuts';
@@ -31,7 +29,7 @@ import { useWorkspaceState } from './useWorkspace';
 import styles from './WorkspaceView.module.css';
 import { match } from 'ts-pattern';
 import { showAccessLostDialog } from '../elements/dialogs/accessLostDialog';
-import { dialogFor } from '../elements/workspace/dialogFor';
+import { dialogFor, type TreeAction } from '../elements/workspace/dialogFor';
 import { runTreeDialog } from '../elements/workspace/treeDialogs';
 import { useUnmountSignal } from './useUnmountSignal';
 import { allowedInSettings } from '../elements/workspace/keymap';
@@ -117,7 +115,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
   }, [hasDoc]);
   const editorRef = useRef<HmdEditor>(null);
   const previewRef = useRef<HmdPreview>(null);
-  const searchRef = useRef<HTMLInputElement>(null);
+  const searchRef = useRef<HmdSearchPanel>(null);
   const reopened = useRef(false);
   const [orphans, setOrphans] = useState<string[]>([]);
 
@@ -273,7 +271,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
         .with('search', () => {
           if (shownMode === 'ai') changeMode(lastPane.current);
           setSidebar(true);
-          requestAnimationFrame(() => searchRef.current?.focus());
+          requestAnimationFrame(() => searchRef.current?.focusInput());
         })
         .with('toggleAi', () => {
           if (ai) changeMode(shownMode === 'ai' ? lastPane.current : 'ai');
@@ -393,7 +391,13 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
                 <Icon name="newFolder" />
               </button>
             </div>
-            <SearchPanel ref={searchRef} index={workspace.search} indexRevision={state.indexRevision} onOpen={openFile} />
+            <hmd-search-panel
+              ref={searchRef}
+              index={workspace.search}
+              indexRevision={state.indexRevision}
+              i18n={i18nStore}
+              onhmd-search-open={(event) => void openFile(event.detail.path, event.detail.terms)}
+            />
             {orphans.length > 0 && (
               <section className={styles.orphans} aria-label={t('orphans.title')}>
                 <h2 className={styles.orphansTitle}>{t('orphans.title')}</h2>
@@ -410,7 +414,14 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
                 ))}
               </section>
             )}
-            <FileTree nodes={tree} openPath={doc?.path ?? null} drafts={drafts} onOpen={(path) => openFile(path)} onAction={onTreeAction} />
+            <hmd-file-tree
+              nodes={tree}
+              openPath={doc?.path ?? null}
+              drafts={drafts}
+              i18n={i18nStore}
+              onhmd-open={(event) => void openFile(event.detail.path)}
+              onhmd-tree-action={(event) => onTreeAction(event.detail.action, event.detail.node)}
+            />
             </>}
           </aside>
           <div
@@ -525,13 +536,14 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
             )}
             {historyOpen ? (
               <section className={styles.pane} aria-label={t('toolbar.history')}>
-                <HistoryPanel
+                <hmd-history-panel
                   key={doc.path}
                   workspace={workspace}
                   path={doc.path}
                   currentText={doc.text}
-                  onRestore={restoreVersion}
-                  onClose={() => setHistoryOpen(false)}
+                  i18n={i18nStore}
+                  onhmd-history-restore={(event) => restoreVersion(event.detail.id)}
+                  onhmd-history-close={() => setHistoryOpen(false)}
                 />
               </section>
             ) : (

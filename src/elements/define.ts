@@ -5,9 +5,12 @@ import { HmdAiParameters } from './ai/parameters.element';
 import { HmdAiSuggestions } from './ai/suggestions.element';
 import { HmdConflictBar } from './conflict-bar/conflict-bar.element';
 import { HmdEditor } from './editor/editor.element';
+import { HmdFileTree } from './file-tree/file-tree.element';
+import { HmdHistoryPanel } from './history-panel/history-panel.element';
 import { HmdNotice } from './notice/notice.element';
 import { HmdFrontmatterCard } from './preview/frontmatter-card.element';
 import { HmdPreview } from './preview/preview.element';
+import { HmdSearchPanel } from './search-panel/search-panel.element';
 import { HmdStartScreen } from './start-screen/start-screen.element';
 import { HmdToasts } from './toasts/toasts.element';
 import { HmdThemeSwitcher } from './theme-switcher/theme-switcher.element';
@@ -28,9 +31,12 @@ const ELEMENTS: Definitions = [
   ['hmd-ai-suggestions', HmdAiSuggestions],
   ['hmd-conflict-bar', HmdConflictBar],
   ['hmd-editor', HmdEditor],
+  ['hmd-file-tree', HmdFileTree],
   ['hmd-frontmatter-card', HmdFrontmatterCard],
+  ['hmd-history-panel', HmdHistoryPanel],
   ['hmd-notice', HmdNotice],
   ['hmd-preview', HmdPreview],
+  ['hmd-search-panel', HmdSearchPanel],
   ['hmd-start-screen', HmdStartScreen],
   ['hmd-theme-switcher', HmdThemeSwitcher],
   ['hmd-toasts', HmdToasts],

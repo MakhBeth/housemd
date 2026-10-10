@@ -2,7 +2,7 @@
  * Tipi JSX dei tag `hmd-*` usati da React durante la convivenza (fasi 4–7). File temporaneo: sparisce con
  * React nella fase 7 (spec WC §5.1).
  */
-import type { Ref } from 'react';
+import type { Key, Ref } from 'react';
 import type { TextRange } from '../ai/selectionChip';
 import type { ChatMessage, GenParams, ModelProfile } from '../ai/types';
 import type { HouseConfig } from '../config/config';
@@ -13,12 +13,15 @@ import type { DocTitle } from '../search/searchIndex';
 import type { UpdateFlow } from '../pwa/updateFlow';
 import type { I18nStore } from '../state/i18nStore';
 import type { ThemeStore } from '../state/themeStore';
+import type { TreeNode } from '../ui/tree';
 import type { AiChipController } from './ai/aiChips';
 import type { HmdAiDiffPane } from './ai/diff-pane.element';
 import type { SaveImage } from './editor/docElement';
 import type { HmdEditor } from './editor/editor.element';
 import type { HmdEvents } from './events';
+import type { HistorySource } from './history-panel/history-panel.element';
 import type { HmdPreview } from './preview/preview.element';
+import type { HmdSearchPanel, SearchSource } from './search-panel/search-panel.element';
 import type { StartMode } from './start-screen/startView';
 import type { ToastItem } from './toasts/toasts.element';
 
@@ -49,6 +52,14 @@ declare module 'react' {
       'hmd-ai-suggestions': HmdProps<{ controller: AiChipController; i18n: I18nStore }, 'hmd-ai-suggestion'>;
       'hmd-conflict-bar': HmdProps<{ i18n: I18nStore }, 'hmd-conflict'>;
       'hmd-editor': HmdDocProps<'hmd-top-line'> & { ref?: Ref<HmdEditor> };
+      'hmd-file-tree': HmdProps<
+        { nodes: readonly TreeNode[]; openPath: string | null; drafts: ReadonlySet<string>; i18n: I18nStore },
+        'hmd-open' | 'hmd-tree-action'
+      >;
+      'hmd-history-panel': HmdProps<
+        { workspace: HistorySource; path: string; currentText: string; i18n: I18nStore },
+        'hmd-history-close' | 'hmd-history-restore'
+      > & { key?: Key };
       'hmd-notice': HmdProps<
         { message: string; actionLabel: string; busy: boolean; dismissLabel: string; dismissible: boolean; placement: 'top' | 'bottom' },
         'hmd-notice-action' | 'hmd-notice-dismiss'
@@ -57,6 +68,9 @@ declare module 'react' {
         { text: string; path: string; files: string[]; config: HouseConfig; readBlob: (path: string) => Promise<Blob>; highlight: string[]; i18n: I18nStore },
         'hmd-open' | 'hmd-open-wiki' | 'hmd-top-line'
       > & { ref?: Ref<HmdPreview> };
+      'hmd-search-panel': HmdProps<{ index: SearchSource; indexRevision: number; i18n: I18nStore }, 'hmd-search-open'> & {
+        ref?: Ref<HmdSearchPanel>;
+      };
       'hmd-start-screen': HmdProps<
         { mode: StartMode; reason: UnsupportedReason; error: string; folderName: string; busy: boolean; i18n: I18nStore },
         'hmd-start-pick' | 'hmd-start-resume'
