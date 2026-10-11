@@ -2,6 +2,7 @@ import { HmdElement } from '../../dom/element';
 import { el, setText, toggleAttr } from '../../dom/el';
 import { icon } from '../../dom/icon';
 import { reconcileList } from '../../dom/list';
+import { RenderLoop } from '../../dom/renderLoop';
 import type { SearchResult } from '../../search/searchIndex';
 import type { I18nStore } from '../../state/i18nStore';
 import { emit } from '../events';
@@ -48,8 +49,14 @@ export class HmdSearchPanel extends HmdElement {
   #timer: ReturnType<typeof setTimeout> | undefined;
   /** Una ricerca chiesta (o interrotta dal distacco) mentre l'elemento era staccato: riparte al ricollegamento. */
   #pending = false;
-  #rendering = false;
-  #again = false;
+  #loop = new RenderLoop(this, {
+    ready: () => !!this.#parts && !!this.#i18n && this.isConnected,
+    render: () => this.#render(this.#parts!, this.#i18n!),
+    // Anche quando l'ultima passata toglie l'elenco intero (query svuotata).
+    focusScope: () => this.#parts?.list ?? null,
+    // Il risultato con il focus è sparito (file eliminato o non più trovato): il focus torna nella casella.
+    refocus: () => this.#parts?.input.focus(),
+  });
 
   get index(): SearchSource | null { return this.#index; }
   set index(value: SearchSource | null) {
@@ -134,27 +141,7 @@ export class HmdSearchPanel extends HmdElement {
 
   /** Un render alla volta, come albero e cronologia: uno chiesto da dentro (un listener) si ripete alla fine. */
   #update(): void {
-    if (!this.#parts || !this.#i18n || !this.isConnected) return;
-    if (this.#rendering) {
-      this.#again = true;
-      return;
-    }
-    const { input, list } = this.#parts;
-    // Il focus si guarda prima della prima passata e si recupera dopo l'ultima (come nell'albero): anche
-    // quando l'ultima toglie l'elenco intero (query svuotata).
-    const hadFocus = list.contains(document.activeElement);
-    this.#rendering = true;
-    try {
-      // Un listener sincrono può aver tolto lo store o staccato l'elemento: nessuna passata senza.
-      do {
-        this.#again = false;
-        this.#render(this.#parts, this.#i18n);
-      } while (this.#again && this.#parts && this.#i18n && this.isConnected);
-    } finally {
-      this.#rendering = false;
-    }
-    // Il risultato con il focus è sparito (file eliminato o non più trovato): il focus torna nella casella.
-    if (hadFocus && this.isConnected && !list.contains(document.activeElement)) input.focus();
+    this.#loop.update();
   }
 
   #onKeyDown(event: KeyboardEvent): void {
