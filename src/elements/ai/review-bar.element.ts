@@ -1,4 +1,5 @@
-import { isBusy, type ReviewStatus } from '../../ai/reviewStatus';
+import type { AcceptBlocker } from '../../ai/aiController';
+import type { ReviewStatus } from '../../ai/reviewStatus';
 import type { CheckWarning } from '../../ai/types';
 import { HmdElement } from '../../dom/element';
 import { el, setText, toggleAttr } from '../../dom/el';
@@ -8,7 +9,7 @@ import { uid } from '../../dom/uid';
 import type { MessageKey } from '../../i18n/messages';
 import type { I18nStore } from '../../state/i18nStore';
 import { emit } from '../events';
-import { statusLine, type ReviewAction } from './reviewBarView';
+import { actionBlocker, statusLine, type ReviewAction, type ReviewBlocker } from './reviewBarView';
 import './review-bar.css';
 
 interface Parts {
@@ -24,21 +25,27 @@ interface Parts {
   popover: HTMLDivElement;
   discard: HTMLButtonElement;
   acceptAll: HTMLButtonElement;
+  /** Nota sotto la riga dei pulsanti (`role="status"`): perché il pulsante attivato non ha fatto nulla. Vuota di norma. */
+  note: HTMLParagraphElement;
 }
 
 /**
  * Barra della revisione AI (era ReviewBar.tsx): frecce tra le modifiche, stato (contatore della
  * generazione, parziale con «Continua», troncata, selezione persa, applicata), avvisi in un popover,
  * Scarta e Accetta tutto. Le azioni salgono come `hmd-ai-review-action`, un avviso scelto come
- * `hmd-ai-review-warning`. Le frecce si disattivano durante la generazione, Scarta e Accetta tutto
- * secondo `canDiscard` e `canAccept` (come React).
+ * `hmd-ai-review-warning`. Nessun pulsante si disattiva mai (regola di Davide, spec §2 vincolo 4): quando
+ * l'azione non è possibile (generazione in corso; per Accetta tutto la ragione del controller,
+ * `acceptBlocker`) il pulsante resta attivo e, attivato, la nota sotto la riga dice perché; il focus resta
+ * sul pulsante. La nota ricorda la sua causa e si svuota quando quella non vale più, quando un'azione
+ * della barra riesce, o quando la barra sparisce.
  */
 export class HmdAiReviewBar extends HmdElement {
   #status: ReviewStatus = { kind: 'none' };
   #warnings: CheckWarning[] = [];
-  #canAccept = false;
-  #canDiscard = false;
+  #acceptBlocker: AcceptBlocker | null = 'generating';
   #i18n: I18nStore | null = null;
+  /** Nota mostrata: l'azione che l'ha prodotta e la sua chiave, per sapere quando la causa sparisce. */
+  #note: { action: ReviewAction; key: ReviewBlocker } | null = null;
 
   #parts: Parts | null = null;
   #loop = new RenderLoop(this, {
@@ -59,14 +66,10 @@ export class HmdAiReviewBar extends HmdElement {
     this.#warnings = value ?? [];
     this.#loop.update();
   }
-  get canAccept(): boolean { return this.#canAccept; }
-  set canAccept(value: boolean) {
-    this.#canAccept = !!value;
-    this.#loop.update();
-  }
-  get canDiscard(): boolean { return this.#canDiscard; }
-  set canDiscard(value: boolean) {
-    this.#canDiscard = !!value;
+  /** Perché Accetta tutto non può (dal controller, `acceptBlocker(p, true)`), o null. */
+  get acceptBlocker(): AcceptBlocker | null { return this.#acceptBlocker; }
+  set acceptBlocker(value: AcceptBlocker | null) {
+    this.#acceptBlocker = value ?? null;
     this.#loop.update();
   }
   get i18n(): I18nStore | null { return this.#i18n; }
@@ -81,7 +84,7 @@ export class HmdAiReviewBar extends HmdElement {
     if (!this.#parts) {
       const id = uid('hmd-ai-review');
       const action = (name: ReviewAction, className: string, ...children: Node[]) =>
-        el('button', { type: 'button', class: className, on: { click: () => emit(this, 'hmd-ai-review-action', { action: name }) } }, ...children);
+        el('button', { type: 'button', class: className, on: { click: () => this.#onAction(name) } }, ...children);
       const count = document.createTextNode('');
       const parts: Parts = {
         bar: el('div', { class: 'bar' }),
@@ -95,26 +98,38 @@ export class HmdAiReviewBar extends HmdElement {
         popover: el('div', { id, popover: 'auto', class: 'warnings' }),
         discard: action('discard', 'secondary'),
         acceptAll: action('acceptAll', 'secondary accept'),
+        note: el('p', { class: 'note', role: 'status' }),
       };
       this.#parts = parts;
       parts.bar.append(parts.previous, parts.next, parts.spacer, parts.discard, parts.acceptAll);
-      this.append(parts.bar);
+      this.append(parts.bar, parts.note);
     }
     const i18n = this.#i18n;
     if (!i18n) return;
     this.watch(i18n, () => this.#loop.update(), signal);
   }
 
+  disconnectedCallback(): void {
+    super.disconnectedCallback();
+    // La barra sparita (proposta scartata o applicata) non ricorda la nota.
+    this.#note = null;
+  }
+
+  /** Un pulsante attivato: se l'azione non è possibile la nota dice perché, altrimenti l'azione sale e la nota se ne va. */
+  #onAction(action: ReviewAction): void {
+    const key = actionBlocker(action, this.#status, this.#acceptBlocker);
+    this.#note = key ? { action, key } : null;
+    this.#loop.update();
+    if (!key) emit(this, 'hmd-ai-review-action', { action });
+  }
+
   #render(parts: Parts, i18n: I18nStore): void {
     const t = i18n.t;
     const { bar } = parts;
-    const busy = isBusy(this.#status);
     toggleAttr(parts.previous, 'aria-label', true, t('ai.previous'));
     toggleAttr(parts.previous, 'data-tooltip', true, t('ai.previous'));
     toggleAttr(parts.next, 'aria-label', true, t('ai.next'));
     toggleAttr(parts.next, 'data-tooltip', true, t('ai.next'));
-    parts.previous.disabled = busy;
-    parts.next.disabled = busy;
     // Lo stato: uno span riusato come fa React (stessa posizione, stesso tipo), con gli attributi del momento.
     const line = statusLine(this.#status, t);
     if (line) {
@@ -155,9 +170,10 @@ export class HmdAiReviewBar extends HmdElement {
       parts.popover.remove();
     }
     setText(parts.discard, t('ai.discard'));
-    parts.discard.disabled = !this.#canDiscard;
     setText(parts.acceptAll, t('ai.acceptAll'));
-    parts.acceptAll.disabled = !this.#canAccept;
+    // La nota resta finché vale la causa che l'ha prodotta (per quella azione); la stessa nota due volte di fila non si ri-annuncia: accettato.
+    if (this.#note && actionBlocker(this.#note.action, this.#status, this.#acceptBlocker) !== this.#note.key) this.#note = null;
+    setText(parts.note, this.#note ? t(this.#note.key) : '');
   }
 }
 

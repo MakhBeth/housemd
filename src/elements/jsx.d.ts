@@ -3,6 +3,7 @@
  * React nella fase 7 (spec WC §5.1).
  */
 import type { Key, Ref } from 'react';
+import type { AcceptBlocker } from '../ai/aiController';
 import type { ReviewStatus } from '../ai/reviewStatus';
 import type { TextRange } from '../ai/selectionChip';
 import type { CheckWarning, GenParams, ModelProfile, SelectionScope } from '../ai/types';
@@ -50,7 +51,7 @@ declare module 'react' {
         };
       'hmd-ai-model-select': HmdProps<{ controller: ModelSelectController; profile: ModelProfile; i18n: I18nStore }, 'hmd-ai-model-change'>;
       'hmd-ai-parameters': HmdProps<{ profile: ModelProfile; value: GenParams; hideEffort: boolean; i18n: I18nStore }, 'hmd-params-change'>;
-      'hmd-ai-review-bar': HmdProps<{ status: ReviewStatus; warnings: CheckWarning[]; canAccept: boolean; canDiscard: boolean; i18n: I18nStore }, 'hmd-ai-review-action' | 'hmd-ai-review-warning'>;
+      'hmd-ai-review-bar': HmdProps<{ status: ReviewStatus; warnings: CheckWarning[]; acceptBlocker: AcceptBlocker | null; i18n: I18nStore }, 'hmd-ai-review-action' | 'hmd-ai-review-warning'>;
       'hmd-ai-sidebar': HmdProps<
         {
           controller: SidebarController;

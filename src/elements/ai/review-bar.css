@@ -1,17 +1,18 @@
 @layer components {
   @scope (hmd-ai-review-bar) {
+    /* L'host ha un box: il bordo inferiore sta qui, sotto la riga dei pulsanti e la nota (variante A del design 6c). */
     :scope {
-      display: contents;
+      display: block;
+      border-bottom: 1px solid var(--c-border);
     }
 
-    /* Valori copiati da ReviewView.module.css (.bar, .status, .spacer, .iconButton, .secondary, .accept, :disabled, .warnings). */
+    /* Valori copiati da ReviewView.module.css (.bar, .status, .spacer, .iconButton, .secondary, .accept, .warnings). */
     .bar {
       display: flex;
       align-items: center;
       gap: 6px;
       min-height: 42px;
       padding: 6px 12px;
-      border-bottom: 1px solid var(--c-border);
       font-family: var(--font-pixel);
     }
 
@@ -35,7 +36,7 @@
       cursor: pointer;
     }
 
-    .iconButton:hover:not(:disabled) {
+    .iconButton:hover {
       background: var(--c-accent-soft);
     }
 
@@ -51,12 +52,6 @@
     .accept {
       color: var(--c-accent);
       font-weight: 600;
-    }
-
-    .iconButton:disabled,
-    .secondary:disabled {
-      opacity: 0.45;
-      cursor: default;
     }
 
     .warnings {
@@ -77,6 +72,18 @@
       background: none;
       text-align: start;
       cursor: pointer;
+    }
+
+    /* Nota sotto la riga dei pulsanti (come le note della 6b): vuota non occupa spazio, i pixel restano quelli di prima. */
+    .note {
+      margin: 0;
+      padding-inline: 12px;
+      color: var(--c-muted);
+      font-size: 12px;
+    }
+
+    .note:not(:empty) {
+      padding-block: 0 8px;
     }
   }
 }

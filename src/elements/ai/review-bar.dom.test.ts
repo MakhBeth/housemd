@@ -4,6 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import '../define';
+import type { AcceptBlocker } from '../../ai/aiController';
 import type { ReviewStatus } from '../../ai/reviewStatus';
 import type { CheckWarning } from '../../ai/types';
 import { EN_MESSAGES } from '../../i18n/messages';
@@ -21,20 +22,19 @@ const focusOn = (node: Element | null | undefined, what: string) => assert.ok(!!
 
 const GENERATING: ReviewStatus = { kind: 'generating', seconds: 3, done: 1, total: 3 };
 
-function mount(initial: ReviewStatus = { kind: 'none' }, warnings: CheckWarning[] = [], canAccept = true, canDiscard = true) {
+function mount(initial: ReviewStatus = { kind: 'none' }, warnings: CheckWarning[] = [], acceptBlocker: AcceptBlocker | null = null) {
   const { store: i18n, listeners } = countListeners(
     createI18nStore({
       locale: 'en',
       messages: EN_MESSAGES,
-      load: async (locale) => ({ locale, messages: { ...EN_MESSAGES, 'ai.previous': 'PRIMA', 'ai.discard': 'SCARTA', 'ai.acceptAll': 'TUTTO', 'ai.warning.wikilinks': 'WIKI' } }),
+      load: async (locale) => ({ locale, messages: { ...EN_MESSAGES, 'ai.previous': 'PRIMA', 'ai.discard': 'SCARTA', 'ai.acceptAll': 'TUTTO', 'ai.warning.wikilinks': 'WIKI', 'ai.review.generating': 'ASPETTA' } }),
       persist() {},
     }),
   );
   const el = document.createElement('hmd-ai-review-bar');
   el.status = initial;
   el.warnings = warnings;
-  el.canAccept = canAccept;
-  el.canDiscard = canDiscard;
+  el.acceptBlocker = acceptBlocker;
   el.i18n = i18n;
   document.body.append(el);
   const events: [keyof HmdEvents, unknown][] = [];
@@ -44,12 +44,14 @@ function mount(initial: ReviewStatus = { kind: 'none' }, warnings: CheckWarning[
   const byLabel = (label: string) => buttons().find((b) => (b.getAttribute('aria-label') ?? b.textContent) === label)!;
   const status = () => bar().querySelector<HTMLSpanElement>('.status');
   const popover = () => bar().querySelector<HTMLDivElement>('[popover]');
-  return { el, i18n, listeners, events, bar, buttons, byLabel, status, popover };
+  const note = () => el.querySelector<HTMLParagraphElement>(':scope > [role="status"]')!;
+  return { el, i18n, listeners, events, bar, buttons, byLabel, status, popover, note };
 }
 
-test('the same DOM as ReviewBar.tsx without status or warnings', () => {
-  const { el, bar, buttons, status, popover, byLabel } = mount();
-  assert.deepEqual([...el.children].map((c) => `${c.localName}.${c.className}`), ['div.bar']);
+test('the same DOM as ReviewBar.tsx without status or warnings, then the empty status note: nothing is ever disabled', () => {
+  const { el, bar, buttons, status, popover, byLabel, note } = mount();
+  assert.deepEqual([...el.children].map((c) => `${c.localName}.${c.className}`), ['div.bar', 'p.note']);
+  assert.equal(note().textContent, '');
   assert.deepEqual([...bar().children].map((c) => `${c.localName}.${c.className}`), ['button.iconButton tooltip', 'button.iconButton tooltip', 'span.spacer', 'button.secondary', 'button.secondary accept']);
   assert.equal(status(), null);
   assert.equal(popover(), null);
@@ -61,27 +63,74 @@ test('the same DOM as ReviewBar.tsx without status or warnings', () => {
   for (const button of buttons()) {
     assert.equal(button.type, 'button');
     assert.equal(button.disabled, false);
+    assert.equal(button.hasAttribute('aria-disabled'), false);
   }
   assert.ok(byLabel(EN_MESSAGES['ai.discard']));
   assert.ok(byLabel(EN_MESSAGES['ai.acceptAll']));
 });
 
-test('while generating: the counter with progress in a polite live region, the arrows disabled; canDiscard and canAccept drive the other two (today)', () => {
-  const { el, status, byLabel, buttons, events } = mount(GENERATING, [], false, false);
+test('while generating: the counter with progress in a polite live region; every button active, activated it writes the note and keeps the focus', () => {
+  const { status, byLabel, buttons, note, events } = mount(GENERATING, [], 'generating');
   assert.equal(status()!.textContent, `${EN_MESSAGES['ai.generating'].replace('{seconds}', '3')} 1/3`);
   assert.equal(status()!.getAttribute('aria-live'), 'polite');
   assert.equal(status()!.hasAttribute('role'), false);
   assert.equal(status()!.previousElementSibling, buttons()[1]);
   assert.equal(status()!.nextElementSibling!.className, 'spacer');
-  for (const button of buttons()) assert.equal(button.disabled, true);
-  byLabel(EN_MESSAGES['ai.acceptAll']).click();
+  for (const button of [buttons()[0], buttons()[1], byLabel(EN_MESSAGES['ai.discard']), byLabel(EN_MESSAGES['ai.acceptAll'])]) {
+    assert.equal(button.disabled, false);
+    button.focus();
+    button.click();
+    assert.equal(note().textContent, EN_MESSAGES['ai.review.generating']);
+    focusOn(button, button.getAttribute('aria-label') ?? button.textContent ?? '');
+  }
   assert.deepEqual(events, []);
+});
+
+test('the note goes when its cause goes: the generation ends, Accept all is possible again, or an action succeeds', () => {
+  const { el, byLabel, note, events } = mount(GENERATING, [], 'generating');
+  byLabel(EN_MESSAGES['ai.acceptAll']).click();
+  assert.equal(note().textContent, EN_MESSAGES['ai.review.generating']);
+  el.status = { kind: 'truncated' };
+  el.acceptBlocker = 'truncated';
+  assert.equal(note().textContent, '');
+  byLabel(EN_MESSAGES['ai.acceptAll']).click();
+  assert.equal(note().textContent, EN_MESSAGES['ai.review.truncated']);
+  // Un'altra azione riesce: la nota se ne va e l'azione sale.
+  byLabel(EN_MESSAGES['ai.discard']).click();
+  assert.equal(note().textContent, '');
+  assert.deepEqual(events, [['hmd-ai-review-action', { action: 'discard' }]]);
+  byLabel(EN_MESSAGES['ai.acceptAll']).click();
+  assert.equal(note().textContent, EN_MESSAGES['ai.review.truncated']);
+  el.acceptBlocker = null;
+  assert.equal(note().textContent, '');
+});
+
+test('Accept all says the reason of the controller, one text per reason, in the order of the bar', () => {
+  const { el, byLabel, note } = mount({ kind: 'none' }, [], 'updating');
+  const accept = () => byLabel(EN_MESSAGES['ai.acceptAll']).click();
+  accept();
+  assert.equal(note().textContent, EN_MESSAGES['ai.review.updating']);
+  el.acceptBlocker = 'conflict';
+  assert.equal(note().textContent, '');
+  accept();
+  assert.equal(note().textContent, EN_MESSAGES['ai.review.conflict']);
+  el.status = { kind: 'scopeLost' };
+  el.acceptBlocker = 'scopeLost';
+  accept();
+  assert.equal(note().textContent, EN_MESSAGES['ai.review.scopeLost']);
   el.status = { kind: 'none' };
-  assert.equal(buttons()[0].disabled, false);
-  assert.equal(byLabel(EN_MESSAGES['ai.discard']).disabled, true);
-  el.canDiscard = true;
-  el.canAccept = true;
-  for (const button of buttons()) assert.equal(button.disabled, false);
+  el.acceptBlocker = 'notAcceptable';
+  accept();
+  assert.equal(note().textContent, EN_MESSAGES['ai.review.notAcceptable']);
+});
+
+test('detached and attached again the note is forgotten', () => {
+  const { el, byLabel, note } = mount(GENERATING, [], 'generating');
+  byLabel(EN_MESSAGES['ai.discard']).click();
+  assert.equal(note().textContent, EN_MESSAGES['ai.review.generating']);
+  el.remove();
+  document.body.append(el);
+  assert.equal(note().textContent, '');
 });
 
 test('partial: the status with Continue next to it; truncated and applied: just the text; lost selection: an alert', () => {
@@ -134,7 +183,7 @@ test('warnings: a button with the count and a popover with one button per warnin
   assert.equal(bar().querySelector('button[popovertarget]'), null);
 });
 
-test('the four actions reach the host as one event each', () => {
+test('the four actions reach the host as one event each when they are possible', () => {
   const { buttons, byLabel, events } = mount();
   buttons()[0].click();
   buttons()[1].click();
@@ -155,9 +204,11 @@ test('the focused Continue removed by a status change: the focus goes to Accept 
   focusOn(byLabel(EN_MESSAGES['ai.acceptAll']), 'Accept all');
 });
 
-test('a language change rewrites labels, tooltips and warnings; detached, no listener stays', async () => {
-  const { el, i18n, listeners, buttons, byLabel, popover } = mount(GENERATING, [{ code: 'wikilinks' }]);
+test('a language change rewrites labels, tooltips, warnings and the note; detached, no listener stays', async () => {
+  const { el, i18n, listeners, buttons, byLabel, popover, note } = mount(GENERATING, [{ code: 'wikilinks' }], 'generating');
+  byLabel(EN_MESSAGES['ai.discard']).click();
   await i18n.setLocale('it');
+  assert.equal(note().textContent, 'ASPETTA');
   assert.equal(buttons()[0].getAttribute('aria-label'), 'PRIMA');
   assert.equal(buttons()[0].getAttribute('data-tooltip'), 'PRIMA');
   assert.equal(byLabel('SCARTA').textContent, 'SCARTA');

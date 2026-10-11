@@ -31,7 +31,7 @@ test.describe('review bar', () => {
     await enterAi(app);
   });
 
-  test('while generating, Previous, Next, Discard and Accept all are disabled and the counter is a polite live region; with the proposal they are enabled', async ({ app, ai, page }) => {
+  test('while generating nothing is disabled: Previous, Next, Discard and Accept all say why in the note and keep the focus; the counter is a polite live region; the note goes with the proposal', async ({ app, ai, page }) => {
     await page.clock.install();
     ai.hold();
     await composer(app).fill('fix');
@@ -39,29 +39,39 @@ test.describe('review bar', () => {
     const counter = page.getByText(app.t('ai.generating', { seconds: 0 }).replace(/0 s$/, ''), { exact: false });
     await expect(counter).toBeVisible();
     await expect(counter).toHaveAttribute('aria-live', 'polite');
-    await expect(previous(app)).toBeDisabled();
-    await expect(next(app)).toBeDisabled();
-    await expect(discard(app)).toBeDisabled();
-    await expect(acceptAll(app)).toBeDisabled();
+    const note = page.getByRole('status').filter({ hasText: app.t('ai.review.generating') });
+    for (const button of [previous(app), next(app), discard(app), acceptAll(app)]) {
+      await expect(button).toBeEnabled();
+      await button.click();
+      await expect(note).toBeVisible();
+      await expect(button).toBeFocused();
+    }
+    expect(ai.requests).toBe(1);
     await page.clock.runFor(2100);
     await expect(page.getByText(app.t('ai.generating', { seconds: 2 }))).toBeVisible();
     ai.release();
     await proposalShown(app);
     await expect(counter).toHaveCount(0);
+    await expect(note).toHaveCount(0);
     for (const button of [previous(app), next(app), discard(app), acceptAll(app)]) await expect(button).toBeEnabled();
   });
 
-  test('a truncated proposal: Accept all is disabled, Discard and the block buttons work (today)', async ({ app, ai, page }) => {
+  test('a truncated proposal: Accept all says to accept the changes one at a time and keeps the focus, the block buttons work; the note goes with the proposal', async ({ app, ai, page }) => {
     ai.finishReason = 'length';
     await composer(app).fill('fix');
     await composer(app).press('Enter');
     await proposalShown(app);
     await expect(page.getByText(app.t('ai.status.truncated'))).toBeVisible();
-    await expect(acceptAll(app)).toBeDisabled();
-    await expect(discard(app)).toBeEnabled();
+    const note = page.getByRole('status').filter({ hasText: app.t('ai.review.truncated') });
+    await expect(acceptAll(app)).toBeEnabled();
+    await acceptAll(app).click();
+    await expect(note).toBeVisible();
+    await expect(acceptAll(app)).toBeFocused();
+    expect(await page.locator('.cm-mergeView').count()).toBe(1);
     await expect(page.locator('.cm-merge-revert button[data-action=accept]').first()).toBeEnabled();
     await discard(app).click();
     await expect(mergeView(app)).toHaveCount(0);
+    await expect(note).toHaveCount(0);
   });
 
   test('Accept all with the focus on the button: the proposal is applied and the focus is in the editor; Ctrl+Z brings the diff back with the focus in it', async ({ app, page }) => {
@@ -182,6 +192,7 @@ test.describe('composer without a document', () => {
     await composer(app).press('Enter');
     await expect(note).toBeVisible();
     await expect(composer(app)).toHaveValue('again');
+    await expect(composer(app)).toBeFocused();
     expect(ai.requests).toBe(1);
     ai.release();
     await proposalShown(app);

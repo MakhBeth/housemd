@@ -230,7 +230,7 @@ const STATES: State[] = [
   {
     name: 'ai-review-generating',
     async setup(app, page, ai) {
-      // Generazione senza ancora una proposta: la barra con il contatore al posto del suggerimento, tutti i pulsanti spenti.
+      // Generazione senza ancora una proposta: la barra con il contatore al posto del suggerimento, tutti i pulsanti attivi (dalla 6c).
       await page.clock.install({ time: NOW });
       ai.hold();
       await app.openFolder({ 'a.md': 'A\n\nB\n\nC' });
@@ -250,7 +250,7 @@ const STATES: State[] = [
   {
     name: 'ai-review-truncated',
     async setup(app, page, ai) {
-      // Proposta troncata dal limite del modello: stato «Troncata», Accetta tutto spento, Scarta acceso.
+      // Proposta troncata dal limite del modello: stato «Troncata», Accetta tutto attivo (dalla 6c: la nota al clic).
       ai.reply = 'A2\n\nB\n\nC2';
       ai.finishReason = 'length';
       await app.openFolder({ 'a.md': 'A\n\nB\n\nC' });
@@ -295,6 +295,26 @@ const STATES: State[] = [
       await page.getByRole('button', { name: app.t('ai.acceptAll'), exact: true }).click();
       await expect(page.locator('.cm-mergeView')).toHaveCount(0);
       await expect(page.locator('.cm-content')).toBeFocused();
+    },
+  },
+  {
+    name: 'ai-review-note',
+    async setup(app, page, ai) {
+      // Generazione tenuta, clic su Accetta tutto: il pulsante resta attivo e la nota sotto la riga dice perché (spec §2 vincolo 4).
+      await page.clock.install({ time: NOW });
+      ai.hold();
+      await app.openFolder({ 'a.md': 'A\n\nB\n\nC' });
+      await app.openFile('a.md');
+      await expect(app.mode('mode.ai')).toBeVisible();
+      await app.mode('mode.ai').click();
+      const composer = page.getByRole('textbox', { name: app.t('ai.request') });
+      await composer.fill('fix');
+      await composer.press('Enter');
+      await expect(page.getByRole('button', { name: app.t('ai.stop'), exact: true })).toBeVisible();
+      await page.clock.runFor(2100);
+      await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 50);
+      await page.getByRole('button', { name: app.t('ai.acceptAll'), exact: true }).click();
+      await expect(page.getByRole('status').filter({ hasText: app.t('ai.review.generating') })).toBeVisible();
     },
   },
   {

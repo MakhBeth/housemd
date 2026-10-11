@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 
 import type { AiController } from '../../ai/aiController';
-import { isBusy, reviewStatus } from '../../ai/reviewStatus';
+import { reviewStatus } from '../../ai/reviewStatus';
 import type { CheckWarning } from '../../ai/types';
 import { showConfirmDialog } from '../../elements/dialogs/confirmDialog';
 import type { HmdAiDiffPane } from '../../elements/ai/diff-pane.element';
@@ -93,7 +93,7 @@ export function ReviewView({ controller, editor }: Props) {
     return (
       <section ref={section} className={styles.review}>
         {status.kind === 'generating' ? (
-          <hmd-ai-review-bar status={status} warnings={[]} canAccept={false} canDiscard={false} i18n={i18nStore} />
+          <hmd-ai-review-bar status={status} warnings={[]} acceptBlocker="generating" i18n={i18nStore} />
         ) : (
           <p className={styles.hint}>{t('ai.emptyProposal')}</p>
         )}
@@ -121,8 +121,7 @@ export function ReviewView({ controller, editor }: Props) {
       <hmd-ai-review-bar
         status={status}
         warnings={warnings}
-        canAccept={controller.canAccept(p, true)}
-        canDiscard={!isBusy(status)}
+        acceptBlocker={controller.acceptBlocker(p, true)}
         i18n={i18nStore}
         onhmd-ai-review-action={(event) => {
           switch (event.detail.action) {
