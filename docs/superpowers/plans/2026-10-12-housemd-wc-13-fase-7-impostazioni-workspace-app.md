@@ -5271,8 +5271,9 @@ nel componente, prima di `dbBlocked`: `const [route] = useState(() => createRout
 
 ```bash
 git rm src/ui/WorkspaceView.tsx src/ui/WorkspaceView.module.css src/ui/Icon.tsx src/ui/useRoute.ts src/ui/useUnmountSignal.ts src/ui/useWorkspace.ts src/ui/ai/useAiController.ts src/ui/ai/useAiState.ts
-grep -rn "WorkspaceView\|useRoute\|useUnmountSignal\|useWorkspaceState\|useAiController\|useAiState\|ui/Icon\|from './Icon'" src --include=*.ts --include=*.tsx | grep -v "^src/elements/workspace/.*(era WorkspaceView"; echo "uscita $?"
-# atteso: nessuna riga di codice (restano solo commenti che dicono «era WorkspaceView.tsx»)
+grep -rln "useRoute\|useUnmountSignal\|useWorkspaceState\|useAiController\|useAiState\|ui/Icon\|from './Icon'\|<WorkspaceView" src; echo "uscita $?"
+# atteso (misurato nel prototipo): solo src/architecture.test.ts (il caso sintetico `ui/Icon.tsx`) e
+# src/elements/workspace/aiSession.ts (i commenti «era useAiController»); uscita 0 per quelle due righe
 ```
 
 - [ ] **Step 7: Verifica**
@@ -5280,7 +5281,7 @@ grep -rn "WorkspaceView\|useRoute\|useUnmountSignal\|useWorkspaceState\|useAiCon
 ```bash
 npx tsc --noEmit && npm test            # 1034 verdi
 npm run lint
-E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npx playwright test -c e2e/playwright.config.ts --grep-invert "visual"
+E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npx playwright test -c e2e/playwright.config.ts $(ls e2e/*.spec.ts | grep -v visual.spec.ts)
 E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npx playwright test -c e2e/dev.config.ts e2e/workspace-shell.spec.ts e2e/settings.spec.ts e2e/settings-sections.spec.ts e2e/startup.spec.ts e2e/editor.spec.ts e2e/external.spec.ts e2e/history.spec.ts e2e/ai-review.spec.ts e2e/ai-review-bar.spec.ts e2e/ai-composer.spec.ts e2e/theme-i18n.spec.ts
 E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npx playwright test -c e2e/audit.config.ts -g "workspace|editor-mode|ai-review|tree|search|history|toast|conflict|orphans|sidebar|resizer|focus"
 pgrep -af "vite|chrom|playwright"
