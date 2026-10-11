@@ -42,7 +42,22 @@
 
 ## Misure prese scrivendo il piano (11/10, su `0ba9ccb`)
 
-@@MISURE@@
+Baseline su `0ba9ccb` (= `epic/LAB-3-web-components`): `npm test` = **934** test verdi; `npm run test:e2e` = **176** (174 verdi + i 2 snapshot dello start screen che cadono su ape per il font pixel: estraneo, misurato prima di toccare l'app); `npm run test:e2e:dev` = **161**; audit = **52** stati (104 test, `baseline` + `current`); bundle principale gzip = **439 717 B** (`dist/assets/index-Degrg3UY.js`; l'handover diceva 439 695).
+
+**Prototipo.** Il codice di tutti i task è stato provato su una copia del repository fuori dal worktree (`git worktree add --detach ../housemd-proto-6c origin/epic/LAB-3-web-components` sotto `/home/agent/work`, `npm ci`, `dist-baseline/` costruita da `0ba9ccb` prima di toccare l'app, niente commit; prototipo rimosso alla fine), in due run (il primo è caduto due volte per un riavvio del daemon di ape: i log delle suite dei Task 1–3 vengono da lì, il Task 4 e le suite complete finali da questo). `npm run lint` pulito a ogni task; `npm test` 934 → **974** (+8 Task 2: 3 controller, 1 vista del composer, 4 composer; +1 + 7 e +3 + 3 Task 3; +7 + 11 Task 4; nel primo run la divisione tra le due parti della barra era diversa: 953 dopo la prima parte); `npm run test:e2e` 176 → **186** (+10 di `ai-review-bar.spec.ts` nel Task 1; i 2 dello start screen cadono sempre e solo loro), **snapshot invariati** (lo snapshot «AI review» passa senza rigenerare anche con la nota della barra: la nota vuota è a 0 px); `npm run test:e2e:dev` 161 → **171**; audit 104 → 112 (Task 1: `ai-review-generating`, `ai-review-truncated`, `ai-review-warnings`, `ai-review-applied`) → 114 (Task 2: `ai-composer-note-no-document`) → **116** (Task 3, seconda parte: `ai-review-note`), verde dopo ogni task: la prima parte della barra contro la baseline del Task 1 (112, nessuna differenza), le due seconde parti contro le baseline ricostruite, il Task 4 contro la baseline del Task 3 (116: l'host della vista è `display: contents`); bundle gzip 439 717 → **441 030 B** (+1 313: React resta, due componenti diventano elementi). Tempi con **un solo worker** (regola di Davide): `test:e2e` 4,7 min, `test:e2e:dev` 6,7 min, `test:e2e:audit` 5,8 min, `npm test` 39 s. Sull'app finale una sola caduta estranea: `ai-sync-reactivate` dell'audit con «Target page, context or browser has been closed» al `page.reload()` del suo setup (trappola già nota dell'handover), ripetuta da sola 2/2 verde. Misurato anche:
+
+- **Il difetto del focus di «Scarta» non si riproduce in Chromium sull'app React** (11 scenari in produzione e in sviluppo: Scarta, Accetta tutto, Ctrl+Z, conferma annullata, Continua; il focus finisce sempre nell'editor), mentre **si riproduce in jsdom** con il focus sul pulsante che sparisce: `ReviewView.tsx` tale e quale (la vista senza `refocus`) lascia il focus sul `body`. Il test «Discard with the focus on the button: the focus goes into the plain editor, not the body (the fix of 6c)» cade con `focus on the plain editor, not on body.` senza la riga `refocus` e passa con (RED misurato in questo run, 1 su 11); gli e2e del Task 1 affermano il comportamento di oggi di Chromium e restano verdi.
+- **`assert.equal` tra due nodi di jsdom appende il processo**: il primo RED del test del focus è durato 150 s senza output, perché il messaggio di `node:assert` passa da `util.inspect` dell'albero. Tutte le asserzioni sul focus usano `focusOn` (valore derivato), e i test con CodeMirror girano con `--test-timeout=20000`.
+- **`fakeAi` senza `proposals` nello stato di default** faceva cadere `reviewModel` (`state.proposals.get`): aggiunti `proposals: new Map()` e `streamingPreview: null` (Task 2, dove `fakeAi` cambia comunque).
+- **La proposta applicata mostrava il suggerimento**: il primo render della vista metteva `p.hint` ogni volta che la barra non c'era; React non lo mostra con una proposta applicata. `reviewModel` ha il campo `hint` (`!proposal && !bar`) e il test «the proposal applied…» lo afferma (RED: `['p.hint', 'div.editor']` al posto di `['div.editor']`).
+- **Uno stato di audit non raggiungibile sulla build vecchia blocca tutto il progetto `current`** («1 failed, 58 did not run»): per le due note nuove si prova il resto con `--grep-invert` e poi si ricostruisce la baseline (Step 8 del Task 2, Step 13 del Task 3). Il filtro va dato a `npx playwright test -c e2e/audit.config.ts …` direttamente: passato attraverso `npm run … -- -g` ha eseguito 60 test invece dei 4 attesi.
+- **`ai-composer-running`** (stato della 6b) differiva dalla baseline per la larghezza dello span del contatore: il contatore parte dal `Date.now()` della richiesta, non da `NOW`, e `pauseAt(NOW + 2000)` dava «1 s» o «2 s» secondo l'avvio. Corretto nel Task 1 con `runFor(2100)` + `pauseAt(Date.now() + 50)`, usato anche dagli stati `ai-review-generating` e `ai-review-note`.
+- **«Suggerimento cliccato durante una generazione» non è raggiungibile** (`suggestionPresets` nasconde i suggerimenti con `running`): la ragione `running` vale per Invio da tastiera, che oggi tace; il test del Task 1 afferma anche l'assenza dei suggerimenti.
+- **Senza documento aperto non si apre un documento restando in modalità AI** (il pannello AI prende il posto dell'albero): si passa dall'editor, `WorkspaceView` smonta la sidebar e la bozza si perde come oggi; il test e2e afferma solo che la nota non c'è più (la prima versione, che pretendeva la bozza dopo il rimontaggio, cadeva: non è una regressione).
+- **Precedente/Successivo** si verificano con `.cm-activeLine` del lato documento (segue il cursore anche senza il focus nell'editor; con il focus sul pulsante la selezione del DOM non si aggiorna).
+- **`finish_reason: 'length'` nel finto Ollama** produce davvero una proposta «troncata» (Accetta tutto spento oggi, nota `ai.review.truncated` dopo); interrompere lo stream a metà con `route.fulfill` non si può.
+
+**Esecuzione.** (da compilare nel Task 5: misure sul branch finale, deviazioni dal piano, correzioni della review.)
 
 ### Inventario
 
@@ -910,7 +925,7 @@ npm test                    # 934 + 8 = 942 (3 controller, 1 vista, 4 composer)
 npm run lint
 E2E_WORKERS=1 flock /home/agent/work/.browser-tests.lock npm run test:e2e        # 186, snapshot invariati (i 2 dello start screen cadono su ape per il font pixel: estraneo)
 E2E_WORKERS=1 flock /home/agent/work/.browser-tests.lock npm run test:e2e:dev    # 171
-E2E_WORKERS=1 flock /home/agent/work/.browser-tests.lock npm run test:e2e:audit -- --grep-invert "ai-composer-note-no-document"   # 112, nessuna differenza
+E2E_WORKERS=1 flock /home/agent/work/.browser-tests.lock npx playwright test -c e2e/audit.config.ts --grep-invert "ai-composer-note-no-document"   # 112, nessuna differenza (il filtro direttamente a playwright, non via npm run)
 npm run build && rm -rf dist-baseline && cp -r dist dist-baseline
 E2E_WORKERS=1 flock /home/agent/work/.browser-tests.lock npm run test:e2e:audit  # 112 + 2 = 114
 pgrep -af "vite|chrom|playwright"   # niente di proprio appeso
@@ -1442,7 +1457,7 @@ declare global {
 }
 ```
 
-(Nel prototipo questa prima parte è stata provata nel run precedente del piano: log `.proto-t3a-*`, 31 e2e e 31 dev dei file AI verdi, audit 112 verde contro la baseline del Task 1. Il testo qui sopra è la versione finale senza nota e con `disabled`: la seconda parte sotto è la differenza esatta.)
+(Nel prototipo questa prima parte è stata provata nel primo run del piano: 31 e2e e 31 dev dei file AI verdi, audit 112 verde contro la baseline del Task 1. Il prototipo finale conserva solo la seconda parte: il testo qui sopra è quella versione senza nota e con `disabled`, e la seconda parte sotto è la differenza esatta.)
 
 - [ ] **Step 4: Registrazione, eventi, tipi**
 
@@ -1843,7 +1858,7 @@ E2E_WORKERS=1 flock /home/agent/work/.browser-tests.lock npm run test:e2e:dev   
 Il `p.note` in più sposta gli indici del DOM dei 5 stati `ai-review*` con la barra (`ai-review`, `ai-review-hover`, `ai-review-conflict`, `ai-review-generating`, `ai-review-truncated`, `ai-review-warnings`: tutti quelli in cui la barra c'è) e lo stato nuovo non è raggiungibile sulla build vecchia: si prova il resto con `--grep-invert`, poi si ricostruisce la baseline (cambio d'aspetto voluto, regola di `CLAUDE.md`):
 
 ```bash
-E2E_WORKERS=1 flock /home/agent/work/.browser-tests.lock npm run test:e2e:audit -- --grep-invert "ai-review"   # tutto il resto identico
+E2E_WORKERS=1 flock /home/agent/work/.browser-tests.lock npx playwright test -c e2e/audit.config.ts --grep-invert "ai-review"   # tutto il resto identico (il filtro direttamente a playwright)
 npm run build && rm -rf dist-baseline && cp -r dist dist-baseline
 E2E_WORKERS=1 flock /home/agent/work/.browser-tests.lock npm run test:e2e:audit  # 114 + 2 = 116
 pgrep -af "vite|chrom|playwright"
@@ -2672,7 +2687,7 @@ git commit -m "feat: hmd-ai-review al posto di ReviewView (figli creati una volt
 
 ```bash
 npm run build
-gzip -c dist/assets/index-*.js | wc -c     # annotare accanto al valore del Task 1 (prototipo: 439 717 → @@GZIP_AFTER@@)
+gzip -c dist/assets/index-*.js | wc -c     # annotare accanto al valore del Task 1 (prototipo: 439 717 → 441 030)
 npm test                                    # annotare: 974
 ```
 
