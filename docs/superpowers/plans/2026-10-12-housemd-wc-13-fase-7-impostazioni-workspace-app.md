@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - **Branch** `lab/LAB-5-fase-7` creato da `epic/LAB-3-web-components` (contiene la 6c, merge `5fa9abf`): ogni sub-issue di esecuzione committa lì. PR in bozza #10 verso `epic/LAB-3-web-components`, aperta da questo piano (`gh pr create --draft --base epic/LAB-3-web-components`), portata a pronta dal task di chiusura (`gh pr ready`). Con la divisione in 7a/7b (decisione 1, raccomandata) la PR #10 diventa quella della 7a e la 7b ha un branch e una PR suoi (sotto). Commit piccoli in italiano, all'imperativo, prefisso convenzionale (`test:`, `feat:`, `refactor:`, `docs:`, `chore:`), niente emoji, **nessuna riga di attribuzione**. Il daemon di Multica installa un hook `prepare-commit-msg` che aggiunge `Co-authored-by: multica-agent`: si committa con `git -c core.hooksPath=/dev/null commit …` e prima di ogni push si controlla `git log --format=%B -n <N>` (misurato scrivendo questo piano: il primo commit l'aveva preso). Mai push su `main` né sul branch dell'epica, nessun merge: la PR la mergia il PM dopo la review (Reviewer, A11y) e i gate verdi.
-- **Task 1 prima di tutto**: rete di sicurezza scritta e verde **sull'app React di oggi**, `dist-baseline/` costruita dal branch **prima di qualsiasi modifica all'app**, conteggi delle suite e gzip del bundle annotati. `dist-baseline/` **non si ricostruisce mai** in questa fase: nessun cambio d'aspetto è previsto (misurato nel prototipo: audit verde contro la build React dal primo all'ultimo task).
+- **Task 1 prima di tutto**: rete di sicurezza scritta e verde **sull'app React di oggi**, `dist-baseline/` costruita dal branch **prima di qualsiasi modifica all'app**, conteggi delle suite e gzip del bundle annotati. `dist-baseline/` **non si ricostruisce mai** in questa fase: nessun cambio d'aspetto è previsto (misurato nel prototipo: audit verde contro la build React dal primo all'ultimo task). **Provenienza annotata**: il Task 1 scrive lo SHA del commit da cui è costruita (`git rev-parse HEAD` prima della build) nel commento finale e in `dist-baseline/BASELINE_SHA`. Attraversando il confine 7a/7b la baseline si **copia** dal checkout della 7a, oppure si ricostruisce in un worktree separato (`git worktree add --detach <dir> <SHA del Task 1>`); **mai** da una build della HEAD dell'epica dopo il merge della 7a, che ha già le impostazioni migrate e confronterebbe l'audit della 7b con un riferimento sbagliato. Ogni audit si lancia dopo aver controllato `cat dist-baseline/BASELINE_SHA`.
 - **Aspetto e comportamento invariati.** `npm run test:e2e` verde con gli **snapshot di oggi** (nessuna rigenerazione: misurato), `npm run test:e2e:dev` verde (console senza errori né avvisi), `npm run test:e2e:audit` verde contro `dist-baseline/`. I pulsanti oggi `disabled` restano `disabled` (Salva chiave senza chiave, Sincronizza ora durante una sync, la cartella durante un cambio, la cronologia senza documento, l'indirizzo per Anthropic): la regola «mai disabled» sulle impostazioni e sui dialog è della fase 8 (handover, «Per la fase 8»). L'unico cambio voluto è la chiave fuori dal DOM serializzato (decisione 5). Un cambio d'aspetto voluto passerebbe prima da Designer e richiederebbe di rinnovare `dist-baseline/` e gli snapshot toccati, elencati con il motivo: qui non ce ne sono.
 - **Un task per elemento (o per gruppo stretto), sempre TDD**: test che fallisce (**il RED si vede e si annota nel commento finale prima di scrivere il codice**: nel dispatch va chiesto «test prima, poi il codice», non «scrivere tutto e ripristinare HEAD») → logica pura + elemento + foglio → `define.ts` (ordine alfabetico), `events.ts`, `jsx.d.ts` finché esiste → i chiamanti montano il tag → i `.tsx`, i `.module.css` e gli hook sostituiti si cancellano con `git rm`, poi `grep -r` (uscita 1 = nessuna occorrenza, il risultato giusto; 2 = comando fallito, da ripetere).
 - **`events.ts`: ogni voce nuova (JSDoc + chiave) va subito sopra il JSDoc della voce successiva, mai tra un JSDoc e la sua chiave.** Qui sette voci: `hmd-settings-autosave`, `hmd-settings-close`, `hmd-settings-dirty`, `hmd-settings-save-all`, `hmd-settings-section`, `hmd-settings-text-width` sopra il JSDoc di `hmd-start-pick`; `hmd-workspace-change-folder` dopo `hmd-toast-dismiss` (in fondo).
@@ -145,7 +145,7 @@ Il Task 6 va a Planner (griglia, separatore con pointer capture, scorciatoie, li
 3. **`hmd-settings` e la rotta**: `dirty` letto dalla guardia, `requestClose()` senza secondo dialog, eventi verso il workspace (`hmd-settings-section|close|autosave|text-width|save-all`) e preferenze scritte come prima. Test: «with a dirty section, closing (✕, Esc, requestClose) asks once…», `settings.spec.ts` («Back with unsaved changes…», «Back again with the confirmation already open…»).
 4. **`hmd-workspace` non perde nulla di `WorkspaceView.tsx`**: figli condizionali ricreati, scorciatoie e listener della finestra legati al `signal` (nessuno dopo il distacco), sessione AI chiusa al distacco e scartata se arriva dopo, sync per controller, bozze orfane e ultimo file, accesso perso, titolo, focus restituito dalle impostazioni, `doc` nuovo alla revisione. Test: `workspace.dom.test.ts` (9), `aiSession.test.ts`, `workspaceView.test.ts`, `workspace-shell.spec.ts`, e tutta la suite e2e (il workspace la attraversa tutta), audit completo.
 5. **`hmd-app` e `main.ts`**: schermate, un cambio cartella alla volta, uno workspace nuovo a ogni apertura, workspace buttato se aperto dopo il distacco, `<html lang>` dalla lingua caricata, tema applicato prima del render (`visual.spec.ts`), nessun React nel bundle (`architecture.test.ts`, `package.json`), bundle −62 KB gzip.
-6. **Aspetto identico**: nessuno snapshot rigenerato, `dist-baseline/` mai ricostruita, audit verde dal Task 1 al Task 8 con i 10 stati nuovi.
+6. **Aspetto identico**: nessuno snapshot rigenerato, `dist-baseline/` mai ricostruita e sempre la build React del commit annotato nel Task 1 (`dist-baseline/BASELINE_SHA`), anche nella 7b (copiata dal checkout della 7a o ricostruita in un worktree detached da quello SHA, mai dalla HEAD dell'epica dopo la 7a); audit verde dal Task 1 al Task 8 con i 10 stati nuovi.
 
 ---
 
@@ -179,7 +179,7 @@ Nessuna riga dell'app cambia: test che **passano sull'app React di oggi**, compr
 **Interfaces:**
 - Produces: i test «the key typed in the password field: where it ends up in the DOM» (afferma `true`, rovesciato dal Task 2) e gli altri 14; gli stati di audit `workspace-empty`, `sidebar-hidden`, `resizer-focus-keyboard`, `orphans`, `settings-autosave-off`, `settings-preset`, `settings-cloud-profile`, `settings-connected`, `settings-sync-folder`, `settings-narrow`; `State.width`.
 
-**Criteri di accettazione:** i due file nuovi verdi in build e in sviluppo sull'app di oggi; i 10 stati verdi nell'audit; `npm test` e `npm run lint` invariati (980, pulito); `dist-baseline/` costruita da questo commit dell'app (React); conteggi e gzip annotati nel commento finale.
+**Criteri di accettazione:** i due file nuovi verdi in build e in sviluppo sull'app di oggi; i 10 stati verdi nell'audit; `npm test` e `npm run lint` invariati (980, pulito); `dist-baseline/` costruita da questo commit dell'app (React), con lo SHA in `dist-baseline/BASELINE_SHA` e nel commento finale; conteggi e gzip annotati nel commento finale.
 
 - [ ] **Step 1: Baseline e build di riferimento**
 
@@ -189,10 +189,14 @@ git status --short && git log --oneline -3      # pulito; sopra 5fa9abf solo i c
 npm ci
 npm test                                          # annotare (12/10 nel prototipo: 980)
 npm run lint
+git rev-parse HEAD                                # annotare: lo SHA da cui nasce la baseline (app React di oggi)
 npm run build
 gzip -c dist/assets/index-*.js | wc -c            # annotare (12/10: 441 143)
 rm -rf dist-baseline && cp -r dist dist-baseline  # riferimento dell'audit per TUTTA la fase: non si ricostruisce più
+git rev-parse HEAD > dist-baseline/BASELINE_SHA   # provenienza: la 7b la ritrova qui (dist-baseline/ non è versionata)
 ```
+
+Lo SHA va anche nel commento finale della sub-issue («`dist-baseline/` costruita da `<SHA>`»): serve alla 7b (Task 6, Step 0) e all'handover (Task 8).
 
 - [ ] **Step 2: E2e delle impostazioni scoperte oggi**
 
@@ -3546,8 +3550,25 @@ git fetch origin
 git switch -c lab/LAB-5-fase-7b origin/epic/LAB-3-web-components
 git push -u origin lab/LAB-5-fase-7b
 gh pr create --draft --base epic/LAB-3-web-components --title "LAB-5: fase 7b, workspace e app senza React" --body-file <riepilogo e link al piano>
-npm ci && npm run build && rm -rf dist-baseline && cp -r dist dist-baseline   # stessa build React di prima: la 7a non ha cambiato l'aspetto
+npm ci
 ```
+
+La baseline **non** si ricostruisce dalla HEAD dell'epica: dopo il merge della 7a quella build ha già le impostazioni migrate, e l'audit della 7b non confronterebbe più con l'app React. Due strade, nell'ordine:
+
+```bash
+# (a) copiarla dal checkout della 7a (dist-baseline/ non è versionata, resta nel worktree del Task 1)
+cp -r <worktree della 7a>/dist-baseline ./dist-baseline
+cat dist-baseline/BASELINE_SHA                     # deve essere lo SHA annotato nel Task 1
+
+# (b) se quel checkout non c'è più: ricostruirla in un worktree separato, dallo SHA del Task 1
+SHA=<SHA annotato nel Task 1 (commento finale della sub-issue del Task 1)>
+git worktree add --detach /home/agent/work/housemd-baseline-7 "$SHA"
+(cd /home/agent/work/housemd-baseline-7 && npm ci && npm run build)
+rm -rf dist-baseline && cp -r /home/agent/work/housemd-baseline-7/dist dist-baseline && echo "$SHA" > dist-baseline/BASELINE_SHA
+git worktree remove --force /home/agent/work/housemd-baseline-7
+```
+
+Nel commento finale del Task 6: quale strada e lo SHA di `dist-baseline/BASELINE_SHA`.
 
 - [ ] **Step 1: I test, prima del codice**
 
@@ -5989,7 +6010,7 @@ E2e, solo i commenti che parlano di React al presente: `e2e/dev.config.ts` («Le
 
 - [ ] **Step 4: Handover della fase 8**
 
-`docs/superpowers/notes/2026-10-xx-handover-fase-8.md` nello stile di quello della fase 7: stato (branch, PR, misure delle suite e del bundle), `dist-baseline/` (invariata dalla fase 6c), cosa resta per la fase 8 (l'elenco «Per la fase 8» dell'handover della fase 7, più: la regola «mai disabled» su Salva chiave, Sincronizza ora, la cartella durante un cambio, la Cronologia senza documento e l'indirizzo per Anthropic; l'indice delle impostazioni che non arriva a «Sync»; il `padding` di 40vh; la checklist §9 in Chrome ed Edge; bundle e tempo di avvio contro il baseline della fase 3), le lezioni nuove di questa fase (dal paragrafo «Misure» e da quello che emerge nell'esecuzione: `:scope` contro la prossimità di `@scope`; `doc` nuovo a ogni render quando la vista dipende da uno stato esterno; figli condizionali ricreati; `#saveSecret(` e il test statico; l'hook `prepare-commit-msg` del daemon), le trappole dell'ambiente.
+`docs/superpowers/notes/2026-10-xx-handover-fase-8.md` nello stile di quello della fase 7: stato (branch, PR, misure delle suite e del bundle), `dist-baseline/` con commit e provenienza (lo SHA di `dist-baseline/BASELINE_SHA`, cioè il commit React del Task 1, e come è arrivata nella 7b: copiata dal checkout della 7a o ricostruita in un worktree detached), invariata per tutta la fase, cosa resta per la fase 8 (l'elenco «Per la fase 8» dell'handover della fase 7, più: la regola «mai disabled» su Salva chiave, Sincronizza ora, la cartella durante un cambio, la Cronologia senza documento e l'indirizzo per Anthropic; l'indice delle impostazioni che non arriva a «Sync»; il `padding` di 40vh; la checklist §9 in Chrome ed Edge; bundle e tempo di avvio contro il baseline della fase 3), le lezioni nuove di questa fase (dal paragrafo «Misure» e da quello che emerge nell'esecuzione: `:scope` contro la prossimità di `@scope`; `doc` nuovo a ogni render quando la vista dipende da uno stato esterno; figli condizionali ricreati; `#saveSecret(` e il test statico; l'hook `prepare-commit-msg` del daemon), le trappole dell'ambiente.
 
 - [ ] **Step 5: Esecuzione, PR, commit**
 
