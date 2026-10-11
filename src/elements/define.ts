@@ -1,4 +1,5 @@
 import { HmdAiChatLog } from './ai/chat-log.element';
+import { HmdAiComposer } from './ai/composer.element';
 import { HmdAiDiffPane } from './ai/diff-pane.element';
 import { HmdAiEffortChip } from './ai/effort-chip.element';
 import { HmdAiModelChip } from './ai/model-chip.element';
@@ -27,6 +28,7 @@ type Definitions = readonly (readonly [string, CustomElementConstructor])[];
 
 const ELEMENTS: Definitions = [
   ['hmd-ai-chat-log', HmdAiChatLog],
+  ['hmd-ai-composer', HmdAiComposer],
   ['hmd-ai-diff-pane', HmdAiDiffPane],
   ['hmd-ai-effort-chip', HmdAiEffortChip],
   ['hmd-ai-model-chip', HmdAiModelChip],

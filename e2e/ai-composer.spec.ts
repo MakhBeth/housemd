@@ -105,13 +105,13 @@ test.describe('composer', () => {
     await expect(page.getByText(app.t('ai.selectionLines', { count: 2 }), { exact: true })).toBeVisible();
   });
 
-  test('ignoring the selection with ✕: where the focus goes', async ({ app, page }) => {
+  test('ignoring the selection with ✕: the focus goes to the box', async ({ app, page }) => {
     await app.mode('mode.editor').click();
     await app.selectRange(0, 3);
     await enterAi(app);
     await page.getByRole('button', { name: app.t('ai.selectionIgnore') }).click();
-    // Difetto di oggi (React): il ✕ sparisce con il focus e il focus cade sul body. Il Task 5 lo rovescia (decisione 3).
-    await expect.poll(() => focusOnBody(app)).toBe(true);
+    // Decisione 3: il ✕ sparisce con il focus, che va nella casella del composer e non sul body.
+    await expect(composer(app)).toBeFocused();
   });
 
   test('the composer and the sidebar follow the interface language', async ({ app, page }) => {

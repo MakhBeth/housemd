@@ -4,7 +4,7 @@
  */
 import type { Key, Ref } from 'react';
 import type { TextRange } from '../ai/selectionChip';
-import type { ChatMessage, GenParams, ModelProfile } from '../ai/types';
+import type { ChatMessage, GenParams, ModelProfile, SelectionScope } from '../ai/types';
 import type { HouseConfig } from '../config/config';
 import type { DocSession } from '../editor/docSession';
 import type { RestoreCommand } from '../editor/restoreCommand';
@@ -15,8 +15,9 @@ import type { I18nStore } from '../state/i18nStore';
 import type { ThemeStore } from '../state/themeStore';
 import type { TreeNode } from '../ui/tree';
 import type { AiChipController } from './ai/aiChips';
+import type { HmdAiComposer } from './ai/composer.element';
+import type { ComposerController } from './ai/composerView';
 import type { HmdAiDiffPane } from './ai/diff-pane.element';
-import type { ModelChipController } from './ai/modelChipView';
 import type { ModelSelectController } from './ai/modelSelectView';
 import type { SaveImage } from './editor/docElement';
 import type { HmdEditor } from './editor/editor.element';
@@ -45,12 +46,14 @@ declare module 'react' {
   namespace JSX {
     interface IntrinsicElements {
       'hmd-ai-chat-log': HmdProps<{ messages: readonly ChatMessage[]; i18n: I18nStore }, 'hmd-ai-open-file' | 'hmd-ai-retry'>;
+      'hmd-ai-composer': HmdProps<
+        { controller: ComposerController; text: string; selection: TextRange | null; getSelection: () => SelectionScope | undefined; i18n: I18nStore },
+        'hmd-ai-manage'
+      > & { ref?: Ref<HmdAiComposer> };
       'hmd-ai-diff-pane': HmdDocProps<'hmd-ai-proposal-edit' | 'hmd-ai-all-rejected'> &
         HmdProps<{ proposal: string; range: TextRange | null; canAccept: boolean; streaming: boolean; beforeAccept: () => boolean }> & {
           ref?: Ref<HmdAiDiffPane>;
         };
-      'hmd-ai-effort-chip': HmdProps<{ controller: AiChipController; i18n: I18nStore }>;
-      'hmd-ai-model-chip': HmdProps<{ controller: ModelChipController; i18n: I18nStore }, 'hmd-ai-manage'>;
       'hmd-ai-model-select': HmdProps<{ controller: ModelSelectController; profile: ModelProfile; i18n: I18nStore }, 'hmd-ai-model-change'>;
       'hmd-ai-parameters': HmdProps<{ profile: ModelProfile; value: GenParams; hideEffort: boolean; i18n: I18nStore }, 'hmd-params-change'>;
       'hmd-ai-suggestions': HmdProps<{ controller: AiChipController; i18n: I18nStore }, 'hmd-ai-suggestion'>;

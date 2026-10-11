@@ -4,9 +4,9 @@ import type { AiController } from '../../ai/aiController';
 import type { TextRange } from '../../ai/selectionChip';
 import type { SelectionScope } from '../../ai/types';
 import { useI18nStore, useT } from '../../i18n/I18nProvider';
+import type { HmdAiComposer } from '../../elements/ai/composer.element';
 import type { SettingsSection } from '../../lib/route';
 import { Icon } from '../Icon';
-import { Composer, type ComposerHandle } from './Composer';
 import styles from './AiSidebar.module.css';
 
 interface Props {
@@ -22,7 +22,7 @@ export function AiSidebar({ controller, text, selection, getSelection, onSetting
   const t = useT();
   const i18nStore = useI18nStore();
   const state = useSyncExternalStore(controller.subscribe, controller.getState);
-  const composer = useRef<ComposerHandle>(null);
+  const composer = useRef<HmdAiComposer>(null);
   return (
     <div className={styles.sidebar}>
       <div className={styles.header}>
@@ -50,7 +50,15 @@ export function AiSidebar({ controller, text, selection, getSelection, onSetting
             ⚠ {t('ai.syncReactivate')}
           </button>
         )}
-        <Composer ref={composer} controller={controller} text={text} selection={selection} getSelection={getSelection} onManage={() => onSettings('ai-profiles')} />
+        <hmd-ai-composer
+          ref={composer}
+          controller={controller}
+          text={text}
+          selection={selection}
+          getSelection={getSelection}
+          i18n={i18nStore}
+          onhmd-ai-manage={() => onSettings('ai-profiles')}
+        />
         <hmd-ai-suggestions controller={controller} i18n={i18nStore} onhmd-ai-suggestion={(event) => composer.current?.sendPreset(event.detail.presetId)} />
       </div>
     </div>
