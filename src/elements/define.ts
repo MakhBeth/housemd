@@ -17,6 +17,8 @@ import { HmdNotice } from './notice/notice.element';
 import { HmdFrontmatterCard } from './preview/frontmatter-card.element';
 import { HmdPreview } from './preview/preview.element';
 import { HmdSearchPanel } from './search-panel/search-panel.element';
+import { HmdSettingsPresets } from './settings/presets.element';
+import { HmdSettingsProfiles } from './settings/profiles.element';
 import { HmdStartScreen } from './start-screen/start-screen.element';
 import { HmdToasts } from './toasts/toasts.element';
 import { HmdThemeSwitcher } from './theme-switcher/theme-switcher.element';
@@ -49,6 +51,8 @@ const ELEMENTS: Definitions = [
   ['hmd-notice', HmdNotice],
   ['hmd-preview', HmdPreview],
   ['hmd-search-panel', HmdSearchPanel],
+  ['hmd-settings-presets', HmdSettingsPresets],
+  ['hmd-settings-profiles', HmdSettingsProfiles],
   ['hmd-start-screen', HmdStartScreen],
   ['hmd-theme-switcher', HmdThemeSwitcher],
   ['hmd-toasts', HmdToasts],

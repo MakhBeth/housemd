@@ -23,6 +23,8 @@ import type { HmdEvents } from './events';
 import type { HistorySource } from './history-panel/history-panel.element';
 import type { HmdPreview } from './preview/preview.element';
 import type { HmdSearchPanel, SearchSource } from './search-panel/search-panel.element';
+import type { PresetsController } from './settings/presets.element';
+import type { ProfilesController } from './settings/profiles.element';
 import type { StartMode } from './start-screen/startView';
 import type { ToastItem } from './toasts/toasts.element';
 
@@ -78,6 +80,8 @@ declare module 'react' {
       'hmd-search-panel': HmdProps<{ index: SearchSource; indexRevision: number; i18n: I18nStore }, 'hmd-search-open'> & {
         ref?: Ref<HmdSearchPanel>;
       };
+      'hmd-settings-presets': HmdProps<{ controller: PresetsController; i18n: I18nStore }, 'hmd-settings-dirty'>;
+      'hmd-settings-profiles': HmdProps<{ controller: ProfilesController; i18n: I18nStore }, 'hmd-settings-dirty'>;
       'hmd-start-screen': HmdProps<
         { mode: StartMode; reason: UnsupportedReason; error: string; folderName: string; busy: boolean; i18n: I18nStore },
         'hmd-start-pick' | 'hmd-start-resume'

@@ -58,6 +58,8 @@ export interface HmdEvents {
   'hmd-selection': CustomEvent<{ range: TextRange | null }>;
   /** Ricerca: aprire un risultato (clic o Invio sul primo), con i termini da evidenziare nell'anteprima. */
   'hmd-search-open': CustomEvent<{ path: string; terms: string[] }>;
+  /** Sezione di profili o preset: la bozza aperta è diventata (o non è più) da salvare. */
+  'hmd-settings-dirty': CustomEvent<{ dirty: boolean }>;
   /** Schermata iniziale: scegliere una cartella (anche «Apri un'altra cartella»). */
   'hmd-start-pick': CustomEvent<null>;
   /** Schermata iniziale: riprendere l'accesso alla cartella ricordata. */
