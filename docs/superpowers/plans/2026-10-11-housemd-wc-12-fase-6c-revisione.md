@@ -20,6 +20,7 @@
 - Regole degli elementi (spec §2, §5): elementi sottili (logica in moduli puri testati senza DOM), DOM solo con `el()` (mai stringhe HTML), light DOM + `@scope`, un file `<nome>.element.ts` + `<nome>.css`, classe `Hmd<Nome>`, `customElements.define` solo in `src/elements/define.ts`, ogni `addEventListener` verso nodi che sopravvivono all'elemento con il `signal` (i listener sui nodi creati dall'elemento muoiono con i nodi: `on` di `el()`).
 - Cartella: `src/elements/ai/` (radici `hmd-ai-*`, già ammesse da `architecture.test.ts`; il limite inferiore `to (hmd-…)` è ammesso dalla regola). Nessuna eccezione nuova.
 - **Schema di render (`RenderLoop`)**: ogni render passa da `this.#loop.update()`: setter, `watch`, gestori (`click`, notifiche del controller, tick del contatore), risposte asincrone (la conferma del dialog). Nessun `#render()` fuori dal loop. **`HmdElement.watch()` esegue subito la funzione**: niente render ridondanti in fondo a `connect()`; **nessun evento si emette dentro `connect`**. I prerequisiti si ricontrollano a ogni passata; `hadFocus` prima della prima, recupero del focus dopo l'ultima, contro il DOM finito.
+- **Una nota si svuota solo a un render: ogni causa, quando sparisce, deve provocarne uno** (rilievo di Reviewer sul piano, bloccante). Le note del composer e della barra si ricalcolano nel render dalla causa (`sendBlocker()`, `acceptBlocker()`); un render arriva solo da una notifica del controller, da un ingresso o da un evento. `AiController.prepare()` e `cancel()` cambiavano `updating` **senza notificare**: la nota «aggiornamento in corso» restava dopo la fine dell'aggiornamento anche ripassando testo e selezione invariati. Il Task 2 fa notificare `prepare()`, `cancel()` e `documentChanged(…, reset = true)` (un documento aperto: la nota «apri un documento») con `this.set({})`, che cambia anche l'identità dello stato per `useSyncExternalStore` (`ReviewView.tsx` e `ReviewBar.tsx` restano React fino al Task 4: la nota della barra «aggiornamento in corso» della seconda parte del Task 3 si svuota per la stessa via). Le altre cause notificano già: generazione (`running` nello stato), profilo (`reload()` → `set`), testo (evento `input`). Il test che lo prova usa il **controller vero**, non `fakeAi` con un `ai.set({})` a mano.
 - **Lo stato si salva prima di emettere**: la barra registra la nota (o la toglie) e fa il render **prima** di mandare `hmd-ai-review-action`; la vista non emette nulla verso fuori (gli eventi di editor e diff risalgono da soli).
 - **Nessun callback DOM rientra in un render in modo sincrono**: la vista toglie e inserisce i figli della sezione (barra, diff, editor semplice, suggerimento, anteprima) senza mai spostarne uno già al suo posto; il `focusout` sincrono di Chromium quando sparisce il nodo con il focus (Scarta, Continua, il pulsante degli avvisi) arriva dentro il render e chiede solo una passata in più (`RenderLoop`). Il popover degli avvisi si apre e chiude solo con `popovertarget`: nessun `toggle` ascoltato.
 - **Lavoro asincrono tardivo scartato**: il contatore dei secondi (`setInterval` di 1 s) vive con il run in corso e si ferma al distacco (`disconnectedCallback`); la conferma di «Accetta tutto» (`showConfirmDialog`) ha un `signal` che si interrompe al distacco e, risolta, accetta **la proposta di quel momento** (come `acceptRef` di ReviewView.tsx), non quella del clic.
@@ -36,7 +37,7 @@
 - **Un difetto noto si afferma, non si nasconde**: niente `test.fail`. I test del Task 1 che affermano i pulsanti spenti durante la generazione e con la proposta troncata, la casella svuotata senza documento e il silenzio di Invio durante una generazione li riscrivono nella forma nuova la seconda parte del Task 3 e il Task 2.
 - Dialog solo con le funzioni di `src/elements/dialogs/` (qui `showConfirmDialog` per «Accetta tutto» a documento cambiato); File System Access API solo in `src/fs/`; `workspace/` non cambia; `ai/` cambia solo per i due metodi nuovi del controller.
 - **Mai giudicare un comando di verifica dal suo output filtrato.** I `grep` di controllo sono ricorsivi, si lanciano dopo il `git rm` e distinguono l'uscita 1 dalla 2. Il controller rilancia almeno i file e2e nuovi o toccati di ogni task.
-- Verifica di ogni task che tocca l'app, **in sequenza**: `npm test`, `npm run lint`, `npm run test:e2e`, `npm run test:e2e:dev`, `npm run test:e2e:audit`. **RAM di ape** (regola di Davide dell'11/10): tutto il servizio Multica (daemon, agenti attivi, build, Vite, Chromium) ha un tetto di 8 GB e rallenta già sopra i 6, con fino a 2 task insieme: **un solo browser e un solo worker** (`E2E_WORKERS=1`, la config lo supporta già), **una suite alla volta**, sempre dentro il lock condiviso: `E2E_WORKERS=1 flock /home/agent/work/.browser-tests.lock npm run test:e2e` (lo stesso per `test:e2e:dev` e `test:e2e:audit`, anche nel prototipo); mentre si sviluppa solo i file di test toccati (`… npx playwright test -c e2e/playwright.config.ts e2e/ai-review-bar.spec.ts`), le suite complete solo ai gate (fine task e commit finale); a fine suite `pgrep -af "vite|chrom|playwright"` e chiudere solo i PID propri (mai `pkill` per nome). Con un solo worker una caduta isolata non è più «carico»: va guardata come un possibile bug. Le misure dei tempi si prendono con un solo worker. Instabilità estranee note: `settings.spec.ts` «Back again with the confirmation already open keeps a single dialog» (ripetere da solo e annotarlo); i 2 snapshot dello start screen di `visual.spec.ts` cadono su ape per il font pixel (estraneo, misurato prima di toccare l'app: non si rigenerano).
+- Verifica di ogni task che tocca l'app, **in sequenza**: `npm test`, `npm run lint`, `npm run test:e2e`, `npm run test:e2e:dev`, `npm run test:e2e:audit`. **RAM di ape** (regola di Davide dell'11/10): tutto il servizio Multica (daemon, agenti attivi, build, Vite, Chromium) ha un tetto di 8 GB e rallenta già sopra i 6, con fino a 2 task insieme: **un solo browser e due worker** (`E2E_WORKERS=2`, il default della config; regola aggiornata da Davide l'11/10: con 1 worker solo se una suite cade per memoria, e allora lo si scrive nel commento finale), **una suite alla volta**, sempre dentro il lock condiviso, con la variabile **prima** di `flock`: `E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npm run test:e2e` (lo stesso per `test:e2e:dev` e `test:e2e:audit`, anche nel prototipo); mentre si sviluppa solo i file di test toccati (`… npx playwright test -c e2e/playwright.config.ts e2e/ai-review-bar.spec.ts`), le suite complete solo ai gate (fine task e commit finale); a fine suite `pgrep -af "vite|chrom|playwright"` e chiudere solo i PID propri (mai `pkill` per nome). Una caduta isolata si ripete da sola prima di chiamarla carico. Instabilità estranee note: `settings.spec.ts` «Back again with the confirmation already open keeps a single dialog» (ripetere da solo e annotarlo); i 2 snapshot dello start screen di `visual.spec.ts` cadono su ape per il font pixel (estraneo, misurato prima di toccare l'app: non si rigenerano).
 - Commenti e commit in italiano, identificatori in inglese.
 
 
@@ -44,7 +45,7 @@
 
 Baseline su `0ba9ccb` (= `epic/LAB-3-web-components`): `npm test` = **934** test verdi; `npm run test:e2e` = **176** (174 verdi + i 2 snapshot dello start screen che cadono su ape per il font pixel: estraneo, misurato prima di toccare l'app); `npm run test:e2e:dev` = **161**; audit = **52** stati (104 test, `baseline` + `current`); bundle principale gzip = **439 717 B** (`dist/assets/index-Degrg3UY.js`; l'handover diceva 439 695).
 
-**Prototipo.** Il codice di tutti i task è stato provato su una copia del repository fuori dal worktree (`git worktree add --detach ../housemd-proto-6c origin/epic/LAB-3-web-components` sotto `/home/agent/work`, `npm ci`, `dist-baseline/` costruita da `0ba9ccb` prima di toccare l'app, niente commit; prototipo rimosso alla fine), in due run (il primo è caduto due volte per un riavvio del daemon di ape: i log delle suite dei Task 1–3 vengono da lì, il Task 4 e le suite complete finali da questo). `npm run lint` pulito a ogni task; `npm test` 934 → **974** (+8 Task 2: 3 controller, 1 vista del composer, 4 composer; +1 + 7 e +3 + 3 Task 3; +7 + 11 Task 4; nel primo run la divisione tra le due parti della barra era diversa: 953 dopo la prima parte); `npm run test:e2e` 176 → **186** (+10 di `ai-review-bar.spec.ts` nel Task 1; i 2 dello start screen cadono sempre e solo loro), **snapshot invariati** (lo snapshot «AI review» passa senza rigenerare anche con la nota della barra: la nota vuota è a 0 px); `npm run test:e2e:dev` 161 → **171**; audit 104 → 112 (Task 1: `ai-review-generating`, `ai-review-truncated`, `ai-review-warnings`, `ai-review-applied`) → 114 (Task 2: `ai-composer-note-no-document`) → **116** (Task 3, seconda parte: `ai-review-note`), verde dopo ogni task: la prima parte della barra contro la baseline del Task 1 (112, nessuna differenza), le due seconde parti contro le baseline ricostruite, il Task 4 contro la baseline del Task 3 (116: l'host della vista è `display: contents`); bundle gzip 439 717 → **441 030 B** (+1 313: React resta, due componenti diventano elementi). Tempi con **un solo worker** (regola di Davide): `test:e2e` 4,7 min, `test:e2e:dev` 6,7 min, `test:e2e:audit` 5,8 min, `npm test` 39 s. Sull'app finale una sola caduta estranea: `ai-sync-reactivate` dell'audit con «Target page, context or browser has been closed» al `page.reload()` del suo setup (trappola già nota dell'handover), ripetuta da sola 2/2 verde. Misurato anche:
+**Prototipo.** Il codice di tutti i task è stato provato su una copia del repository fuori dal worktree (`git worktree add --detach ../housemd-proto-6c origin/epic/LAB-3-web-components` sotto `/home/agent/work`, `npm ci`, `dist-baseline/` costruita da `0ba9ccb` prima di toccare l'app, niente commit; prototipo rimosso alla fine), in due run (il primo è caduto due volte per un riavvio del daemon di ape: i log delle suite dei Task 1–3 vengono da lì, il Task 4 e le suite complete finali da questo). `npm run lint` pulito a ogni task; `npm test` 934 → **974** (+8 Task 2: 3 controller, 1 vista del composer, 4 composer; +1 + 7 e +3 + 3 Task 3; +7 + 11 Task 4; nel primo run la divisione tra le due parti della barra era diversa: 953 dopo la prima parte); `npm run test:e2e` 176 → **186** (+10 di `ai-review-bar.spec.ts` nel Task 1; i 2 dello start screen cadono sempre e solo loro), **snapshot invariati** (lo snapshot «AI review» passa senza rigenerare anche con la nota della barra: la nota vuota è a 0 px); `npm run test:e2e:dev` 161 → **171**; audit 104 → 112 (Task 1: `ai-review-generating`, `ai-review-truncated`, `ai-review-warnings`, `ai-review-applied`) → 114 (Task 2: `ai-composer-note-no-document`) → **116** (Task 3, seconda parte: `ai-review-note`), verde dopo ogni task: la prima parte della barra contro la baseline del Task 1 (112, nessuna differenza), le due seconde parti contro le baseline ricostruite, il Task 4 contro la baseline del Task 3 (116: l'host della vista è `display: contents`); bundle gzip 439 717 → **441 030 B** (+1 313: React resta, due componenti diventano elementi). Tempi con un solo worker (la regola del momento; ora sono due): `test:e2e` 4,7 min, `test:e2e:dev` 6,7 min, `test:e2e:audit` 5,8 min, `npm test` 39 s. Sull'app finale una sola caduta estranea: `ai-sync-reactivate` dell'audit con «Target page, context or browser has been closed» al `page.reload()` del suo setup (trappola già nota dell'handover), ripetuta da sola 2/2 verde. Misurato anche:
 
 - **Il difetto del focus di «Scarta» non si riproduce in Chromium sull'app React** (11 scenari in produzione e in sviluppo: Scarta, Accetta tutto, Ctrl+Z, conferma annullata, Continua; il focus finisce sempre nell'editor), mentre **si riproduce in jsdom** con il focus sul pulsante che sparisce: `ReviewView.tsx` tale e quale (la vista senza `refocus`) lascia il focus sul `body`. Il test «Discard with the focus on the button: the focus goes into the plain editor, not the body (the fix of 6c)» cade con `focus on the plain editor, not on body.` senza la riga `refocus` e passa con (RED misurato in questo run, 1 su 11); gli e2e del Task 1 affermano il comportamento di oggi di Chromium e restano verdi.
 - **`assert.equal` tra due nodi di jsdom appende il processo**: il primo RED del test del focus è durato 150 s senza output, perché il messaggio di `node:assert` passa da `util.inspect` dell'albero. Tutte le asserzioni sul focus usano `focusOn` (valore derivato), e i test con CodeMirror girano con `--test-timeout=20000`.
@@ -56,6 +57,8 @@ Baseline su `0ba9ccb` (= `epic/LAB-3-web-components`): `npm test` = **934** test
 - **Senza documento aperto non si apre un documento restando in modalità AI** (il pannello AI prende il posto dell'albero): si passa dall'editor, `WorkspaceView` smonta la sidebar e la bozza si perde come oggi; il test e2e afferma solo che la nota non c'è più (la prima versione, che pretendeva la bozza dopo il rimontaggio, cadeva: non è una regressione).
 - **Precedente/Successivo** si verificano con `.cm-activeLine` del lato documento (segue il cursore anche senza il focus nell'editor; con il focus sul pulsante la selezione del DOM non si aggiorna).
 - **`finish_reason: 'length'` nel finto Ollama** produce davvero una proposta «troncata» (Accetta tutto spento oggi, nota `ai.review.truncated` dopo); interrompere lo stream a metà con `route.fulfill` non si può.
+
+**Correzioni dopo la review di Reviewer (11/10, su LAB-9), provate nel prototipo ricostruito dalla patch (`0ba9ccb` + Task 1–4) con il RED prima della correzione**: (1) **bloccante, Task 2**: `prepare()`/`cancel()` non notificavano, quindi la nota «aggiornamento in corso» restava dopo la fine dell'aggiornamento (il test con `fakeAi` lo mascherava con `ai.set({})`) → `prepare()`, `cancel()` e `documentChanged(…, reset = true)` chiamano `this.set({})`; test nuovi «prepare(), cancel() e un documento aperto … notificano gli iscritti» (RED `0 !== 1`) e, con il controller vero montato nel composer, «with the real controller: the updating note goes when cancel() ends the update…» (RED `'An update is in progress: try again in a moment' !== ''`); (2) **Task 4**: `#update()` riportava il focus al cambio di vista solo dal `body`; con il focus su Accetta tutto durante la generazione, arrivata la proposta il focus restava sul pulsante (React lo sposta nel diff) → la regola intera dell'effetto `[view]` (`body` o dentro la sezione); test nuovo «generation finishes with the focus in the retained bar…» (RED `focus on the document side of the diff, not on button.secondary accept`). Dopo: `npm test` **977** (974 + 3), lint pulito, e2e dei cinque file AI (`ai-review-bar`, `ai-review`, `ai-diff`, `ai-composer`, `ai-chat-log`) con due worker: produzione 41 verdi + «a sync folder without permission…» caduta con «page.reload: Target page… closed» (la trappola nota, prima di arrivare all'AI), ripetuta da sola 2/3 con due worker e **3/3 con un worker**; sviluppo 42/42 (StrictMode, console pulita). Le suite complete e l'audit non rilanciati per queste correzioni: le notifiche in più non cambiano il DOM né gli stili (nessuna baseline da rifare), e il Task 2 e il Task 4 le rilanciano ai loro gate.
 
 **Esecuzione.** (da compilare nel Task 5: misure sul branch finale, deviazioni dal piano, correzioni della review.)
 
@@ -97,7 +100,7 @@ Ordine della 6c: rete (Task 1) → ragioni dal controller (Task 2) → barra, pr
 1. **Ordine e divisione come sopra** (sì): ragioni dal controller prima della barra (la seconda parte della barra usa `acceptBlocker`), barra prima della vista, un elemento per task, il cambio d'aspetto isolato nella seconda parte del Task 3.
 2. **Ragioni dal controller con due metodi sincroni** (sì, raccomandazione del PM confermata dal design): `sendBlocker(): 'running' | 'noDocument' | 'updating' | null` (la guardia di `send()`, letta dal composer **prima** di svuotare la casella; `send()` tiene la guardia e resta silenzioso) e `acceptBlocker(p, all): 'generating' | 'updating' | 'notAcceptable' | 'conflict' | 'scopeLost' | 'truncated' | null` (`canAccept(p, all) = acceptBlocker(p, all) === null`, nell'ordine della barra). Codici, non chiavi i18n: il controller non conosce le chiavi (come `AiErrorCode` → `ai.error.<code>`); le mappe `ai.review.<codice>` e `CONTROLLER_NOTES` stanno nei moduli di vista. Il profilo mancante resta al composer (`needProfile`), che lo sa già. **Alternativa scartata**: `send()` che restituisce la ragione in una Promise si risolve a fine generazione (dopo `await this.execute(…)`), troppo tardi per non svuotare la casella; e un `send()` che restituisce subito una ragione e poi continua in sottofondo cambia il contratto dei chiamanti (`.catch(report)`) per niente. **Trovato nel prototipo**: «suggerimento cliccato durante una generazione» (handover, punto 2) non è raggiungibile dall'interfaccia (`suggestionPresets` nasconde i suggerimenti con `running` o con messaggi in chat); la ragione `running` vale per **Invio da tastiera** durante la generazione (`composerAction` restituisce `send` anche con `running`), che oggi tace. Il test del Task 1 afferma anche l'assenza dei suggerimenti.
 3. **Barra: pulsanti mai disattivati, una nota per la barra** (sì, variante A di Designer): `p.note[role=status]` figlia di `hmd-ai-review-bar`, sorella di `.bar`, sotto la riga dei pulsanti e **dentro** il bordo inferiore (spostato da `.bar` all'host, che diventa `display: block`); stile delle note 6b (`margin: 0; color: var(--c-muted); font-size: 12px; padding-inline: 12px`, `padding-block: 0 8px` solo se non vuota); vuota = 0 px. Aspetto dei pulsanti identico in ogni stato (via le regole `:disabled` e il `:not(:disabled)` dell'hover). Chiavi `ai.review.*`, priorità generazione → aggiornamento → conflitto → selezione persa → troncata → riserva (`notAcceptable`, per i rami del controller che la vista non raggiunge: documento diverso o nessun documento). Scarta durante la generazione: nota, non Ferma+scarta (comportamento di oggi; Ferma+scarta in fase 8). Lo span di stato resta com'è (contatore in live region → rilievo per A11y in fase 8). **Continua** non ha nota (oggi non si disattiva; il controller lo ignora in silenzio durante un aggiornamento: raro, da rivedere in fase 8 con la regola estesa). **La nota non usa il font pixel della barra**: sta fuori da `.bar`, come le note 6b (font dell'app); la proposta di Designer non lo fissa, si raccomanda così per coerenza con le altre note.
-4. **Focus su un bersaglio stabile quando il nodo che lo ha sparisce** (sì): la vista recupera il focus con `RenderLoop` (`focusScope` = la sezione, `refocus` = l'editor della vista mostrata) **più** la regola «focus sul `body`» dell'effetto di ReviewView.tsx (un cambio di vista con il focus da nessuna parte porta il focus nell'editor nuovo); la barra recupera su Accetta tutto (Continua che sparisce dopo il clic, il pulsante degli avvisi senza avvisi). **Il difetto «focus perso da Scarta dopo Accetta tutto completo» non si riproduce** (vedi «Misure»: 11 scenari in produzione e in sviluppo, focus sempre nell'editor): il Task 1 afferma il comportamento di oggi (focus nell'editor dopo Scarta, dopo Accetta tutto, dopo Ctrl+Z), e l'elemento lo mantiene per costruzione; il test jsdom del Task 4 «Discard with the focus on the button…» fallisce senza `refocus` (RED per costruzione). Resta a Davide una verifica a mano in Chrome (sub-issue LAB-38, già aperta): se il difetto si vede solo con la scheda nascosta o con lo screen reader, lo stesso recupero lo copre. **Riprodotto in jsdom** (Task 4): con il focus sul pulsante Scarta che sparisce, la vista senza `refocus` lascia il focus sul `body` (test «Discard with the focus on the button…», RED misurato nel prototipo con la riga tolta).
+4. **Focus su un bersaglio stabile quando il nodo che lo ha sparisce** (sì): la vista recupera il focus con `RenderLoop` (`focusScope` = la sezione, `refocus` = l'editor della vista mostrata) **più** la regola intera dell'effetto `[view]` di ReviewView.tsx: a ogni cambio di vista (diff ↔ editor semplice) con il focus sul `body` **o dentro la sezione** il focus va nell'editor nuovo, anche se il nodo con il focus sopravvive (rilievo di Reviewer: generazione senza proposta, focus su Accetta tutto, arriva la proposta: React sposta il focus nel diff, la prima stesura della vista lo lasciava sul pulsante; il comportamento di oggi si conserva, un cambio andrebbe deciso con Designer e A11y fuori da questa fase); la barra recupera su Accetta tutto (Continua che sparisce dopo il clic, il pulsante degli avvisi senza avvisi). **Il difetto «focus perso da Scarta dopo Accetta tutto completo» non si riproduce** (vedi «Misure»: 11 scenari in produzione e in sviluppo, focus sempre nell'editor): il Task 1 afferma il comportamento di oggi (focus nell'editor dopo Scarta, dopo Accetta tutto, dopo Ctrl+Z), e l'elemento lo mantiene per costruzione; il test jsdom del Task 4 «Discard with the focus on the button…» fallisce senza `refocus` (RED per costruzione). Resta a Davide una verifica a mano in Chrome (sub-issue LAB-38, già aperta): se il difetto si vede solo con la scheda nascosta o con lo screen reader, lo stesso recupero lo copre. **Riprodotto in jsdom** (Task 4): con il focus sul pulsante Scarta che sparisce, la vista senza `refocus` lascia il focus sul `body` (test «Discard with the focus on the button…», RED misurato nel prototipo con la riga tolta).
 5. **Ingressi e uscite** (sì): `hmd-ai-review-bar` riceve `status`, `warnings`, `canAccept`, `canDiscard` (prima parte) → `status`, `warnings`, `acceptBlocker` (seconda parte), `i18n`; manda `hmd-ai-review-action { action: 'previous' | 'next' | 'acceptAll' | 'discard' | 'continue' }` (**un** evento con il discriminante, come `hmd-tree-action`, invece di cinque) e `hmd-ai-review-warning { warning }`. `hmd-ai-review` riceve `controller` (`ReviewController`), `doc` (`ReviewDoc`, spostata da `ui/ai/reviewDoc.ts` a `elements/ai/reviewView.ts`), `i18n`; non manda eventi. `beforeAccept` del diff è una funzione stabile che legge la proposta del momento (come la closure di React, che la rileggeva a ogni render).
 6. **Il contatore dei secondi e la conferma vivono con l'elemento** (sì): `setInterval` fermato in `disconnectedCallback` (non al `reconnect()`, che lo ricreerebbe comunque dal `watch`); `showConfirmDialog` con un `AbortController` dei dialog interrotto al distacco (non il `signal` di `connect`, che si interrompe anche a un cambio di store).
 7. **Sentinella e2e** (sì, Task 1): i 14 `expect(acceptAll).toBeEnabled()` usati come «proposta arrivata» (elenco nello Step 2 del Task 1) diventano `proposalShown(app)` = diff visibile; `ai-composer.spec.ts` e `ai-chat-log.spec.ts` perdono la costante `acceptAll` se resta senza usi.
@@ -115,8 +118,8 @@ Ordine della 6c: rete (Task 1) → ragioni dal controller (Task 2) → barra, pr
 ## Review Focus
 
 1. **Nessun pulsante della barra si disattiva mai e la nota dice il perché giusto**: generazione (tutti e quattro), aggiornamento, conflitto, selezione persa, troncata, riserva (Accetta tutto); il focus resta sul pulsante; la nota se ne va quando la causa sparisce, quando un'azione riesce, quando la barra sparisce; la stessa nota due volte non si ri-annuncia (accettato). Test jsdom della seconda parte del Task 3 («while generating nothing is disabled…», «the note goes when its cause goes…», «Accept all says the reason of the controller…», «detached and attached again the note is forgotten») + `ai-review-bar.spec.ts` («while generating nothing is disabled…», «a truncated proposal: Accept all says…») + `reviewBarView.test.ts` + audit `ai-review-note`.
-2. **Ragioni dal controller, bozza conservata**: senza documento, durante un aggiornamento, durante una generazione (Invio) l'invio non parte, la casella non si svuota, la nota lo dice e si svuota quando la causa sparisce; l'ordine generazione → documento → aggiornamento → profilo → testo; `send()` resta la stessa guardia; `acceptBlocker` nell'ordine della barra e `canAccept` identico a prima. Test del Task 2: `aiController.test.ts` («sendBlocker: …», «acceptBlocker: una ragione per volta…», «acceptBlocker: la selezione persa…»), `composerView.test.ts`, `composer.dom.test.ts` («without a document Send says so…», «during an update…», «a suggestion (or Enter) during a generation…», «the order of the reasons…»), `ai-review-bar.spec.ts` («with no document open, Send says so…», «Enter in the composer during a generation says so…»), audit `ai-composer-note-no-document`.
-3. **Il focus tra diff ed editor semplice e dentro la barra**: Accetta tutto, Scarta, Ctrl+Z, Continua, la chiusura del popover degli avvisi, la conferma annullata; mai sul `body`, anche in sviluppo con StrictMode. Test jsdom del Task 4 («Discard with the focus on the button…», «a view change with the focus already on the body…») e della barra («the focused Continue removed…») + `ai-review-bar.spec.ts` (i tre test del focus) + `ai-diff.spec.ts` («Ctrl+Z that brings the diff back…»).
+2. **Ragioni dal controller, bozza conservata**: senza documento, durante un aggiornamento, durante una generazione (Invio) l'invio non parte, la casella non si svuota, la nota lo dice e si svuota quando la causa sparisce **senza altre azioni dell'utente** (`cancel()` e un documento aperto notificano: test con il controller vero); l'ordine generazione → documento → aggiornamento → profilo → testo; `send()` resta la stessa guardia; `acceptBlocker` nell'ordine della barra e `canAccept` identico a prima. Test del Task 2: `aiController.test.ts` («sendBlocker: …», «acceptBlocker: una ragione per volta…», «acceptBlocker: la selezione persa…»), `composerView.test.ts`, `composer.dom.test.ts` («without a document Send says so…», «during an update…», «a suggestion (or Enter) during a generation…», «the order of the reasons…»), `ai-review-bar.spec.ts` («with no document open, Send says so…», «Enter in the composer during a generation says so…»), audit `ai-composer-note-no-document`.
+3. **Il focus tra diff ed editor semplice e dentro la barra**: Accetta tutto, Scarta, Ctrl+Z, Continua, la chiusura del popover degli avvisi, la conferma annullata; la proposta che arriva con il focus su un pulsante della barra (focus nel diff, come React); mai sul `body`, anche in sviluppo con StrictMode. Test jsdom del Task 4 («Discard with the focus on the button…», «a view change with the focus already on the body…», «generation finishes with the focus in the retained bar…») e della barra («the focused Continue removed…») + `ai-review-bar.spec.ts` (i tre test del focus) + `ai-diff.spec.ts` («Ctrl+Z that brings the diff back…»).
 4. **La vista non ricrea mai editor e diff e passa le proprietà prima dell'inserimento**: `resetKey`, `session`, `restore`, `readOnly` arrivano all'editor nuovo prima che entri nel DOM; nessun nodo già al suo posto viene spostato; l'anteprima della risposta in arrivo entra e esce tra barra e diff; il contatore si ferma al distacco; il dialog si chiude al distacco e accetta la proposta del momento. Test jsdom del Task 4 («without a proposal: the same DOM…», «with a proposal: the bar and the diff…», «Accept all after the document changed: the confirmation dialog…», «the seconds counter stops at detach…») + `ai-review.spec.ts` esistente.
 5. **Aspetto identico negli stati che oggi nessuno fotografa**: generazione senza proposta (barra con il contatore), proposta troncata, popover degli avvisi aperto, editor dopo Accetta tutto; poi le due note. Stati di audit del Task 1 (`ai-review-generating`, `ai-review-truncated`, `ai-review-warnings`, `ai-review-applied`), verdi contro `dist-baseline/` nella prima parte del Task 3 e nel Task 4, più `ai-review-note` e `ai-composer-note-no-document` dopo le baseline ricostruite.
 
@@ -469,10 +472,10 @@ In `e2e/computed-styles.audit.ts`, dopo lo stato `ai-review-conflict` (il contat
 
 ```bash
 npm run lint
-E2E_WORKERS=1 flock /home/agent/work/.browser-tests.lock npx playwright test -c e2e/playwright.config.ts e2e/ai-review-bar.spec.ts --repeat-each=3   # 30/30
-E2E_WORKERS=1 flock /home/agent/work/.browser-tests.lock npm run test:e2e        # annotare: 176 + 10 = 186 (2 snapshot dello start screen cadono su ape per il font pixel: estraneo, vedi «Misure»)
-E2E_WORKERS=1 flock /home/agent/work/.browser-tests.lock npm run test:e2e:dev    # annotare: 161 + 10 = 171
-E2E_WORKERS=1 flock /home/agent/work/.browser-tests.lock npm run test:e2e:audit  # annotare: 104 + 8 = 112 (due test per stato)
+E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npx playwright test -c e2e/playwright.config.ts e2e/ai-review-bar.spec.ts --repeat-each=3   # 30/30
+E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npm run test:e2e        # annotare: 176 + 10 = 186 (2 snapshot dello start screen cadono su ape per il font pixel: estraneo, vedi «Misure»)
+E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npm run test:e2e:dev    # annotare: 161 + 10 = 171
+E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npm run test:e2e:audit  # annotare: 104 + 8 = 112 (due test per stato)
 pgrep -af "vite|chrom|playwright"   # niente di proprio appeso
 ```
 
@@ -488,13 +491,13 @@ git commit -m "test: rete sulla barra e sulla vista della revisione AI (pulsanti
 ---
 ### Task 2: Ragioni dal controller, note nel composer, bozza conservata (LAB-10)
 
-`AiController` dice **perché** un invio o un'accettazione non può partire, con due metodi **sincroni** (decisione 2): `sendBlocker()` è la guardia di `send()` letta prima; `acceptBlocker(p, all)` è `canAccept` scomposto nelle sue cause, nell'ordine della barra. Il composer legge `sendBlocker()` prima di svuotare la casella: senza documento, durante un aggiornamento o durante una generazione (Invio da tastiera, perché i suggerimenti non ci sono con `running`) la nota sotto il composer dice perché e la bozza resta. Tutte le **nove chiavi** nuove entrano qui, in tutti i locali, per non toccare i locali due volte (le sei `ai.review.*` le usa la seconda parte del Task 3). `ReviewView.tsx` e `ReviewBar.tsx` non cambiano.
+`AiController` dice **perché** un invio o un'accettazione non può partire, con due metodi **sincroni** (decisione 2): `sendBlocker()` è la guardia di `send()` letta prima; `acceptBlocker(p, all)` è `canAccept` scomposto nelle sue cause, nell'ordine della barra. `prepare()`, `cancel()` e `documentChanged(…, reset = true)` notificano gli iscritti, così la nota si svuota al render quando la causa sparisce. Il composer legge `sendBlocker()` prima di svuotare la casella: senza documento, durante un aggiornamento o durante una generazione (Invio da tastiera, perché i suggerimenti non ci sono con `running`) la nota sotto il composer dice perché e la bozza resta. Tutte le **nove chiavi** nuove entrano qui, in tutti i locali, per non toccare i locali due volte (le sei `ai.review.*` le usa la seconda parte del Task 3). `ReviewView.tsx` e `ReviewBar.tsx` non cambiano.
 
 **Files:**
 - Modify: `src/ai/aiController.ts`, `src/ai/aiController.test.ts`, `src/elements/ai/composerView.ts`, `composerView.test.ts`, `composer.element.ts`, `composer.dom.test.ts`, `src/testing/fakeAi.ts`, `src/i18n/locales/*.json` (nove chiavi), `e2e/ai-review-bar.spec.ts` (i due test del composer nella forma nuova), `e2e/computed-styles.audit.ts` (stato `ai-composer-note-no-document`)
 
 **Interfaces:**
-- Produces: `type SendBlocker = 'running' | 'noDocument' | 'updating'`, `type AcceptBlocker = 'generating' | 'updating' | 'notAcceptable' | 'conflict' | 'scopeLost' | 'truncated'`, `AiController.sendBlocker(): SendBlocker | null`, `AiController.acceptBlocker(p, all = false): AcceptBlocker | null`, `canAccept(p, all) = acceptBlocker(p, all) === null`; `ComposerController` con `sendBlocker`; `composerView.ts`: `SendBlocker` (chiavi) esteso a `'ai.composer.generating' | 'ai.composer.noDocument' | 'ai.composer.updating'`, `CONTROLLER_NOTES`, `sendBlocker(request, hasProfile, preset, controller = null)`; `fakeAi` con `sendBlocker`/`sendBlockerValue`, `blocker`/`acceptBlocker`/`canAccept`/`beforeAccept`, `proposalText`/`proposalTextValue`, `edited`, `discard`, `continue`, e `proposals: new Map()` e `streamingPreview: null` nello stato di default (servono al Task 4).
+- Produces: `prepare()`, `cancel()`, `documentChanged(…, reset = true)` che notificano (`this.set({})`); `type SendBlocker = 'running' | 'noDocument' | 'updating'`, `type AcceptBlocker = 'generating' | 'updating' | 'notAcceptable' | 'conflict' | 'scopeLost' | 'truncated'`, `AiController.sendBlocker(): SendBlocker | null`, `AiController.acceptBlocker(p, all = false): AcceptBlocker | null`, `canAccept(p, all) = acceptBlocker(p, all) === null`; `ComposerController` con `sendBlocker`; `composerView.ts`: `SendBlocker` (chiavi) esteso a `'ai.composer.generating' | 'ai.composer.noDocument' | 'ai.composer.updating'`, `CONTROLLER_NOTES`, `sendBlocker(request, hasProfile, preset, controller = null)`; `fakeAi` con `sendBlocker`/`sendBlockerValue`, `blocker`/`acceptBlocker`/`canAccept`/`beforeAccept`, `proposalText`/`proposalTextValue`, `edited`, `discard`, `continue`, e `proposals: new Map()` e `streamingPreview: null` nello stato di default (servono al Task 4).
 
 - [ ] **Step 1: Test che falliscono**
 
@@ -544,6 +547,14 @@ test('acceptBlocker: la selezione persa viene prima della proposta troncata', as
   f.controller.documentChanged('a.md', ChangeSet.of({ from: 0, to: 9, insert: 'Cambiata' }, 'Originale A'.length), false, { before: 'Originale A', after: 'Cambiata A' });
   const lost = f.controller.getState().proposals.get('a.md')!; assert.equal(lost.scope?.status, 'lost');
   assert.equal(f.controller.acceptBlocker(lost, true), 'scopeLost'); assert.equal(f.controller.acceptBlocker(lost), 'scopeLost');
+});
+test('prepare(), cancel() e un documento aperto (documentChanged con reset) notificano gli iscritti: la nota del composer si svuota al render', async () => {
+  const f = await fixture();
+  let notified = 0; const off = f.controller.subscribe(() => { notified++; });
+  assert.equal(await f.controller.prepare(), 'durable'); assert.equal(notified, 1);
+  f.controller.cancel(); assert.equal(notified, 2); assert.equal(f.controller.sendBlocker(), null);
+  f.controller.documentChanged('a.md', ChangeSet.empty('Originale A'.length), true); assert.equal(notified, 3);
+  off();
 });
 ```
 
@@ -623,11 +634,46 @@ test('the order of the reasons: the controller first (generation, document, upda
   send().click();
   assert.equal(note().textContent, EN_MESSAGES['ai.composer.needText']);
 });
+
+/** Il controller vero (store in memoria, provider finto mai chiamato) al posto di `fakeAi`: le notifiche arrivano solo da lui. */
+async function realController() {
+  const world = { doc: { path: 'a.md', textLf: 'uno\ndue\ntre', conflict: null as unknown, updating: false } as { path: string; textLf: string; conflict: unknown; updating: boolean } | null };
+  const controller = new AiController(createMemoryAiStores({ writerId: 'test', now: () => 100 }), { getDoc: () => world.doc, snapshotBeforeAi() {}, openFile() {} }, () => ({
+    async listModels() { return []; },
+    async *stream() { throw new Error('mai chiamato'); },
+  }));
+  await controller.initialize();
+  return { controller, world };
+}
+
+test('with the real controller: the updating note goes when cancel() ends the update, the no-document note when a document opens; no other user action', async () => {
+  const { controller, world } = await realController();
+  const { el, send, type, note, input } = mount();
+  el.controller = controller;
+  assert.equal(await controller.prepare(), 'durable');
+  type('draft');
+  send().click();
+  assert.equal(note().textContent, EN_MESSAGES['ai.composer.updating']);
+  assert.equal(input().value, 'draft');
+  controller.cancel();
+  assert.equal(controller.sendBlocker(), null);
+  assert.equal(note().textContent, '');
+  world.doc = null;
+  send().click();
+  assert.equal(note().textContent, EN_MESSAGES['ai.composer.noDocument']);
+  world.doc = { path: 'b.md', textLf: 'B', conflict: null, updating: false };
+  // Come WorkspaceView quando apre un documento: documentChanged con reset.
+  controller.documentChanged('b.md', ChangeSet.empty(1), true);
+  assert.equal(note().textContent, '');
+  assert.equal(input().value, 'draft');
+});
 ```
+
+(In cima al file: `import { ChangeSet } from '@codemirror/state';`, `import { AiController } from '../../ai/aiController';`, `import { createMemoryAiStores } from '../../ai/stores';`. Nei quattro test con `fakeAi` qui sopra, `ai.set({})` sta per la notifica che il controller vero manda da `prepare()`/`cancel()`/`documentChanged(reset)`: senza quella notifica la nota non si svuota, ed è questo test con il controller vero a provarlo.)
 
 - [ ] **Step 2: Eseguire e vedere il fallimento**
 
-Run: `npx tsx --import ./src/testing/assetHooks.ts --test src/ai/aiController.test.ts src/elements/ai/composerView.test.ts src/elements/ai/composer.dom.test.ts` → i tre test del controller cadono (`sendBlocker is not a function`, `acceptBlocker is not a function`), quello di `composerView` cade (`CONTROLLER_NOTES` undefined, quattro argomenti), i quattro del composer cadono (nessuna nota, `ai.sendBlockerValue` ignorato: la casella si svuota). Annotare il RED nel commento finale.
+Run: `npx tsx --import ./src/testing/assetHooks.ts --test src/ai/aiController.test.ts src/elements/ai/composerView.test.ts src/elements/ai/composer.dom.test.ts` → i tre test del controller cadono (`sendBlocker is not a function`, `acceptBlocker is not a function`), il quarto cade con `0 !== 1` (nessuna notifica da `prepare()`), quello di `composerView` cade (`CONTROLLER_NOTES` undefined, quattro argomenti), i quattro del composer con `fakeAi` cadono (nessuna nota, `ai.sendBlockerValue` ignorato: la casella si svuota) e quello con il controller vero cade (`sendBlocker is not a function`). Annotare il RED nel commento finale. **Dopo lo Step 5, con il controller senza le notifiche** (Step 4 fatto a metà, solo `sendBlocker`/`acceptBlocker`): il quarto test del controller cade con `0 !== 1` e quello con il controller vero con `'An update is in progress: try again in a moment' !== ''` (misurato nel prototipo): è il RED del rilievo di Reviewer, da vedere e annotare prima di aggiungere le notifiche.
 
 - [ ] **Step 3: Nove chiavi in tutti i locali**
 
@@ -780,6 +826,23 @@ La riga `canAccept(p:Proposal,all=false){…}` diventa:
 
 `send()` **non cambia**: la guardia `if(!doc||!profile||this.state.running||this.updating||doc.updating)return;` resta (un chiamante che non legge `sendBlocker()` continua a non rompere niente).
 
+Le righe `prepare=…` e `cancel=…` diventano:
+
+```ts
+  /** Inizio e fine di un aggiornamento: `set({})` notifica gli iscritti (le note «aggiornamento in corso» del composer e della barra si svuotano al render; per React cambia l'identità dello stato). */
+  prepare=async():Promise<'failed'|'durable'>=>{if(this.hasPendingWork()){this.set({error:'aiPendingUpdate'});return 'failed';}this.updating=true;this.set({});return 'durable';};
+  cancel=()=>{this.updating=false;this.set({});};
+```
+
+e in `documentChanged`, dopo la riga `if(p&&next!==null&&!reset){…}else if(reset)this.appliedPaths.delete(path);`:
+
+```ts
+    // Un documento aperto o sostituito (reset, da WorkspaceView): chi guarda il documento aperto (la nota «apri un documento» del composer) deve rendere.
+    if(reset)this.set({});
+```
+
+(`set({})` copia lo stato: nessun campo cambia, ma l'identità sì, così anche `useSyncExternalStore` in `ReviewView.tsx`/`WorkspaceView` rende. `doc.updating` del workspace cambia solo dentro lo stesso flusso di aggiornamento (`pwa/updateHost.ts`: `endUpdate()` del workspace e poi `cancel()` dei partecipanti), quindi al render provocato da `cancel()` è già falso. Per il profilo mancante `reload()` chiama già `set`; per la generazione `running` è nello stato; per il testo basta l'evento `input`.)
+
 - [ ] **Step 5: Vista, elemento, controller finto**
 
 `src/elements/ai/composerView.ts`: l'import diventa `import type { AiController, SendBlocker as ControllerBlocker } from '../../ai/aiController';`; `ComposerController` diventa `ModelChipController & Pick<AiController, 'send' | 'stop' | 'sendBlocker'>`; il blocco da `export type SendBlocker` a `sendBlocker()` diventa:
@@ -895,7 +958,7 @@ test.describe('composer without a document', () => {
 
 (Trovato nel prototipo: con nessun documento aperto non si può «aprire un documento» restando in modalità AI, perché il pannello AI prende il posto dell'albero; si passa dall'editor, e `WorkspaceView` smonta la sidebar: la bozza si perde come oggi. Il test afferma solo che la nota non c'è più. Nel prototipo la prima versione del test pretendeva la bozza conservata dopo il rimontaggio ed è caduta: non è una regressione, la sidebar è nuova.) Lo stesso file deve passare anche nella **prima parte del Task 3**: non tocca la barra.
 
-Run: `E2E_WORKERS=1 flock /home/agent/work/.browser-tests.lock npx playwright test -c e2e/playwright.config.ts e2e/ai-review-bar.spec.ts e2e/ai-composer.spec.ts` → verde (10 + 11).
+Run: `E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npx playwright test -c e2e/playwright.config.ts e2e/ai-review-bar.spec.ts e2e/ai-composer.spec.ts` → verde (10 + 11).
 
 - [ ] **Step 7: Stato di audit con la nota**
 
@@ -921,13 +984,13 @@ In `e2e/computed-styles.audit.ts`, subito dopo lo stato `ai-composer-note`:
 Sulla build vecchia (`dist-baseline/` del Task 1) lo stato nuovo **non è raggiungibile** (Invia svuota la casella senza nota: il `setup` del progetto `baseline` cade, e con una caduta in `baseline` Playwright non esegue nessun test del progetto `current`: misurato nel prototipo, «1 failed, 58 did not run»). Quindi prima si prova che **tutto il resto è identico** escludendo lo stato nuovo, poi si ricostruisce la baseline da questa build (nessun pixel in più: la nota vuota è a 0 px) e si rilancia tutto:
 
 ```bash
-npm test                    # 934 + 8 = 942 (3 controller, 1 vista, 4 composer)
+npm test                    # 934 + 10 = 944 (4 controller, 1 vista, 4 composer con fakeAi + 1 con il controller vero)
 npm run lint
-E2E_WORKERS=1 flock /home/agent/work/.browser-tests.lock npm run test:e2e        # 186, snapshot invariati (i 2 dello start screen cadono su ape per il font pixel: estraneo)
-E2E_WORKERS=1 flock /home/agent/work/.browser-tests.lock npm run test:e2e:dev    # 171
-E2E_WORKERS=1 flock /home/agent/work/.browser-tests.lock npx playwright test -c e2e/audit.config.ts --grep-invert "ai-composer-note-no-document"   # 112, nessuna differenza (il filtro direttamente a playwright, non via npm run)
+E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npm run test:e2e        # 186, snapshot invariati (i 2 dello start screen cadono su ape per il font pixel: estraneo)
+E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npm run test:e2e:dev    # 171
+E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npx playwright test -c e2e/audit.config.ts --grep-invert "ai-composer-note-no-document"   # 112, nessuna differenza (il filtro direttamente a playwright, non via npm run)
 npm run build && rm -rf dist-baseline && cp -r dist dist-baseline
-E2E_WORKERS=1 flock /home/agent/work/.browser-tests.lock npm run test:e2e:audit  # 112 + 2 = 114
+E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npm run test:e2e:audit  # 112 + 2 = 114
 pgrep -af "vite|chrom|playwright"   # niente di proprio appeso
 ```
 
@@ -935,7 +998,7 @@ pgrep -af "vite|chrom|playwright"   # niente di proprio appeso
 
 ```bash
 git add src/ai/ src/elements/ai/composerView.ts src/elements/ai/composerView.test.ts src/elements/ai/composer.element.ts src/elements/ai/composer.dom.test.ts src/testing/fakeAi.ts src/i18n/locales/ e2e/ai-review-bar.spec.ts e2e/computed-styles.audit.ts
-git commit -m "feat: ragioni dal controller (sendBlocker, acceptBlocker), note del composer senza documento, in aggiornamento e in generazione, bozza conservata, nove chiavi nei locali"
+git commit -m "feat: ragioni dal controller (sendBlocker, acceptBlocker), note del composer senza documento, in aggiornamento e in generazione, bozza conservata, notifiche da prepare/cancel e dal documento aperto, nove chiavi nei locali"
 ```
 
 ---
@@ -1533,12 +1596,12 @@ Le classi `.bar`, `.status`, `.spacer`, `.iconButton`, `.secondary`, `.accept`, 
 - [ ] **Step 7: Verifica completa (prima parte)**
 
 ```bash
-npm test                    # 942 + 1 + 7 = 950
+npm test                    # 944 + 1 + 7 = 952
 npm run lint
-E2E_WORKERS=1 flock /home/agent/work/.browser-tests.lock npx playwright test -c e2e/playwright.config.ts e2e/ai-review-bar.spec.ts e2e/ai-review.spec.ts e2e/ai-diff.spec.ts --repeat-each=3
-E2E_WORKERS=1 flock /home/agent/work/.browser-tests.lock npm run test:e2e        # 186, snapshot invariati
-E2E_WORKERS=1 flock /home/agent/work/.browser-tests.lock npm run test:e2e:dev    # 171
-E2E_WORKERS=1 flock /home/agent/work/.browser-tests.lock npm run test:e2e:audit  # 114, nessuna differenza (ai-review, -hover, -conflict, -generating, -truncated, -warnings, -applied)
+E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npx playwright test -c e2e/playwright.config.ts e2e/ai-review-bar.spec.ts e2e/ai-review.spec.ts e2e/ai-diff.spec.ts --repeat-each=3
+E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npm run test:e2e        # 186, snapshot invariati
+E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npm run test:e2e:dev    # 171
+E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npm run test:e2e:audit  # 114, nessuna differenza (ai-review, -hover, -conflict, -generating, -truncated, -warnings, -applied)
 ```
 
 - [ ] **Step 8: Commit**
@@ -1814,7 +1877,7 @@ In `e2e/ai-review-bar.spec.ts` i primi due test del `describe('review bar')` div
   });
 ```
 
-Dopo: `git grep -n "toBeDisabled()" -- e2e/ai-review-bar.spec.ts` → nessuna riga. Run: `E2E_WORKERS=1 flock /home/agent/work/.browser-tests.lock npx playwright test -c e2e/playwright.config.ts e2e/ai-review-bar.spec.ts --repeat-each=3` → 30/30.
+Dopo: `git grep -n "toBeDisabled()" -- e2e/ai-review-bar.spec.ts` → nessuna riga. Run: `E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npx playwright test -c e2e/playwright.config.ts e2e/ai-review-bar.spec.ts --repeat-each=3` → 30/30.
 
 - [ ] **Step 12: Stato di audit con la nota**
 
@@ -1848,19 +1911,19 @@ e nei commenti degli stati `ai-review-generating` e `ai-review-truncated` «tutt
 - [ ] **Step 13: Verifica, snapshot invariati e `dist-baseline/` ricostruita**
 
 ```bash
-npm test                    # 950 + 3 + 3 = 956
+npm test                    # 952 + 3 + 3 = 958
 npm run lint
-E2E_WORKERS=1 flock /home/agent/work/.browser-tests.lock npm run test:e2e        # 186: lo snapshot «AI review» (light e dark) passa SENZA rigenerare (nota vuota a 0 px, misurato nel prototipo)
+E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npm run test:e2e        # 186: lo snapshot «AI review» (light e dark) passa SENZA rigenerare (nota vuota a 0 px, misurato nel prototipo)
 git status --short e2e/__screenshots__   # vuoto
-E2E_WORKERS=1 flock /home/agent/work/.browser-tests.lock npm run test:e2e:dev    # 171
+E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npm run test:e2e:dev    # 171
 ```
 
 Il `p.note` in più sposta gli indici del DOM dei 5 stati `ai-review*` con la barra (`ai-review`, `ai-review-hover`, `ai-review-conflict`, `ai-review-generating`, `ai-review-truncated`, `ai-review-warnings`: tutti quelli in cui la barra c'è) e lo stato nuovo non è raggiungibile sulla build vecchia: si prova il resto con `--grep-invert`, poi si ricostruisce la baseline (cambio d'aspetto voluto, regola di `CLAUDE.md`):
 
 ```bash
-E2E_WORKERS=1 flock /home/agent/work/.browser-tests.lock npx playwright test -c e2e/audit.config.ts --grep-invert "ai-review"   # tutto il resto identico (il filtro direttamente a playwright)
+E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npx playwright test -c e2e/audit.config.ts --grep-invert "ai-review"   # tutto il resto identico (il filtro direttamente a playwright)
 npm run build && rm -rf dist-baseline && cp -r dist dist-baseline
-E2E_WORKERS=1 flock /home/agent/work/.browser-tests.lock npm run test:e2e:audit  # 114 + 2 = 116
+E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npm run test:e2e:audit  # 114 + 2 = 116
 pgrep -af "vite|chrom|playwright"
 ```
 
@@ -2213,6 +2276,16 @@ test('the seconds counter stops at detach and follows a new run', async () => {
   document.body.append(el);
   assert.equal((bar().status as { seconds: number }).seconds, 5);
 });
+
+test('generation finishes with the focus in the retained bar (Accept all): the focus follows the new diff, as the [view] effect of ReviewView.tsx', async () => {
+  const { ai, button, diff } = mount({ running: { messageId: 'm', path: 'a.md', startedAt: Date.now() } });
+  const accept = button(EN_MESSAGES['ai.acceptAll']);
+  accept.focus();
+  focusOn(accept, 'Accept all');
+  ai.set({ running: null, proposals: new Map([['a.md', proposal()]]) });
+  await tick();
+  focusOn(diff().querySelector('.cm-content'), 'the document side of the diff');
+});
 ```
 
 - [ ] **Step 2: Eseguire e vedere il fallimento**
@@ -2464,15 +2537,18 @@ export class HmdAiReview extends HmdElement {
   }
 
   /**
-   * Un render, più la regola dell'effetto `[view]` di ReviewView.tsx per il focus già sul body: il recupero
-   * del `RenderLoop` copre il focus che era nella revisione, questo copre il focus che non era da nessuna parte.
+   * Un render, più la regola dell'effetto `[view]` di ReviewView.tsx: quando la vista cambia (diff ↔ editor
+   * semplice) e il focus era sul body o dentro la revisione (anche su un pulsante della barra che resta, per
+   * esempio Accetta tutto quando arriva la proposta), il focus va nell'editor della vista nuova. Il recupero
+   * del `RenderLoop` copre a parte il nodo con il focus che sparisce senza cambio di vista.
    */
   #update(): void {
     const doc = this.ownerDocument;
-    const onBody = doc.activeElement === doc.body;
+    const active = doc.activeElement;
+    const inReview = active === doc.body || !!this.#parts?.section.contains(active);
     const before = this.#shownView;
     this.#loop.update();
-    if (onBody && before !== null && before !== this.#shownView && this.isConnected && doc.activeElement === doc.body) this.#focusEditor();
+    if (inReview && before !== null && before !== this.#shownView && this.isConnected) this.#focusEditor();
   }
 
   #focusEditor(): void {
@@ -2628,9 +2704,9 @@ declare global {
 }
 ```
 
-Run: `npx tsx --import ./src/testing/assetHooks.ts --test --test-timeout=20000 src/elements/ai/reviewView.test.ts src/elements/ai/review.dom.test.ts` → solo «Discard with the focus…» può ancora cadere finché manca `define.ts` (Step 4); dopo lo Step 4 tutto PASS.
+Run: `npx tsx --import ./src/testing/assetHooks.ts --test --test-timeout=20000 src/elements/ai/reviewView.test.ts src/elements/ai/review.dom.test.ts` → dopo lo Step 4 tutto PASS (12 test della vista).
 
-**Prova del fix del focus (decisione 4), da annotare nel commento finale**: togliere la riga `refocus: () => this.#focusEditor(),` e rilanciare `review.dom.test.ts` → «Discard with the focus on the button…» cade con `focus on the plain editor, not on body.` (misurato nel prototipo: 1 su 11), gli altri dieci passano; rimettere la riga → 11/11. Senza `refocus` la vista è ReviewView.tsx tale e quale: il difetto «focus sul body dopo Scarta» esiste quando il focus era sul pulsante che sparisce, e l'elemento lo copre per costruzione.
+**Prova del fix del focus (decisione 4), da annotare nel commento finale**: togliere la riga `refocus: () => this.#focusEditor(),` e rilanciare `review.dom.test.ts` → «Discard with the focus on the button…» cade con `focus on the plain editor, not on body.` (misurato nel prototipo: 1 su 11), gli altri passano; rimettere la riga. **Prova della regola `[view]`**: in `#update()` sostituire `inReview` con il solo `active === doc.body` → «generation finishes with the focus in the retained bar…» cade con `focus on the document side of the diff, not on button.secondary accept` (misurato nel prototipo); ripristinare → 12/12. Senza `refocus` la vista è ReviewView.tsx tale e quale: il difetto «focus sul body dopo Scarta» esiste quando il focus era sul pulsante che sparisce, e l'elemento lo copre per costruzione.
 
 - [ ] **Step 4: Registrazione, tipi, `WorkspaceView.tsx` monta il tag**
 
@@ -2659,12 +2735,12 @@ ls src/ui/ai/                                  # restano useAiController.ts, use
 - [ ] **Step 6: Verifica completa**
 
 ```bash
-npm test                    # 956 + 7 + 11 = 974
+npm test                    # 958 + 7 + 12 = 977
 npm run lint
-E2E_WORKERS=1 flock /home/agent/work/.browser-tests.lock npx playwright test -c e2e/playwright.config.ts e2e/ai-review-bar.spec.ts e2e/ai-review.spec.ts e2e/ai-diff.spec.ts --repeat-each=3
-E2E_WORKERS=1 flock /home/agent/work/.browser-tests.lock npm run test:e2e        # 186, snapshot invariati
-E2E_WORKERS=1 flock /home/agent/work/.browser-tests.lock npm run test:e2e:dev    # 171 (StrictMode: il focus dopo Accetta tutto, Scarta e Ctrl+Z)
-E2E_WORKERS=1 flock /home/agent/work/.browser-tests.lock npm run test:e2e:audit  # 116, nessuna differenza (l'host della vista è display: contents: stessi percorsi)
+E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npx playwright test -c e2e/playwright.config.ts e2e/ai-review-bar.spec.ts e2e/ai-review.spec.ts e2e/ai-diff.spec.ts --repeat-each=3
+E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npm run test:e2e        # 186, snapshot invariati
+E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npm run test:e2e:dev    # 171 (StrictMode: il focus dopo Accetta tutto, Scarta e Ctrl+Z)
+E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npm run test:e2e:audit  # 116, nessuna differenza (l'host della vista è display: contents: stessi percorsi)
 pgrep -af "vite|chrom|playwright"
 ```
 
@@ -2688,7 +2764,7 @@ git commit -m "feat: hmd-ai-review al posto di ReviewView (figli creati una volt
 ```bash
 npm run build
 gzip -c dist/assets/index-*.js | wc -c     # annotare accanto al valore del Task 1 (prototipo: 439 717 → 441 030)
-npm test                                    # annotare: 974
+npm test                                    # annotare: 977
 ```
 
 - [ ] **Step 2: Spec**
@@ -2709,9 +2785,9 @@ npm test                                    # annotare: 974
 npm test
 npm run lint
 npm run build
-E2E_WORKERS=1 flock /home/agent/work/.browser-tests.lock npm run test:e2e
-E2E_WORKERS=1 flock /home/agent/work/.browser-tests.lock npm run test:e2e:dev
-E2E_WORKERS=1 flock /home/agent/work/.browser-tests.lock npm run test:e2e:audit
+E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npm run test:e2e
+E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npm run test:e2e:dev
+E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npm run test:e2e:audit
 pgrep -af "vite|chrom|playwright"
 git status --short
 ```
