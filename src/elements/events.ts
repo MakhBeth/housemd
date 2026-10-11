@@ -1,7 +1,7 @@
 import type { ChangeDesc } from '@codemirror/state';
 
 import type { TextRange } from '../ai/selectionChip';
-import type { GenParams } from '../ai/types';
+import type { GenParams, ModelProfile } from '../ai/types';
 import type { TreeNode } from '../ui/tree';
 import type { TreeAction } from './workspace/dialogFor';
 
@@ -12,6 +12,8 @@ import type { TreeAction } from './workspace/dialogFor';
 export interface HmdEvents {
   /** Diff della revisione AI: rifiutato l'ultimo blocco rimasto (equivale a scartare la proposta). */
   'hmd-ai-all-rejected': CustomEvent<null>;
+  /** Selettore del modello: modello scelto dall'elenco o scritto in «Altro…», con il suo contesto se noto. */
+  'hmd-ai-model-change': CustomEvent<{ selection: Pick<ModelProfile, 'model' | 'contextTokens'> }>;
   /** Chat AI: aprire il documento di un messaggio. */
   'hmd-ai-open-file': CustomEvent<{ path: string }>;
   /** Diff della revisione AI: proposta modificata a mano (anche da un rifiuto), testo intero del lato destro. */

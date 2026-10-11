@@ -7,7 +7,6 @@ import type { ModelProfile } from '../../ai/types';
 import { useI18nStore, useT } from '../../i18n/I18nProvider';
 import { writePref } from '../../lib/prefs';
 import { Icon } from '../Icon';
-import { ModelSelect } from './ModelSelect';
 import styles from './Composer.module.css';
 
 interface Props {
@@ -105,7 +104,14 @@ export function ModelChip({ controller, onManage }: Props) {
             </fieldset>
           );
         })}
-        {opened && <ModelSelect controller={controller} profile={effective} onChange={(selection) => controller.override({ ...overrides, ...selection })} />}
+        {opened && (
+          <hmd-ai-model-select
+            controller={controller}
+            profile={effective}
+            i18n={i18nStore}
+            onhmd-ai-model-change={(event) => controller.override({ ...overrides, ...event.detail.selection })}
+          />
+        )}
         <hmd-ai-parameters
           profile={effective}
           value={{ ...profile.params, ...overrides }}

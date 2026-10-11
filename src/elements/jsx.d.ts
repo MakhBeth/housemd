@@ -16,6 +16,7 @@ import type { ThemeStore } from '../state/themeStore';
 import type { TreeNode } from '../ui/tree';
 import type { AiChipController } from './ai/aiChips';
 import type { HmdAiDiffPane } from './ai/diff-pane.element';
+import type { ModelSelectController } from './ai/modelSelectView';
 import type { SaveImage } from './editor/docElement';
 import type { HmdEditor } from './editor/editor.element';
 import type { HmdEvents } from './events';
@@ -48,6 +49,7 @@ declare module 'react' {
           ref?: Ref<HmdAiDiffPane>;
         };
       'hmd-ai-effort-chip': HmdProps<{ controller: AiChipController; i18n: I18nStore }>;
+      'hmd-ai-model-select': HmdProps<{ controller: ModelSelectController; profile: ModelProfile; i18n: I18nStore }, 'hmd-ai-model-change'>;
       'hmd-ai-parameters': HmdProps<{ profile: ModelProfile; value: GenParams; hideEffort: boolean; i18n: I18nStore }, 'hmd-params-change'>;
       'hmd-ai-suggestions': HmdProps<{ controller: AiChipController; i18n: I18nStore }, 'hmd-ai-suggestion'>;
       'hmd-conflict-bar': HmdProps<{ i18n: I18nStore }, 'hmd-conflict'>;
