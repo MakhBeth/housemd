@@ -43,10 +43,10 @@
 
 Baseline: `npm test` = **848** test verdi; `npm run test:e2e` = **155**; `npm run test:e2e:dev` = **140**; audit = **42** stati (84 test, `baseline` + `current`); bundle principale gzip = **437 013 B** (`dist/assets/index-9cuW-47X.js` della build di `547f529` nel prototipo; il valore 436 972 dell'handover non torna con la build).
 
-**Prototipo.** Il codice di tutti i task è stato provato su una copia del repository fuori dal worktree (`git worktree add --detach ../housemd-proto-6b 547f529` + `npm ci`, `dist-baseline/` costruita da `547f529` prima di toccare l'app, niente commit): `npm run lint` pulito a ogni task; `npm test` 848 → **925** (+7 Task 2, +23 Task 3 compreso il test statico, +21 Task 4, +15 + 4 Task 5, +7 Task 6); `npm run test:e2e` 155 → **175** (+20 del Task 1: `ai-model` 10, `ai-composer` 10), snapshot invariati; `npm run test:e2e:dev` 140 → **160**; audit 84 → **104** (8 stati nuovi del Task 1 più `ai-composer-note` e `ai-sidebar-note`), uguale alla baseline dopo ogni task (Task 1, 3, 4, 5, 6: tutte e tre le suite verdi; dopo la decisione 4, contro la baseline ricostruita); bundle gzip 437 013 → **439 701 B** (+2 688: React resta, quattro componenti diventano elementi, più `RenderLoop`). I due file e2e nuovi `--repeat-each=3` verdi sull'app React (60/60) e, sull'app finale, insieme ad `ai-chips` e `ai-review`, 4 esecuzioni `--repeat-each=3`/`6` (555 test): **una** sola caduta non riprodotta (in un'esecuzione da 111; le tre seguenti, 444 test, tutte verdi): se ricapita, annotare il nome del test nel ledger e ripetere quel file con `--repeat-each=5` sull'app React (`git stash` del task) per sapere se è preesistente. In sviluppo `--repeat-each=3` 60/60. Dopo le correzioni della review di Codex: `npm test` 921, `npm run lint` pulito, `test:e2e` 175, `test:e2e:dev` 160, `test:e2e:dev` dei file `ai-model`, `ai-composer`, `ai-chips`, `ai-review` 37, audit 100, tutti verdi. Misurato anche:
+**Prototipo.** Il codice di tutti i task è stato provato su una copia del repository fuori dal worktree (`git worktree add --detach ../housemd-proto-6b 547f529` + `npm ci`, `dist-baseline/` costruita da `547f529` prima di toccare l'app, niente commit): `npm run lint` pulito a ogni task; `npm test` 848 → **927** (+7 Task 2, +23 Task 3 compreso il test statico, +21 Task 4, +15 + 6 Task 5, +7 Task 6); `npm run test:e2e` 155 → **176** (+20 del Task 1: `ai-model` 10, `ai-composer` 10; +1 nella seconda parte del Task 5), snapshot invariati; `npm run test:e2e:dev` 140 → **161**; audit 84 → **104** (8 stati nuovi del Task 1 più `ai-composer-note` e `ai-sidebar-note`), uguale alla baseline dopo ogni task (Task 1, 3, 4, 5, 6: tutte e tre le suite verdi; dopo la decisione 4, contro la baseline ricostruita); bundle gzip 437 013 → **439 690 B** (+2 677: React resta, quattro componenti diventano elementi, più `RenderLoop`). I due file e2e nuovi `--repeat-each=3` verdi sull'app React (60/60) e, sull'app finale, insieme ad `ai-chips` e `ai-review`, 4 esecuzioni `--repeat-each=3`/`6` (555 test): **una** sola caduta non riprodotta (in un'esecuzione da 111; le tre seguenti, 444 test, tutte verdi): se ricapita, annotare il nome del test nel ledger e ripetere quel file con `--repeat-each=5` sull'app React (`git stash` del task) per sapere se è preesistente. In sviluppo `--repeat-each=3` 60/60. Dopo le correzioni della review di Codex: `npm test` 921, `npm run lint` pulito, `test:e2e` 175, `test:e2e:dev` 160, `test:e2e:dev` dei file `ai-model`, `ai-composer`, `ai-chips`, `ai-review` 37, audit 100, tutti verdi. Misurato anche:
 
 - **Oggi il focus cade sul `body`** quando sparisce il nodo che lo ha: la ✕ del chip della selezione (cliccata, sparisce). Il Task 1 lo afferma sull'app React; con la decisione 3 il Task 5 lo rovescia.
-- **Decisione 4 (rivista da Davide l'11/10) nel prototipo**: le note provate in jsdom (+4 test) e in e2e (riscritti 4 test di `ai-composer.spec.ts`: Invia, Nuova chat, lingua); lo snapshot «AI review» con Invia acceso differisce di circa 750 pixel (0,07 %, sotto la tolleranza 0,2 %: passa anche senza rigenerarlo, si rigenera comunque con `--update-snapshots=all` mirato); il paragrafo nuovo sposta gli indici del DOM e fa differire contro la baseline del Task 1 tutti i 17 stati di audit della sidebar AI, quindi la baseline si ricostruisce dopo ogni seconda parte; dopo: `npm test` 925, `test:e2e` 175, `test:e2e:dev` 160, audit 104, tutti verdi. Tre scatti della nota (Invia senza testo, Invia senza profilo, Nuova chat a chat vuota) mostrati a Davide.
+- **Decisione 4 (rivista da Davide l'11/10) nel prototipo**: le note provate in jsdom (+6 test) e in e2e (riscritti 4 test di `ai-composer.spec.ts`: Invia, Nuova chat, lingua; +1 per il suggerimento senza profilo); lo snapshot «AI review» con Invia acceso differisce di circa 750 pixel (0,07 %, sotto la tolleranza 0,2 %: passa anche senza rigenerarlo, si rigenera comunque con `--update-snapshots=all` mirato); il paragrafo nuovo sposta gli indici del DOM e fa differire contro la baseline del Task 1 tutti i 17 stati di audit della sidebar AI, quindi la baseline si ricostruisce dopo ogni seconda parte; dopo: `npm test` 925, `test:e2e` 175, `test:e2e:dev` 160, audit 104, tutti verdi. **Review di Codex delle sezioni nuove (11/10): F1–F3 corretti**: (F1) la nota del composer restava accanto a Stop quando una generazione partiva da fuori («Riprova») → si svuota quando `running` diventa vero (test «a generation that starts from anywhere clears the note…», che fallisce senza); (F2) un suggerimento senza profilo non faceva nulla e non spiegava → il blocco vale per il messaggio risolto, preset compresi (`sendBlocker(request, hasProfile, preset)`; test jsdom «a preset without a profile…» ed e2e «without a profile a suggestion says why…», che falliscono senza); (F3) la checklist del Task 7 chiedeva ancora i pulsanti spenti → riscritta. Dopo: `npm test` 927, `test:e2e:dev` di `ai-composer`, `ai-chips`, `ai-review` 28 verdi (le suite complete non rilanciate: la macchina era occupata dall'esecuzione del Task 5 nel worktree; attesi 176, 161, audit 104). Tre scatti della nota (Invia senza testo, Invia senza profilo, Nuova chat a chat vuota) mostrati a Davide.
 - **I pulsanti che si disattivano con il focus lo perdono in modo asincrono** (Chromium: `disabled = true` lascia `activeElement` sul pulsante, dopo un fotogramma il focus è sul `body` con un `blur`): Invia subito dopo il clic (la casella si svuota prima che parta la generazione), Invia dopo Stop, Nuova chat. Con la decisione 4 (pulsanti mai disattivati) il problema sparisce: il focus resta sul pulsante.
 - **L'elenco dei modelli** si chiede solo a popover aperto (0 richieste `/api/tags` prima, 1 all'apertura, 1 a ogni riapertura, 1 con «Aggiorna»): React smonta `ModelSelect` alla chiusura. L'elemento fa lo stesso (un selettore nuovo a ogni apertura).
 - **Dopo «Gestisci profili…» e la chiusura delle impostazioni il focus torna sul chip** (oggi e con l'elemento): Chromium riporta il focus all'invocatore del popover quando lo si chiude con il focus dentro, e `WorkspaceView` ridà il focus all'elemento che lo aveva prima delle impostazioni.
@@ -102,7 +102,7 @@ Ordine della 6b: rete (Task 1) → `RenderLoop` (Task 2) → selettore (Task 3) 
 1. **Ordine e divisione come sopra** (sì): spec confermata, dal fondo (selettore) alla sidebar, un elemento per task; il Task 3 monta il selettore anche nelle impostazioni (secondo chiamante, che l'ipotesi di partenza non contava).
 2. **Estrarre lo schema di render in `src/dom/renderLoop.ts`** (sì): tre elementi della 6a lo copiano identico e ne arrivano quattro (sette con la 6c); la copia è dove sono nati i tre MAJOR della review di Codex della 6a (focus recuperato tra due passate, prerequisiti non ricontrollati). `RenderLoop` (classe, non metodo di `HmdElement`, così tocca solo chi lo usa) prende `ready`, `render` e facoltativi `focusScope`/`refocus`, espone `rendering` (l'albero lo usa nel `focusin`). Il Task 2 lo introduce con 7 test e lo applica ad albero, ricerca e cronologia **senza cambiarne il comportamento** (i loro 68 test jsdom e i 47 e2e restano verdi). Per non farlo: si toglie il Task 2 e i quattro elementi copiano il ciclo `#update()` della cronologia (con `#rendering`/`#again`).
 3. **Focus su un bersaglio stabile quando il nodo che lo ha sparisce** (sì): come la decisione 3 della 6a e la spec R2. Oggi la ✕ del chip della selezione cliccata sparisce e il focus cade sul `body` (misurato); dopo va nella casella del composer. Nel chip del modello, nei casi rari in cui il nodo con il focus sparisce (un profilo tolto a popover aperto, per esempio da una sync; il chip che diventa «Gestisci profili» perché non restano profili, o il contrario), il focus va sul chip. Non cambia l'aspetto. Per la fedeltà stretta si tolgono `focusScope`/`refocus` dai due elementi e si lascia il test del Task 1 nella forma di oggi.
-4. **I pulsanti non si disattivano mai: una nota dice perché** (decisa da Davide l'11/10: «è pessima UX»; regola generale, da estendere alla 6c e alla fase 8). Invia e Nuova chat restano sempre attivi. Invia (clic o Invio) senza profilo scrive «Choose a profile before sending» (priorità al profilo: senza non si invia comunque), senza testo «Write a message before sending»; durante la generazione il pulsante è Stop come oggi e non c'è nota. Nuova chat con la chat vuota e niente in corso non fa nulla e scrive «The chat is already empty». La nota è un `p.note[role=status]` per elemento, sempre nel DOM e vuota di norma (vuota non occupa spazio): nel composer dopo il riquadro `div.composer`, nella sidebar tra la testata e il registro; si svuota al prossimo `input` nella casella, a un cambio di profilo, con un invio riuscito, o (sidebar) quando nella chat arriva qualcosa. La stessa nota due volte di fila non si ri-annuncia (stesso testo nella regione): accettato. Il focus resta sul pulsante (prima Chromium lo portava sul `body` un fotogramma dopo lo spegnimento, misurato). Ogni elemento prima si migra identico a React (prima parte del task, audit contro la baseline del Task 1) e poi cambia (seconda parte, con baseline ricostruita): il cambio d'aspetto resta isolato e verificabile. Chiavi in tutti i locali; testi proposti dal coordinatore, Davide può correggerli.
+4. **I pulsanti non si disattivano mai: una nota dice perché** (decisa da Davide l'11/10: «è pessima UX»; regola generale, da estendere alla 6c e alla fase 8). Invia e Nuova chat restano sempre attivi. Invia (clic o Invio) senza profilo scrive «Choose a profile before sending» (priorità al profilo: senza non si invia comunque), senza testo «Write a message before sending»; durante la generazione il pulsante è Stop come oggi e non c'è nota. Nuova chat con la chat vuota e niente in corso non fa nulla e scrive «The chat is already empty». La nota è un `p.note[role=status]` per elemento, sempre nel DOM e vuota di norma (vuota non occupa spazio): nel composer dopo il riquadro `div.composer`, nella sidebar tra la testata e il registro; si svuota al prossimo `input` nella casella, a un cambio di profilo, con un invio riuscito, quando parte una generazione da qualunque parte, o (sidebar) quando nella chat arriva qualcosa. Il blocco del profilo vale anche per i suggerimenti (preset). La stessa nota due volte di fila non si ri-annuncia (stesso testo nella regione): accettato. Il focus resta sul pulsante (prima Chromium lo portava sul `body` un fotogramma dopo lo spegnimento, misurato). Ogni elemento prima si migra identico a React (prima parte del task, audit contro la baseline del Task 1) e poi cambia (seconda parte, con baseline ricostruita): il cambio d'aspetto resta isolato e verificabile. Chiavi in tutti i locali; testi proposti dal coordinatore, Davide può correggerli.
 5. **Ingressi e uscite** (sì): `hmd-ai-model-select` riceve `controller` (`ModelSelectController` = `Pick<AiController, 'provider' | 'report'>`), `profile`, `i18n` e manda `hmd-ai-model-change` `{ selection }`; `hmd-ai-model-chip` riceve `controller` (`ModelChipController`), `i18n` e manda `hmd-ai-manage`; `hmd-ai-composer` riceve `controller` (`ComposerController`), `text`, `selection`, `getSelection`, `i18n` e ha `sendPreset(presetId)`; `hmd-ai-sidebar` riceve `controller` (`SidebarController`, con `workspace: Pick<AiWorkspace, 'openFile'>`), `text`, `selection`, `getSelection`, `syncNeedsPermission`, `i18n` e manda `hmd-ai-sync-reactivate` (e lascia salire `hmd-ai-manage`). Due eventi distinti verso `WorkspaceView` invece di un `hmd-ai-settings { section }` comune: un evento, un elemento che lo manda (la regola del bubbling).
 6. **Niente `focus()` pubblico sul composer** (sì): la spec §7 lo elenca, ma oggi nessuno mette il focus nel composer da fuori; si aggiorna la spec (Task 7) invece di aggiungere un metodo senza chiamanti. Per aggiungerlo: `focus(): void { this.#parts?.input.focus(); }` più un test.
 7. **Piccole deviazioni invisibili** (sì): (a) il selettore tiene una volta sola un valore di modello doppio nell'elenco del server (React lo mostrava due volte con un avviso di chiave doppia; `reconcileList` lancerebbe); (b) il chip dimentica che il popover era aperto quando lo si stacca o quando restano zero profili (React teneva `opened` e avrebbe chiesto l'elenco dei modelli con il popover chiuso al ritorno del profilo); (c) testi composti in un solo nodo di testo (`nome · modello •`, `nome ⚠`, `⚠ Riattiva…`) invece di due o tre (stesso testo, stessi pixel).
@@ -3541,13 +3541,13 @@ git commit -m "feat: hmd-ai-composer al posto di Composer (casella mai riscritta
 
 #### Seconda parte del Task 5: Invia non si disattiva mai (decisione 4)
 
-Cambio **voluto** di comportamento e di aspetto, dopo che la prima parte ha provato l'elemento identico a React (commit dello Step 9 con audit verde contro `dist-baseline/`). Invia resta sempre attivo; cliccato (o con Invio) quando non può inviare, la nota `p.note[role=status]` sotto il composer dice perché: prima il profilo («Choose a profile before sending»), poi il testo («Write a message before sending»). La nota si svuota al prossimo `input` nella casella, a un cambio di profilo, o con un invio riuscito; durante la generazione il pulsante è Stop e non c'è nota. La stessa nota due volte di fila non si ri-annuncia (stesso testo nella regione): accettato. Non un toast, non `aria-disabled`, non un tooltip.
+Cambio **voluto** di comportamento e di aspetto, dopo che la prima parte ha provato l'elemento identico a React (commit dello Step 9 con audit verde contro `dist-baseline/`). Invia resta sempre attivo; cliccato (o con Invio) quando non può inviare, la nota `p.note[role=status]` sotto il composer dice perché: prima il profilo («Choose a profile before sending»), poi il testo («Write a message before sending»). Vale per ogni messaggio risolto, preset compresi: un suggerimento cliccato senza profilo scrive la nota del profilo e lascia la bozza (un preset non ha bisogno di testo). La nota si svuota al prossimo `input` nella casella, a un cambio di profilo, con un invio riuscito o quando parte una generazione da qualunque parte (anche «Riprova» nel registro); durante la generazione il pulsante è Stop e non c'è nota. La stessa nota due volte di fila non si ri-annuncia (stesso testo nella regione): accettato. Non un toast, non `aria-disabled`, non un tooltip.
 
 **Files:**
 - Modify: `src/elements/ai/composerView.ts`, `composerView.test.ts`, `composer.element.ts`, `composer.css`, `composer.dom.test.ts`, `src/i18n/locales/*.json` (due chiavi nuove, più la terza del Task 6 già qui per non toccare i locali due volte), `e2e/ai-composer.spec.ts`, `e2e/computed-styles.audit.ts`, `e2e/__screenshots__/visual.spec.ts/ai-review-light-linux.png`, `ai-review-dark-linux.png`
 
 **Interfaces:**
-- Produces: `sendButton(running: boolean): SendButton` (senza `disabled`), `type SendBlocker = 'ai.composer.needProfile' | 'ai.composer.needText'`, `sendBlocker(request: string, hasProfile: boolean): SendBlocker | null`; chiavi `ai.composer.needText`, `ai.composer.needProfile`, `ai.newChat.alreadyEmpty` in tutti i locali; nel composer, dopo `div.composer`, `p.note[role=status]` (vuota di norma).
+- Produces: `sendButton(running: boolean): SendButton` (senza `disabled`), `type SendBlocker = 'ai.composer.needProfile' | 'ai.composer.needText'`, `sendBlocker(request: string, hasProfile: boolean, preset: boolean): SendBlocker | null`; chiavi `ai.composer.needText`, `ai.composer.needProfile`, `ai.newChat.alreadyEmpty` in tutti i locali; nel composer, dopo `div.composer`, `p.note[role=status]` (vuota di norma).
 
 - [ ] **Step 10: Test che falliscono**
 
@@ -3590,11 +3590,16 @@ test('send button: Stop while running, Send otherwise (never disabled)', () => {
   assert.deepEqual(sendButton(false), { label: 'ai.send', icon: 'send' });
 });
 
-test('why Send cannot send: the profile first (without it nothing can be sent), then the text', () => {
-  assert.equal(sendBlocker('', false), 'ai.composer.needProfile');
-  assert.equal(sendBlocker('fix', false), 'ai.composer.needProfile');
-  assert.equal(sendBlocker('  \n ', true), 'ai.composer.needText');
-  assert.equal(sendBlocker('fix', true), null);
+test('why a message cannot be sent: the profile first (without it nothing can be sent), then the text', () => {
+  assert.equal(sendBlocker('', false, false), 'ai.composer.needProfile');
+  assert.equal(sendBlocker('fix', false, false), 'ai.composer.needProfile');
+  assert.equal(sendBlocker('  \n ', true, false), 'ai.composer.needText');
+  assert.equal(sendBlocker('fix', true, false), null);
+});
+
+test('a preset needs a profile but no text', () => {
+  assert.equal(sendBlocker('', false, true), 'ai.composer.needProfile');
+  assert.equal(sendBlocker('', true, true), null);
 });
 ```
 
@@ -3732,10 +3737,30 @@ test('without a profile Send asks for one first, even with text; choosing a prof
   assert.equal(note().textContent, '');
 });
 
-test('while running there is no note: the button is Stop', () => {
+test('a generation that starts from anywhere clears the note; while running a click on Stop shows none', () => {
   const { send, note, running } = mount();
-  running(true);
   send().click();
+  assert.equal(note().textContent, EN_MESSAGES['ai.composer.needText']);
+  // Per esempio «Riprova» nel registro: la generazione parte dal controller, non dal composer.
+  running(true);
+  assert.equal(note().textContent, '');
+  send().click();
+  assert.equal(note().textContent, '');
+});
+
+test('a preset without a profile shows the profile note, keeps the draft and the focus; with a profile it sends even with an empty box', () => {
+  const { el, ai, input, type, note } = mount(false);
+  type('draft');
+  input().focus();
+  el.sendPreset('p1');
+  assert.equal(note().textContent, EN_MESSAGES['ai.composer.needProfile']);
+  assert.equal(input().value, 'draft');
+  assert.deepEqual(ai.calls, []);
+  assert.notEqual(document.activeElement, document.body);
+  ai.set({ profiles: [defaultProfile('ollama', 'o')], profileId: 'o' });
+  type('');
+  el.sendPreset('p1');
+  assert.deepEqual(ai.calls, [['send', 'Fix it', PRESET, undefined]]);
   assert.equal(note().textContent, '');
 });
 
@@ -3861,7 +3886,7 @@ test('language change relabels, the note too; detached, no listener left', async
 ```
 
 Run: `npx tsx --import ./src/testing/assetHooks.ts --test src/elements/ai/composerView.test.ts src/elements/ai/composer.dom.test.ts`
-Expected: FAIL: `composerView.test.ts` non carica (`sendBlocker` non esiste); 6 FAIL nel test dell'elemento («the same DOM…», «Send is never disabled…», «Enter with an empty box…», «without a profile…», «while running there is no note…», «language change…»). Annotare il RED.
+Expected: FAIL: `composerView.test.ts` non carica (`sendBlocker` non esiste); 7 FAIL nel test dell'elemento («the same DOM…», «Send is never disabled…», «Enter with an empty box…», «without a profile…», «a generation that starts from anywhere clears the note…», «a preset without a profile…», «language change…»). Annotare il RED.
 
 - [ ] **Step 11: Chiavi nuove in tutti i locali**
 
@@ -3938,10 +3963,13 @@ export function sendButton(running: boolean): SendButton {
 
 export type SendBlocker = 'ai.composer.needProfile' | 'ai.composer.needText';
 
-/** Perché Invia non può inviare, o null: prima il profilo (senza non si invia comunque), poi il testo. */
-export function sendBlocker(request: string, hasProfile: boolean): SendBlocker | null {
+/**
+ * Perché il messaggio non può partire, o null: prima il profilo (senza non si invia comunque, preset
+ * compresi), poi il testo (solo per un messaggio scritto: un preset non ne ha bisogno).
+ */
+export function sendBlocker(request: string, hasProfile: boolean, preset: boolean): SendBlocker | null {
   if (!hasProfile) return 'ai.composer.needProfile';
-  return request.trim() ? null : 'ai.composer.needText';
+  return preset || request.trim() ? null : 'ai.composer.needText';
 }
 ```
 
@@ -3981,8 +4009,8 @@ interface Parts {
  * chip del modello, il chip dell'effort e Invia/Stop. La casella è dell'elemento: si crea una volta e
  * l'elemento la svuota solo dopo l'invio di un testo scritto (nessun eco da fuori la riscrive). Invio
  * invia, Shift+Invio va a capo, Esc ferma (composerKeys.ts). `sendPreset()` per i suggerimenti. Invia
- * non si disattiva mai: senza testo o senza profilo la nota sotto il composer dice perché, e si svuota
- * scrivendo, cambiando profilo o con un invio riuscito.
+ * non si disattiva mai: senza testo o senza profilo (anche per un suggerimento) la nota sotto il composer
+ * dice perché, e si svuota scrivendo, cambiando profilo, con un invio riuscito o quando parte una generazione.
  */
 export class HmdAiComposer extends HmdElement {
   #controller: ComposerController | null = null;
@@ -4102,7 +4130,7 @@ export class HmdAiComposer extends HmdElement {
     const action = composerAction({ key, shiftKey, ctrlKey, metaKey, altKey, isComposing }, !!controller.getState().running);
     if (action === 'send') {
       event.preventDefault();
-      this.#trySend();
+      this.#send();
     } else if (action === 'stop') {
       event.preventDefault();
       controller.stop();
@@ -4113,23 +4141,13 @@ export class HmdAiComposer extends HmdElement {
     const controller = this.#controller;
     if (!controller) return;
     if (controller.getState().running) controller.stop();
-    else this.#trySend();
+    else this.#send();
   }
 
-  /** Invio chiesto dall'utente (Invia, Invio): se non è possibile, la nota dice perché. */
-  #trySend(): void {
-    const controller = this.#controller;
-    const parts = this.#parts;
-    if (!controller || !parts || controller.getState().running) return;
-    const blocker = sendBlocker(parts.input.value, !!controller.profile());
-    if (blocker) {
-      this.#note = { key: blocker, profileId: controller.profile()?.id };
-      this.#loop.update();
-      return;
-    }
-    this.#send();
-  }
-
+  /**
+   * Invio chiesto dall'utente (Invia, Invio, un suggerimento): se il messaggio risolto (testo scritto o
+   * preset) non può partire, la nota dice perché; la casella e il focus restano come sono.
+   */
   #send(presetId?: string): void {
     const controller = this.#controller;
     const parts = this.#parts;
@@ -4138,8 +4156,14 @@ export class HmdAiComposer extends HmdElement {
     const state = controller.getState();
     if (state.running) return;
     const preset = presetId ? state.presets.find((p) => p.id === presetId) : undefined;
+    const blocker = sendBlocker(parts.input.value, !!controller.profile(), !!preset);
+    if (blocker) {
+      this.#note = { key: blocker, profileId: controller.profile()?.id };
+      this.#loop.update();
+      return;
+    }
     const message = outgoing(parts.input.value, preset, i18n.t);
-    if (!message || !controller.profile()) return;
+    if (!message) return;
     const scoped = selectionChipText(i18n.t, this.#text, this.#selection, this.#ignored) !== null;
     const scope = scoped ? this.#getSelection() : undefined;
     if (scoped && !scope) {
@@ -4174,9 +4198,9 @@ export class HmdAiComposer extends HmdElement {
     toggleAttr(parts.send, 'aria-label', true, t(button.label));
     toggleAttr(parts.send, 'data-tooltip', true, t(button.label));
     parts.sendIcon.style.setProperty('mask-image', `url("${ICONS[button.icon]}")`);
-    // Un cambio di profilo toglie la nota (anche quella che chiedeva il profilo); la stessa nota due volte
-    // di fila non si ri-annuncia (stesso testo nella regione): accettato.
-    if (this.#note && this.#note.profileId !== controller.profile()?.id) this.#note = null;
+    // Un cambio di profilo o una generazione partita da qualunque parte (anche «Riprova» nel registro)
+    // toglie la nota; la stessa nota due volte di fila non si ri-annuncia (stesso testo nella regione): accettato.
+    if (this.#note && (this.#note.profileId !== controller.profile()?.id || controller.getState().running)) this.#note = null;
     setText(parts.note, this.#note ? t(this.#note.key) : '');
   }
 }
@@ -4285,7 +4309,7 @@ declare global {
 }
 ```
 
-Run: `npx tsx --import ./src/testing/assetHooks.ts --test src/elements/ai/composerView.test.ts src/elements/ai/composer.dom.test.ts` → 19 PASS.
+Run: `npx tsx --import ./src/testing/assetHooks.ts --test src/elements/ai/composerView.test.ts src/elements/ai/composer.dom.test.ts` → 21 PASS.
 
 - [ ] **Step 13: E2e nella forma nuova**
 
@@ -4356,6 +4380,38 @@ In `e2e/ai-composer.spec.ts`:
     await expect(page.getByRole('status').filter({ hasText: it('ai.composer.needText') })).toHaveCount(0);
 ```
 
+4. il blocco
+
+```ts
+  test('while the reply is generated the button is Stop and Enter does not send again; Escape in the box stops it', async ({ app, ai }) => {
+```
+
+   diventa
+
+```ts
+  test('without a profile a suggestion says why, keeps the draft and sends nothing', async ({ app, ai, page }) => {
+    // Nessun profilo: si cancella l'unico (quello predefinito) dalle impostazioni.
+    const settings = page.getByRole('region', { name: app.t('settings.title') });
+    await page.getByRole('button', { name: app.t('toolbar.settings') }).click();
+    await settings.getByRole('link', { name: app.t('settings.aiProfiles') }).click();
+    await settings.getByRole('button', { name: 'ollama', exact: true }).click();
+    await settings.getByRole('button', { name: app.t('ai.delete'), exact: true }).click();
+    await page.getByRole('dialog').getByRole('button', { name: app.t('ai.delete'), exact: true }).click();
+    await expect(settings.getByRole('button', { name: 'ollama', exact: true })).toHaveCount(0);
+    await settings.getByRole('button', { name: app.t('settings.close') }).click();
+    await composer(app).fill('draft');
+    await page.getByRole('group', { name: app.t('ai.suggestions') }).getByRole('button').first().click();
+    await expect(page.getByRole('status').filter({ hasText: app.t('ai.composer.needProfile') })).toBeVisible();
+    await expect(composer(app)).toHaveValue('draft');
+    expect(ai.requests).toBe(0);
+    expect(await page.evaluate(() => document.activeElement === document.body)).toBe(false);
+  });
+
+  test('while the reply is generated the button is Stop and Enter does not send again; Escape in the box stops it', async ({ app, ai }) => {
+```
+
+(Il punto 4 aggiunge il test del suggerimento senza profilo prima di «while the reply is generated…».)
+
 - [ ] **Step 14: Stato di audit con la nota**
 
 In `e2e/computed-styles.audit.ts`, subito prima dello stato `model-chip-hover`:
@@ -4380,9 +4436,9 @@ e nello stato `ai-composer-typed` il commento «Testo scritto (Invia attivo) e c
 - [ ] **Step 15: Snapshot (approvato da Davide per questo cambio) e `dist-baseline/` ricostruita**
 
 ```bash
-npm test                    # 914 + 4 = 918
+npm test                    # 914 + 6 = 920
 npm run lint
-npm run test:e2e            # 175, verde: lo snapshot «AI review» (light e dark) cambia solo nel pulsante Invia
+npm run test:e2e            # 175 + 1 = 176 (il test nuovo del suggerimento senza profilo), verde: lo snapshot «AI review» (light e dark) cambia solo nel pulsante Invia
 ```
 
 Lo snapshot «AI review» di `visual.spec.ts` contiene Invia spento (casella vuota dopo l'invio); ora è del colore d'accento. La differenza misurata nel prototipo è di circa 750 pixel (0,07 %), sotto la tolleranza `maxDiffPixelRatio: 0.002`, quindi il test **passa senza rigenerare**: si rigenerano comunque **solo** quei due riferimenti, così l'immagine di riferimento mostra il pulsante nuovo e la tolleranza resta intera per le regressioni vere. `--update-snapshots` da solo non riscrive un riferimento che passa: serve `=all`, limitato con `-g`:
@@ -4390,8 +4446,8 @@ Lo snapshot «AI review» di `visual.spec.ts` contiene Invia spento (casella vuo
 ```bash
 npx playwright test -c e2e/playwright.config.ts e2e/visual.spec.ts -g "AI review" --update-snapshots=all
 git status --short e2e/__screenshots__   # solo ai-review-light-linux.png e ai-review-dark-linux.png
-npm run test:e2e            # 175
-npm run test:e2e:dev        # 160
+npm run test:e2e            # 176
+npm run test:e2e:dev        # 161
 ```
 
 Il paragrafo nuovo sposta gli indici del DOM: contro la `dist-baseline/` del Task 1 tutti gli stati di audit della sidebar AI differiscono (17 nel prototipo: `model-popover`, `ai-suggestions`, `effort-chip`, `ai-review`, `ai-review-empty`, `ai-review-hover`, `ai-review-conflict`, `ai-chat-error`, `ai-chat-summary`, `ai-composer-selection`, `ai-composer-typed`, `ai-composer-running`, `model-chip-hover`, `model-popover-groups`, `model-popover-custom`, `model-popover-unreachable`, `ai-sync-reactivate`), quindi **si ricostruisce la baseline da questa build** (cambio d'aspetto voluto, regola di `CLAUDE.md`):
@@ -4881,7 +4937,7 @@ ls src/ui/ai/                       # restano ReviewBar.tsx, ReviewView.tsx (+ m
 - [ ] **Step 7: Verifica completa**
 
 ```bash
-npm test                    # 918 + 7 = 925
+npm test                    # 920 + 7 = 927
 npm run lint
 npm run test:e2e            # 175, snapshot invariati
 npx playwright test -c e2e/playwright.config.ts e2e/ai-model.spec.ts e2e/ai-composer.spec.ts e2e/ai-chips.spec.ts e2e/ai-chat-log.spec.ts e2e/ai-review.spec.ts --repeat-each=3
@@ -5403,7 +5459,7 @@ In `e2e/computed-styles.audit.ts`, subito dopo lo stato `ai-composer-note`:
 - [ ] **Step 13: Verifica e `dist-baseline/` ricostruita**
 
 ```bash
-npm test                    # 925 (i test della sidebar restano 7: cambiano, non aumentano)
+npm test                    # 927 (i test della sidebar restano 7: cambiano, non aumentano)
 npm run lint
 npm run test:e2e            # 175, snapshot invariati (in «AI review» Nuova chat è già attivo: c'è un messaggio)
 npm run test:e2e:dev        # 160
@@ -5429,8 +5485,8 @@ git commit -m "feat: Nuova chat non si disattiva mai, con la chat vuota la nota 
 
 ```bash
 npm run build
-gzip -c dist/assets/index-*.js | wc -c     # annotare accanto al valore del Task 1 (prototipo: 437 013 → 439 701)
-npm test                                    # annotare: 925
+gzip -c dist/assets/index-*.js | wc -c     # annotare accanto al valore del Task 1 (prototipo: 437 013 → 439 690)
+npm test                                    # annotare: 927
 ```
 
 - [ ] **Step 2: Spec**
@@ -5473,10 +5529,10 @@ cd ../housemd-wc && git merge --ff-only main && git push origin feat/web-compone
 ```
 
 - [ ] **Step 6: Checklist manuale** (Chrome su Linux, server di sviluppo del worktree con `npx vite --port 5197 --strictPort --host 127.0.0.1`, quindi con StrictMode, aperto su `http://127.0.0.1:5197/` e non sulla 5180 della cartella vera; cartella di prova in OPFS con `window.showDirectoryPicker` sostituito via script; Ollama finto sostituendo `window.fetch` per `localhost:11434` (`/api/tags` con due o tre modelli, chat in SSE con una risposta lenta per vedere Stop); alla fine pulire OPFS, IndexedDB e `localStorage`). Le schede di Claude in Chrome sono `visibilityState: hidden`: niente `requestAnimationFrame` affidabile e Ctrl+K preso da Chrome; ciò che dipende da un fotogramma (il focus che passa al `body` dopo un pulsante disattivato) va guardato in una finestra visibile o da Davide. Prima di chiamare regressione un comportamento sospetto, confrontarlo con `main` (React) su un'altra porta.
-  1. Composer: Invio invia, Shift+Invio va a capo, Ctrl+Invio non fa nulla, Esc durante la generazione ferma; Invia spento senza testo; durante la generazione il pulsante è Stop e torna Invia; scrivere veloce mentre arriva la risposta non perde caratteri né il focus; la casella si svuota solo dopo l'invio di un testo.
+  1. Composer: Invio invia, Shift+Invio va a capo, Ctrl+Invio non fa nulla, Esc durante la generazione ferma; Invia sempre attivo (decisione 4): a casella vuota, clic o Invio scrivono sotto il composer «Write a message before sending» e il focus resta sul pulsante (o nella casella); senza profili (cancellato l'ultimo) Invia e un suggerimento scrivono «Choose a profile before sending» e la bozza resta; la nota sparisce scrivendo, scegliendo un profilo, con un invio riuscito o quando parte una generazione (anche da «Riprova» nel registro); durante la generazione il pulsante è Stop e torna Invia; scrivere veloce mentre arriva la risposta non perde caratteri né il focus; la casella si svuota solo dopo l'invio di un testo.
   2. Chip della selezione: selezione su più righe e su una riga («N caratteri»), ✕ che lo nasconde e lascia il focus nella casella, una selezione diversa che lo fa tornare; invio con la selezione (proposta sul tratto).
   3. Chip del modello: tooltip con la nota privacy (locale, cloud con l'host, CLI); popover sopra il chip e capovolto vicino al bordo superiore; gruppi Locali/Cloud, ⚠ su un profilo cloud senza chiave; scegliere un profilo (ricordato al riavvio); elenco dei modelli chiesto solo all'apertura (rete del finto Ollama), «Aggiorna», «Altro…» con il campo libero, server spento con il messaggio; parametri nel popover (pallino nel chip), Salva nel profilo, Salva come nuovo, Ripristina; Gestisci profili… apre le impostazioni e alla chiusura il focus torna sul chip.
   4. Impostazioni → AI · Profili: il selettore del modello nel dettaglio, «Altro…», Salva; cambio di profilo con il campo libero aperto.
-  5. Sidebar: titolo, Nuova chat spenta con la chat vuota, accesa dopo un messaggio, svuota la chat e riporta i suggerimenti; un suggerimento invia il preset; il pulsante del file in un messaggio apre il file; Riprova dopo un errore; con una cartella di sync senza permesso «⚠ Riattiva il permesso di sync» apre AI · Sync.
+  5. Sidebar: titolo; Nuova chat sempre attivo (decisione 4): a chat vuota il clic scrive «The chat is already empty» sotto la testata e il focus resta sul pulsante, la nota sparisce quando arriva un messaggio; dopo un messaggio Nuova chat svuota la chat e riporta i suggerimenti; le due note sono annunciate dallo screen reader (`role="status"`: non verificabile da Claude in Chrome, provare con Orca o NVDA, o Davide); un suggerimento invia il preset; il pulsante del file in un messaggio apre il file; Riprova dopo un errore; con una cartella di sync senza permesso «⚠ Riattiva il permesso di sync» apre AI · Sync.
   6. Cambio di lingua a caldo: casella, Invia/Stop, chip della selezione, chip del modello e popover, titolo e Nuova chat nella lingua nuova.
   7. Tastiera e screen reader: ordine del focus nel composer e nel popover (radio con le frecce), focus ring sui chip e sui pulsanti, `forced-colors`, tooltip al focus di ✕, Invia, Nuova chat; tema chiaro, scuro e automatico.
