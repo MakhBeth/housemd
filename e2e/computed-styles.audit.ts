@@ -286,6 +286,9 @@ const STATES: State[] = [
   {
     name: 'ai-composer-running',
     async setup(app, page, ai) {
+      // Il contatore dei secondi della generazione cambia la larghezza del testo: orologio finto fin
+      // dall'inizio e fermo a un valore noto, o il testo dipende da quanto dura l'esecuzione.
+      await page.clock.install({ time: NOW });
       ai.hold();
       await app.openFolder({ 'a.md': 'Alpha' });
       await app.openFile('a.md');
@@ -295,9 +298,7 @@ const STATES: State[] = [
       await composer.fill('fix');
       await composer.press('Enter');
       await expect(page.getByRole('button', { name: app.t('ai.stop'), exact: true })).toBeVisible();
-      // Il contatore dei secondi della generazione cambia la larghezza del testo: si ferma l'orologio.
-      await page.clock.install();
-      await page.clock.pauseAt(new Date(Date.now() + 1000));
+      await page.clock.pauseAt(NOW.getTime() + 2000);
     },
   },
   {
