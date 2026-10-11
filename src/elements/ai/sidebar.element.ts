@@ -131,7 +131,7 @@ export class HmdAiSidebar extends HmdElement {
     parts.log.i18n = this.#i18n;
     // I messaggi arrivano al registro prima dell'inserimento, così lo disegna nella stessa passata (il confronto resta nel render).
     const messages = this.#controller?.getState().chat.messages;
-    if (messages) parts.log.messages = messages;
+    if (messages && parts.log.messages !== messages) parts.log.messages = messages;
     parts.composer.controller = this.#controller;
     parts.composer.text = this.#text;
     parts.composer.selection = this.#selection;

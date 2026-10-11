@@ -207,6 +207,12 @@ test('the chat log gets the controller messages before insertion, so it renders 
     document.body.append(el);
     assert.deepEqual(el.querySelector('hmd-ai-chat-log')!.messages, [MESSAGE]);
     assert.equal(connectedAtSet[0], false);
+    // Gli altri ingressi non devono far riconciliare il registro: i messaggi non cambiati non si riassegnano.
+    const count = connectedAtSet.length;
+    el.text = 'altro';
+    el.selection = { from: 0, to: 1 };
+    el.getSelection = () => undefined;
+    assert.equal(connectedAtSet.length, count);
   } finally {
     Object.defineProperty(logProto, 'messages', descriptor);
   }
