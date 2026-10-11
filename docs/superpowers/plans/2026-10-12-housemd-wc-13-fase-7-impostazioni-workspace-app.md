@@ -5292,3 +5292,712 @@ Nel prototipo, a questo passo: suite e2e completa 185 verdi + i 2 noti (2,6 min)
 - [ ] **Step 8: Commit**
 
 `test:` (Step 1), `feat:` (Step 2–5), `refactor:` (Step 6). Nessun `Co-authored-by`.
+
+### Task 7: `hmd-app`, `main.ts`, via React (Builder)
+
+`App.tsx` diventa `hmd-app` (schermate, cambio cartella, avvisi), con le dipendenze del browser in `appDeps.ts` (decisione 13). `main.ts` crea gli store unici (lingua, tema, rotta, aggiornamenti) e `<hmd-app>` dentro `#root` (spec §5.3); `<html lang>` segue la lingua caricata (era l'effetto di `I18nProvider`). Il tema passa a `theme/browserTheme.ts`, senza `flushSync` (decisione 12). Poi via React: file, test, dipendenze, plugin, `"jsx"`, e un controllo statico che lo verifica.
+
+**Files:**
+- Create: `src/elements/app/appDeps.ts`, `app.element.ts`, `app.css`, `app.dom.test.ts`, `src/main.ts`, `src/theme/browserTheme.ts`
+- Modify: `src/elements/define.ts` (`hmd-app`, commento), `src/architecture.test.ts` (niente React), `src/elements/editor/editor.dom.test.ts`, `src/elements/ai/diff-pane.dom.test.ts` (via i test StrictMode e gli import di React), `index.html`, `vite.config.ts`, `tsconfig.json`, `package.json`, `package-lock.json`
+- Delete: `src/App.tsx`, `src/main.tsx`, `src/i18n/I18nProvider.tsx`, `src/theme/useTheme.ts`, `src/elements/jsx.d.ts`, `src/elements/reactInterop.dom.test.ts`
+
+**Interfaces:**
+- Consumes: `app/switchFolder.ts`, `elements/app/screens.ts` (`afterSwitch`), `fs/access.ts`, `fs/handleStore.ts`, `fs/fsaOps.ts`, `fs/workspaceFS.ts`, `history/historyStore.ts`, `workspace/buffers.ts`, `lib/db.ts` (`onDbBlocked`), `pwa/updateHost.ts`, `pwa/registerUpdates.ts`, `state/i18nStore.ts`, `state/routeStore.ts`, `state/themeStore.ts`.
+- Produces: `HmdApp` — ingressi `updates`, `i18n`, `theme`, `route`; solo per i test `deps: AppDeps` e il getter `screen`. `AppDeps`, `browserAppDeps`, `browserThemeStore()`.
+
+**Criteri di accettazione:** RED annotato; `npm test` 1034 + 6 (app) + 1 (niente React) − 3 (`reactInterop`) − 2 (StrictMode) = **1036**; lint pulito; `package.json` senza `react`, `react-dom`, `@types/react*`, `@vitejs/plugin-react`; `npm run build` senza il plugin; bundle principale gzip annotato (prototipo: **379 165 B**); `startup.spec.ts`, `theme-i18n.spec.ts`, `visual.spec.ts`, `workspace-shell.spec.ts`, `settings.spec.ts` verdi in build e in sviluppo (salvo i 2 noti); audit `start*`, `workspace*`, `access-lost-dialog` verdi; nessun `.tsx` in `src/` e nessun import di `react` (solo i casi sintetici di `architecture.test.ts`).
+
+- [ ] **Step 1: I test, prima del codice**
+
+`src/elements/app/app.dom.test.ts` (browser finto con `AppDeps`; workspace veri su `memoryOps`):
+
+```ts
+import '../../testing/domEnv';
+import '../../testing/codemirrorEnv';
+
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+import { installMemoryStorage } from '../../testing/memoryStorage';
+installMemoryStorage();
+
+import '../define';
+import type { StoredWorkspace } from '../../fs/handleStore';
+import { createWorkspaceFS } from '../../fs/workspaceFS';
+import { memoryOps } from '../../fs/testing/memoryOps';
+import { EN_MESSAGES } from '../../i18n/messages';
+import type { UpdateFlow } from '../../pwa/updateFlow';
+import { createI18nStore } from '../../state/i18nStore';
+import { createRouteStore } from '../../state/routeStore';
+import { createThemeStore } from '../../state/themeStore';
+import { installDialogStub } from '../../testing/dialogStub';
+import { installPopoverStub } from '../../testing/popoverStub';
+import { waitFor } from '../../testing/waitFor';
+import { memoryBufferStore } from '../../workspace/buffers';
+import { Workspace } from '../../workspace/workspace';
+import type { HmdApp } from './app.element';
+import type { AppDeps } from './appDeps';
+
+installDialogStub();
+installPopoverStub();
+Object.assign(globalThis, { ResizeObserver: class { observe() {} disconnect() {} } });
+test.afterEach(() => document.body.replaceChildren());
+
+const handle = (name: string) => ({ name, isSameEntry: async () => false }) as unknown as FileSystemDirectoryHandle;
+
+function deps(overrides: Partial<AppDeps> = {}) {
+  const log: string[] = [];
+  let blocked: (() => void) | null = null;
+  const opened: Workspace[] = [];
+  const d: AppDeps = {
+    isSupported: () => true,
+    unsupportedReason: () => 'firefox',
+    loadWorkspace: async () => null,
+    hasAccess: async () => true,
+    requestAccess: async () => true,
+    pickFolder: async () => handle('picked'),
+    knownWorkspaceId: async () => null,
+    saveWorkspace: async (stored) => void log.push(`save ${stored.handle.name}`),
+    async openWorkspace(stored: StoredWorkspace) {
+      const ops = memoryOps();
+      ops.setFile('a.md', '# A');
+      const workspace = new Workspace({ fs: createWorkspaceFS(ops), workspaceId: stored.workspaceId, name: stored.handle.name, buffers: memoryBufferStore() });
+      await workspace.load();
+      opened.push(workspace);
+      return workspace;
+    },
+    onDbBlocked: (listener) => ((blocked = listener), () => void (blocked = null)),
+    setUpdateWorkspace: (workspace) => void log.push(`update ${workspace ? 'open' : 'none'}`),
+    ...overrides,
+  };
+  return { deps: d, log, opened, block: () => blocked?.() };
+}
+
+function mount(d: AppDeps) {
+  const i18n = createI18nStore({ locale: 'en', messages: EN_MESSAGES, load: async (locale) => ({ locale, messages: EN_MESSAGES }), persist() {} });
+  const el = document.createElement('hmd-app') as HmdApp;
+  el.deps = d;
+  el.updates = { subscribe: () => () => {}, getState: () => ({ kind: 'idle' }) } as unknown as UpdateFlow;
+  el.i18n = i18n;
+  el.theme = createThemeStore({ initial: 'auto', persist() {}, transition: (apply) => apply(), apply() {}, watchSystem: () => () => {} });
+  el.route = createRouteStore({ hash: () => '', pushState() {}, replaceState() {}, back() {}, setHash() {}, cleanUrl: () => '/', onHashChange: () => () => {} });
+  document.body.append(el);
+  return el;
+}
+
+const kinds = (el: Element) => [...el.children].map((c) => c.localName);
+
+test('an unsupported browser: the start screen in its unsupported mode, and the update notice', () => {
+  const el = mount(deps({ isSupported: () => false }).deps);
+  assert.equal(el.screen, 'unsupported');
+  assert.deepEqual(kinds(el), ['hmd-start-screen', 'hmd-update-notice']);
+  assert.equal(el.querySelector('hmd-start-screen')!.mode, 'unsupported');
+});
+
+test('no saved folder: the start screen; picking a folder opens it, saves it and tells the update flow', async () => {
+  const { deps: d, log } = deps();
+  const el = mount(d);
+  await waitFor(() => el.screen === 'start');
+  const start = el.querySelector('hmd-start-screen')!;
+  start.dispatchEvent(new CustomEvent('hmd-start-pick', { bubbles: true, detail: null }));
+  await waitFor(() => el.screen === 'open');
+  assert.deepEqual(kinds(el), ['hmd-workspace', 'hmd-update-notice']);
+  assert.deepEqual(log, ['update none', 'save picked', 'update open']);
+});
+
+test('a saved folder without permission: resume; granted, the folder opens', async () => {
+  const el = mount(deps({ loadWorkspace: async () => ({ handle: handle('notes'), workspaceId: 'w' }), hasAccess: async () => false }).deps);
+  await waitFor(() => el.screen === 'resume');
+  assert.equal(el.querySelector('hmd-start-screen')!.folderName, 'notes');
+  el.querySelector('hmd-start-screen')!.dispatchEvent(new CustomEvent('hmd-start-resume', { bubbles: true, detail: null }));
+  await waitFor(() => el.screen === 'open');
+});
+
+test('changing folder from the workspace makes a new hmd-workspace (also for the same folder) and disposes the old one', async () => {
+  const { deps: d, opened } = deps({ loadWorkspace: async () => ({ handle: handle('notes'), workspaceId: 'w' }) });
+  const el = mount(d);
+  await waitFor(() => el.screen === 'open');
+  const first = el.querySelector('hmd-workspace')!;
+  first.dispatchEvent(new CustomEvent('hmd-workspace-change-folder', { bubbles: true, detail: null }));
+  await waitFor(() => el.querySelector('hmd-workspace') !== first && !!el.querySelector('hmd-workspace'));
+  assert.equal(opened.length, 2);
+  assert.equal(first.isConnected, false);
+});
+
+test('a blocked database shows the dismissible notice at the top; dismissed, it goes', async () => {
+  const { deps: d, block } = deps();
+  const el = mount(d);
+  await waitFor(() => el.screen === 'start');
+  block();
+  const notice = el.querySelector('hmd-notice')!;
+  assert.equal(notice.message, EN_MESSAGES['toast.reloadOtherTabs']);
+  assert.equal(notice.placement, 'top');
+  notice.dispatchEvent(new CustomEvent('hmd-notice-dismiss', { bubbles: true, detail: null }));
+  assert.equal(el.querySelector('hmd-notice'), null);
+});
+
+test('detached while the folder is opening: the folder opened afterwards is disposed', async () => {
+  let release: () => void = () => {};
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const disposed: string[] = [];
+  const { deps: d } = deps({ loadWorkspace: async () => ({ handle: handle('notes'), workspaceId: 'w' }) });
+  const open = d.openWorkspace;
+  let opening = false;
+  d.openWorkspace = async (stored) => {
+    opening = true;
+    await gate;
+    const w = await open(stored);
+    const dispose = w.dispose.bind(w);
+    w.dispose = () => (disposed.push('w'), dispose());
+    return w;
+  };
+  const el = mount(d);
+  await waitFor(() => opening);
+  el.remove();
+  release();
+  await waitFor(() => disposed.length === 1);
+  assert.equal(el.screen, 'boot');
+});
+```
+
+In `src/architecture.test.ts`, prima del test di `customElements.define`:
+
+```ts
+/** Fase 7 (spec WC §8.3, §11): React non c'è più, né come import né come file `.tsx`. */
+const REACT = /\bfrom\s+['"](?:react|react-dom)(?:\/[^'"]*)?['"]|\bimport\(\s*['"](?:react|react-dom)(?:\/[^'"]*)?['"]/;
+
+test('no React anywhere in src/: no import of react or react-dom, no .tsx file (tests included)', () => {
+  const all = walk(SRC).map((full) => ({ path: relative(SRC, full).split(sep).join('/'), full }));
+  assert.deepEqual(all.filter(({ path }) => path.endsWith('.tsx')).map(({ path }) => path), []);
+  // Questo file contiene i casi sintetici del controllo: si salta.
+  const ts = all.filter(({ path }) => path.endsWith('.ts') && path !== 'architecture.test.ts').map(({ path, full }) => ({ path, source: readFileSync(full, 'utf8') }));
+  assert.deepEqual(offenders(REACT, () => false, ts), []);
+});
+```
+
+e nel test «the patterns fire on what they must…», prima delle righe di `DEFINE`:
+
+```ts
+  for (const bad of ["import { useState } from 'react';", "import { createRoot } from 'react-dom/client';", "await import('react')"]) {
+    assert.ok(REACT.test(bad), bad);
+  }
+  for (const ok of ["import { reactive } from './reactive';", '// niente React qui', "import { x } from 'preact'"]) {
+    assert.ok(!REACT.test(ok), ok);
+  }
+```
+
+RED atteso: `app.dom.test.ts` non trova `./app.element`/`./appDeps`; il test statico elenca `App.tsx`, `main.tsx`, `i18n/I18nProvider.tsx` e gli import di `react` (`theme/useTheme.ts`, `elements/jsx.d.ts`, `reactInterop.dom.test.ts`, `editor.dom.test.ts`, `diff-pane.dom.test.ts`).
+
+- [ ] **Step 2: Le dipendenze del browser e `hmd-app`**
+
+`src/elements/app/appDeps.ts`:
+
+```ts
+import { hasAccess, isSupported, pickFolder, requestAccess, unsupportedReason, type UnsupportedReason } from '../../fs/access';
+import { fsaOps } from '../../fs/fsaOps';
+import { findKnownWorkspaceId, loadWorkspace, saveWorkspace, type StoredWorkspace } from '../../fs/handleStore';
+import { createWorkspaceFS } from '../../fs/workspaceFS';
+import { indexedDbHistoryStore } from '../../history/historyStore';
+import { onDbBlocked } from '../../lib/db';
+import { readValidPref } from '../../lib/prefs';
+import { setUpdateWorkspace } from '../../pwa/updateHost';
+import { parseAutosave } from '../../workspace/autosave';
+import { indexedDbBufferStore } from '../../workspace/buffers';
+import { Workspace } from '../../workspace/workspace';
+
+/** Quello che l'app usa del browser (cartelle, permessi, IndexedDB): iniettato, così l'elemento si prova in jsdom. */
+export interface AppDeps {
+  isSupported(): boolean;
+  unsupportedReason(): UnsupportedReason;
+  loadWorkspace(): Promise<StoredWorkspace | null>;
+  hasAccess(handle: FileSystemDirectoryHandle): Promise<boolean>;
+  requestAccess(handle: FileSystemDirectoryHandle): Promise<boolean>;
+  pickFolder(): Promise<FileSystemDirectoryHandle | null>;
+  /** Id di una cartella già aperta in passato (anche A → B → A), o null. */
+  knownWorkspaceId(handle: FileSystemDirectoryHandle): Promise<string | null>;
+  saveWorkspace(stored: StoredWorkspace): Promise<unknown>;
+  openWorkspace(stored: StoredWorkspace): Promise<Workspace>;
+  onDbBlocked(listener: () => void): () => void;
+  /** Il flusso di aggiornamento mette al sicuro il documento dello workspace aperto prima del reload. */
+  setUpdateWorkspace(workspace: Workspace | null): void;
+}
+
+const buffers = indexedDbBufferStore();
+const history = indexedDbHistoryStore();
+
+/** L'app nel browser (era il modulo di App.tsx). */
+export const browserAppDeps: AppDeps = {
+  isSupported,
+  unsupportedReason: () => unsupportedReason(navigator.userAgent),
+  loadWorkspace: () => loadWorkspace(),
+  hasAccess,
+  requestAccess,
+  pickFolder,
+  knownWorkspaceId: (handle) => findKnownWorkspaceId(handle),
+  saveWorkspace: (stored) => saveWorkspace(stored.handle, undefined, stored.workspaceId),
+  async openWorkspace(stored) {
+    const workspace = new Workspace({
+      fs: createWorkspaceFS(fsaOps(stored.handle)),
+      workspaceId: stored.workspaceId,
+      name: stored.handle.name,
+      buffers,
+      history,
+      autosave: readValidPref('autosave', parseAutosave),
+    });
+    await workspace.load();
+    return workspace;
+  },
+  onDbBlocked,
+  setUpdateWorkspace,
+};
+```
+
+`src/elements/app/app.element.ts`:
+
+```ts
+import { match } from 'ts-pattern';
+
+import { switchFolder, switchGuard } from '../../app/switchFolder';
+import { HmdElement } from '../../dom/element';
+import { el } from '../../dom/el';
+import { RenderLoop } from '../../dom/renderLoop';
+import type { StoredWorkspace } from '../../fs/handleStore';
+import type { UpdateFlow } from '../../pwa/updateFlow';
+import type { I18nStore } from '../../state/i18nStore';
+import type { RouteStore } from '../../state/routeStore';
+import type { ThemeStore } from '../../state/themeStore';
+import type { Workspace } from '../../workspace/workspace';
+import type { HmdNotice } from '../notice/notice.element';
+import type { HmdStartScreen } from '../start-screen/start-screen.element';
+import type { HmdUpdateNotice } from '../update-notice/update-notice.element';
+import type { HmdWorkspace } from '../workspace/workspace.element';
+import { browserAppDeps, type AppDeps } from './appDeps';
+import { afterSwitch, type Screen as AppScreen } from './screens';
+import './app.css';
+
+type Screen = AppScreen<StoredWorkspace, Workspace>;
+
+/**
+ * Radice dell'app (era App.tsx): schermata iniziale (browser non supportato, prima apertura, ripresa
+ * dell'accesso) o area di lavoro della cartella aperta, l'avviso di nuova versione e l'avviso del database
+ * bloccato da un'altra scheda. Un cambio cartella (o una ripresa) alla volta; ogni apertura riuscita crea un
+ * `hmd-workspace` nuovo (anche per la stessa cartella), così il suo stato non sopravvive. Gli store unici
+ * (lingua, tema, rotta, aggiornamenti) arrivano da `main.ts` e scendono ai figli.
+ */
+export class HmdApp extends HmdElement {
+  #updates: UpdateFlow | null = null;
+  #i18n: I18nStore | null = null;
+  #theme: ThemeStore | null = null;
+  #route: RouteStore | null = null;
+  #deps: AppDeps = browserAppDeps;
+
+  #screen: Screen = { kind: 'boot' };
+  #guard = switchGuard();
+  #switching = false;
+  #dbBlocked = false;
+  #booted = false;
+  #boot: AbortController | null = null;
+  #start: HmdStartScreen | null = null;
+  #workspace: HmdWorkspace | null = null;
+  #updateNotice: HmdUpdateNotice | null = null;
+  #notice: HmdNotice | null = null;
+  #loop = new RenderLoop(this, {
+    ready: () => !!this.#updates && !!this.#i18n && !!this.#theme && !!this.#route && this.isConnected,
+    render: () => this.#render(this.#i18n!),
+  });
+
+  get updates(): UpdateFlow | null { return this.#updates; }
+  set updates(value: UpdateFlow | null) { this.#updates = value ?? null; this.#loop.update(); }
+  get i18n(): I18nStore | null { return this.#i18n; }
+  set i18n(value: I18nStore | null) {
+    value ??= null;
+    if (value === this.#i18n) return;
+    this.#i18n = value;
+    this.reconnect();
+  }
+  get theme(): ThemeStore | null { return this.#theme; }
+  set theme(value: ThemeStore | null) { this.#theme = value ?? null; this.#loop.update(); }
+  get route(): RouteStore | null { return this.#route; }
+  set route(value: RouteStore | null) { this.#route = value ?? null; this.#loop.update(); }
+  /** Solo per i test: il browser finto. */
+  set deps(value: AppDeps) { this.#deps = value; }
+  /** Schermata corrente (per i test). */
+  get screen(): Screen['kind'] { return this.#screen.kind; }
+
+  protected connect(signal: AbortSignal): void {
+    const deps = this.#deps;
+    signal.addEventListener('abort', deps.onDbBlocked(() => this.#set({ dbBlocked: true })), { once: true });
+    if (!this.#booted) {
+      this.#booted = true;
+      this.#startBoot(deps);
+    }
+    if (this.#i18n) this.watch(this.#i18n, () => this.#loop.update(), signal);
+  }
+
+  disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.#boot?.abort();
+  }
+
+  /** Avvio: la cartella salvata, riaperta se c'è ancora il permesso. Uno workspace aperto dopo il distacco si butta. */
+  #startBoot(deps: AppDeps): void {
+    if (!deps.isSupported()) return this.#show({ kind: 'unsupported' });
+    const boot = (this.#boot = new AbortController());
+    void (async () => {
+      const stored = await deps.loadWorkspace().catch(() => null);
+      if (boot.signal.aborted) return;
+      if (!stored) return this.#show({ kind: 'start' });
+      if (!(await deps.hasAccess(stored.handle))) {
+        if (!boot.signal.aborted) this.#show({ kind: 'resume', stored });
+        return;
+      }
+      const workspace = await deps.openWorkspace(stored);
+      if (boot.signal.aborted) return workspace.dispose();
+      this.#show({ kind: 'open', stored, workspace });
+    })();
+  }
+
+  #set(patch: { dbBlocked?: boolean; switching?: boolean }): void {
+    if (patch.dbBlocked !== undefined) this.#dbBlocked = patch.dbBlocked;
+    if (patch.switching !== undefined) this.#switching = patch.switching;
+    this.#loop.update();
+  }
+
+  /** Una schermata nuova; un'apertura riuscita vuole un hmd-workspace nuovo. Lo stato si salva prima del render. */
+  #show(screen: Screen): void {
+    if (screen.kind === 'open') this.#workspace = null;
+    this.#screen = screen;
+    this.#deps.setUpdateWorkspace(screen.kind === 'open' ? screen.workspace : null);
+    this.#loop.update();
+  }
+
+  // Un cambio cartella (o ripresa dell'accesso) alla volta: ognuno cattura lo workspace aperto all'inizio.
+  async #exclusive(task: () => Promise<void>): Promise<void> {
+    if (this.#guard.active) return;
+    this.#set({ switching: true });
+    try {
+      await this.#guard.run(task);
+    } finally {
+      this.#set({ switching: false });
+    }
+  }
+
+  #choose(): void {
+    const deps = this.#deps;
+    void this.#exclusive(async () => {
+      const screen = this.#screen;
+      const current = screen.kind === 'open' ? screen.workspace : null;
+      const result = await switchFolder({
+        pick: () => deps.pickFolder(),
+        current,
+        open: async (handle: FileSystemDirectoryHandle) => {
+          // Una cartella già aperta in passato tiene il suo workspaceId (bozze e ultimo file restano suoi).
+          const workspaceId = (await deps.knownWorkspaceId(handle).catch(() => null)) ?? crypto.randomUUID();
+          const stored: StoredWorkspace = { handle, workspaceId };
+          return { stored, workspace: await deps.openWorkspace(stored) };
+        },
+        // Diventa la cartella salvata solo a cambio riuscito; se il salvataggio fallisce resta aperta lo stesso.
+        persist: ({ stored }) => void deps.saveWorkspace(stored).catch(() => undefined),
+        // La cartella vecchia non si è potuta lasciare: quella nuova, già caricata, si butta.
+        discard: ({ workspace }) => workspace.dispose(),
+      });
+      match(afterSwitch(result, current !== null))
+        .with({ kind: 'show' }, ({ screen: next }) => this.#show(next))
+        .with({ kind: 'reportError' }, ({ detail }) => current?.reportFolderError(detail))
+        .with({ kind: 'stay' }, () => {})
+        .exhaustive();
+    });
+  }
+
+  #resume(): void {
+    const deps = this.#deps;
+    void this.#exclusive(async () => {
+      const screen = this.#screen;
+      if (screen.kind !== 'resume') return;
+      if (!(await deps.requestAccess(screen.stored.handle))) return;
+      const workspace = await deps.openWorkspace(screen.stored);
+      this.#show({ kind: 'open', stored: screen.stored, workspace });
+    });
+  }
+
+  #render(i18n: I18nStore): void {
+    const t = i18n.t;
+    const screen = this.#screen;
+    // La schermata iniziale resta lo stesso elemento tra le sue modalità (come il tag in App.tsx).
+    const start = screen.kind === 'unsupported' || screen.kind === 'start' || screen.kind === 'resume';
+    if (!start) this.#start = null;
+    if (screen.kind !== 'open') this.#workspace = null;
+    const content = match(screen)
+      .with({ kind: 'boot' }, () => null)
+      .with({ kind: 'unsupported' }, () => {
+        const s = this.#startScreen(i18n);
+        // Le proprietà che il ramo non passa tornano al default (React 19 le azzerava sullo stesso elemento).
+        Object.assign(s, { mode: 'unsupported', reason: this.#deps.unsupportedReason(), error: undefined, folderName: '', busy: false });
+        return s;
+      })
+      .with({ kind: 'start' }, ({ error }) => {
+        const s = this.#startScreen(i18n);
+        Object.assign(s, { mode: 'start', reason: undefined, error, folderName: '', busy: this.#switching });
+        return s;
+      })
+      .with({ kind: 'resume' }, ({ stored }) => {
+        const s = this.#startScreen(i18n);
+        Object.assign(s, { mode: 'resume', reason: undefined, error: undefined, folderName: stored.handle.name, busy: this.#switching });
+        return s;
+      })
+      .with({ kind: 'open' }, ({ stored, workspace }) => {
+        const w = (this.#workspace ??= el('hmd-workspace', { on: { 'hmd-workspace-change-folder': () => this.#choose() } }));
+        // Proprietà prima dell'inserimento (lo workspace legge le preferenze e apre la sessione AI collegandosi).
+        if (w.workspace !== workspace) {
+          w.workspaceId = stored.workspaceId;
+          w.handle = stored.handle;
+          w.i18n = i18n;
+          w.theme = this.#theme;
+          w.route = this.#route;
+          w.workspace = workspace;
+        }
+        w.switchingFolder = this.#switching;
+        return w;
+      })
+      .exhaustive();
+    const update = (this.#updateNotice ??= el('hmd-update-notice'));
+    if (update.flow !== this.#updates) update.flow = this.#updates;
+    if (update.i18n !== i18n) update.i18n = i18n;
+    if (this.#dbBlocked) {
+      const notice = (this.#notice ??= el('hmd-notice', { on: { 'hmd-notice-dismiss': () => this.#set({ dbBlocked: false }) } }));
+      notice.placement = 'top';
+      notice.message = t('toast.reloadOtherTabs');
+      notice.dismissLabel = t('toast.close');
+      notice.dismissible = true;
+    } else {
+      this.#notice = null;
+    }
+    const wanted: Element[] = [...(content ? [content] : []), update, ...(this.#notice ? [this.#notice] : [])];
+    for (const child of [...this.children]) if (!wanted.includes(child)) child.remove();
+    let cursor: Element | null = this.firstElementChild;
+    for (const node of wanted) {
+      if (node === cursor) cursor = cursor.nextElementSibling;
+      else this.insertBefore(node, cursor);
+    }
+  }
+
+  #startScreen(i18n: I18nStore): HmdStartScreen {
+    const s = (this.#start ??= el('hmd-start-screen', { on: { 'hmd-start-pick': () => this.#choose(), 'hmd-start-resume': () => this.#resume() } }));
+    if (s.i18n !== i18n) s.i18n = i18n;
+    return s;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'hmd-app': HmdApp;
+  }
+}
+```
+
+`src/elements/app/app.css`:
+
+```css
+@layer components {
+  /* La radice non ha un box: l'albero sotto #root resta quello di App.tsx. */
+  @scope (hmd-app) {
+    :scope {
+      display: contents;
+    }
+  }
+}
+```
+
+`src/elements/define.ts`: import `HmdApp` dopo quello di `HmdAiSuggestions`, voce `['hmd-app', HmdApp]` dopo `hmd-ai-suggestions`; il commento in testa: «`main.ts` lo importa prima di creare `<hmd-app>`: le proprietà assegnate prima della definizione oscurerebbero i setter (spec R9)».
+
+- [ ] **Step 3: Tema e avvio senza React**
+
+`src/theme/browserTheme.ts`:
+
+```ts
+import { readValidPref, writePref } from '../lib/prefs';
+import { createThemeStore, type ThemeStore } from '../state/themeStore';
+import { applyTheme } from './applyTheme';
+import { pixelTransition } from './pixelTransition';
+import { parseTheme } from './theme';
+
+/**
+ * Lo store del tema della pagina (era `getThemeStore` di useTheme.ts): legge la preferenza salvata, la
+ * transizione a pixel avvolge il cambio, `auto` segue il sistema. Lo crea `main.ts`, una volta. Gli
+ * elementi ridisegnano dentro la notifica, che arriva dentro la view transition: niente più `flushSync`.
+ */
+export function browserThemeStore(): ThemeStore {
+  return createThemeStore({
+    initial: readValidPref('theme', parseTheme),
+    persist: (theme) => writePref('theme', theme),
+    transition: (apply) => void pixelTransition(apply),
+    apply: applyTheme,
+    watchSystem: (onChange) => {
+      const media = matchMedia('(prefers-color-scheme: dark)');
+      media.addEventListener('change', onChange);
+      return () => media.removeEventListener('change', onChange);
+    },
+  });
+}
+```
+
+`src/main.ts`:
+
+```ts
+import '@fontsource/space-grotesk/400.css';
+import '@fontsource/space-grotesk/500.css';
+import '@fontsource/space-grotesk/700.css';
+import '@fontsource/space-mono/400.css';
+import '@fontsource/space-mono/700.css';
+import '@fontsource/pixelify-sans/400.css';
+import '@fontsource/pixelify-sans/700.css';
+import './styles/global.css';
+import './elements/define';
+import { registerSW } from 'virtual:pwa-register';
+import { el } from './dom/el';
+import { detectLocale, parseLocale } from './i18n/i18n';
+import { loadMessages } from './i18n/messages';
+import { readValidPref, writePref } from './lib/prefs';
+import { registerUpdates } from './pwa/registerUpdates';
+import { updateHost } from './pwa/updateHost';
+import { createI18nStore } from './state/i18nStore';
+import { browserRouteWindow, createRouteStore } from './state/routeStore';
+import { browserThemeStore } from './theme/browserTheme';
+import { installFocusSource } from './ui/focusSource';
+
+const updates = registerUpdates(registerSW, updateHost);
+installFocusSource(document);
+
+const requestedLocale = readValidPref('locale', parseLocale) ?? detectLocale(navigator.languages);
+
+// Gli store unici dell'app (spec WC §5.3), creati qui e passati a <hmd-app> come proprietà.
+void loadMessages(requestedLocale).then(({ locale, messages }) => {
+  const i18n = createI18nStore({ locale, messages, load: loadMessages, persist: (loaded) => writePref('locale', loaded) });
+  // <html lang> segue la lingua caricata (era l'effetto di I18nProvider).
+  const syncLang = () => {
+    document.documentElement.lang = i18n.getState().locale;
+  };
+  syncLang();
+  i18n.subscribe(syncLang);
+  const app = el('hmd-app');
+  app.updates = updates;
+  app.i18n = i18n;
+  app.theme = browserThemeStore();
+  app.route = createRouteStore(browserRouteWindow());
+  document.getElementById('root')!.append(app);
+});
+```
+
+`index.html`: `<script type="module" src="/src/main.ts"></script>`.
+
+- [ ] **Step 4: Via React**
+
+```bash
+git rm src/App.tsx src/main.tsx src/i18n/I18nProvider.tsx src/theme/useTheme.ts src/elements/jsx.d.ts src/elements/reactInterop.dom.test.ts
+npm uninstall react react-dom @types/react @types/react-dom @vitejs/plugin-react
+```
+
+- `vite.config.ts`: via `import react from '@vitejs/plugin-react';` e `react(),`.
+- `tsconfig.json`: via `"jsx": "react-jsx",`.
+- `src/elements/editor/editor.dom.test.ts`: via gli import di `react`, `react-dom`, `react-dom/client`, `import type { HmdEditor } from './editor.element';` e il test «under React StrictMode: properties (also saveImage) set before connecting, the view is never recreated».
+- `src/elements/ai/diff-pane.dom.test.ts`: via gli import di React, `import type { HmdAiDiffPane } from './diff-pane.element';` e il test «under React StrictMode the MergeView is not recreated: the focus given by the parent stays».
+
+```bash
+grep -rln "from 'react\|react-dom" src index.html vite.config.ts tsconfig.json; echo "uscita $?"   # atteso (prototipo): solo src/architecture.test.ts, i casi sintetici
+find src -name "*.tsx" | wc -l                                                                       # atteso: 0
+grep -n "react" package.json; echo "uscita $?"                                                       # atteso: uscita 1
+```
+
+- [ ] **Step 5: Verifica**
+
+```bash
+npx tsc --noEmit && npm test            # 1036 verdi
+npm run lint
+npm run build && gzip -c dist/assets/index-*.js | wc -c     # annotare (prototipo: 379 165)
+E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npx playwright test -c e2e/playwright.config.ts e2e/startup.spec.ts e2e/theme-i18n.spec.ts e2e/visual.spec.ts e2e/workspace-shell.spec.ts e2e/settings.spec.ts
+E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npx playwright test -c e2e/dev.config.ts e2e/startup.spec.ts e2e/theme-i18n.spec.ts e2e/workspace-shell.spec.ts e2e/settings.spec.ts
+E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npx playwright test -c e2e/audit.config.ts -g "start|workspace|access-lost"
+pgrep -af "vite|chrom|playwright"
+```
+
+`visual.spec.ts` «index.html applies dark before the app starts» trattiene `assets/index-*.js` e guarda `#root` vuoto: `hmd-app` entra in `#root` solo dopo il caricamento delle lingue, come prima.
+
+- [ ] **Step 6: Commit**
+
+`test:` (Step 1), `feat:` (Step 2–3), `chore:` (Step 4: «togli React, i suoi tipi e il plugin di Vite»). Nessun `Co-authored-by`.
+
+### Task 8: Documenti, misure, chiusura (Builder)
+
+**Files:**
+- Modify: `docs/superpowers/specs/2026-09-27-housemd-web-components-design.md` (§7, §11, §13), `CLAUDE.md`, `README.md`, `e2e/dev.config.ts`, `e2e/support/app.ts`, `e2e/theme-i18n.spec.ts` (commenti che parlano di React al presente), questo piano (paragrafo «Esecuzione»)
+- Create: `docs/superpowers/notes/2026-10-xx-handover-fase-8.md`
+
+**Criteri di accettazione:** le tre suite complete verdi **una volta** sul commit finale (attese dal prototipo: `npm test` 1036; `test:e2e` 202 = 200 + i 2 noti dello start screen; `test:e2e:dev` 187; audit 136), snapshot e `dist-baseline/` invariati; bundle annotato; spec, `CLAUDE.md`, `README.md` aggiornati; handover della fase 8 scritto; PR pronta.
+
+- [ ] **Step 1: Suite complete, una volta, in sequenza**
+
+```bash
+npx tsc --noEmit && npm test && npm run lint
+E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npm run test:e2e
+E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npm run test:e2e:dev
+E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npm run test:e2e:audit
+npm run build && gzip -c dist/assets/index-*.js | wc -c && wc -c dist/assets/index-*.js
+pgrep -af "vite|chrom|playwright"
+```
+
+Nel prototipo: 2,6 min, 4,9 min, 4,1 min con 2 worker; nessuna caduta oltre ai 2 snapshot noti. Una caduta isolata si ripete da sola prima di chiamarla regressione; con 1 worker solo se cade per memoria, e lo si scrive.
+
+- [ ] **Step 2: Spec**
+
+- §7 «Fase 7»: la riga «7b **fatta**» (o «7 **fatta**» con la variante A) nello stile delle note precedenti: elementi (`hmd-workspace`, `hmd-app`), moduli puri (`aiSession.ts`, `workspaceView.ts`, `appDeps.ts`, `browserTheme.ts`), store unici da `main.ts`, figli condizionali ricreati come React, `doc` della revisione a ogni render, test di React tolti, «in `src/` nessun `.tsx` né `*.module.css`», bundle principale gzip 441 143 → (misura) B.
+- §7 «Fase 8»: il riferimento del bundle è la misura di questo task (la rimozione di React è già fatta: −62 KB gzip nel prototipo, contro i −40 KB attesi).
+- §8.3: il controllo «nessun import di React né `.tsx`» è attivo (senza `skip`: è un test normale).
+- §5.1: la «Convivenza con React 19 (fasi 4–7)» al passato, `jsx.d.ts` cancellato.
+- §11: segnare come fatti i punti su `package.json`, `.tsx`/`*.module.css`, `architecture.test.ts`, `CLAUDE.md` e `README.md`; restano la checklist §9 in Chrome ed Edge e il merge (Davide).
+- §13: il piano (se non già fatto nel Task 5).
+
+- [ ] **Step 3: `CLAUDE.md` e `README.md`**
+
+`CLAUDE.md`, in «Regole»: «i componenti React restano sottili» → «gli elementi restano sottili»; dopo la regola sulla logica, una sezione «## Interfaccia» con:
+
+```markdown
+## Interfaccia
+
+- Niente framework: l'interfaccia sono custom element `hmd-*` (`src/elements/`, classe base `src/dom/element.ts`),
+  registrati solo in `src/elements/define.ts` e creati da `main.ts` (`<hmd-app>`). Gli store unici (lingua, tema,
+  rotta, aggiornamenti) scendono come proprietà.
+- **Elementi sottili**: un elemento crea il suo DOM, lo aggiorna da uno stato (ogni render passa da `RenderLoop`),
+  trasforma gli eventi DOM in chiamate a moduli puri o store. Calcoli, validazioni e macchine a stati stanno in
+  moduli `.ts` testati senza DOM. Ingressi come proprietà JS, uscite come eventi `hmd-*` (`src/elements/events.ts`).
+- **Light DOM + `@scope`**: niente Shadow DOM. Ogni foglio di `src/elements/` è `@layer components { @scope (hmd-…)
+  to (hmd-figli…) { … } }` (lo controlla `architecture.test.ts`).
+- **Niente DOM da stringhe**: il DOM si crea con `el()` (`src/dom/el.ts`), i testi entrano come nodi di testo;
+  `innerHTML` solo in `src/preview/sanitize.ts`.
+```
+
+`README.md`, in «Sviluppo»: «(StrictMode)» via dalla riga di `test:e2e:dev`; dopo il blocco dei comandi, un paragrafo sullo stack:
+
+```markdown
+Com'è fatto: TypeScript e custom element senza framework (light DOM, CSS con `@layer` e `@scope`), CodeMirror 6
+per l'editor e il diff, markdown-it con DOMPurify (o la Sanitizer API) per l'anteprima, MiniSearch per la ricerca,
+zod ai confini (file system, storage, risposte dei provider), ts-pattern per i `match` esaustivi; Vite e
+vite-plugin-pwa per la build. I test: `node:test` con jsdom, Playwright per gli e2e e per l'audit degli stili.
+```
+
+E2e, solo i commenti che parlano di React al presente: `e2e/dev.config.ts` («Le stesse spec contro `vite` in sviluppo, con gli avvisi in console che qui fanno fallire il test (spec WC R18); fino alla fase 7 anche React con StrictMode…»); `e2e/support/app.ts` (`failOnConsole`: «per la suite in sviluppo»); `e2e/theme-i18n.spec.ts` (il pulsante si aggiorna in modo sincrono dentro la transizione: «gli elementi ridisegnano dentro la notifica dello store», non più `flushSync`). I commenti storici («React 19 tratta `inert`…», «prima della fase 4b…») restano: spiegano perché il test esiste.
+
+- [ ] **Step 4: Handover della fase 8**
+
+`docs/superpowers/notes/2026-10-xx-handover-fase-8.md` nello stile di quello della fase 7: stato (branch, PR, misure delle suite e del bundle), `dist-baseline/` (invariata dalla fase 6c), cosa resta per la fase 8 (l'elenco «Per la fase 8» dell'handover della fase 7, più: la regola «mai disabled» su Salva chiave, Sincronizza ora, la cartella durante un cambio, la Cronologia senza documento e l'indirizzo per Anthropic; l'indice delle impostazioni che non arriva a «Sync»; il `padding` di 40vh; la checklist §9 in Chrome ed Edge; bundle e tempo di avvio contro il baseline della fase 3), le lezioni nuove di questa fase (dal paragrafo «Misure» e da quello che emerge nell'esecuzione: `:scope` contro la prossimità di `@scope`; `doc` nuovo a ogni render quando la vista dipende da uno stato esterno; figli condizionali ricreati; `#saveSecret(` e il test statico; l'hook `prepare-commit-msg` del daemon), le trappole dell'ambiente.
+
+- [ ] **Step 5: Esecuzione, PR, commit**
+
+In questo piano, in fondo a «Misure», un paragrafo «**Esecuzione (data).**» con le misure sul branch finale, le deviazioni dal piano e le correzioni arrivate dalle review. Poi:
+
+```bash
+git add -A && git -c core.hooksPath=/dev/null commit -m "docs: spec, CLAUDE.md, README e handover allineati alla fase 7"
+git log --format=%B -n 3      # nessun Co-authored-by
+git push
+gh pr ready <numero della PR della 7b (o #10 con la variante A)>
+```
