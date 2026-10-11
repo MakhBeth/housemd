@@ -19,6 +19,7 @@ import { HmdPreview } from './preview/preview.element';
 import { HmdSearchPanel } from './search-panel/search-panel.element';
 import { HmdSettingsPresets } from './settings/presets.element';
 import { HmdSettingsProfiles } from './settings/profiles.element';
+import { HmdSettings } from './settings/settings.element';
 import { HmdSettingsSync } from './settings/sync.element';
 import { HmdStartScreen } from './start-screen/start-screen.element';
 import { HmdToasts } from './toasts/toasts.element';
@@ -52,6 +53,7 @@ const ELEMENTS: Definitions = [
   ['hmd-notice', HmdNotice],
   ['hmd-preview', HmdPreview],
   ['hmd-search-panel', HmdSearchPanel],
+  ['hmd-settings', HmdSettings],
   ['hmd-settings-presets', HmdSettingsPresets],
   ['hmd-settings-profiles', HmdSettingsProfiles],
   ['hmd-settings-sync', HmdSettingsSync],

@@ -2,7 +2,10 @@ import type { ChangeDesc } from '@codemirror/state';
 
 import type { TextRange } from '../ai/selectionChip';
 import type { CheckWarning, GenParams, ModelProfile } from '../ai/types';
+import type { SettingsSection } from '../lib/route';
+import type { TextWidth } from '../lib/textWidth';
 import type { TreeNode } from '../ui/tree';
+import type { AutosaveSettings } from '../workspace/autosave';
 import type { ReviewAction } from './ai/reviewBarView';
 import type { TreeAction } from './workspace/dialogFor';
 
@@ -58,8 +61,18 @@ export interface HmdEvents {
   'hmd-selection': CustomEvent<{ range: TextRange | null }>;
   /** Ricerca: aprire un risultato (clic o Invio sul primo), con i termini da evidenziare nell'anteprima. */
   'hmd-search-open': CustomEvent<{ path: string; terms: string[] }>;
+  /** Impostazioni: il ritardo o la modalità dell'autosalvataggio confermati (da salvare e applicare). */
+  'hmd-settings-autosave': CustomEvent<{ autosave: AutosaveSettings }>;
+  /** Impostazioni: chiuse (con la conferma, se c'erano modifiche aperte). */
+  'hmd-settings-close': CustomEvent<null>;
   /** Sezione di profili o preset: la bozza aperta è diventata (o non è più) da salvare. */
   'hmd-settings-dirty': CustomEvent<{ dirty: boolean }>;
+  /** Impostazioni: «Salva tutto». */
+  'hmd-settings-save-all': CustomEvent<null>;
+  /** Impostazioni: voce dell'indice scelta (la rotta passa a quella sezione). */
+  'hmd-settings-section': CustomEvent<{ section: SettingsSection }>;
+  /** Impostazioni: larghezze del testo confermate (da salvare e applicare). */
+  'hmd-settings-text-width': CustomEvent<{ textWidth: TextWidth }>;
   /** Schermata iniziale: scegliere una cartella (anche «Apri un'altra cartella»). */
   'hmd-start-pick': CustomEvent<null>;
   /** Schermata iniziale: riprendere l'accesso alla cartella ricordata. */
