@@ -3482,3 +3482,1812 @@ Nel prototipo: questi e2e verdi (49 in build, salvo i 2 snapshot noti dello star
 - [ ] **Step 7: Commit**
 
 `test:` (Step 1), `feat:` (Step 2–4), `refactor:` (Step 5). Nessun `Co-authored-by`.
+
+### Task 5: Chiusura della 7a — suite complete, spec, PR (Builder)
+
+Solo con la divisione in 7a/7b (decisione 1). Con la variante A questo task si salta e le sue misure finiscono nel Task 8.
+
+**Files:**
+- Modify: `docs/superpowers/specs/2026-09-27-housemd-web-components-design.md` (§7 «Fase 7», §13), questo piano (paragrafo «Esecuzione 7a» in fondo a «Misure»)
+
+**Criteri di accettazione:** le tre suite complete verdi **una volta** sul commit finale della 7a (attesi nel prototipo, calcolati sui passi: `npm test` 1016; `test:e2e` 202 = 200 + i 2 noti; `test:e2e:dev` 187; audit 136); snapshot e `dist-baseline/` invariati; bundle gzip annotato (React c'è ancora: atteso poco sopra 441 143 B); spec aggiornata; PR #10 pronta con titolo e corpo della 7a.
+
+- [ ] **Step 1: Suite complete, una volta, in sequenza**
+
+```bash
+npx tsc --noEmit && npm test && npm run lint
+E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npm run test:e2e
+E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npm run test:e2e:dev
+E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npm run test:e2e:audit
+npm run build && gzip -c dist/assets/index-*.js | wc -c
+pgrep -af "vite|chrom|playwright"
+```
+
+Una caduta isolata si ripete da sola (`--repeat-each=3`) prima di chiamarla regressione; le instabilità note sono nei Global Constraints. Se una suite cade per memoria: di nuovo con `E2E_WORKERS=1`, e lo si scrive.
+
+- [ ] **Step 2: Spec**
+
+In §7 «Fase 7», sotto i punti 1–5, una riga «7a **fatta**: …» nello stile delle note «6c fatta» (elementi, logica pura nuova, cambio voluto della chiave, eccezioni di `architecture.test.ts`, stati di audit nuovi, «In `src/ui/` restano `WorkspaceView`, `App` e gli hook (7b)», bundle prima → dopo). In §13 il piano: `docs/superpowers/plans/2026-10-12-housemd-wc-13-fase-7-impostazioni-workspace-app.md (fase 7, 7a e 7b)`.
+
+- [ ] **Step 3: PR della 7a**
+
+```bash
+gh pr edit 10 --title "LAB-5: fase 7a, impostazioni senza React" --body-file <corpo: riepilogo, decisioni 2–6, come provare, misure>
+gh pr ready 10
+```
+
+Il corpo finisce con la riga «🤖 Generated with [Claude Code](https://claude.com/claude-code)» come le altre PR della migrazione; nessuna riga di attribuzione nei commit.
+
+- [ ] **Step 4: Commit**
+
+`docs: spec e piano allineati alla fase 7a` (nessun `Co-authored-by`), push. Il merge lo fa il PM dopo la review; la 7b parte dal branch dell'epica aggiornato (Task 6, Step 0).
+
+### Task 6: `hmd-workspace` (Planner)
+
+`WorkspaceView.tsx` diventa `hmd-workspace`. La sessione AI della cartella (era `useAiController`) va in `aiSession.ts`, i calcoli (vista mostrata, chiave del documento, toast, `beforeunload`, riapertura) in `workspaceView.ts`; l'elemento crea i figli, li aggiorna, tiene i listener della finestra e lo stato della vista. `App.tsx` lo monta con uno store della rotta suo (decisione 7). Spariscono `WorkspaceView.tsx`, il suo modulo, `Icon.tsx` e gli hook `useRoute`, `useUnmountSignal`, `useWorkspace`, `useAiController`, `useAiState`. A Planner: è il punto dove un dettaglio sbagliato rompe molti flussi (il prototipo ne ha trovato uno, decisione 9).
+
+**Files:**
+- Create: `src/elements/workspace/aiSession.ts`, `aiSession.test.ts`, `workspaceView.ts`, `workspaceView.test.ts`, `workspace.element.ts`, `workspace.css`, `workspace.dom.test.ts`
+- Modify: `src/elements/events.ts` (`hmd-workspace-change-folder`), `src/elements/define.ts`, `src/elements/jsx.d.ts` (restano solo i quattro tag che React monta ancora), `src/App.tsx`
+- Delete: `src/ui/WorkspaceView.tsx`, `src/ui/WorkspaceView.module.css`, `src/ui/Icon.tsx`, `src/ui/useRoute.ts`, `src/ui/useUnmountSignal.ts`, `src/ui/useWorkspace.ts`, `src/ui/ai/useAiController.ts`, `src/ui/ai/useAiState.ts`
+
+**Interfaces:**
+- Consumes: tutti gli elementi del workspace (`hmd-ai-sidebar`, `hmd-search-panel`, `hmd-file-tree`, `hmd-theme-switcher`, `hmd-conflict-bar`, `hmd-ai-review`, `hmd-editor`, `hmd-history-panel`, `hmd-preview`, `hmd-settings`, `hmd-toasts`), `layout.ts`, `keymap.ts`, `saveIndicator.ts`, `dialogFor.ts`, `treeDialogs.ts`, `ui/shortcuts.ts`, `ui/tree.ts`, `lib/prefs.ts`, `lib/pageTitle.ts`, `lib/textWidth.ts`, `editor/docSession.ts`, `showAccessLostDialog`, `browserSyncBinding`, `RouteStore`.
+- Produces: `HmdWorkspace` — ingressi `workspace`, `workspaceId`, `handle`, `switchingFolder`, `i18n`, `theme`, `route`; solo per i test `openAi: OpenAiSession` e `syncFor`; evento `hmd-workspace-change-folder`. `openAiSession(workspace, deps, signal)`, `aiWorkspace(workspace)`, `AiSessionDeps`, `browserAiSessionDeps`. In `workspaceView.ts`: `shownMode`, `docKey`, `toastItems`, `toastTarget`, `unloadNeedsConfirm`, `reopenPlan`.
+
+**Criteri di accettazione:** RED annotato; `npm test` 1016 + 18 (4 + 5 + 9) = **1034**; lint pulito; e2e in build di tutti i file tranne `visual.spec.ts` (il workspace li attraversa tutti: qui «i file toccati» sono la suite; `visual.spec.ts` dà comunque solo i 2 noti), in sviluppo `workspace-shell`, `settings`, `settings-sections`, `startup`, `editor`, `external`, `history`, `ai-review`, `ai-review-bar`, `ai-composer`, `theme-i18n`; audit degli stati del workspace (comando sotto) verde, **in particolare `ai-review-conflict`**; i `grep` di pulizia con uscita 1.
+
+- [ ] **Step 0 (solo con la divisione 7a/7b): branch della 7b**
+
+Dopo il merge della 7a nell'epica:
+
+```bash
+git fetch origin
+git switch -c lab/LAB-5-fase-7b origin/epic/LAB-3-web-components
+git push -u origin lab/LAB-5-fase-7b
+gh pr create --draft --base epic/LAB-3-web-components --title "LAB-5: fase 7b, workspace e app senza React" --body-file <riepilogo e link al piano>
+npm ci && npm run build && rm -rf dist-baseline && cp -r dist dist-baseline   # stessa build React di prima: la 7a non ha cambiato l'aspetto
+```
+
+- [ ] **Step 1: I test, prima del codice**
+
+`src/elements/workspace/aiSession.test.ts`:
+
+```ts
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+import type { AiController } from '../../ai/aiController';
+import { createMemoryAiStores } from '../../ai/stores';
+import type { WorkspaceState } from '../../workspace/workspace';
+import { aiWorkspace, openAiSession, type AiSessionDeps } from './aiSession';
+
+function workspace(doc: Partial<NonNullable<WorkspaceState['doc']>> | null = null, updating = false) {
+  const opened: string[] = [];
+  return {
+    getState: () => ({ doc, updating }) as unknown as WorkspaceState,
+    snapshotBeforeAi: () => {},
+    openFile: async (path: string) => void opened.push(path),
+    opened,
+  };
+}
+
+function deps(options: { idbFails?: boolean } = {}) {
+  const registered: AiController[] = [];
+  let unregistered = 0;
+  const d: AiSessionDeps = {
+    idbStores: async () => (options.idbFails ? Promise.reject(new Error('no idb')) : createMemoryAiStores()),
+    memoryStores: () => createMemoryAiStores(),
+    savedProfile: () => undefined,
+    register: (controller) => (registered.push(controller), () => void unregistered++),
+  };
+  return { deps: d, registered, unregistered: () => unregistered };
+}
+
+test('the AI workspace binding reads the open document as the controller wants it', () => {
+  const ws = workspace({ path: 'a.md', text: 'A', conflict: undefined } as never, true);
+  const binding = aiWorkspace(ws as never);
+  assert.deepEqual(binding.getDoc(), { path: 'a.md', textLf: 'A', conflict: undefined, updating: true });
+  void binding.openFile('b.md');
+  assert.deepEqual(ws.opened, ['b.md']);
+  assert.equal(aiWorkspace(workspace() as never).getDoc(), null);
+});
+
+test('a session: the controller is initialised, registered for updates, and closed once', async () => {
+  const { deps: d, registered, unregistered } = deps();
+  const session = await openAiSession(workspace() as never, d, new AbortController().signal);
+  assert.ok(session);
+  assert.equal(registered.length, 1);
+  assert.ok(session.controller.getState().profiles.length > 0);
+  assert.equal(session.controller.getState().error, null);
+  session.close();
+  assert.equal(unregistered(), 1);
+});
+
+test('without IndexedDB the chat lives in memory and the error says so', async () => {
+  const { deps: d } = deps({ idbFails: true });
+  const session = await openAiSession(workspace() as never, d, new AbortController().signal);
+  assert.equal(session!.controller.getState().error, 'server');
+});
+
+test('aborted before it is ready: nothing registered, null', async () => {
+  const { deps: d, registered } = deps();
+  const abort = new AbortController();
+  const pending = openAiSession(workspace() as never, d, abort.signal);
+  abort.abort();
+  assert.equal(await pending, null);
+  assert.equal(registered.length, 0);
+});
+```
+
+`src/elements/workspace/workspaceView.test.ts`:
+
+```ts
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+import { translate } from '../../i18n/i18n';
+import { EN_MESSAGES } from '../../i18n/messages';
+import type { WorkspaceState } from '../../workspace/workspace';
+import { docKey, reopenPlan, shownMode, toastItems, toastTarget, unloadNeedsConfirm } from './workspaceView';
+
+const t = (key: string, params?: Record<string, string | number>) => translate(EN_MESSAGES, key, params);
+
+test('AI mode without the controller shows the split view; the others stay', () => {
+  assert.equal(shownMode('ai', false), 'split');
+  assert.equal(shownMode('ai', true), 'ai');
+  assert.equal(shownMode('preview', false), 'preview');
+});
+
+test('the document key follows path and revision (no document: undefined#undefined, as with React)', () => {
+  assert.equal(docKey({ path: 'a.md', revision: 3 }), 'a.md#3');
+  assert.equal(docKey(null), 'undefined#undefined');
+});
+
+test('toasts: the workspace ones keyed ws-<id>, then the AI error; dismissing goes back to the right owner', () => {
+  const toasts = [{ id: 7, kind: 'info', code: 'saveAllDone' }] as unknown as WorkspaceState['toasts'];
+  assert.deepEqual(toastItems(toasts, 'server', t), [
+    { key: 'ws-7', kind: 'info', text: EN_MESSAGES['toast.saveAllDone'] },
+    { key: 'ai-error', kind: 'error', text: EN_MESSAGES['ai.error.server'] },
+  ]);
+  assert.deepEqual(toastItems([], null, t), []);
+  assert.deepEqual(toastTarget('ai-error'), { kind: 'ai' });
+  assert.deepEqual(toastTarget('ws-7'), { kind: 'workspace', id: 7 });
+});
+
+test('beforeunload asks only when text is in memory, unless the protected update reload is ready', () => {
+  const doc = (saveState: string) => ({ saveState }) as NonNullable<WorkspaceState['doc']>;
+  assert.equal(unloadNeedsConfirm({ doc: doc('saved'), drafts: [], updateReady: false }, false), false);
+  assert.equal(unloadNeedsConfirm({ doc: doc('dirty'), drafts: [], updateReady: false }, false), true);
+  assert.equal(unloadNeedsConfirm({ doc: null, drafts: ['a.md'], updateReady: false }, false), true);
+  assert.equal(unloadNeedsConfirm({ doc: null, drafts: [], updateReady: false }, true), true);
+  assert.equal(unloadNeedsConfirm({ doc: doc('dirty'), drafts: [], updateReady: true }, false), false);
+  assert.equal(unloadNeedsConfirm({ doc: doc('dirty'), drafts: [], updateReady: true }, true), true);
+});
+
+test('reopening the last file: open it if it is still there, otherwise only through its draft', () => {
+  assert.deepEqual(reopenPlan(null, ['a.md']), { kind: 'none' });
+  assert.deepEqual(reopenPlan('a.md', ['a.md']), { kind: 'open', path: 'a.md' });
+  assert.deepEqual(reopenPlan('gone.md', ['a.md']), { kind: 'draft', path: 'gone.md' });
+});
+```
+
+`src/elements/workspace/workspace.dom.test.ts` (uno `Workspace` vero su `memoryOps`, `localStorage` in memoria **prima** di importare `define` (le preferenze si leggono alla prima connessione), sessione AI e sync finte iniettate):
+
+```ts
+import '../../testing/domEnv';
+import '../../testing/codemirrorEnv';
+
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+import { installMemoryStorage } from '../../testing/memoryStorage';
+const storage = installMemoryStorage();
+
+import '../define';
+import type { AiController } from '../../ai/aiController';
+import { defaultProfile } from '../../ai/profiles';
+import type { SyncBinding } from '../../ai/syncBinding';
+import { createWorkspaceFS } from '../../fs/workspaceFS';
+import { memoryOps } from '../../fs/testing/memoryOps';
+import { EN_MESSAGES } from '../../i18n/messages';
+import { createI18nStore } from '../../state/i18nStore';
+import { createRouteStore, type RouteWindow } from '../../state/routeStore';
+import { createThemeStore } from '../../state/themeStore';
+import { installDialogStub } from '../../testing/dialogStub';
+import { fakeAi } from '../../testing/fakeAi';
+import { installPopoverStub } from '../../testing/popoverStub';
+import { waitFor } from '../../testing/waitFor';
+import { memoryBufferStore } from '../../workspace/buffers';
+import { Workspace } from '../../workspace/workspace';
+import type { HmdWorkspace } from './workspace.element';
+
+installDialogStub();
+installPopoverStub();
+window.HTMLElement.prototype.scrollIntoView = () => {};
+// jsdom non ha ResizeObserver (l'anteprima lo usa per le ancore): basta che esista.
+Object.assign(globalThis, { ResizeObserver: class { observe() {} disconnect() {} } });
+
+test.afterEach(() => {
+  document.body.replaceChildren();
+  storage.clear();
+});
+
+/** Finestra finta della rotta: l'hash e i suoi listener. */
+function routeWindow(): RouteWindow & { hashValue: string } {
+  const listeners = new Set<() => void>();
+  const win = {
+    hashValue: '',
+    hash: () => win.hashValue,
+    pushState: (url: string) => void (win.hashValue = url.startsWith('#') ? url : ''),
+    replaceState: (url: string) => void (win.hashValue = url.startsWith('#') ? url : ''),
+    back: () => {
+      win.hashValue = '';
+      listeners.forEach((l) => l());
+    },
+    setHash: (hash: string) => {
+      win.hashValue = hash;
+      listeners.forEach((l) => l());
+    },
+    cleanUrl: () => '/',
+    onHashChange: (fn: () => void) => (listeners.add(fn), () => void listeners.delete(fn)),
+  };
+  return win;
+}
+
+async function mount(options: { files?: Record<string, string>; ai?: boolean; lastFile?: string } = {}) {
+  const ops = memoryOps();
+  for (const [path, text] of Object.entries(options.files ?? { 'a.md': '# A', 'b.md': '# B' })) ops.setFile(path, text);
+  const workspace = new Workspace({ fs: createWorkspaceFS(ops), workspaceId: 'ws', name: 'notes', buffers: memoryBufferStore() });
+  await workspace.load();
+  if (options.lastFile) storage.set('housemd:lastFile:ws', JSON.stringify(options.lastFile));
+  const i18n = createI18nStore({ locale: 'en', messages: EN_MESSAGES, load: async (locale) => ({ locale, messages: EN_MESSAGES }), persist() {} });
+  const theme = createThemeStore({ initial: 'auto', persist() {}, transition: (apply) => apply(), apply() {}, watchSystem: () => () => {} });
+  const win = routeWindow();
+  const route = createRouteStore(win);
+  const ai = fakeAi({ profiles: [defaultProfile()] }, defaultProfile());
+  const documents: string[] = [];
+  Object.assign(ai, {
+    documentChanged: (path: string, _c: unknown, reset: boolean) => void documents.push(`${path}:${reset}`),
+    hasPendingWork: () => false,
+    clearError: () => {},
+    reload: async () => {},
+    store: { getMeta: async () => null, setMeta: async () => {} },
+  });
+  let closed = 0;
+  const el = document.createElement('hmd-workspace') as HmdWorkspace;
+  el.openAi = async () => (options.ai ? { controller: ai as unknown as AiController, close: () => void closed++ } : null);
+  el.syncFor = () => ({ subscribe: () => () => {}, getState: () => ({ sync: null, handle: null, permission: false }), needsPermission: false, dispose() {} }) as unknown as SyncBinding;
+  el.workspaceId = 'ws';
+  el.handle = null;
+  el.i18n = i18n;
+  el.theme = theme;
+  el.route = route;
+  el.workspace = workspace;
+  document.body.append(el);
+  if (options.ai) await waitFor(() => !!el.querySelector('[aria-label="' + EN_MESSAGES['mode.ai'] + '"]'));
+  const button = (label: string) => el.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!;
+  return { el, workspace, ai, route, win, documents, button, closed: () => closed };
+}
+
+test('the same DOM as WorkspaceView.tsx with no file open: layout with sidebar, separator and main, then the toasts', async () => {
+  const { el } = await mount();
+  assert.deepEqual([...el.children].map((c) => c.localName), ['div', 'hmd-toasts']);
+  const layout = el.firstElementChild as HTMLElement;
+  assert.equal(layout.className, 'layout');
+  assert.equal(layout.style.gridTemplateColumns, '280px 5px minmax(0, 1fr)');
+  assert.deepEqual([...layout.children].map((c) => `${c.localName}.${c.className}`), ['aside.sidebar', 'div.resizer', 'main.main']);
+  const aside = layout.firstElementChild!;
+  assert.deepEqual([...aside.children].map((c) => c.localName), ['div', 'hmd-search-panel', 'hmd-file-tree']);
+  const main = layout.lastElementChild!;
+  assert.deepEqual([...main.children].map((c) => `${c.localName}.${c.className}`), ['header.toolbar', 'div.empty']);
+  const toolbar = main.firstElementChild!;
+  assert.deepEqual([...toolbar.children].map((c) => c.className), ['lead', 'modes', 'actions']);
+  assert.deepEqual([...toolbar.querySelectorAll('.modes button')].map((b) => b.getAttribute('aria-label')), [EN_MESSAGES['mode.editor'], EN_MESSAGES['mode.split'], EN_MESSAGES['mode.preview']]);
+  assert.equal(toolbar.querySelector<HTMLButtonElement>(`button[aria-label="${EN_MESSAGES['toolbar.history']}"]`)!.disabled, true);
+  assert.equal(document.title, 'HouseMD');
+});
+
+test('a file opened: split panes with the editor and the preview, the path, the title; preview only drops the editor', async () => {
+  const { el, workspace, button } = await mount();
+  await workspace.openFile('a.md');
+  const panes = el.querySelector('.panes')!;
+  assert.equal(panes.getAttribute('data-mode'), 'split');
+  assert.deepEqual([...panes.children].map((c) => `${c.getAttribute('aria-label')}>${c.firstElementChild!.localName}`), [`${EN_MESSAGES['pane.editor']}>hmd-editor`, `${EN_MESSAGES['pane.preview']}>hmd-preview`]);
+  assert.equal(el.querySelector('.path')!.textContent, 'a.md');
+  assert.equal(document.title, 'HMD - a.md');
+  const editor = panes.querySelector('hmd-editor');
+  button(EN_MESSAGES['mode.preview']).click();
+  assert.deepEqual([...panes.children].map((c) => c.firstElementChild!.localName), ['hmd-preview']);
+  // Tornando alla vista divisa l'editor è un elemento nuovo, come quando React lo rimontava.
+  button(EN_MESSAGES['mode.split']).click();
+  assert.ok(panes.querySelector('hmd-editor') !== editor, 'a new editor');
+  assert.equal(storage.get('housemd:mode'), '"split"');
+});
+
+test('the last file of the folder is reopened once', async () => {
+  const { el } = await mount({ lastFile: 'b.md' });
+  await waitFor(() => el.querySelector('.path')!.textContent === 'b.md');
+});
+
+test('the settings come from the route: on top of an inert layout, the title follows, closing brings the focus back', async () => {
+  const { el, button, route } = await mount();
+  const settingsButton = button(EN_MESSAGES['toolbar.settings']);
+  settingsButton.focus();
+  settingsButton.click();
+  assert.deepEqual([...el.children].map((c) => c.localName), ['div', 'hmd-settings', 'hmd-toasts']);
+  assert.equal((el.firstElementChild as HTMLElement).inert, true);
+  assert.equal(document.title, `HMD - ${EN_MESSAGES['settings.title']}`);
+  el.querySelector<HTMLButtonElement>('hmd-settings .navHeader button')!.click();
+  assert.equal(route.getState().view, 'workspace');
+  assert.equal(el.querySelector('hmd-settings'), null);
+  assert.equal((el.firstElementChild as HTMLElement).inert, false);
+  assert.ok(document.activeElement === settingsButton, 'focus back on the settings button');
+});
+
+test('shortcuts on the window: Ctrl+B toggles the sidebar and is remembered; detached, nothing listens', async () => {
+  const { el } = await mount();
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', ctrlKey: true }));
+  assert.equal(el.querySelector('aside'), null);
+  assert.equal((el.firstElementChild as HTMLElement).style.gridTemplateColumns, 'minmax(0, 1fr)');
+  assert.equal(storage.get('housemd:sidebarOpen'), 'false');
+  el.remove();
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', ctrlKey: true }));
+  assert.equal(storage.get('housemd:sidebarOpen'), 'false');
+});
+
+test('the separator: arrows resize the panel and save the width', async () => {
+  const { el } = await mount();
+  const separator = el.querySelector<HTMLElement>('[role="separator"]')!;
+  assert.equal(separator.getAttribute('aria-valuenow'), '280');
+  separator.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+  assert.equal(separator.getAttribute('aria-valuenow'), '296');
+  assert.equal(storage.get('housemd:sidebarWidth'), '296');
+});
+
+test('beforeunload asks only with text in memory', async () => {
+  const { workspace } = await mount();
+  await workspace.openFile('a.md');
+  const clean = new Event('beforeunload', { cancelable: true });
+  window.dispatchEvent(clean);
+  assert.equal(clean.defaultPrevented, false);
+  workspace.edit('# A changed');
+  const dirty = new Event('beforeunload', { cancelable: true });
+  window.dispatchEvent(dirty);
+  assert.equal(dirty.defaultPrevented, true);
+});
+
+test('with the AI session: four modes, AI mode shows the AI sidebar and the review, the chat hears about the document', async () => {
+  const { el, workspace, button, documents } = await mount({ ai: true });
+  await workspace.openFile('a.md');
+  assert.deepEqual(documents, ['a.md:true']);
+  button(EN_MESSAGES['mode.ai']).click();
+  assert.deepEqual([...el.querySelector('aside')!.children].map((c) => c.localName), ['hmd-ai-sidebar']);
+  const review = el.querySelector('hmd-ai-review')!;
+  assert.ok(review);
+  // Un doc nuovo a ogni notifica dello workspace: la revisione rilegge canAccept (conflitto, aggiornamento).
+  const before = review.doc;
+  workspace.dismissToast(-1);
+  workspace.edit('# A!');
+  assert.ok(review.doc !== before, 'a new doc object');
+});
+
+test('detached: the AI session is closed and the title goes back to the app name', async () => {
+  const { el, workspace, closed } = await mount({ ai: true });
+  await workspace.openFile('a.md');
+  el.remove();
+  assert.equal(closed(), 1);
+  assert.equal(document.title, 'HouseMD');
+});
+```
+
+RED atteso: `Cannot find module './aiSession'` e `'./workspaceView'`; il test jsdom cade finché il tag non è definito.
+
+- [ ] **Step 2: La sessione AI della cartella**
+
+`src/elements/workspace/aiSession.ts`:
+
+```ts
+import { AiController, type AiWorkspace } from '../../ai/aiController';
+import { createIdbAiStores } from '../../ai/idbStores';
+import { createMemoryAiStores, type AiStores } from '../../ai/stores';
+import { readPref } from '../../lib/prefs';
+import { registerUpdateParticipant } from '../../pwa/updateHost';
+import type { Workspace } from '../../workspace/workspace';
+
+/** Quello che la sessione AI usa dello workspace. */
+export type AiSessionWorkspace = Pick<Workspace, 'getState' | 'snapshotBeforeAi' | 'openFile'>;
+
+/** Archivi e registrazione: iniettati, così la sessione si prova senza IndexedDB. */
+export interface AiSessionDeps {
+  idbStores(): Promise<AiStores>;
+  memoryStores(): AiStores;
+  /** Profilo scelto l'ultima volta (preferenza `aiProfile`). */
+  savedProfile(): string | undefined;
+  /** Registra il controller nel flusso di aggiornamento della PWA; restituisce come toglierlo. */
+  register(controller: AiController): () => void;
+}
+
+/** Il documento aperto visto dal controller AI (era il `binding` di useAiController). */
+export function aiWorkspace(workspace: AiSessionWorkspace): AiWorkspace {
+  return {
+    getDoc: () => {
+      const s = workspace.getState();
+      return s.doc ? { path: s.doc.path, textLf: s.doc.text, conflict: s.doc.conflict, updating: s.updating } : null;
+    },
+    snapshotBeforeAi: () => workspace.snapshotBeforeAi(),
+    openFile: (path) => workspace.openFile(path),
+  };
+}
+
+/**
+ * Una sessione AI per cartella (era `useAiController`): il controller su IndexedDB, o in memoria se
+ * IndexedDB non c'è (con l'errore `server`). Se `signal` si interrompe prima che sia pronto il
+ * controller si butta e la Promise dà null; pronto, si registra nel flusso di aggiornamento. Chi lo
+ * riceve lo chiude con `close` (toglie la registrazione e lo elimina).
+ */
+export async function openAiSession(workspace: AiSessionWorkspace, deps: AiSessionDeps, signal: AbortSignal): Promise<{ controller: AiController; close(): void } | null> {
+  const binding = aiWorkspace(workspace);
+  let controller: AiController | null = null;
+  try {
+    controller = new AiController(await deps.idbStores(), binding);
+    await controller.initialize(deps.savedProfile());
+  } catch {
+    controller?.dispose();
+    controller = new AiController(deps.memoryStores(), binding);
+    await controller.initialize();
+    controller.report({ code: 'server' });
+  }
+  if (signal.aborted) {
+    controller.dispose();
+    return null;
+  }
+  const unregister = deps.register(controller);
+  const ready = controller;
+  return {
+    controller: ready,
+    close() {
+      unregister();
+      ready.dispose();
+    },
+  };
+}
+
+/** La sessione AI del browser: IndexedDB, profilo salvato, flusso di aggiornamento della PWA. */
+export const browserAiSessionDeps: AiSessionDeps = {
+  idbStores: () => createIdbAiStores(),
+  memoryStores: () => createMemoryAiStores(),
+  savedProfile: () => readPref('aiProfile'),
+  register: (controller) => registerUpdateParticipant(controller),
+};
+```
+
+- [ ] **Step 3: I calcoli della vista**
+
+`src/elements/workspace/workspaceView.ts`:
+
+```ts
+import type { AiErrorCode } from '../../ai/types';
+import type { MessageKey } from '../../i18n/messages';
+import type { Params } from '../../i18n/i18n';
+import type { WorkspaceState } from '../../workspace/workspace';
+import type { ToastItem } from '../toasts/toasts.element';
+import type { Mode } from './layout';
+
+/** La vista mostrata: con la preferenza «AI» ma il controller non ancora pronto (IndexedDB lento), la divisa. */
+export function shownMode(mode: Mode, hasAi: boolean): Mode {
+  return mode === 'ai' && !hasAi ? 'split' : mode;
+}
+
+/** Chiave della sessione dell'editor e del `resetKey`: cambia con il file o con una revisione nuova. */
+export function docKey(doc: Pick<NonNullable<WorkspaceState['doc']>, 'path' | 'revision'> | null): string {
+  return `${doc?.path}#${doc?.revision}`;
+}
+
+/** Toast del workspace più l'errore AI non legato a un messaggio (sync, chiave, selezione persa), nello stesso contenitore. */
+export function toastItems(toasts: WorkspaceState['toasts'], aiError: AiErrorCode | null | undefined, t: (key: MessageKey, params?: Params) => string): ToastItem[] {
+  return [
+    ...toasts.map((toast) => ({ key: `ws-${toast.id}`, kind: toast.kind, text: t(`toast.${toast.code}` as MessageKey, toast.params) })),
+    ...(aiError ? [{ key: 'ai-error', kind: 'error' as const, text: t(`ai.error.${aiError}` as MessageKey) }] : []),
+  ];
+}
+
+/** Chiusura di un toast: l'errore AI si toglie dal controller, gli altri dallo workspace. */
+export function toastTarget(key: string): { kind: 'ai' } | { kind: 'workspace'; id: number } {
+  return key === 'ai-error' ? { kind: 'ai' } : { kind: 'workspace', id: Number(key.slice('ws-'.length)) };
+}
+
+/**
+ * `beforeunload`: chiedere conferma (e intanto mettere al sicuro con `blur`) se il testo è solo in memoria.
+ * Il reload protetto dell'aggiornamento PWA passa senza domanda quando tutto è già durevole: annullarlo
+ * lascerebbe l'app in sola lettura; mentre il documento si mette ancora al sicuro l'avviso resta.
+ */
+export function unloadNeedsConfirm(state: Pick<WorkspaceState, 'doc' | 'drafts' | 'updateReady'>, aiPending: boolean): boolean {
+  if (state.updateReady && !aiPending) return false;
+  return (!!state.doc && state.doc.saveState !== 'saved') || state.drafts.length > 0 || aiPending;
+}
+
+/**
+ * Riapertura dell'ultimo file della cartella, una volta a cartella pronta: il file se c'è ancora, altrimenti
+ * (`draft`) solo se ha una bozza nel buffer di emergenza, unica strada per recuperarla.
+ */
+export function reopenPlan(last: string | null, files: readonly string[]): { kind: 'none' } | { kind: 'open'; path: string } | { kind: 'draft'; path: string } {
+  if (!last) return { kind: 'none' };
+  return files.includes(last) ? { kind: 'open', path: last } : { kind: 'draft', path: last };
+}
+```
+
+- [ ] **Step 4: L'evento**
+
+`src/elements/events.ts`, in fondo (dopo `hmd-toast-dismiss`):
+
+```ts
+  /** Workspace: cambiare cartella (pulsante con il nome della cartella nella sidebar). */
+  'hmd-workspace-change-folder': CustomEvent<null>;
+```
+
+- [ ] **Step 5: `hmd-workspace` e il suo foglio**
+
+Punti da rispettare (tutti misurati nel prototipo):
+
+- **Figli condizionali come React** (`#slot`, decisione 8): `aside` e separatore con la sidebar aperta; nella sidebar `hmd-ai-sidebar` in modalità AI, altrimenti testata, ricerca, orfane (solo se ce ne sono) e albero, dimenticati passando all'AI e ricreati tornando; nel documento `hmd-ai-review` | `div.panes` (editor se non sola anteprima; cronologia **per file**, un pannello nuovo quando cambia il percorso; anteprima se non solo editor) | `div.empty`; `hmd-conflict-bar` con il conflitto; `hmd-settings` con la rotta.
+- **Proprietà prima dell'inserimento e solo se cambiano** (`assign`), salvo il `doc` di `hmd-ai-review`, nuovo a ogni render (decisione 9: è quello che fa spegnere gli «accetta» dei blocchi durante un conflitto).
+- **Effetti di React dentro il render, nello stesso ordine**: sessione dell'editor e selezione AI per `path#revision` (e `ai.documentChanged(path, …, true)` **solo** quando cambia la chiave, come l'effetto `[path, revision]`: un controller arrivato dopo non lo riceve); cronologia chiusa senza documento; `writeLastFile`; bozze orfane (richieste scartate se superate); riapertura dell'ultimo file una volta (in un microtask); dialog dell'accesso perso (in un microtask, chiuso quando lo stato cambia o al distacco); titolo della scheda (e `APP_TITLE` al distacco); focus restituito all'elemento di prima chiudendo le impostazioni (dopo aver tolto `inert`); ripristino in coda dalla sola anteprima (in un microtask, solo se il file è ancora quello).
+- **Listener della finestra con il `signal`**: `focus`, `blur`, `visibilitychange`, `beforeunload` (`unloadNeedsConfirm`), `keydown` (scorciatoie con lo stato del momento; Ctrl+K apre la sidebar e mette il focus nella ricerca al fotogramma dopo).
+- **Separatore**: `pointerdown` con `setPointerCapture`, `pointermove`/`pointerup`/`pointercancel`/`lostpointercapture` legati a un `AbortController` della trascinata; frecce con `resizeByKey`; larghezze separate per albero e AI, salvate.
+- **Sessione AI**: aperta alla prima connessione con un `AbortController` suo (non il `signal` di `connect`, che si interrompe anche al `reconnect()`), chiusa in `disconnectedCallback` con la sync; pronta, si ascolta con il `signal` del momento.
+- **Toast**: un array nuovo solo quando cambiano toast, errore AI o lingua (decisione 10).
+
+`src/elements/workspace/workspace.element.ts`:
+
+```ts
+import type { ChangeDesc } from '@codemirror/state';
+import { match } from 'ts-pattern';
+
+import type { AiController } from '../../ai/aiController';
+import { sameRange, type TextRange } from '../../ai/selectionChip';
+import { browserSyncBinding, type SyncBinding } from '../../ai/syncBinding';
+import { HmdElement } from '../../dom/element';
+import { el, setText, toggleAttr } from '../../dom/el';
+import { icon } from '../../dom/icon';
+import { RenderLoop } from '../../dom/renderLoop';
+import { createDocSession, type DocSession } from '../../editor/docSession';
+import { requestAccess } from '../../fs/access';
+import { APP_TITLE, pageTitle } from '../../lib/pageTitle';
+import { readLastFile, readPref, readValidPref, writeLastFile, writePref } from '../../lib/prefs';
+import type { SettingsSection } from '../../lib/route';
+import { parseTextWidth, textWidthVars, type TextWidth } from '../../lib/textWidth';
+import type { I18nStore } from '../../state/i18nStore';
+import type { RouteStore } from '../../state/routeStore';
+import type { ThemeStore } from '../../state/themeStore';
+import type { IconName } from '../../ui/icons';
+import { shortcutFor } from '../../ui/shortcuts';
+import { buildTree, type TreeNode } from '../../ui/tree';
+import type { Workspace, WorkspaceState } from '../../workspace/workspace';
+import type { HmdAiReview } from '../ai/review.element';
+import type { HmdAiSidebar } from '../ai/sidebar.element';
+import type { HmdConflictBar } from '../conflict-bar/conflict-bar.element';
+import { showAccessLostDialog } from '../dialogs/accessLostDialog';
+import type { HmdEditor } from '../editor/editor.element';
+import { emit } from '../events';
+import type { HmdFileTree } from '../file-tree/file-tree.element';
+import type { HmdHistoryPanel } from '../history-panel/history-panel.element';
+import type { HmdPreview } from '../preview/preview.element';
+import type { HmdSearchPanel } from '../search-panel/search-panel.element';
+import type { HmdSettings } from '../settings/settings.element';
+import type { HmdToasts } from '../toasts/toasts.element';
+import { openAiSession, browserAiSessionDeps, type AiSessionWorkspace } from './aiSession';
+import { dialogFor, type TreeAction } from './dialogFor';
+import { allowedInSettings } from './keymap';
+import { clampWidth, gridColumns, MODES, nextPaneMode, PANE_MODES, panesMode, resizeByKey, sidePanel, WIDTH_LIMITS, type Mode, type PaneMode } from './layout';
+import { saveIndicator } from './saveIndicator';
+import { runTreeDialog } from './treeDialogs';
+import { docKey, reopenPlan, shownMode, toastItems, toastTarget, unloadNeedsConfirm } from './workspaceView';
+import './workspace.css';
+
+/** Apre la sessione AI di una cartella (iniettabile nei test: IndexedDB in jsdom non c'è). */
+export type OpenAiSession = (workspace: AiSessionWorkspace, signal: AbortSignal) => Promise<{ controller: AiController; close(): void } | null>;
+
+const NO_TERMS: string[] = [];
+
+interface Parts {
+  layout: HTMLDivElement;
+  main: HTMLElement;
+  toggle: HTMLButtonElement;
+  path: HTMLSpanElement;
+  modes: HTMLDivElement;
+  modeButtons: Map<Mode, HTMLButtonElement>;
+  saveState: HTMLSpanElement;
+  saveText: Text;
+  history: HTMLButtonElement;
+  saveAll: HTMLButtonElement;
+  settings: HTMLButtonElement;
+  toolbar: HTMLElement;
+  toasts: HmdToasts;
+}
+
+/** Nodi che compaiono e spariscono con lo stato (come i rami condizionali di WorkspaceView.tsx): ricreati a ogni ricomparsa. */
+interface Slots {
+  aside: HTMLElement;
+  resizer: HTMLDivElement;
+  aiSidebar: HmdAiSidebar;
+  treeHeader: HTMLDivElement;
+  search: HmdSearchPanel;
+  orphans: HTMLElement;
+  tree: HmdFileTree;
+  conflict: HmdConflictBar;
+  review: HmdAiReview;
+  panes: HTMLDivElement;
+  editorPane: HTMLElement;
+  historyPane: HTMLElement;
+  previewPane: HTMLElement;
+  empty: HTMLDivElement;
+  settings: HmdSettings;
+  draftIcon: HTMLSpanElement;
+}
+
+/** Togli i figli non voluti e inserisci i mancanti nell'ordine dato, senza spostare quelli già al loro posto. */
+function place(parent: Element, wanted: readonly Element[]): void {
+  for (const child of [...parent.children]) if (!wanted.includes(child)) child.remove();
+  let cursor: Element | null = parent.firstElementChild;
+  for (const node of wanted) {
+    if (node === cursor) cursor = cursor.nextElementSibling;
+    else parent.insertBefore(node, cursor);
+  }
+}
+
+/** Assegna una proprietà solo se cambia (i setter dei figli possono riconciliare tutto). */
+function assign<T extends object, K extends keyof T>(target: T, key: K, value: T[K]): void {
+  if (target[key] !== value) target[key] = value;
+}
+
+/**
+ * Area di lavoro di una cartella (era WorkspaceView.tsx): griglia con il pannello a sinistra (albero, ricerca,
+ * bozze orfane o, in modalità AI, la chat) e il separatore ridimensionabile, la barra degli strumenti, il
+ * documento (editor, anteprima, cronologia o revisione AI), le impostazioni sopra (dalla rotta) e i toast.
+ * Crea la sessione AI della cartella e la sync, riapre l'ultimo file, elenca le bozze orfane, gestisce le
+ * scorciatoie globali e i listener della finestra (tutti legati al `signal`), il dialog dell'accesso perso e
+ * il titolo della scheda. Verso fuori manda solo `hmd-workspace-change-folder`.
+ */
+export class HmdWorkspace extends HmdElement {
+  #workspace: Workspace | null = null;
+  #workspaceId = '';
+  #handle: FileSystemDirectoryHandle | null = null;
+  #switchingFolder = false;
+  #i18n: I18nStore | null = null;
+  #theme: ThemeStore | null = null;
+  #route: RouteStore | null = null;
+  #openAi: OpenAiSession = (workspace, signal) => openAiSession(workspace, browserAiSessionDeps, signal);
+  #syncFor: (controller: AiController) => SyncBinding = browserSyncBinding;
+
+  #parts: Parts | null = null;
+  #slots: Partial<Slots> = {};
+  #signal: AbortSignal | null = null;
+  // Stato della vista (era lo stato di React), letto dalle preferenze alla prima connessione.
+  #mode: Mode = 'split';
+  #lastPane: PaneMode = 'split';
+  #sidebarOpen = true;
+  #sidebarWidth = WIDTH_LIMITS.sidebar.initial;
+  #aiWidth = WIDTH_LIMITS.ai.initial;
+  #textWidth: TextWidth = { editor: null, preview: null };
+  #highlight: string[] = NO_TERMS;
+  #historyOpen = false;
+  #historyPath = '';
+  #queuedRestore: { id: number; path: string } | null = null;
+  #aiSelection: TextRange | null = null;
+  #orphans: string[] = [];
+  #orphanNodes = new Map<string, HTMLButtonElement>();
+  #orphanKey: unknown[] = [];
+  #orphanRequest = 0;
+  #reopened = false;
+  #docKey = '';
+  #session: DocSession = createDocSession('undefined#undefined', '');
+  #lastFile: string | null = null;
+  #settingsWasOpen = false;
+  #focusBeforeSettings: HTMLElement | null = null;
+  #memo: { entries?: WorkspaceState['entries']; locale?: string; tree?: TreeNode[]; files?: string[]; drafts?: readonly string[]; draftSet?: ReadonlySet<string> } = {};
+  #toastKey: unknown[] = [];
+  // Sessione AI e sync: vivono con l'elemento collegato.
+  #ai: AiController | null = null;
+  #aiSession: { close(): void } | null = null;
+  #aiAbort: AbortController | null = null;
+  #sync: SyncBinding | null = null;
+  #accessLost: AbortController | null = null;
+  #dialogs: AbortController | null = null;
+  #loop = new RenderLoop(this, {
+    ready: () => !!this.#parts && !!this.#workspace && !!this.#i18n && !!this.#theme && !!this.#route && this.isConnected,
+    render: () => this.#render(this.#parts!, this.#workspace!, this.#i18n!),
+  });
+
+  get workspace(): Workspace | null { return this.#workspace; }
+  set workspace(value: Workspace | null) {
+    value ??= null;
+    if (value === this.#workspace) return;
+    this.#workspace = value;
+    this.reconnect();
+  }
+  get workspaceId(): string { return this.#workspaceId; }
+  set workspaceId(value: string) { this.#workspaceId = value ?? ''; }
+  get handle(): FileSystemDirectoryHandle | null { return this.#handle; }
+  set handle(value: FileSystemDirectoryHandle | null) { this.#handle = value ?? null; }
+  get switchingFolder(): boolean { return this.#switchingFolder; }
+  set switchingFolder(value: boolean) {
+    value = !!value;
+    if (value === this.#switchingFolder) return;
+    this.#switchingFolder = value;
+    this.#loop.update();
+  }
+  get i18n(): I18nStore | null { return this.#i18n; }
+  set i18n(value: I18nStore | null) {
+    value ??= null;
+    if (value === this.#i18n) return;
+    this.#i18n = value;
+    this.reconnect();
+  }
+  get theme(): ThemeStore | null { return this.#theme; }
+  set theme(value: ThemeStore | null) {
+    value ??= null;
+    if (value === this.#theme) return;
+    this.#theme = value;
+    this.#loop.update();
+  }
+  get route(): RouteStore | null { return this.#route; }
+  set route(value: RouteStore | null) {
+    value ??= null;
+    if (value === this.#route) return;
+    this.#route = value;
+    this.reconnect();
+  }
+  /** Solo per i test: come si apre la sessione AI e come si crea la sync. */
+  set openAi(value: OpenAiSession) { this.#openAi = value; }
+  set syncFor(value: (controller: AiController) => SyncBinding) { this.#syncFor = value; }
+
+  protected connect(signal: AbortSignal): void {
+    if (!this.#parts) {
+      this.#mode = readPref('mode');
+      this.#lastPane = this.#mode === 'ai' ? 'split' : this.#mode;
+      this.#sidebarOpen = readPref('sidebarOpen');
+      this.#sidebarWidth = clampWidth('sidebar', readPref('sidebarWidth'));
+      this.#aiWidth = clampWidth('ai', readPref('aiSidebarWidth'));
+      this.#textWidth = readValidPref('textWidth', parseTextWidth);
+      this.#applyTextWidth();
+      this.#parts = this.#build();
+      this.append(this.#parts.layout, this.#parts.toasts);
+    }
+    this.#signal = signal;
+    this.#dialogs ??= new AbortController();
+    const { workspace, i18n, route } = { workspace: this.#workspace, i18n: this.#i18n, route: this.#route };
+    if (!workspace || !i18n || !route) return;
+    this.#startAi(workspace);
+    route.setGuard({ canLeave: () => !this.#slots.settings?.dirty, onBlocked: () => this.#slots.settings?.requestClose() });
+    this.#listen(workspace, signal);
+    this.watch(workspace, () => this.#loop.update(), signal);
+    this.watch(i18n, () => this.#loop.update(), signal);
+    this.watch(route, () => this.#loop.update(), signal);
+    if (this.#ai) this.watch(this.#ai, () => this.#loop.update(), signal);
+    if (this.#sync) this.watch(this.#sync, () => this.#loop.update(), signal);
+  }
+
+  disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.#signal = null;
+    this.#route?.setGuard({ canLeave: () => true, onBlocked: () => {} });
+    this.#accessLost?.abort();
+    this.#accessLost = null;
+    this.#dialogs?.abort();
+    this.#dialogs = null;
+    this.#aiAbort?.abort();
+    this.#aiAbort = null;
+    this.#sync?.dispose();
+    this.#sync = null;
+    this.#aiSession?.close();
+    this.#aiSession = null;
+    this.#ai = null;
+    // Tornando alla schermata iniziale il titolo è quello dell'app.
+    document.title = APP_TITLE;
+  }
+
+  /** Una sessione AI per cartella: pronta, si ascolta con il signal del momento e porta con sé la sync. */
+  #startAi(workspace: Workspace): void {
+    if (this.#aiAbort) return;
+    const abort = (this.#aiAbort = new AbortController());
+    void this.#openAi(workspace, abort.signal).then((session) => {
+      if (!session) return;
+      if (abort.signal.aborted) return session.close();
+      this.#aiSession = session;
+      this.#ai = session.controller;
+      this.#sync = this.#syncFor(session.controller);
+      const signal = this.#signal;
+      if (signal) {
+        this.watch(session.controller, () => this.#loop.update(), signal);
+        this.watch(this.#sync, () => this.#loop.update(), signal);
+      }
+    });
+  }
+
+  /** Listener della finestra e del documento, legati al `signal`. */
+  #listen(workspace: Workspace, signal: AbortSignal): void {
+    const onFocus = () => void workspace.checkExternal();
+    const onBlur = () => void workspace.blur();
+    window.addEventListener('focus', onFocus, { signal });
+    window.addEventListener('blur', onBlur, { signal });
+    document.addEventListener('visibilitychange', () => (document.visibilityState === 'visible' ? onFocus() : onBlur()), { signal });
+    window.addEventListener(
+      'beforeunload',
+      (event) => {
+        if (!unloadNeedsConfirm(workspace.getState(), !!this.#ai?.hasPendingWork())) return;
+        void workspace.blur();
+        event.preventDefault();
+      },
+      { signal },
+    );
+    window.addEventListener('keydown', (event) => this.#onKey(event, workspace), { signal });
+  }
+
+  get #settingsOpen(): boolean {
+    return this.#route?.getState().view === 'settings';
+  }
+
+  get #shown(): Mode {
+    return shownMode(this.#mode, !!this.#ai);
+  }
+
+  /** Scorciatoie globali: vedi src/ui/shortcuts.ts. */
+  #onKey(event: KeyboardEvent, workspace: Workspace): void {
+    const shown = this.#shown;
+    const settingsOpen = this.#settingsOpen;
+    if (event.key === 'Escape' && shown === 'ai' && !settingsOpen) this.#ai?.stop();
+    // Già gestito dall'editor (Ctrl+B è il grassetto lì, la barra laterale altrove).
+    if (event.defaultPrevented) return;
+    const shortcut = shortcutFor(event);
+    if (!shortcut) return;
+    // Con le impostazioni aperte restano solo i salvataggi (altrimenti Ctrl+S apre "Salva pagina").
+    if (settingsOpen && !allowedInSettings(shortcut)) return;
+    event.preventDefault();
+    match(shortcut)
+      .with('save', () => void workspace.saveNow())
+      .with('saveAll', () => void workspace.saveAll())
+      .with('search', () => {
+        if (shown === 'ai') this.#changeMode(this.#lastPane);
+        this.#setSidebar(true);
+        requestAnimationFrame(() => this.#slots.search?.focusInput());
+      })
+      .with('toggleAi', () => {
+        if (this.#ai) this.#changeMode(shown === 'ai' ? this.#lastPane : 'ai');
+      })
+      .with('toggleSidebar', () => this.#setSidebar(!this.#sidebarOpen))
+      .with('cycleMode', () => this.#changeMode(nextPaneMode(shown)))
+      .exhaustive();
+  }
+
+  #setSidebar(open: boolean): void {
+    this.#sidebarOpen = open;
+    writePref('sidebarOpen', open);
+    this.#loop.update();
+  }
+
+  #changeMode(next: Mode): void {
+    if (next !== 'ai') this.#lastPane = next;
+    // La chat sta nella sidebar: entrando in AI la si apre.
+    else this.#setSidebar(true);
+    this.#mode = next;
+    writePref('mode', next);
+    this.#loop.update();
+  }
+
+  #openFile(path: string, terms: string[] = NO_TERMS): Promise<void> {
+    this.#highlight = terms;
+    this.#loop.update();
+    return this.#workspace!.openFile(path);
+  }
+
+  #openSettings(section: SettingsSection = 'general'): void {
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && active !== document.body) this.#focusBeforeSettings = active;
+    this.#route?.navigate({ view: 'settings', section });
+  }
+
+  // Il ripristino deve passare dall'editor come transazione (annullabile con Ctrl+Z): in sola anteprima
+  // l'editor non c'è, quindi si passa alla vista affiancata e si ripristina solo dopo.
+  #restoreVersion(id: number): void {
+    const workspace = this.#workspace!;
+    const path = workspace.getState().doc?.path;
+    if (!path) return;
+    if (this.#shown !== 'preview') return void workspace.restoreVersion(id);
+    this.#queuedRestore = { id, path };
+    this.#changeMode('split');
+  }
+
+  #onTreeAction(action: TreeAction, node: TreeNode | null): void {
+    const workspace = this.#workspace!;
+    const t = this.#i18n!.t;
+    match(dialogFor(action, node))
+      .with({ kind: 'history' }, ({ path }) => {
+        // La cronologia si apre solo se il file richiesto è davvero quello aperto.
+        void this.#openFile(path).then(() => {
+          if (workspace.getState().doc?.path !== path) return;
+          this.#historyOpen = true;
+          this.#loop.update();
+        });
+      })
+      .with({ kind: 'dialog' }, ({ dialog }) => {
+        const signal = this.#dialogs?.signal;
+        if (signal) void runTreeDialog(dialog, { t, signal, paths: () => workspace.getState().entries.map((e) => e.path), workspace });
+      })
+      .with({ kind: 'none' }, () => {})
+      .exhaustive();
+  }
+
+  #onResizeStart(event: PointerEvent): void {
+    const target = event.currentTarget as HTMLDivElement;
+    target.setPointerCapture(event.pointerId);
+    const panel = sidePanel(this.#shown);
+    let width = panel === 'ai' ? this.#aiWidth : this.#sidebarWidth;
+    const done = new AbortController();
+    const move = (e: PointerEvent) => {
+      width = clampWidth(panel, e.clientX);
+      if (panel === 'ai') this.#aiWidth = width;
+      else this.#sidebarWidth = width;
+      this.#loop.update();
+    };
+    const up = () => {
+      done.abort();
+      writePref(panel === 'ai' ? 'aiSidebarWidth' : 'sidebarWidth', width);
+    };
+    target.addEventListener('pointermove', move, { signal: done.signal });
+    for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) target.addEventListener(type, up, { signal: done.signal });
+  }
+
+  #onResizeKey(event: KeyboardEvent): void {
+    const panel = sidePanel(this.#shown);
+    const next = resizeByKey(panel, panel === 'ai' ? this.#aiWidth : this.#sidebarWidth, event.key);
+    if (next === null) return;
+    event.preventDefault();
+    if (panel === 'ai') this.#aiWidth = next;
+    else this.#sidebarWidth = next;
+    writePref(panel === 'ai' ? 'aiSidebarWidth' : 'sidebarWidth', next);
+    this.#loop.update();
+  }
+
+  #applyTextWidth(): void {
+    const root = document.documentElement.style;
+    for (const [name, value] of Object.entries(textWidthVars(this.#textWidth))) root.setProperty(name, value);
+  }
+
+  #build(): Parts {
+    const modeButtons = new Map(
+      MODES.map((m) => [m.id, el('button', { class: 'mode tooltip', on: { click: () => this.#changeMode(m.id) } }, icon(m.icon))] as const),
+    );
+    const saveText = document.createTextNode('');
+    const parts: Parts = {
+      layout: el('div', { class: 'layout' }),
+      main: el('main', { class: 'main' }),
+      toggle: el('button', { class: 'iconButton tooltip', on: { click: () => this.#setSidebar(!this.#sidebarOpen) } }, icon('sidebarOpen')),
+      path: el('span', { class: 'path' }),
+      modes: el('div', { class: 'modes', role: 'group' }),
+      modeButtons,
+      saveState: el('span', { class: 'saveState' }, saveText),
+      saveText,
+      history: el(
+        'button',
+        {
+          class: 'iconButton tooltip',
+          on: {
+            click: () => {
+              const ai = this.#shown === 'ai';
+              if (ai) this.#changeMode(this.#lastPane);
+              this.#historyOpen = ai ? true : !this.#historyOpen;
+              this.#loop.update();
+            },
+          },
+        },
+        icon('history'),
+      ),
+      saveAll: el('button', { class: 'iconButton tooltip', on: { click: () => void this.#workspace?.saveAll() } }, icon('save')),
+      settings: el('button', { class: 'iconButton tooltip', on: { click: () => this.#openSettings() } }, icon('settings')),
+      toolbar: el('header', { class: 'toolbar' }),
+      toasts: el('hmd-toasts', {
+        on: {
+          'hmd-toast-dismiss': (event) => {
+            const target = toastTarget(event.detail.key);
+            if (target.kind === 'ai') this.#ai?.clearError();
+            else this.#workspace?.dismissToast(target.id);
+          },
+        },
+      }),
+    };
+    const themeSwitcher = el('hmd-theme-switcher');
+    themeSwitcher.store = this.#theme;
+    themeSwitcher.i18n = this.#i18n;
+    parts.toolbar.append(
+      el('div', { class: 'lead' }, parts.toggle, parts.path),
+      parts.modes,
+      el('div', { class: 'actions' }, parts.saveState, parts.history, parts.saveAll, themeSwitcher, parts.settings),
+    );
+    parts.main.append(parts.toolbar);
+    return parts;
+  }
+
+  /** Un nodo condizionale: creato quando serve, dimenticato quando non serve più (alla ricomparsa è nuovo, come con React). */
+  #slot<K extends keyof Slots>(name: K, show: boolean, create: () => Slots[K]): Slots[K] | null {
+    if (!show) {
+      delete this.#slots[name];
+      return null;
+    }
+    return (this.#slots[name] ??= create());
+  }
+
+  #createReview(): HmdAiReview {
+    return el('hmd-ai-review');
+  }
+
+  #createEditor(): HmdEditor {
+    return el('hmd-editor', {
+      on: {
+        'hmd-doc-change': (event) => this.#docChanged(event.detail.changes, event.detail),
+        'hmd-selection': (event) => this.#onSelection(event.detail.range),
+        'hmd-top-line': (event) => {
+          if (this.#shown === 'split') this.#slots.previewPane?.querySelector('hmd-preview')?.scrollToLine(event.detail.line);
+        },
+      },
+    });
+  }
+
+  #onSelection(range: TextRange | null): void {
+    // Scatta a ogni movimento del cursore: si aggiorna solo se il tratto cambia.
+    if (sameRange(this.#aiSelection, range)) return;
+    this.#aiSelection = range;
+    this.#loop.update();
+  }
+
+  #render(parts: Parts, workspace: Workspace, i18n: I18nStore): void {
+    const t = i18n.t;
+    const state = workspace.getState();
+    const doc = state.doc;
+    const ai = this.#ai;
+    const aiState = ai?.getState() ?? null;
+    const shown = this.#shown;
+    const settingsOpen = this.#settingsOpen;
+    const theme = this.#theme!;
+
+    // Effetti di React, nell'ordine: sessione e selezione per documento, chat AI avvisata, bozze, ultimo file.
+    const key = docKey(doc);
+    if (key !== this.#docKey) {
+      this.#docKey = key;
+      this.#session = createDocSession(key, doc?.text || '');
+      this.#aiSelection = null;
+      if (doc) ai?.documentChanged(doc.path, { iterChangedRanges: () => {}, mapPos: (n: number) => n } as never, true);
+    }
+    if (!doc) this.#historyOpen = false;
+    if (doc && doc.path !== this.#lastFile) writeLastFile(this.#workspaceId, doc.path);
+    this.#lastFile = doc?.path ?? this.#lastFile;
+    this.#watchOrphans(workspace, state);
+    this.#reopen(workspace, state);
+    this.#watchAccess(workspace, state, i18n);
+    document.title = pageTitle({ settings: settingsOpen, filePath: doc?.path }, t('settings.title'));
+
+    // Griglia, pannello e separatore.
+    const panel = sidePanel(shown);
+    const width = shown === 'ai' ? this.#aiWidth : this.#sidebarWidth;
+    parts.layout.inert = settingsOpen;
+    const columns = gridColumns(this.#sidebarOpen, width);
+    if (parts.layout.style.gridTemplateColumns !== columns) parts.layout.style.gridTemplateColumns = columns;
+    const aside = this.#slot('aside', this.#sidebarOpen, () => el('aside', { class: 'sidebar' }));
+    const resizer = this.#slot('resizer', this.#sidebarOpen, () =>
+      el('div', {
+        class: 'resizer',
+        role: 'separator',
+        'aria-orientation': 'vertical',
+        tabIndex: 0,
+        on: { pointerdown: (event) => this.#onResizeStart(event), keydown: (event) => this.#onResizeKey(event) },
+      }),
+    );
+    if (aside) this.#renderSidebar(aside, workspace, state, i18n);
+    else for (const name of ['aiSidebar', 'treeHeader', 'search', 'orphans', 'tree'] as const) delete this.#slots[name];
+    if (resizer) {
+      toggleAttr(resizer, 'aria-label', true, t('sidebar.resize'));
+      toggleAttr(resizer, 'aria-valuenow', true, String(width));
+      toggleAttr(resizer, 'aria-valuemin', true, String(WIDTH_LIMITS[panel].min));
+      toggleAttr(resizer, 'aria-valuemax', true, String(WIDTH_LIMITS[panel].max));
+    }
+    place(parts.layout, [...(aside && resizer ? [aside, resizer] : []), parts.main]);
+
+    // Barra degli strumenti.
+    const sidebarLabel = this.#sidebarOpen ? t('sidebar.hide') : t('sidebar.show');
+    toggleAttr(parts.toggle, 'aria-pressed', true, String(this.#sidebarOpen));
+    toggleAttr(parts.toggle, 'aria-label', true, sidebarLabel);
+    toggleAttr(parts.toggle, 'data-tooltip', true, sidebarLabel);
+    const toggleIcon: IconName = this.#sidebarOpen ? 'sidebarClose' : 'sidebarOpen';
+    if (parts.toggle.dataset.icon !== toggleIcon) {
+      parts.toggle.replaceChildren(icon(toggleIcon));
+      parts.toggle.dataset.icon = toggleIcon;
+    }
+    setText(parts.path, doc?.path ?? t('toolbar.noFile'));
+    toggleAttr(parts.modes, 'aria-label', true, t('toolbar.modes'));
+    const modes = ai ? MODES : PANE_MODES;
+    for (const m of modes) {
+      const button = parts.modeButtons.get(m.id)!;
+      toggleAttr(button, 'aria-pressed', true, String(shown === m.id));
+      toggleAttr(button, 'aria-label', true, t(m.label));
+      toggleAttr(button, 'data-tooltip', true, t(m.label));
+    }
+    place(parts.modes, modes.map((m) => parts.modeButtons.get(m.id)!));
+    const indicator = saveIndicator(doc);
+    toggleAttr(parts.saveState, 'data-state', true, indicator.state);
+    toggleAttr(parts.saveState, 'aria-live', true, indicator.live);
+    toggleAttr(parts.saveState, 'role', !!indicator.role, indicator.role ?? '');
+    const draftIcon = this.#slot('draftIcon', indicator.draftIcon, () => icon('draft', { size: 10 }));
+    if (draftIcon && draftIcon.parentNode !== parts.saveState) parts.saveState.prepend(draftIcon);
+    for (const child of [...parts.saveState.children]) if (child !== draftIcon) child.remove();
+    setText(parts.saveText, indicator.label ? t(indicator.label) : '');
+    toggleAttr(parts.history, 'aria-pressed', true, String(shown !== 'ai' && this.#historyOpen));
+    parts.history.disabled = !doc;
+    toggleAttr(parts.history, 'aria-label', true, t('toolbar.history'));
+    toggleAttr(parts.history, 'data-tooltip', true, t('toolbar.history'));
+    toggleAttr(parts.saveAll, 'aria-label', true, t('toolbar.saveAll'));
+    toggleAttr(parts.saveAll, 'data-tooltip', true, t('toolbar.saveAll'));
+    toggleAttr(parts.settings, 'aria-label', true, t('toolbar.settings'));
+    toggleAttr(parts.settings, 'data-tooltip', true, t('toolbar.settings'));
+    const themeSwitcher = parts.toolbar.querySelector('hmd-theme-switcher')!;
+    assign(themeSwitcher, 'store', theme);
+    assign(themeSwitcher, 'i18n', i18n);
+
+    // Conflitto e documento.
+    const conflict = this.#slot('conflict', !!doc?.conflict, () =>
+      el('hmd-conflict-bar', { on: { 'hmd-conflict': (event) => void this.#workspace?.resolveConflict(event.detail.choice) } }),
+    );
+    if (conflict) assign(conflict, 'i18n', i18n);
+    const review = this.#slot('review', !!doc && shown === 'ai' && !!ai, () => this.#createReview());
+    const panes = this.#slot('panes', !!doc && !review, () => el('div', { class: 'panes' }));
+    const empty = this.#slot('empty', !doc, () =>
+      el('div', { class: 'empty' }, el('p'), el('button', { class: 'primary', on: { click: () => this.#onTreeAction('new-file', null) } })),
+    );
+    if (review && doc && ai) this.#renderReview(review, state, ai, i18n);
+    if (panes && doc) this.#renderPanes(panes, workspace, state, i18n);
+    else for (const name of ['editorPane', 'historyPane', 'previewPane'] as const) delete this.#slots[name];
+    if (empty) {
+      setText(empty.firstElementChild!, t('empty.hint'));
+      setText(empty.lastElementChild!, t('file.new'));
+    }
+    place(parts.main, [parts.toolbar, ...(conflict ? [conflict] : []), (review ?? panes ?? empty)!]);
+
+    // Impostazioni sopra l'area di lavoro, e i toast.
+    const settings = this.#slot('settings', settingsOpen, () => this.#createSettings());
+    if (settings) this.#renderSettings(settings, state, i18n);
+    place(this, [parts.layout, ...(settings ? [settings] : []), parts.toasts]);
+    assign(parts.toasts, 'i18n', i18n);
+    // Un array nuovo solo quando cambiano toast, errore AI o lingua (lo useMemo di React): i toast riavviano i timer a ogni array.
+    const toastKey = [state.toasts, aiState?.error, i18n.getState()];
+    if (!toastKey.every((v, i) => v === this.#toastKey[i])) {
+      this.#toastKey = toastKey;
+      parts.toasts.items = toastItems(state.toasts, aiState?.error, t);
+    }
+
+    // Chiuse le impostazioni, il focus torna dove era prima di aprirle.
+    if (this.#settingsWasOpen && !settingsOpen) {
+      const previous = this.#focusBeforeSettings;
+      this.#focusBeforeSettings = null;
+      if (previous?.isConnected) previous.focus();
+    }
+    this.#settingsWasOpen = settingsOpen;
+
+    // Ripristino chiesto in sola anteprima: parte appena l'editor c'è.
+    const queued = this.#queuedRestore;
+    if (queued && shown !== 'preview' && this.#slots.editorPane) {
+      this.#queuedRestore = null;
+      // Nel frattempo si è passati a un altro file: quella versione non riguarda più il documento.
+      if (doc?.path === queued.path) queueMicrotask(() => void workspace.restoreVersion(queued.id));
+    }
+  }
+
+  #renderSidebar(aside: HTMLElement, workspace: Workspace, state: WorkspaceState, i18n: I18nStore): void {
+    const t = i18n.t;
+    const ai = this.#ai;
+    const doc = state.doc;
+    const aiMode = this.#shown === 'ai' && !!ai;
+    const aiSidebar = this.#slot('aiSidebar', aiMode, () => {
+      const sidebar = el('hmd-ai-sidebar', {
+        on: { 'hmd-ai-manage': () => this.#openSettings('ai-profiles'), 'hmd-ai-sync-reactivate': () => this.#openSettings('ai-sync') },
+      });
+      sidebar.getSelection = () => {
+        const selected = this.#session.selection?.main;
+        return selected && !selected.empty ? { from: selected.from, to: selected.to, originalText: this.#session.textLf.slice(selected.from, selected.to), status: 'valid' } : undefined;
+      };
+      return sidebar;
+    });
+    if (aiSidebar && ai) {
+      assign(aiSidebar, 'controller', ai);
+      assign(aiSidebar, 'text', doc?.text ?? '');
+      assign(aiSidebar, 'selection', this.#aiSelection);
+      assign(aiSidebar, 'syncNeedsPermission', !!this.#sync?.needsPermission);
+      assign(aiSidebar, 'i18n', i18n);
+      place(aside, [aiSidebar]);
+      for (const name of ['treeHeader', 'search', 'orphans', 'tree'] as const) delete this.#slots[name];
+      return;
+    }
+    const header = this.#slot('treeHeader', true, () =>
+      el(
+        'div',
+        { class: 'sidebarHeader' },
+        el('button', { class: 'iconButton tooltip', on: { click: () => this.#setSidebar(false) } }, icon('sidebarClose')),
+        el('button', { class: 'folder tooltip', on: { click: () => emit(this, 'hmd-workspace-change-folder', null) } }),
+        el('button', { class: 'iconButton tooltip', on: { click: () => this.#onTreeAction('new-file', null) } }, icon('newFile')),
+        el('button', { class: 'iconButton tooltip', on: { click: () => this.#onTreeAction('new-folder', null) } }, icon('newFolder')),
+      ),
+    )!;
+    const [hide, folder, newFile, newFolder] = [...header.children] as HTMLButtonElement[];
+    for (const [button, label] of [[hide, t('sidebar.hide')], [newFile, t('file.new')], [newFolder, t('folder.new')]] as const) {
+      toggleAttr(button, 'aria-label', true, label);
+      toggleAttr(button, 'data-tooltip', true, label);
+    }
+    setText(folder, state.name);
+    folder.disabled = this.#switchingFolder;
+    toggleAttr(folder, 'data-tooltip', true, t('sidebar.changeFolder'));
+    const search = this.#slot('search', true, () => el('hmd-search-panel', { on: { 'hmd-search-open': (event) => void this.#openFile(event.detail.path, event.detail.terms) } }))!;
+    assign(search, 'index', workspace.search);
+    assign(search, 'indexRevision', state.indexRevision);
+    assign(search, 'i18n', i18n);
+    const orphans = this.#slot('orphans', this.#orphans.length > 0, () => el('section', { class: 'orphans' }, el('h2', { class: 'orphansTitle' })));
+    if (orphans) this.#renderOrphans(orphans, doc?.path ?? null, t);
+    else this.#orphanNodes.clear();
+    const tree = this.#slot('tree', true, () =>
+      el('hmd-file-tree', {
+        on: { 'hmd-open': (event) => void this.#openFile(event.detail.path), 'hmd-tree-action': (event) => this.#onTreeAction(event.detail.action, event.detail.node) },
+      }),
+    )!;
+    // Albero, file e bozze ricalcolati solo quando cambiano le voci (o la lingua), come gli useMemo di React.
+    const memo = this.#memo;
+    if (memo.entries !== state.entries || memo.locale !== i18n.getState().locale) {
+      memo.tree = buildTree(state.entries, i18n.getState().locale);
+      memo.locale = i18n.getState().locale;
+    }
+    if (memo.drafts !== state.drafts) {
+      memo.drafts = state.drafts;
+      memo.draftSet = new Set(state.drafts);
+    }
+    assign(tree, 'nodes', memo.tree!);
+    assign(tree, 'openPath', doc?.path ?? null);
+    assign(tree, 'drafts', memo.draftSet!);
+    assign(tree, 'i18n', i18n);
+    place(aside, [header, search, ...(orphans ? [orphans] : []), tree]);
+    delete this.#slots.aiSidebar;
+  }
+
+  #renderOrphans(section: HTMLElement, openPath: string | null, t: I18nStore['t']): void {
+    toggleAttr(section, 'aria-label', true, t('orphans.title'));
+    setText(section.firstElementChild!, t('orphans.title'));
+    const nodes = new Map<string, HTMLButtonElement>();
+    for (const path of this.#orphans) {
+      const button = this.#orphanNodes.get(path) ?? el('button', { class: 'orphan tooltip', on: { click: () => void this.#openFile(path) } }, path);
+      toggleAttr(button, 'aria-current', openPath === path, 'true');
+      toggleAttr(button, 'data-tooltip', true, t('orphans.recover', { path }));
+      nodes.set(path, button);
+    }
+    this.#orphanNodes = nodes;
+    place(section, [section.firstElementChild!, ...nodes.values()]);
+  }
+
+  #files(state: WorkspaceState): string[] {
+    const memo = this.#memo;
+    if (memo.entries !== state.entries || !memo.files) {
+      memo.entries = state.entries;
+      memo.files = state.entries.filter((e) => e.kind === 'file').map((e) => e.path);
+    }
+    return memo.files;
+  }
+
+  #getDocs = () => this.#workspace!.search.titles();
+  #readBlob = (path: string) => this.#workspace!.readBlob(path);
+  #saveImage = (file: File) => this.#workspace!.saveImage(file, file.name);
+
+  #renderReview(review: HmdAiReview, state: WorkspaceState, ai: AiController, i18n: I18nStore): void {
+    const doc = state.doc!;
+    assign(review, 'controller', ai);
+    assign(review, 'i18n', i18n);
+    // Un oggetto nuovo a ogni render, come con React: la revisione rilegge allora `canAccept`, che dipende anche dallo
+    // stato dello workspace (un conflitto spegne gli «accetta» dei blocchi). Confrontare i campi la lascerebbe ferma.
+    review.doc = {
+      path: doc.path,
+      text: doc.text,
+      resetKey: docKey(doc),
+      session: this.#session,
+      restore: doc.restore,
+      readOnly: state.updating,
+      getDocs: this.#getDocs,
+      saveImage: this.#saveImage,
+      docChanged: this.#docChanged,
+      selectionChanged: this.#selectionChanged,
+    };
+  }
+
+  #docChanged = (changes: ChangeDesc, texts: { before: string; after: string }) => {
+    const workspace = this.#workspace!;
+    const path = workspace.getState().doc?.path;
+    if (path) this.#ai?.documentChanged(path, changes, false, texts);
+    workspace.edit(texts.after);
+  };
+  #selectionChanged = (range: TextRange | null) => this.#onSelection(range);
+
+  #renderPanes(panes: HTMLDivElement, workspace: Workspace, state: WorkspaceState, i18n: I18nStore): void {
+    const t = i18n.t;
+    const doc = state.doc!;
+    const shown = this.#shown;
+    toggleAttr(panes, 'data-mode', true, panesMode(shown, this.#historyOpen));
+    const editorPane = this.#slot('editorPane', shown !== 'preview', () => el('section', { class: 'pane' }, this.#createEditor()));
+    if (editorPane) {
+      toggleAttr(editorPane, 'aria-label', true, t('pane.editor'));
+      const editor = editorPane.firstElementChild as HmdEditor;
+      assign(editor, 'text', doc.text);
+      assign(editor, 'resetKey', docKey(doc));
+      assign(editor, 'session', this.#session);
+      assign(editor, 'restore', doc.restore);
+      assign(editor, 'readOnly', state.updating);
+      assign(editor, 'getDocs', this.#getDocs);
+      assign(editor, 'saveImage', this.#saveImage);
+      assign(editor, 'i18n', i18n);
+    }
+    // La cronologia è per file (la `key` di React): un file nuovo, un pannello nuovo.
+    if (this.#historyOpen && this.#historyPath !== doc.path) delete this.#slots.historyPane;
+    const historyPane = this.#slot('historyPane', this.#historyOpen, () =>
+      el(
+        'section',
+        { class: 'pane' },
+        el('hmd-history-panel', {
+          on: {
+            'hmd-history-restore': (event) => this.#restoreVersion(event.detail.id),
+            'hmd-history-close': () => {
+              this.#historyOpen = false;
+              this.#loop.update();
+            },
+          },
+        }),
+      ),
+    );
+    if (historyPane) {
+      this.#historyPath = doc.path;
+      toggleAttr(historyPane, 'aria-label', true, t('toolbar.history'));
+      const history = historyPane.firstElementChild as HmdHistoryPanel;
+      assign(history, 'workspace', workspace);
+      assign(history, 'path', doc.path);
+      assign(history, 'currentText', doc.text);
+      assign(history, 'i18n', i18n);
+    }
+    const previewPane = this.#slot('previewPane', !this.#historyOpen && shown !== 'editor', () =>
+      el(
+        'section',
+        { class: 'pane' },
+        el('hmd-preview', {
+          on: {
+            'hmd-top-line': (event) => {
+              if (this.#shown === 'split') (this.#slots.editorPane?.firstElementChild as HmdEditor | undefined)?.scrollToLine(event.detail.line);
+            },
+            'hmd-open-wiki': (event) => {
+              this.#highlight = NO_TERMS;
+              this.#loop.update();
+              void workspace.followWikiLink(event.detail.target);
+            },
+            'hmd-open': (event) => void this.#openFile(event.detail.path),
+          },
+        }),
+      ),
+    );
+    if (previewPane) {
+      toggleAttr(previewPane, 'aria-label', true, t('pane.preview'));
+      const preview = previewPane.firstElementChild as HmdPreview;
+      assign(preview, 'text', doc.text);
+      assign(preview, 'path', doc.path);
+      assign(preview, 'files', this.#files(state));
+      assign(preview, 'config', state.config);
+      assign(preview, 'readBlob', this.#readBlob);
+      assign(preview, 'highlight', this.#highlight);
+      assign(preview, 'i18n', i18n);
+    }
+    place(panes, [...(editorPane ? [editorPane] : []), ...(historyPane ? [historyPane] : previewPane ? [previewPane] : [])]);
+  }
+
+  #createSettings(): HmdSettings {
+    return el('hmd-settings', {
+      on: {
+        'hmd-settings-section': (event) => this.#route?.navigate({ view: 'settings', section: event.detail.section }),
+        'hmd-settings-close': () => this.#route?.navigate({ view: 'workspace' }),
+        'hmd-settings-autosave': (event) => {
+          writePref('autosave', event.detail.autosave);
+          this.#workspace?.setAutosave(event.detail.autosave);
+        },
+        'hmd-settings-text-width': (event) => {
+          writePref('textWidth', event.detail.textWidth);
+          this.#textWidth = event.detail.textWidth;
+          this.#applyTextWidth();
+          this.#loop.update();
+        },
+        'hmd-settings-save-all': () => void this.#workspace?.saveAll(),
+      },
+    });
+  }
+
+  #renderSettings(settings: HmdSettings, state: WorkspaceState, i18n: I18nStore): void {
+    const route = this.#route!.getState();
+    if (route.view === 'settings') assign(settings, 'section', route.section);
+    assign(settings, 'ai', this.#ai);
+    assign(settings, 'syncBinding', this.#sync);
+    assign(settings, 'theme', this.#theme);
+    assign(settings, 'autosave', state.autosave);
+    assign(settings, 'textWidth', this.#textWidth);
+    assign(settings, 'i18n', i18n);
+  }
+
+  // Bozze nel buffer di emergenza di file spariti dal disco: senza questa lista non si ritroverebbero.
+  #watchOrphans(workspace: Workspace, state: WorkspaceState): void {
+    const key = [state.status, state.indexRevision, state.entries, state.drafts];
+    if (key.every((v, i) => v === this.#orphanKey[i])) return;
+    this.#orphanKey = key;
+    const request = ++this.#orphanRequest;
+    if (state.status !== 'ready') return;
+    void workspace.orphanDrafts().then((paths) => {
+      if (request !== this.#orphanRequest || !this.isConnected) return;
+      this.#orphans = paths;
+      this.#loop.update();
+    });
+  }
+
+  /** Riapre l'ultimo file della cartella, una volta. */
+  #reopen(workspace: Workspace, state: WorkspaceState): void {
+    if (this.#reopened || state.status !== 'ready') return;
+    this.#reopened = true;
+    const plan = reopenPlan(readLastFile(this.#workspaceId), this.#files(state));
+    // Dopo il render: aprire un file notifica, e una notifica dentro il render chiede solo un'altra passata.
+    if (plan.kind === 'open') queueMicrotask(() => void this.#openFile(plan.path));
+    else if (plan.kind === 'draft') {
+      // Non scavalca un file che l'utente ha già aperto nel frattempo.
+      void workspace.hasDraft(plan.path).then((has) => {
+        if (has && !workspace.getState().doc && this.isConnected) void this.#openFile(plan.path);
+      });
+    }
+  }
+
+  /** Accesso perso: dialog bloccante finché il permesso non torna; se lo stato cambia per altre vie (o al distacco) si chiude. */
+  #watchAccess(workspace: Workspace, state: WorkspaceState, i18n: I18nStore): void {
+    const lost = state.status === 'access-lost';
+    if (lost === !!this.#accessLost) return;
+    if (!lost) {
+      this.#accessLost?.abort();
+      this.#accessLost = null;
+      return;
+    }
+    const controller = (this.#accessLost = new AbortController());
+    const handle = this.#handle;
+    // Dopo il render (come l'effetto di React): il dialog modale sposta il focus.
+    queueMicrotask(() => {
+      if (controller.signal.aborted) return;
+      void showAccessLostDialog({
+        folderName: state.name,
+        t: i18n.t,
+        signal: controller.signal,
+        onResume: async () => {
+          const granted = !!handle && (await requestAccess(handle));
+          if (granted) await workspace.resume();
+          return granted;
+        },
+      });
+    });
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'hmd-workspace': HmdWorkspace;
+  }
+}
+```
+
+`src/elements/workspace/workspace.css` (valori di `WorkspaceView.module.css`; `.saveState :global(.icon)` diventa `.saveState .icon`; il limite inferiore è necessario: con i nomi di classe non più cifrati, `.iconButton` prenderebbe anche quelli della sidebar AI):
+
+```css
+@layer components {
+  /*
+   * Valori copiati da WorkspaceView.module.css. Il limite inferiore lascia ai loro fogli tutti gli elementi
+   * contenuti: con i nomi di classe non più cifrati dai CSS Modules, `.iconButton` di questo foglio
+   * prenderebbe anche quelli della sidebar AI, `.empty` e `.path` quelli di altri pannelli.
+   */
+  @scope (hmd-workspace) to (hmd-ai-sidebar, hmd-search-panel, hmd-file-tree, hmd-theme-switcher, hmd-conflict-bar, hmd-ai-review, hmd-editor, hmd-history-panel, hmd-preview, hmd-settings, hmd-toasts) {
+    :scope {
+      display: contents;
+    }
+
+    .layout {
+      display: grid;
+      height: 100%;
+    }
+
+    .sidebar {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      background: var(--c-sidebar);
+    }
+
+    .sidebarHeader {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--c-border);
+      font-family: var(--font-pixel);
+    }
+
+    .folder {
+      flex: 1;
+      min-width: 0;
+      text-align: left;
+      font-weight: 700;
+      background: none;
+      border: none;
+      padding: 4px 6px;
+      border-radius: 6px;
+      cursor: pointer;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .folder:hover:not(:disabled),
+    .iconButton:hover {
+      background: var(--c-accent-soft);
+    }
+
+    /* Cambio cartella in corso. */
+    .folder:disabled {
+      opacity: 0.6;
+      cursor: progress;
+    }
+
+    .iconButton {
+      background: none;
+      border: none;
+      border-radius: 6px;
+      width: 30px;
+      height: 30px;
+      cursor: pointer;
+      display: inline-grid;
+      place-items: center;
+      color: var(--c-text);
+    }
+
+    .resizer {
+      cursor: col-resize;
+      background: var(--c-border);
+      touch-action: none;
+    }
+
+    .resizer:hover,
+    .resizer:focus-visible {
+      background: var(--c-accent);
+    }
+
+    .main {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      min-height: 0;
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 6px 12px;
+      border-bottom: 1px solid var(--c-border);
+      background: var(--c-bg);
+      font-family: var(--font-pixel);
+    }
+
+    /* Le due ali occupano lo stesso spazio: così il gruppo delle modalità resta al centro. */
+    .lead,
+    .actions {
+      flex: 1 1 0;
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .actions {
+      justify-content: flex-end;
+    }
+
+    .path {
+      flex: 1;
+      min-width: 0;
+      color: var(--c-muted);
+      font-size: 13px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .modes {
+      display: flex;
+      border: 1px solid var(--c-border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .mode {
+      background: none;
+      border: none;
+      padding: 4px 10px;
+      cursor: pointer;
+      display: inline-grid;
+      place-items: center;
+    }
+
+    .mode[aria-pressed='true'] {
+      background: var(--c-accent);
+      color: light-dark(#fff, #042f2e);
+    }
+
+    .saveState {
+      min-width: 11ch;
+      display: inline-flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 6px;
+      font-size: 13px;
+      color: var(--c-muted);
+    }
+
+    .saveState[data-state='error'] {
+      color: var(--c-danger);
+      font-weight: 600;
+    }
+
+    .saveState .icon {
+      color: var(--c-accent);
+    }
+
+    .panes {
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .panes[data-mode='split'] {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    }
+
+    .pane {
+      min-height: 0;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .panes[data-mode='split'] .pane + .pane {
+      border-left: 1px solid var(--c-border);
+    }
+
+    .empty {
+      flex: 1;
+      display: grid;
+      place-content: center;
+      justify-items: center;
+      gap: 12px;
+      color: var(--c-muted);
+    }
+
+    .primary {
+      background: var(--c-accent);
+      color: light-dark(#fff, #042f2e);
+      border: none;
+      border-radius: 8px;
+      padding: 8px 16px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    .orphans {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--c-border);
+      background: var(--c-warning-bg);
+    }
+
+    .orphansTitle {
+      margin: 0 0 4px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--c-muted);
+    }
+
+    .orphan {
+      text-align: left;
+      background: none;
+      border: none;
+      border-radius: 6px;
+      padding: 3px 6px;
+      cursor: pointer;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .orphan:hover,
+    .orphan[aria-current='true'] {
+      background: var(--c-accent-soft);
+    }
+  }
+}
+```
+
+`src/elements/define.ts`: import `HmdWorkspace` e voce `['hmd-workspace', HmdWorkspace]` in fondo (dopo `hmd-update-notice`).
+
+- [ ] **Step 6: `App.tsx` monta `hmd-workspace`**
+
+`src/App.tsx`: via `import { WorkspaceView } from './ui/WorkspaceView';`; dopo gli import di `I18nProvider`:
+
+```tsx
+import { browserRouteWindow, createRouteStore } from './state/routeStore';
+import { getThemeStore } from './theme/useTheme';
+```
+
+nel componente, prima di `dbBlocked`: `const [route] = useState(() => createRouteStore(browserRouteWindow()));` e il ramo `open`:
+
+```tsx
+    .with({ kind: 'open' }, (s) => (
+      <hmd-workspace
+        key={`${s.stored.workspaceId}:${openCount}`}
+        workspace={s.workspace}
+        workspaceId={s.stored.workspaceId}
+        handle={s.stored.handle}
+        switchingFolder={switching}
+        i18n={i18nStore}
+        theme={getThemeStore()}
+        route={route}
+        onhmd-workspace-change-folder={choose}
+      />
+    ))
+```
+
+`src/elements/jsx.d.ts`: React monta ormai solo `hmd-start-screen`, `hmd-workspace`, `hmd-update-notice` e `hmd-notice`; le altre voci e i loro import si tolgono (6c, decisione 9: il file dice solo quello che React monta), e si aggiunge:
+
+```ts
+      'hmd-workspace': HmdProps<
+        {
+          workspace: Workspace;
+          workspaceId: string;
+          handle: FileSystemDirectoryHandle;
+          switchingFolder: boolean;
+          i18n: I18nStore;
+          theme: ThemeStore;
+          route: RouteStore;
+        },
+        'hmd-workspace-change-folder'
+      > & { key?: Key };
+```
+
+(import `RouteStore` da `../state/routeStore`, `Workspace` da `../workspace/workspace`; `HmdDocProps` e gli import di editor, AI, preview, ricerca, albero, cronologia, toast e impostazioni non servono più.) Poi:
+
+```bash
+git rm src/ui/WorkspaceView.tsx src/ui/WorkspaceView.module.css src/ui/Icon.tsx src/ui/useRoute.ts src/ui/useUnmountSignal.ts src/ui/useWorkspace.ts src/ui/ai/useAiController.ts src/ui/ai/useAiState.ts
+grep -rn "WorkspaceView\|useRoute\|useUnmountSignal\|useWorkspaceState\|useAiController\|useAiState\|ui/Icon\|from './Icon'" src --include=*.ts --include=*.tsx | grep -v "^src/elements/workspace/.*(era WorkspaceView"; echo "uscita $?"
+# atteso: nessuna riga di codice (restano solo commenti che dicono «era WorkspaceView.tsx»)
+```
+
+- [ ] **Step 7: Verifica**
+
+```bash
+npx tsc --noEmit && npm test            # 1034 verdi
+npm run lint
+E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npx playwright test -c e2e/playwright.config.ts --grep-invert "visual"
+E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npx playwright test -c e2e/dev.config.ts e2e/workspace-shell.spec.ts e2e/settings.spec.ts e2e/settings-sections.spec.ts e2e/startup.spec.ts e2e/editor.spec.ts e2e/external.spec.ts e2e/history.spec.ts e2e/ai-review.spec.ts e2e/ai-review-bar.spec.ts e2e/ai-composer.spec.ts e2e/theme-i18n.spec.ts
+E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npx playwright test -c e2e/audit.config.ts -g "workspace|editor-mode|ai-review|tree|search|history|toast|conflict|orphans|sidebar|resizer|focus"
+pgrep -af "vite|chrom|playwright"
+```
+
+Nel prototipo, a questo passo: suite e2e completa 185 verdi + i 2 noti (2,6 min), audit completo 116 verdi dopo la correzione della decisione 9 (prima: `ai-review-conflict` con «expect(locator).toBeDisabled() failed» sugli «accetta» dei blocchi).
+
+- [ ] **Step 8: Commit**
+
+`test:` (Step 1), `feat:` (Step 2–5), `refactor:` (Step 6). Nessun `Co-authored-by`.
