@@ -124,7 +124,7 @@ Il Task 6 va a Planner (griglia, separatore con pointer capture, scorciatoie, li
 ### Decisioni (tra parentesi la raccomandazione; il PM decide e procede)
 
 1. **Due sotto-fasi, 7a e 7b, con due PR** (sì). Varianti: **A** una PR sola per tutta la fase (circa 7 000 righe di diff da rivedere in una volta, un solo giro di suite; scartata: la review della 6b, metà di questa, ha già richiesto tre giri); **B** (raccomandata) 7a = impostazioni (Task 1–5) sulla PR #10 (titolo da cambiare in «LAB-5: fase 7a, impostazioni senza React»), mergiata nell'epica; 7b = workspace, app e via React (Task 6–8) su un branch nuovo `lab/LAB-5-fase-7b` creato da `epic/LAB-3-web-components` **dopo** il merge della 7a, PR in bozza nuova «LAB-5: fase 7b, workspace e app senza React»; il confine regge (misurato: con le impostazioni come elementi dentro `WorkspaceView.tsx` tutte le suite sono verdi), e ogni metà ha le sue suite complete e la sua review; **C** 7a = impostazioni e workspace, 7b = app e via React (scartata: la 7b sarebbe un terzo della 7a, e il workspace resterebbe senza una chiusura sua). Con A il Task 5 si salta (le sue misure finiscono nel Task 8).
-2. **Un foglio comune per le tre sezioni AI, con `@scope` a più radici** (sì): `sections.css` con `@scope (hmd-settings-profiles, hmd-settings-presets, hmd-settings-sync)`, e `architecture.test.ts` che accetta più radici separate da virgola, ognuna ammessa nella cartella (con due casi sintetici, uno buono e uno con una radice di un'altra cartella). Il minificatore conserva la lista (`buildCss.test.ts` verde, misurato). **Scartate**: tre fogli con le stesse 80 righe ripetute (duplicato da tenere allineato); un solo foglio su `hmd-settings` con le sezioni senza foglio (le sezioni montate da `SettingsView.tsx` nei Task 2–3 resterebbero senza stile fino al Task 4).
+2. **Un foglio comune per le tre sezioni AI, con `@scope` a più radici** (sì): `sections.css` con `@scope (hmd-settings-profiles, hmd-settings-presets, hmd-settings-sync)`, e `architecture.test.ts` che accetta più radici separate da virgola, ognuna ammessa nella cartella (con due casi sintetici, uno buono e uno con una radice di un'altra cartella). Il minificatore conserva la lista (misurato nel CSS di produzione del prototipo: `@scope(hmd-settings-profiles,hmd-settings-presets,hmd-settings-sync)`). **Scartate**: tre fogli con le stesse 80 righe ripetute (duplicato da tenere allineato); un solo foglio su `hmd-settings` con le sezioni senza foglio (le sezioni montate da `SettingsView.tsx` nei Task 2–3 resterebbero senza stile fino al Task 4).
 3. **`:scope` davanti alle regole `.detail label`, `.detail label > span`, `.detail input|select|textarea`** (sì, misurato): oggi raggiungono anche i campi di `hmd-ai-parameters` e `hmd-ai-model-select` e vincono perché `Settings.module.css` sta fuori dai layer; nel layer a pari specificità vincerebbe il foglio del figlio (prossimità di `@scope`). Il `:scope` aggiunge una classe di specificità e tiene il risultato di oggi; nessun limite inferiore su quei due figli. **Scartato**: `!important` (il progetto ne ha già tre da togliere in fase 8).
 4. **La chiave passa al controller dalla sezione dei profili: eccezione stretta nel test statico** (sì): `SECRET_WRITE_ALLOWED = elements/settings/profiles.element.ts`, dove si toglie dal sorgente solo `controller.setSecret(` prima di applicare `ELEMENT_AI`; tutto il resto (lettura delle chiavi, `aiSecrets`, `ai/providers`) resta vietato anche lì, e un caso sintetico lo prova. **Scartate**: un modulo in `ai/` che avvolge `setSecret` solo per non farsi vedere dal test (nasconde, non chiarisce); una callback passata da `hmd-workspace` (la chiave attraverserebbe un elemento in più).
 5. **La chiave fuori dal DOM serializzato** (sì, cambio voluto e invisibile): l'elemento scrive solo la proprietà `value` del campo password; React scriveva anche l'attributo (misurato: `document.body.outerHTML` contiene la chiave). Spec R21 e CLAUDE.md («chiavi mai negli attributi»). Il Task 1 afferma il comportamento di oggi, il Task 2 lo rovescia. Nessun aspetto cambia.
@@ -167,3 +167,405 @@ Il Task 6 va a Planner (griglia, separatore con pointer capture, scorciatoie, li
 | `docs/superpowers/specs/2026-09-27-housemd-web-components-design.md`, `CLAUDE.md`, `README.md`, `e2e/dev.config.ts` e i commenti e2e che parlano di React, `docs/superpowers/notes/2026-10-xx-handover-fase-8.md` | Documenti (Task 5 e 8). |
 
 ---
+
+### Task 1: Rete di sicurezza e baseline sull'app React di oggi (Builder)
+
+Nessuna riga dell'app cambia: test che **passano sull'app React di oggi**, compreso il comportamento da rovesciare (la chiave nel DOM serializzato, decisione 5), più dieci stati di audit per quello che nessuno fotografa. Provato nel prototipo sulla copia React (`housemd-proto-7-base`): 15/15 e2e verdi, 10 stati di audit raggiungibili e stabili.
+
+**Files:**
+- Create: `e2e/settings-sections.spec.ts`, `e2e/workspace-shell.spec.ts`
+- Modify: `e2e/computed-styles.audit.ts` (campo `width` di `State`, larghezza nel ridimensionamento di stabilizzazione, 10 stati)
+
+**Interfaces:**
+- Produces: i test «the key typed in the password field: where it ends up in the DOM» (afferma `true`, rovesciato dal Task 2) e gli altri 14; gli stati di audit `workspace-empty`, `sidebar-hidden`, `resizer-focus-keyboard`, `orphans`, `settings-autosave-off`, `settings-preset`, `settings-cloud-profile`, `settings-connected`, `settings-sync-folder`, `settings-narrow`; `State.width`.
+
+**Criteri di accettazione:** i due file nuovi verdi in build e in sviluppo sull'app di oggi; i 10 stati verdi nell'audit; `npm test` e `npm run lint` invariati (980, pulito); `dist-baseline/` costruita da questo commit dell'app (React); conteggi e gzip annotati nel commento finale.
+
+- [ ] **Step 1: Baseline e build di riferimento**
+
+```bash
+cd <worktree del branch lab/LAB-5-fase-7>
+git status --short && git log --oneline -3      # pulito; sopra 5fa9abf solo i commit del piano
+npm ci
+npm test                                          # annotare (12/10 nel prototipo: 980)
+npm run lint
+npm run build
+gzip -c dist/assets/index-*.js | wc -c            # annotare (12/10: 441 143)
+rm -rf dist-baseline && cp -r dist dist-baseline  # riferimento dell'audit per TUTTA la fase: non si ricostruisce più
+```
+
+- [ ] **Step 2: E2e delle impostazioni scoperte oggi**
+
+`e2e/settings-sections.spec.ts` (il preset predefinito si trova con l'id della sezione, `#settings-ai-presets`: le sezioni non hanno un nome accessibile e «+ Create», «Name», «Save» ci sono in tutte e tre; l'id è già il bersaglio dello scorrimento e resta identico):
+
+```ts
+import { expect, test, type App } from './support/app.ts';
+
+/** Rete della fase 7 (Task 1): comportamenti delle impostazioni che le altre spec non toccano. */
+
+const settings = (app: App) => app.page.getByRole('region', { name: app.t('settings.title') });
+
+async function openSettings(app: App): Promise<void> {
+  await app.page.getByRole('button', { name: app.t('toolbar.settings') }).click();
+  await expect(settings(app)).toBeVisible();
+}
+
+test.beforeEach(async ({ app }) => {
+  await app.openFolder({ 'a.md': '# A' });
+  await app.openFile('a.md');
+});
+
+test('autosave: the delay shows only after a pause, Enter clamps and saves it, everything is remembered after a reload', async ({ app, page }) => {
+  await openSettings(app);
+  const delay = settings(app).getByRole('spinbutton', { name: app.t('settings.delay') });
+  await expect(delay).toHaveValue('1000');
+  await delay.fill('50');
+  await delay.press('Enter');
+  await expect(delay).toHaveValue('500');
+  await settings(app).getByRole('radio', { name: app.t('settings.autosave.off') }).check();
+  await expect(delay).toHaveCount(0);
+  await page.reload();
+  await expect(settings(app)).toBeVisible();
+  await expect(settings(app).getByRole('radio', { name: app.t('settings.autosave.off') })).toBeChecked();
+  await settings(app).getByRole('radio', { name: app.t('settings.autosave.afterDelay') }).check();
+  await expect(delay).toHaveValue('500');
+});
+
+test('Escape closes the settings and the focus goes back to the settings button', async ({ app, page }) => {
+  await openSettings(app);
+  await page.keyboard.press('Escape');
+  await expect(settings(app)).toHaveCount(0);
+  await expect(page.getByRole('button', { name: app.t('toolbar.settings') })).toBeFocused();
+});
+
+test('the theme radios change the theme of the page', async ({ app, page }) => {
+  await openSettings(app);
+  await settings(app).getByRole('radio', { name: app.t('theme.option.dark') }).check();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await expect(settings(app).getByRole('radio', { name: app.t('theme.option.dark') })).toBeChecked();
+});
+
+test('Save all in the settings saves the open file (autosave off)', async ({ app, page }) => {
+  await openSettings(app);
+  await settings(app).getByRole('radio', { name: app.t('settings.autosave.off') }).check();
+  await page.keyboard.press('Escape');
+  await app.typeAtEnd('\nmore');
+  await page.waitForTimeout(1500);
+  expect(await app.disk('a.md')).toBe('# A');
+  await openSettings(app);
+  await settings(app).getByRole('button', { name: app.t('settings.saveAll') }).click();
+  await expect.poll(() => app.disk('a.md')).toBe('# A\nmore');
+});
+
+test('the index follows the scroll: the section brought into view is the current link', async ({ app }) => {
+  await openSettings(app);
+  const index = settings(app).getByRole('navigation', { name: app.t('settings.sections') });
+  await expect(index.getByRole('link', { name: app.t('settings.general') })).toHaveAttribute('aria-current', 'true');
+  // Profili, non Sync: le ultime sezioni non arrivano in cima (padding di 40vh) e l'indice resta su Profili (limite di oggi, fase 8).
+  await index.getByRole('link', { name: app.t('settings.aiProfiles') }).click();
+  await expect(index.getByRole('link', { name: app.t('settings.aiProfiles') })).toHaveAttribute('aria-current', 'true');
+  await expect(index.getByRole('link', { name: app.t('settings.general') })).not.toHaveAttribute('aria-current', 'true');
+});
+
+test('a cloud profile asks for the key: the address is fixed, Save key is off until something is typed', async ({ app }) => {
+  await openSettings(app);
+  await settings(app).getByRole('link', { name: app.t('settings.aiProfiles') }).click();
+  await settings(app).getByRole('button', { name: `+ ${app.t('ai.create')}` }).first().click();
+  await settings(app).getByRole('combobox', { name: app.t('ai.provider'), exact: true }).selectOption('anthropic');
+  await expect(settings(app).getByRole('textbox', { name: app.t('ai.url') })).toBeDisabled();
+  await expect(settings(app).getByRole('textbox', { name: app.t('ai.url') })).toHaveValue('https://api.anthropic.com');
+  const save = settings(app).getByRole('button', { name: app.t('ai.saveSecret') });
+  await expect(save).toBeDisabled();
+  await settings(app).getByLabel(app.t('ai.secret')).fill('sk-test');
+  await expect(save).toBeEnabled();
+  await settings(app).getByRole('combobox', { name: app.t('ai.provider'), exact: true }).selectOption('ollama');
+  await expect(settings(app).getByLabel(app.t('ai.secret'))).toHaveCount(0);
+  await expect(settings(app).getByRole('textbox', { name: app.t('ai.url') })).toHaveValue('http://localhost:11434');
+});
+
+test('the key typed in the password field: where it ends up in the DOM', async ({ app, page }) => {
+  await openSettings(app);
+  await settings(app).getByRole('link', { name: app.t('settings.aiProfiles') }).click();
+  await settings(app).getByRole('button', { name: `+ ${app.t('ai.create')}` }).first().click();
+  await settings(app).getByRole('combobox', { name: app.t('ai.provider'), exact: true }).selectOption('anthropic');
+  await settings(app).getByLabel(app.t('ai.secret')).fill('sk-test');
+  // React tiene sincronizzato l'attributo `value` dei campi controllati: oggi la chiave sta anche nel DOM serializzato (il Task 2 lo rovescia).
+  expect(await page.evaluate(() => document.body.outerHTML.includes('sk-test'))).toBe(true);
+});
+
+test('Connection on the local profile says Connected (fake Ollama)', async ({ app }) => {
+  await openSettings(app);
+  await settings(app).getByRole('link', { name: app.t('settings.aiProfiles') }).click();
+  await settings(app).getByRole('button', { name: 'ollama', exact: true }).click();
+  await settings(app).getByRole('button', { name: app.t('ai.connection') }).click();
+  await expect(settings(app).getByRole('status').filter({ hasText: app.t('ai.connected') })).toBeVisible();
+});
+
+test('a built-in preset offers Restore original instead of Delete, and restoring brings its instructions back', async ({ app }) => {
+  await openSettings(app);
+  await settings(app).getByRole('link', { name: app.t('settings.aiPresets') }).click();
+  // La seconda sezione AI è quella dei preset: il primo pulsante dell'elenco è un preset predefinito.
+  const presets = settings(app).locator('#settings-ai-presets');
+  await presets.getByRole('button').first().click();
+  const instructions = presets.getByRole('textbox', { name: app.t('ai.instructions') });
+  const original = await instructions.inputValue();
+  await expect(presets.getByRole('button', { name: app.t('ai.delete'), exact: true })).toHaveCount(0);
+  await instructions.fill('changed');
+  await presets.getByRole('button', { name: app.t('ai.restoreOriginal') }).click();
+  await expect(instructions).toHaveValue(original);
+});
+
+test('a sync folder: its name, the status line, Sync now and the backups; Disable takes it away', async ({ app }) => {
+  await openSettings(app);
+  await settings(app).getByRole('link', { name: app.t('settings.aiSync') }).click();
+  await app.setFlags({ folder: 'sync' });
+  await settings(app).getByRole('button', { name: app.t('ai.syncChoose') }).click();
+  await expect(settings(app).getByText('sync', { exact: true })).toBeVisible();
+  await expect(settings(app).getByRole('button', { name: app.t('ai.syncNow') })).toBeEnabled();
+  await expect(settings(app).getByText(app.t('ai.backups'))).toBeVisible();
+  await settings(app).getByRole('button', { name: app.t('ai.syncDisable') }).click();
+  await expect(settings(app).getByRole('button', { name: app.t('ai.syncNow') })).toHaveCount(0);
+  await expect(settings(app).getByText('sync', { exact: true })).toHaveCount(0);
+});
+```
+
+Note: «Save all» passa con l'autosalvataggio spento, altrimenti la scrittura arriverebbe comunque dopo la pausa. «the index follows the scroll» usa Profili e non Sync: saltando a Sync la voce corrente resta Profili (le ultime sezioni non arrivano in cima, «Misure»). Il test della chiave afferma **il comportamento di oggi** (la chiave nel DOM serializzato): il Task 2 lo rovescia.
+
+- [ ] **Step 3: E2e del guscio del workspace scoperto oggi**
+
+`e2e/workspace-shell.spec.ts`:
+
+```ts
+import { expect, test, type App } from './support/app.ts';
+
+/** Rete della fase 7 (Task 1): il guscio del workspace che le altre spec non toccano. */
+
+const separator = (app: App) => app.page.getByRole('separator', { name: app.t('sidebar.resize') });
+
+test('dragging the separator resizes the sidebar and is remembered; the AI panel has its own width', async ({ app, page }) => {
+  await app.openFolder({ 'a.md': '# A' });
+  await app.openFile('a.md');
+  const box = (await separator(app).boundingBox())!;
+  await page.mouse.move(box.x + 2, box.y + 200);
+  await page.mouse.down();
+  await page.mouse.move(350, box.y + 200, { steps: 4 });
+  await page.mouse.up();
+  await expect(separator(app)).toHaveAttribute('aria-valuenow', '350');
+  await app.mode('mode.ai').click();
+  await expect(separator(app)).toHaveAttribute('aria-valuenow', '380');
+  await page.reload();
+  await expect(app.mode('mode.ai')).toHaveAttribute('aria-pressed', 'true');
+  await app.mode('mode.split').click();
+  await expect(separator(app)).toHaveAttribute('aria-valuenow', '350');
+});
+
+test('with no file open: the hint and New file, which creates the file and opens it', async ({ app, page }) => {
+  await app.openFolder({ 'a.md': '# A' });
+  await expect(page.getByText(app.t('empty.hint'))).toBeVisible();
+  await expect(page.getByRole('button', { name: app.t('toolbar.history') })).toBeDisabled();
+  await page.getByRole('main').getByRole('button', { name: app.t('file.new'), exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('textbox').fill('new');
+  await dialog.getByRole('textbox').press('Enter');
+  await expect.poll(() => app.exists('new.md')).toBe(true);
+  await app.expectOpen('new.md');
+});
+
+test('Ctrl+Shift+E enters AI mode and leaves it for the last document view', async ({ app, page }) => {
+  await app.openFolder({ 'a.md': '# A' });
+  await app.openFile('a.md');
+  await app.mode('mode.preview').click();
+  await expect(app.mode('mode.ai')).toBeVisible();
+  await page.keyboard.press('ControlOrMeta+Shift+E');
+  await expect(app.mode('mode.ai')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('textbox', { name: app.t('ai.request') })).toBeVisible();
+  await page.keyboard.press('ControlOrMeta+Shift+E');
+  await expect(app.mode('mode.preview')).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('Ctrl+K in AI mode goes back to the last view, opens the file tree and focuses the search', async ({ app, page }) => {
+  await app.openFolder({ 'a.md': '# A' });
+  await app.openFile('a.md');
+  await app.mode('mode.ai').click();
+  await expect(app.tree()).toHaveCount(0);
+  await page.keyboard.press('ControlOrMeta+k');
+  await expect(app.mode('mode.split')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('searchbox', { name: app.t('search.label') })).toBeFocused();
+});
+
+test('Escape in AI mode, with the focus outside the composer, stops the generation', async ({ app, ai, page }) => {
+  ai.hold();
+  await app.openFolder({ 'a.md': 'A' });
+  await app.openFile('a.md');
+  await app.mode('mode.ai').click();
+  const composer = page.getByRole('textbox', { name: app.t('ai.request') });
+  await composer.fill('fix');
+  await composer.press('Enter');
+  await expect(page.getByRole('button', { name: app.t('ai.stop'), exact: true })).toBeVisible();
+  await app.mode('mode.ai').focus();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('button', { name: app.t('ai.send'), exact: true })).toBeVisible();
+});
+```
+
+- [ ] **Step 4: Gli stati di audit**
+
+In `e2e/computed-styles.audit.ts`, nell'interfaccia `State` dopo `keepMouse`:
+
+```ts
+  /** Larghezza della finestra (default 1280): per i layout stretti (`@media (width < 700px)`). */
+  width?: number;
+```
+
+nel test, le due righe del ridimensionamento di stabilizzazione usano la larghezza dello stato (altrimenti lo stato stretto tornerebbe a 1280 prima della lettura):
+
+```ts
+      await page.setViewportSize({ width: state.width ?? 1280, height: 799 });
+      await page.setViewportSize({ width: state.width ?? 1280, height: 800 });
+```
+
+e prima dello stato `tree-menu` i dieci stati nuovi:
+
+```ts
+  // Rete della fase 7 (Task 1): stati delle impostazioni e del guscio del workspace che nessuno fotografa.
+  {
+    name: 'workspace-empty',
+    async setup(app, page) {
+      await app.openFolder({ 'note.md': '# Note' });
+      await expect(page.getByText(app.t('empty.hint'))).toBeVisible();
+    },
+  },
+  {
+    name: 'sidebar-hidden',
+    async setup(app, page) {
+      await workspace(app);
+      await page.getByRole('button', { name: app.t('sidebar.hide'), pressed: true }).click();
+      await expect(app.tree()).toHaveCount(0);
+    },
+  },
+  {
+    name: 'resizer-focus-keyboard',
+    async setup(app, page) {
+      await workspace(app);
+      // Come focus-button-keyboard: l'ultima interazione è la tastiera, così il separatore ha l'anello.
+      await page.getByRole('button', { name: app.t('folder.new') }).first().click();
+      await page.keyboard.press('Escape');
+      const separator = page.getByRole('separator', { name: app.t('sidebar.resize') });
+      await separator.focus();
+      await page.keyboard.press('ArrowRight');
+      await expect(separator).toHaveAttribute('aria-valuenow', '296');
+    },
+  },
+  {
+    name: 'orphans',
+    async setup(app, page) {
+      await app.openFolder({ 'note.md': '# Note' });
+      await app.openFile('note.md');
+      await app.setFlags({ denyWrites: true, request: 'denied' });
+      await app.typeAtEnd('orphan text');
+      await expect(page.getByRole('dialog', { name: app.t('access.title') })).toBeVisible();
+      await app.setFlags({ denyWrites: false, request: 'granted' });
+      await app.removeExternal('note.md');
+      await page.reload();
+      await expect(page.getByRole('region', { name: app.t('orphans.title') }).getByRole('button', { name: 'note.md', exact: true })).toBeVisible();
+      // I toast del ripristino scadono: si chiudono, così le due build non dipendono dal tempo.
+      for (const close of await page.getByRole('button', { name: app.t('toast.close') }).all()) await close.click();
+    },
+  },
+  {
+    name: 'settings-autosave-off',
+    async setup(app, page) {
+      await app.openFolder({ 'note.md': '# Note' });
+      await page.getByRole('button', { name: app.t('toolbar.settings') }).click();
+      const settings = page.getByRole('region', { name: app.t('settings.title') });
+      await settings.getByRole('radio', { name: app.t('settings.autosave.off') }).check();
+      await expect(settings.getByRole('spinbutton', { name: app.t('settings.delay') })).toHaveCount(0);
+    },
+  },
+  {
+    name: 'settings-preset',
+    async setup(app, page) {
+      await app.openFolder({ 'note.md': '# Note' });
+      await page.getByRole('button', { name: app.t('toolbar.settings') }).click();
+      const settings = page.getByRole('region', { name: app.t('settings.title') });
+      await settings.getByRole('link', { name: app.t('settings.aiPresets') }).click();
+      await settings.locator('#settings-ai-presets').getByRole('button').first().click();
+      await expect(settings.getByRole('button', { name: app.t('ai.restoreOriginal') })).toBeVisible();
+    },
+  },
+  {
+    name: 'settings-cloud-profile',
+    async setup(app, page) {
+      await app.openFolder({ 'note.md': '# Note' });
+      await page.getByRole('button', { name: app.t('toolbar.settings') }).click();
+      const settings = page.getByRole('region', { name: app.t('settings.title') });
+      await settings.getByRole('link', { name: app.t('settings.aiProfiles') }).click();
+      await settings.getByRole('button', { name: `+ ${app.t('ai.create')}` }).first().click();
+      await settings.getByRole('combobox', { name: app.t('ai.provider'), exact: true }).selectOption('anthropic');
+      await expect(settings.getByRole('button', { name: app.t('ai.saveSecret') })).toBeDisabled();
+    },
+  },
+  {
+    name: 'settings-connected',
+    async setup(app, page) {
+      await app.openFolder({ 'note.md': '# Note' });
+      await page.getByRole('button', { name: app.t('toolbar.settings') }).click();
+      const settings = page.getByRole('region', { name: app.t('settings.title') });
+      await settings.getByRole('link', { name: app.t('settings.aiProfiles') }).click();
+      await settings.getByRole('button', { name: 'ollama', exact: true }).click();
+      await settings.getByRole('button', { name: app.t('ai.connection') }).click();
+      await expect(settings.getByRole('status').filter({ hasText: app.t('ai.connected') })).toBeVisible();
+    },
+  },
+  {
+    name: 'settings-sync-folder',
+    async setup(app, page) {
+      await app.openFolder({ 'note.md': '# Note' });
+      await page.getByRole('button', { name: app.t('toolbar.settings') }).click();
+      const settings = page.getByRole('region', { name: app.t('settings.title') });
+      await settings.getByRole('link', { name: app.t('settings.aiSync') }).click();
+      await app.setFlags({ folder: 'sync' });
+      await settings.getByRole('button', { name: app.t('ai.syncChoose') }).click();
+      await expect(settings.getByRole('button', { name: app.t('ai.syncNow') })).toBeEnabled();
+      // La riga di stato porta l'ora dell'ultima sincronizzazione: si aspetta che sia scritta.
+      await expect(settings.getByText(app.t('ai.backups'))).toBeVisible();
+      await settings.getByText(app.t('ai.backups')).click();
+    },
+  },
+  {
+    name: 'settings-narrow',
+    width: 600,
+    async setup(app, page) {
+      await app.openFolder({ 'note.md': '# Note' });
+      await page.getByRole('button', { name: app.t('toolbar.settings') }).click();
+      const settings = page.getByRole('region', { name: app.t('settings.title') });
+      await settings.getByRole('link', { name: app.t('settings.aiProfiles') }).click();
+      await settings.getByRole('button', { name: 'ollama', exact: true }).click();
+      await expect(settings.getByRole('spinbutton', { name: app.t('ai.param.temperature') })).toBeVisible();
+    },
+  },
+```
+
+- [ ] **Step 5: Verdi sull'app di oggi**
+
+```bash
+npx tsc --noEmit -p e2e
+E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npx playwright test -c e2e/playwright.config.ts e2e/settings-sections.spec.ts e2e/workspace-shell.spec.ts
+# atteso: 15 passed (prototipo: 17 s)
+E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npx playwright test -c e2e/dev.config.ts e2e/settings-sections.spec.ts e2e/workspace-shell.spec.ts
+# atteso: 15 passed, console pulita
+E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npx playwright test -c e2e/audit.config.ts -g "workspace-empty|sidebar-hidden|resizer-focus|orphans|settings-"
+# atteso: verdi tutti i [current] (11: i 10 nuovi più settings-profile); il progetto baseline gira tutto
+pgrep -af "vite|chrom|playwright"      # nulla di proprio appeso
+```
+
+Se `orphans` o `settings-*` cadono con «Target page… closed» al `page.reload()`: è la trappola nota, ripetere da soli.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add e2e/settings-sections.spec.ts e2e/workspace-shell.spec.ts e2e/computed-styles.audit.ts
+git -c core.hooksPath=/dev/null commit -m "test: rete della fase 7 su impostazioni e guscio del workspace di oggi"
+git log --format=%B -n 1        # nessun Co-authored-by
+git push
+```
