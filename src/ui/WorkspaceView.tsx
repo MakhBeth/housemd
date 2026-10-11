@@ -2,7 +2,6 @@ import { useAiController } from './ai/useAiController';
 import { useAiState } from './ai/useAiState';
 import { createDocSession } from '../editor/docSession';
 import { sameRange, type TextRange } from '../ai/selectionChip';
-import { AiSidebar } from './ai/AiSidebar';
 import { ReviewView } from './ai/ReviewView';
 import { useAiSync } from './ai/settings/AiSyncSection';
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
@@ -364,7 +363,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
       {sidebarOpen && (
         <>
           <aside className={styles.sidebar}>
-            {shownMode === 'ai' && ai ? <AiSidebar
+            {shownMode === 'ai' && ai ? <hmd-ai-sidebar
               controller={ai}
               text={doc?.text ?? ''}
               selection={aiSelection}
@@ -374,8 +373,10 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
                   ? { from: selected.from, to: selected.to, originalText: session.textLf.slice(selected.from, selected.to), status: 'valid' }
                   : undefined;
               }}
-              onSettings={openSettings}
               syncNeedsPermission={!!syncBinding.handle && !syncBinding.permission}
+              i18n={i18nStore}
+              onhmd-ai-manage={() => openSettings('ai-profiles')}
+              onhmd-ai-sync-reactivate={() => openSettings('ai-sync')}
             /> : <>
             <div className={styles.sidebarHeader}>
               <button className={`${styles.iconButton} tooltip`} onClick={() => setSidebar(false)} aria-label={t('sidebar.hide')} data-tooltip={t('sidebar.hide')}>

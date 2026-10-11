@@ -24,6 +24,8 @@ export interface HmdEvents {
   'hmd-ai-retry': CustomEvent<{ id: string; removeRejected: boolean }>;
   /** Suggerimento scelto sotto il composer: invia il preset. */
   'hmd-ai-suggestion': CustomEvent<{ presetId: string }>;
+  /** Sidebar AI: la cartella di sync ha perso il permesso, aprire le impostazioni della sync per riattivarlo. */
+  'hmd-ai-sync-reactivate': CustomEvent<null>;
   /** Conflitto con il disco: l'utente sceglie se ricaricare o sovrascrivere. */
   'hmd-conflict': CustomEvent<{ choice: 'reload' | 'overwrite' }>;
   /** Editor e lato documento del diff: testo cambiato (`changes` e `before` per la proposta AI, `after` da salvare). */

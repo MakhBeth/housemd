@@ -5,6 +5,7 @@ import { HmdAiEffortChip } from './ai/effort-chip.element';
 import { HmdAiModelChip } from './ai/model-chip.element';
 import { HmdAiModelSelect } from './ai/model-select.element';
 import { HmdAiParameters } from './ai/parameters.element';
+import { HmdAiSidebar } from './ai/sidebar.element';
 import { HmdAiSuggestions } from './ai/suggestions.element';
 import { HmdConflictBar } from './conflict-bar/conflict-bar.element';
 import { HmdEditor } from './editor/editor.element';
@@ -34,6 +35,7 @@ const ELEMENTS: Definitions = [
   ['hmd-ai-model-chip', HmdAiModelChip],
   ['hmd-ai-model-select', HmdAiModelSelect],
   ['hmd-ai-parameters', HmdAiParameters],
+  ['hmd-ai-sidebar', HmdAiSidebar],
   ['hmd-ai-suggestions', HmdAiSuggestions],
   ['hmd-conflict-bar', HmdConflictBar],
   ['hmd-editor', HmdEditor],
