@@ -151,17 +151,24 @@ test.describe('review bar', () => {
 });
 
 test.describe('composer without a document', () => {
-  test('with no document open, Send empties the box and nothing is sent (today: no note, the draft is lost)', async ({ app, ai }) => {
+  test('with no document open, Send says so, keeps the draft and the focus', async ({ app, ai, page }) => {
     await app.openFolder({ 'a.md': 'A' });
     await enterAi(app);
     await composer(app).fill('fix');
     await send(app).click();
-    await expect(composer(app)).toHaveValue('');
-    await expect(app.page.getByRole('status').filter({ hasText: app.t('ai.composer.needText') })).toHaveCount(0);
+    const note = page.getByRole('status').filter({ hasText: app.t('ai.composer.noDocument') });
+    await expect(note).toBeVisible();
+    await expect(composer(app)).toHaveValue('fix');
+    await expect(send(app)).toBeFocused();
     expect(ai.requests).toBe(0);
+    // Aprire un documento passa dalla modalità editor: la sidebar AI si smonta e si rimonta (bozza e nota ripartono da zero, come oggi).
+    await app.mode('mode.editor').click();
+    await app.openFile('a.md');
+    await app.mode('mode.ai').click();
+    await expect(note).toHaveCount(0);
   });
 
-  test('Enter in the composer during a generation sends nothing and says nothing (today); the suggestions are not there', async ({ app, ai, page }) => {
+  test('Enter in the composer during a generation says so and keeps the draft; the note goes when the generation ends', async ({ app, ai, page }) => {
     ai.hold();
     await app.openFolder({ 'a.md': 'A' });
     await app.openFile('a.md');
@@ -170,14 +177,14 @@ test.describe('composer without a document', () => {
     await composer(app).press('Enter');
     await expect(stop(app)).toBeVisible();
     await expect(page.getByRole('group', { name: app.t('ai.suggestions') })).toHaveCount(0);
-    const spoken = () => page.getByRole('status').evaluateAll((nodes) => nodes.map((n) => n.textContent?.trim() ?? ''));
-    const before = await spoken();
+    const note = page.getByRole('status').filter({ hasText: app.t('ai.composer.generating') });
     await composer(app).fill('again');
     await composer(app).press('Enter');
-    await page.waitForTimeout(200);
-    expect(await spoken()).toEqual(before);
+    await expect(note).toBeVisible();
     await expect(composer(app)).toHaveValue('again');
     expect(ai.requests).toBe(1);
     ai.release();
+    await proposalShown(app);
+    await expect(note).toHaveCount(0);
   });
 });

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import type { PromptPreset } from '../../ai/types';
 import { translate, type Params } from '../../i18n/i18n';
 import { EN_MESSAGES } from '../../i18n/messages';
-import { outgoing, selectionChipText, sendBlocker, sendButton } from './composerView';
+import { CONTROLLER_NOTES, outgoing, selectionChipText, sendBlocker, sendButton } from './composerView';
 
 const t = (key: string, params?: Params) => translate(EN_MESSAGES, key, params);
 
@@ -44,4 +44,12 @@ test('why a message cannot be sent: the profile first (without it nothing can be
 test('a preset needs a profile but no text', () => {
   assert.equal(sendBlocker('', false, true), 'ai.composer.needProfile');
   assert.equal(sendBlocker('', true, true), null);
+});
+
+test('a reason of the controller comes before profile and text: generation, no document, update', () => {
+  assert.equal(sendBlocker('', false, false, 'running'), 'ai.composer.generating');
+  assert.equal(sendBlocker('fix', true, false, 'noDocument'), 'ai.composer.noDocument');
+  assert.equal(sendBlocker('fix', true, true, 'updating'), 'ai.composer.updating');
+  assert.equal(sendBlocker('fix', true, false, null), null);
+  assert.deepEqual(CONTROLLER_NOTES, { running: 'ai.composer.generating', noDocument: 'ai.composer.noDocument', updating: 'ai.composer.updating' });
 });

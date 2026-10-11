@@ -386,6 +386,18 @@ const STATES: State[] = [
     },
   },
   {
+    name: 'ai-composer-note-no-document',
+    async setup(app, page) {
+      // Modalità AI senza un documento aperto: Invia resta attivo e la nota dice di aprire un documento.
+      await app.openFolder({ 'a.md': 'Alpha' });
+      await expect(app.mode('mode.ai')).toBeVisible();
+      await app.mode('mode.ai').click();
+      await page.getByRole('textbox', { name: app.t('ai.request') }).fill('fix');
+      await page.getByRole('button', { name: app.t('ai.send'), exact: true }).click();
+      await expect(page.getByRole('status').filter({ hasText: app.t('ai.composer.noDocument') })).toBeVisible();
+    },
+  },
+  {
     name: 'ai-sidebar-note',
     async setup(app, page) {
       await app.openFolder({ 'a.md': 'Alpha' });

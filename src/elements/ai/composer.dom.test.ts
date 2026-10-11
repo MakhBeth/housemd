@@ -3,9 +3,12 @@ import '../../testing/domEnv';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import { ChangeSet } from '@codemirror/state';
+
 import '../define';
+import { AiController, type AiState } from '../../ai/aiController';
 import { defaultProfile } from '../../ai/profiles';
-import type { AiState } from '../../ai/aiController';
+import { createMemoryAiStores } from '../../ai/stores';
 import type { PromptPreset, SelectionScope } from '../../ai/types';
 import { translate, type Params } from '../../i18n/i18n';
 import { EN_MESSAGES } from '../../i18n/messages';
@@ -289,4 +292,99 @@ test('language change relabels, the note too; detached, no listener left', async
   el.remove();
   assert.equal(listeners(), 0);
   assert.equal(ai.listeners(), 0);
+});
+
+test('without a document Send says so, keeps the draft and the focus; a document opened clears the note', () => {
+  const { ai, send, type, note, input } = mount();
+  ai.sendBlockerValue = 'noDocument';
+  type('draft');
+  send().focus();
+  send().click();
+  assert.deepEqual(ai.calls, []);
+  assert.equal(input().value, 'draft');
+  assert.equal(note().textContent, EN_MESSAGES['ai.composer.noDocument']);
+  assert.equal(document.activeElement, send());
+  ai.sendBlockerValue = null;
+  ai.set({});
+  assert.equal(note().textContent, '');
+});
+
+test('during an update Send says so; typing clears the note as for the other notes, and so does the end of the update', () => {
+  const { ai, send, type, note } = mount();
+  ai.sendBlockerValue = 'updating';
+  type('draft');
+  send().click();
+  assert.equal(note().textContent, EN_MESSAGES['ai.composer.updating']);
+  type('draft more');
+  assert.equal(note().textContent, '');
+  send().click();
+  assert.equal(note().textContent, EN_MESSAGES['ai.composer.updating']);
+  ai.sendBlockerValue = null;
+  ai.set({});
+  assert.equal(note().textContent, '');
+});
+
+test('a suggestion (or Enter) during a generation says so, the draft stays, the note goes when the generation ends', () => {
+  const { el, ai, key, note, type, input, running } = mount();
+  running(true);
+  type('draft');
+  el.sendPreset('p1');
+  assert.deepEqual(ai.calls, []);
+  assert.equal(note().textContent, EN_MESSAGES['ai.composer.generating']);
+  assert.equal(input().value, 'draft');
+  key('Enter');
+  assert.equal(note().textContent, EN_MESSAGES['ai.composer.generating']);
+  running(false);
+  assert.equal(note().textContent, '');
+});
+
+test('the order of the reasons: the controller first (generation, document, update), then the profile, then the text', () => {
+  const { ai, send, key, note, running } = mount(false);
+  // Durante la generazione il pulsante è Stop: la ragione si vede con Invio.
+  running(true);
+  key('Enter');
+  assert.equal(note().textContent, EN_MESSAGES['ai.composer.generating']);
+  running(false);
+  ai.sendBlockerValue = 'noDocument';
+  send().click();
+  assert.equal(note().textContent, EN_MESSAGES['ai.composer.noDocument']);
+  ai.sendBlockerValue = null;
+  send().click();
+  assert.equal(note().textContent, EN_MESSAGES['ai.composer.needProfile']);
+  ai.set({ profiles: [defaultProfile('ollama', 'o')], profileId: 'o' });
+  send().click();
+  assert.equal(note().textContent, EN_MESSAGES['ai.composer.needText']);
+});
+
+/** Il controller vero (store in memoria, provider finto mai chiamato) al posto di `fakeAi`: le notifiche arrivano solo da lui. */
+async function realController() {
+  const world = { doc: { path: 'a.md', textLf: 'uno\ndue\ntre', conflict: null as unknown, updating: false } as { path: string; textLf: string; conflict: unknown; updating: boolean } | null };
+  const controller = new AiController(createMemoryAiStores({ writerId: 'test', now: () => 100 }), { getDoc: () => world.doc, snapshotBeforeAi() {}, openFile() {} }, () => ({
+    async listModels() { return []; },
+    async *stream() { throw new Error('mai chiamato'); },
+  }));
+  await controller.initialize();
+  return { controller, world };
+}
+
+test('with the real controller: the updating note goes when cancel() ends the update, the no-document note when a document opens; no other user action', async () => {
+  const { controller, world } = await realController();
+  const { el, send, type, note, input } = mount();
+  el.controller = controller;
+  assert.equal(await controller.prepare(), 'durable');
+  type('draft');
+  send().click();
+  assert.equal(note().textContent, EN_MESSAGES['ai.composer.updating']);
+  assert.equal(input().value, 'draft');
+  controller.cancel();
+  assert.equal(controller.sendBlocker(), null);
+  assert.equal(note().textContent, '');
+  world.doc = null;
+  send().click();
+  assert.equal(note().textContent, EN_MESSAGES['ai.composer.noDocument']);
+  world.doc = { path: 'b.md', textLf: 'B', conflict: null, updating: false };
+  // Come WorkspaceView quando apre un documento: documentChanged con reset.
+  controller.documentChanged('b.md', ChangeSet.empty(1), true);
+  assert.equal(note().textContent, '');
+  assert.equal(input().value, 'draft');
 });
