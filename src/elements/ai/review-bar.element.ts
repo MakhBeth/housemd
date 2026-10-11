@@ -37,13 +37,14 @@ interface Parts {
  * l'azione non è possibile (generazione in corso; per Accetta tutto la ragione del controller,
  * `acceptBlocker`) il pulsante resta attivo e, attivato, la nota sotto la riga dice perché; il focus resta
  * sul pulsante. La nota ricorda la sua causa e si svuota quando quella non vale più, quando un'azione
- * della barra riesce, o quando la barra sparisce.
+ * della barra riesce, quando cambia la proposta (`proposalId`) o quando la barra sparisce.
  */
 export class HmdAiReviewBar extends HmdElement {
   #status: ReviewStatus = { kind: 'none' };
   #warnings: CheckWarning[] = [];
   #acceptBlocker: AcceptBlocker | null = 'generating';
   #i18n: I18nStore | null = null;
+  #proposalId = '';
   /** Nota mostrata: l'azione che l'ha prodotta e la sua chiave, per sapere quando la causa sparisce. */
   #note: { action: ReviewAction; key: ReviewBlocker } | null = null;
 
@@ -64,6 +65,15 @@ export class HmdAiReviewBar extends HmdElement {
   get warnings(): CheckWarning[] { return this.#warnings; }
   set warnings(value: CheckWarning[]) {
     this.#warnings = value ?? [];
+    this.#loop.update();
+  }
+  /** Identità della proposta mostrata (percorso + createdAt): quando cambia la nota della proposta di prima si svuota, senza ricreare l'elemento (il focus resta). */
+  get proposalId(): string { return this.#proposalId; }
+  set proposalId(value: string) {
+    value ??= '';
+    if (value === this.#proposalId) return;
+    this.#proposalId = value;
+    this.#note = null;
     this.#loop.update();
   }
   /** Perché Accetta tutto non può (dal controller, `acceptBlocker(p, true)`), o null. */

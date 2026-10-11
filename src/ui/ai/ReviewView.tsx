@@ -93,7 +93,7 @@ export function ReviewView({ controller, editor }: Props) {
     return (
       <section ref={section} className={styles.review}>
         {status.kind === 'generating' ? (
-          <hmd-ai-review-bar status={status} warnings={[]} acceptBlocker="generating" i18n={i18nStore} />
+          <hmd-ai-review-bar status={status} warnings={[]} acceptBlocker="generating" proposalId="" i18n={i18nStore} />
         ) : (
           <p className={styles.hint}>{t('ai.emptyProposal')}</p>
         )}
@@ -122,6 +122,7 @@ export function ReviewView({ controller, editor }: Props) {
         status={status}
         warnings={warnings}
         acceptBlocker={controller.acceptBlocker(p, true)}
+        proposalId={`${p.path}#${p.createdAt}`}
         i18n={i18nStore}
         onhmd-ai-review-action={(event) => {
           switch (event.detail.action) {

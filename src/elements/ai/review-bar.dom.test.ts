@@ -204,6 +204,22 @@ test('the focused Continue removed by a status change: the focus goes to Accept 
   focusOn(byLabel(EN_MESSAGES['ai.acceptAll']), 'Accept all');
 });
 
+test('the proposal changes while the same block holds: the note is forgotten and the focus stays on the button', () => {
+  const { el, byLabel, note } = mount({ kind: 'truncated' }, [], 'truncated');
+  el.proposalId = 'a.md#1';
+  const accept = byLabel(EN_MESSAGES['ai.acceptAll']);
+  accept.focus();
+  accept.click();
+  assert.equal(note().textContent, EN_MESSAGES['ai.review.truncated']);
+  el.proposalId = 'a.md#1';
+  assert.equal(note().textContent, EN_MESSAGES['ai.review.truncated']);
+  el.proposalId = 'b.md#2';
+  assert.equal(note().textContent, '');
+  focusOn(accept, 'Accept all');
+  accept.click();
+  assert.equal(note().textContent, EN_MESSAGES['ai.review.truncated']);
+});
+
 test('a language change rewrites labels, tooltips, warnings and the note; detached, no listener stays', async () => {
   const { el, i18n, listeners, buttons, byLabel, popover, note } = mount(GENERATING, [{ code: 'wikilinks' }], 'generating');
   byLabel(EN_MESSAGES['ai.discard']).click();
