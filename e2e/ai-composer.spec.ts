@@ -7,7 +7,8 @@ const send = (app: App) => app.page.getByRole('button', { name: app.t('ai.send')
 const stop = (app: App) => app.page.getByRole('button', { name: app.t('ai.stop'), exact: true });
 const newChat = (app: App) => app.page.getByRole('button', { name: app.t('ai.newChat') });
 const log = (app: App) => app.page.getByRole('log');
-const acceptAll = (app: App) => app.page.getByRole('button', { name: app.t('ai.acceptAll'), exact: true });
+/** La proposta è arrivata: il diff è visibile. Non «Accetta tutto attivo»: con i pulsanti mai disattivati (6c) passerebbe subito. */
+const proposalShown = (app: App) => expect(app.page.locator('.cm-mergeView')).toBeVisible();
 const chip = (app: App) => app.page.getByRole('button', { name: new RegExp(`^${app.t('ai.profile')}: `) });
 
 async function enterAi(app: App): Promise<void> {
@@ -45,7 +46,7 @@ test.describe('composer', () => {
     await expect(composer(app)).toHaveValue('');
     await expect(send(app)).toBeEnabled();
     // Finita la risposta (durante la generazione il pulsante è Stop e la nota non c'è), Invio a vuoto la mostra.
-    await expect(acceptAll(app)).toBeEnabled();
+    await proposalShown(app);
     await composer(app).press('Enter');
     await expect(needText).toBeVisible();
     expect(ai.requests).toBe(1);
@@ -104,7 +105,7 @@ test.describe('composer', () => {
     await composer(app).pressSequentially('next question');
     ai.release();
     await composer(app).pressSequentially(' and more');
-    await expect(acceptAll(app)).toBeEnabled();
+    await proposalShown(app);
     await expect(composer(app)).toHaveValue('next question and more');
     await expect(composer(app)).toBeFocused();
   });
@@ -176,7 +177,7 @@ test.describe('sidebar', () => {
     await expect(newChat(app)).toBeFocused();
     await composer(app).fill('fix');
     await composer(app).press('Enter');
-    await expect(acceptAll(app)).toBeEnabled();
+    await proposalShown(app);
     // Un messaggio nella chat toglie la nota.
     await expect(alreadyEmpty).toHaveCount(0);
     await newChat(app).click();

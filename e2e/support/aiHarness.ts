@@ -15,6 +15,8 @@ export class FakeModel {
   /** Stato HTTP delle risposte di chat: diverso da 200 = errore del provider, con `errorBody` come corpo. */
   status = 200;
   errorBody = '';
+  /** Motivo di fine della risposta: `length` = uscita troncata dal limite del modello (proposta «troncata»). */
+  finishReason: 'stop' | 'length' = 'stop';
   /** Modelli dell'elenco (`/api/tags`), e quante volte l'app lo ha chiesto. */
   models = ['qwen3.6:35b-mlx'];
   modelLists = 0;
@@ -71,7 +73,7 @@ export class FakeModel {
       return;
     }
     const content = `${this.comment}<housemd-proposal>${this.reply}</housemd-proposal>`;
-    const event = JSON.stringify({ choices: [{ delta: { content }, finish_reason: 'stop' }] });
+    const event = JSON.stringify({ choices: [{ delta: { content }, finish_reason: this.finishReason }] });
     await route.fulfill({ headers: cors, contentType: 'text/event-stream', body: `data: ${event}\n\ndata: [DONE]\n\n` });
   }
 }
