@@ -1741,3 +1741,758 @@ Nel prototipo, sulla copia React con le tre sezioni: questi e2e verdi, audit `se
 - [ ] **Step 10: Commit**
 
 Commit separati: `test:` (Step 1 e casi sintetici), `feat:` (Step 2–6), `refactor:` (Step 7), `test:` (Step 8). `git log --format=%B -n 4`: nessun `Co-authored-by`.
+
+### Task 3: `SyncBinding` e `hmd-settings-sync` (Builder)
+
+L'hook `useAiSync` diventa uno store puro, `SyncBinding` (`src/ai/syncBinding.ts`), con le dipendenze del browser iniettate e una fabbrica `browserSyncBinding(controller)`; la sezione della sync diventa `hmd-settings-sync`. `WorkspaceView.tsx` crea un `SyncBinding` per controller e ne legge `needsPermission` per la sidebar AI; `SettingsView.tsx` monta la sezione. Con `AiSyncSection.tsx` se ne vanno `Settings.module.css` e la cartella `src/ui/ai/settings/`.
+
+**Files:**
+- Create: `src/ai/syncBinding.ts`, `src/ai/syncBinding.test.ts`, `src/elements/settings/sync.element.ts`, `src/elements/settings/sync.dom.test.ts`
+- Modify: `src/elements/define.ts`, `src/elements/jsx.d.ts`, `src/ui/WorkspaceView.tsx`, `src/ui/SettingsView.tsx`
+- Delete: `src/ui/ai/settings/AiSyncSection.tsx`, `src/ui/ai/settings/Settings.module.css`
+
+**Interfaces:**
+- Consumes: `ai/aiSync.ts` (`AiSync`, `AiSyncState`), `fs/access.ts` (`hasAccess`, `requestAccess`, `pickFolder`), `fs/fsaOps.ts`, `sections.css` del Task 2, `showChildren`.
+- Produces: `SyncBinding` (`getState(): { sync, handle, permission }`, `subscribe`, `needsPermission`, `choose()`, `reactivate()`, `disable()`, `dispose()`), `SyncService`, `SyncHost`, `SyncBindingDeps`, `browserSyncBinding(controller)`; `HmdSettingsSync` (`controller: SyncController`, `binding: SyncBinding | null`, `i18n`), `SyncController = Pick<AiController, 'report' | 'reload'>`.
+
+**Criteri di accettazione:** RED annotato; `npm test` 992 + 11 = **1003**; lint pulito; `ai-composer.spec.ts` (riattivazione della sync), `settings-sections.spec.ts` («a sync folder…»), `settings.spec.ts` verdi in build e in sviluppo; audit `settings-sync-folder`, `ai-sync-reactivate`, `settings` verdi; `grep -rn "useAiSync\|AiSyncSection\|Settings.module" src` → uscita 1; `src/ui/ai/settings/` non esiste più.
+
+- [ ] **Step 1: I test, prima del codice**
+
+`src/ai/syncBinding.test.ts` (servizio e controller finti; nessun browser):
+
+```ts
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+import type { AiSyncState } from './aiSync';
+import { SyncBinding, type SyncBindingDeps, type SyncHost, type SyncService } from './syncBinding';
+
+const handle = (name: string) => ({ name }) as FileSystemDirectoryHandle;
+const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+function fakeService() {
+  let state: AiSyncState = { status: 'idle', error: null, lastSync: null, conflicts: [] };
+  const listeners = new Set<() => void>();
+  const log: string[] = [];
+  const service: SyncService & { set(patch: Partial<AiSyncState>): void; log: string[]; listeners: () => number } = {
+    getState: () => state,
+    subscribe: (fn) => (listeners.add(fn), () => void listeners.delete(fn)),
+    start: () => void log.push('start'),
+    localChanged: () => void log.push('localChanged'),
+    dispose: () => void log.push('dispose'),
+    set(patch) {
+      state = { ...state, ...patch };
+      for (const fn of [...listeners]) fn();
+    },
+    log,
+    listeners: () => listeners.size,
+  };
+  return service;
+}
+
+function setup(saved: FileSystemDirectoryHandle | null, access = true) {
+  const meta = new Map<string, unknown>([['folderHandle', saved]]);
+  const reports: unknown[] = [];
+  let reloads = 0;
+  const host: SyncHost = {
+    store: {
+      getMeta: async <T>(key: string) => (meta.get(key) ?? null) as T | null,
+      setMeta: async (key: string, value: unknown) => void meta.set(key, value),
+    } as SyncHost['store'],
+    report: (error) => void reports.push(error),
+    reload: async () => void reloads++,
+  };
+  const services: ReturnType<typeof fakeService>[] = [];
+  const deps: SyncBindingDeps & { picked: FileSystemDirectoryHandle | null; granted: boolean } = {
+    picked: null,
+    granted: true,
+    hasAccess: async () => access,
+    requestAccess: async () => deps.granted,
+    pickFolder: async () => deps.picked,
+    createSync: () => {
+      const service = fakeService();
+      services.push(service);
+      return service;
+    },
+  };
+  const binding = new SyncBinding(host, deps);
+  let notified = 0;
+  binding.subscribe(() => notified++);
+  return { binding, host, deps, meta, services, reports, reloads: () => reloads, notified: () => notified };
+}
+
+test('a saved folder with permission starts one sync service, linked to the settings changes', async () => {
+  const { binding, host, services } = setup(handle('sync'));
+  await flush();
+  assert.equal(binding.getState().handle?.name, 'sync');
+  assert.equal(binding.getState().permission, true);
+  assert.equal(services.length, 1);
+  assert.equal(binding.getState().sync, services[0]);
+  assert.deepEqual(services[0].log, ['start']);
+  host.onSettingsChanged?.();
+  assert.deepEqual(services[0].log, ['start', 'localChanged']);
+  assert.equal(binding.needsPermission, false);
+});
+
+test('a saved folder without permission: no service, the sidebar must offer to reactivate', async () => {
+  const { binding, services, deps } = setup(handle('sync'), false);
+  await flush();
+  assert.equal(binding.getState().sync, null);
+  assert.equal(services.length, 0);
+  assert.equal(binding.needsPermission, true);
+  deps.granted = true;
+  await binding.reactivate();
+  assert.equal(binding.needsPermission, false);
+  assert.equal(services.length, 1);
+});
+
+test('no saved folder: nothing; choosing one saves it and starts the service; disabling stops it', async () => {
+  const { binding, deps, meta, services, host, notified } = setup(null);
+  await flush();
+  assert.equal(binding.getState().handle, null);
+  assert.equal(notified(), 0);
+  deps.picked = null;
+  await binding.choose();
+  assert.equal(services.length, 0);
+  deps.picked = handle('new');
+  await binding.choose();
+  assert.equal((meta.get('folderHandle') as FileSystemDirectoryHandle).name, 'new');
+  assert.equal(services.length, 1);
+  await binding.disable();
+  assert.equal(meta.get('folderHandle'), null);
+  assert.equal(binding.getState().sync, null);
+  assert.deepEqual(services[0].log, ['start', 'dispose']);
+  assert.equal(services[0].listeners(), 0);
+  assert.equal(host.onSettingsChanged, undefined);
+});
+
+test('a syncPermission error drops the permission and the service; every finished sync reloads the controller', async () => {
+  const { binding, services, reloads } = setup(handle('sync'));
+  await flush();
+  const service = services[0];
+  service.set({ status: 'syncing' });
+  assert.equal(reloads(), 0);
+  service.set({ status: 'written' });
+  assert.equal(reloads(), 1);
+  service.set({ status: 'error', error: 'syncPermission' });
+  assert.equal(binding.getState().permission, false);
+  assert.equal(binding.getState().sync, null);
+  assert.ok(service.log.includes('dispose'));
+  assert.equal(binding.needsPermission, true);
+});
+
+test('state is saved before the listeners hear about it', async () => {
+  const { binding, deps } = setup(null);
+  await flush();
+  const seen: (string | null)[] = [];
+  binding.subscribe(() => seen.push(binding.getState().handle?.name ?? null));
+  deps.picked = handle('x');
+  await binding.choose();
+  assert.deepEqual(seen, ['x']);
+});
+
+test('disposed: the service stops, late answers change nothing, listeners are dropped', async () => {
+  const { binding, services, deps } = setup(handle('sync'));
+  await flush();
+  binding.dispose();
+  assert.ok(services[0].log.includes('dispose'));
+  deps.picked = handle('late');
+  await binding.choose();
+  assert.equal(binding.getState().handle?.name, 'sync');
+  assert.equal(services.length, 1);
+});
+
+test('a failed read of the saved folder is reported to the controller', async () => {
+  const reports: unknown[] = [];
+  const host: SyncHost = {
+    store: { getMeta: async () => Promise.reject({ code: 'server' }), setMeta: async () => {} } as unknown as SyncHost['store'],
+    report: (error) => void reports.push(error),
+    reload: async () => {},
+  };
+  new SyncBinding(host, { hasAccess: async () => true, requestAccess: async () => true, pickFolder: async () => null, createSync: () => fakeService() });
+  await flush();
+  assert.deepEqual(reports, [{ code: 'server' }]);
+});
+```
+
+`src/elements/settings/sync.dom.test.ts` (un `SyncBinding` vero con dipendenze finte; `listBackups` resta in attesa finché il test non risponde, così si prova la risposta superata):
+
+```ts
+import '../../testing/domEnv';
+
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+import '../define';
+import type { AiSyncState } from '../../ai/aiSync';
+import { SyncBinding, type SyncService } from '../../ai/syncBinding';
+import { EN_MESSAGES } from '../../i18n/messages';
+import { createI18nStore } from '../../state/i18nStore';
+import { installDialogStub } from '../../testing/dialogStub';
+import { waitFor } from '../../testing/waitFor';
+
+installDialogStub();
+test.afterEach(() => document.body.replaceChildren());
+
+const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+function service(backups: string[][]) {
+  let state: AiSyncState = { status: 'idle', error: null, lastSync: null, conflicts: [] };
+  const listeners = new Set<() => void>();
+  const pending: ((paths: string[]) => void)[] = [];
+  const calls: string[] = [];
+  return {
+    getState: () => state,
+    subscribe: (fn: () => void) => (listeners.add(fn), () => void listeners.delete(fn)),
+    start: () => {},
+    localChanged: () => {},
+    dispose: () => {},
+    syncNow: async () => void calls.push('syncNow'),
+    /** Ogni richiesta resta in attesa finché il test non la risolve con `answer`. */
+    listBackups: () => new Promise<string[]>((resolve) => pending.push(resolve)),
+    answer: (i: number) => pending[i](backups[i]),
+    backupCounts: async () => ({ profiles: 2, presets: 3 }),
+    restore: async (path: string) => void calls.push(`restore ${path}`),
+    set(patch: Partial<AiSyncState>) {
+      state = { ...state, ...patch };
+      for (const fn of [...listeners]) fn();
+    },
+    calls,
+    requests: () => pending.length,
+  };
+}
+
+async function mount(saved: FileSystemDirectoryHandle | null, access = true) {
+  const i18n = createI18nStore({ locale: 'en', messages: EN_MESSAGES, load: async (locale) => ({ locale, messages: EN_MESSAGES }), persist() {} });
+  const meta = new Map<string, unknown>([['folderHandle', saved]]);
+  const services: ReturnType<typeof service>[] = [];
+  const reports: unknown[] = [];
+  let reloads = 0;
+  const controller = {
+    store: { getMeta: async (key: string) => meta.get(key) ?? null, setMeta: async (key: string, value: unknown) => void meta.set(key, value) },
+    report: (error: unknown) => void reports.push(error),
+    reload: async () => void reloads++,
+  };
+  const binding = new SyncBinding(controller as never, {
+    hasAccess: async () => access,
+    requestAccess: async () => true,
+    pickFolder: async () => ({ name: 'picked' }) as FileSystemDirectoryHandle,
+    createSync: () => {
+      const s = service([['a.json', 'b.json'], ['c.json']]);
+      services.push(s);
+      return s as unknown as SyncService;
+    },
+  });
+  await flush();
+  const el = document.createElement('hmd-settings-sync');
+  el.controller = controller as never;
+  el.binding = binding;
+  el.i18n = i18n;
+  document.body.append(el);
+  const button = (label: string) => [...el.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent === label);
+  return { el, binding, services, reports, reloads: () => reloads, button };
+}
+
+test('no folder: the notice and Choose only', async () => {
+  const { el } = await mount(null);
+  const detail = el.firstElementChild!;
+  assert.equal(detail.className, 'detail');
+  assert.deepEqual([...detail.children].map((c) => c.localName), ['p', 'div']);
+  assert.deepEqual([...detail.querySelectorAll('.actions > *')].map((c) => c.textContent), [EN_MESSAGES['ai.syncChoose']]);
+});
+
+test('a folder without permission: its name, Disable and Reactivate; reactivated, the details appear', async () => {
+  const { el, button } = await mount({ name: 'sync' } as FileSystemDirectoryHandle, false);
+  assert.deepEqual([...el.querySelectorAll('.actions > *')].map((c) => c.textContent), [EN_MESSAGES['ai.syncChoose'], 'sync', EN_MESSAGES['ai.syncDisable'], EN_MESSAGES['ai.syncReactivate']]);
+  button(EN_MESSAGES['ai.syncReactivate'])!.click();
+  await waitFor(() => el.querySelector('details') !== null);
+  assert.equal(button(EN_MESSAGES['ai.syncReactivate']), undefined);
+});
+
+test('with the service: status, Sync now off while syncing, and the backups asked again after every sync; a stale list is dropped', async () => {
+  const { el, services, button } = await mount({ name: 'sync' } as FileSystemDirectoryHandle);
+  const s = services[0];
+  assert.deepEqual([...el.firstElementChild!.children].map((c) => c.localName), ['p', 'div', 'p', 'div', 'details']);
+  s.set({ status: 'syncing' });
+  assert.equal(button(EN_MESSAGES['ai.syncNow'])!.disabled, true);
+  s.set({ status: 'written', lastSync: 1000 });
+  assert.equal(button(EN_MESSAGES['ai.syncNow'])!.disabled, false);
+  assert.equal(s.requests(), 2);
+  // La risposta più nuova arriva prima: quella vecchia, arrivata dopo, non la sostituisce.
+  s.answer(1);
+  await waitFor(() => el.querySelectorAll('details > p').length === 1);
+  s.answer(0);
+  await flush();
+  assert.deepEqual([...el.querySelectorAll('details > p')].map((p) => p.firstChild!.textContent), ['c.json']);
+});
+
+test('restoring a backup: the confirmation says how many profiles and presets; confirmed, it restores and reloads', async () => {
+  const { el, services, reloads } = await mount({ name: 'sync' } as FileSystemDirectoryHandle);
+  services[0].answer(0);
+  await waitFor(() => el.querySelectorAll('details > p').length === 2);
+  el.querySelector<HTMLButtonElement>('details > p button')!.click();
+  await waitFor(() => document.querySelector('dialog') !== null);
+  const dialog = document.querySelector('dialog')!;
+  assert.ok(dialog.textContent!.includes(EN_MESSAGES['ai.syncCounts'].replace('{profiles}', '2').replace('{presets}', '3')));
+  // Un secondo clic con la conferma aperta non ne apre un'altra.
+  el.querySelector<HTMLButtonElement>('details > p button')!.click();
+  await flush();
+  assert.equal(document.querySelectorAll('dialog').length, 1);
+  [...dialog.querySelectorAll('button')].find((b) => b.textContent === EN_MESSAGES['ai.restoreBackup'])!.click();
+  await waitFor(() => reloads() === 1);
+  assert.deepEqual(services[0].calls, ['restore a.json']);
+});
+```
+
+RED atteso: `Cannot find module './syncBinding'` per il primo; per il secondo lo stesso import, poi i test cadono finché il tag non è definito.
+
+- [ ] **Step 2: `SyncBinding`**
+
+`src/ai/syncBinding.ts` (lo stato si salva prima di notificare; il servizio si ricrea quando cambiano cartella o permesso; letture tardive dopo `dispose` o superate da una scelta più nuova si scartano):
+
+```ts
+import { hasAccess, pickFolder, requestAccess } from '../fs/access';
+import { fsaOps } from '../fs/fsaOps';
+import type { AiController } from './aiController';
+import { AiSync, type AiSyncState } from './aiSync';
+import type { AiStores } from './stores';
+
+/** Il servizio di sync di una cartella (AiSync), visto da chi lo collega al controller. */
+export interface SyncService {
+  getState(): AiSyncState;
+  subscribe(listener: () => void): () => void;
+  start(): void;
+  localChanged(): void;
+  dispose(): void;
+}
+
+/** Quello che la sync usa del controller AI. */
+export interface SyncHost {
+  readonly store: Pick<AiStores, 'getMeta' | 'setMeta'>;
+  onSettingsChanged?: () => void;
+  report(error: unknown): void;
+  reload(): Promise<void>;
+}
+
+/** Permessi e servizio: iniettati, così lo store si prova senza File System Access API. */
+export interface SyncBindingDeps {
+  hasAccess(handle: FileSystemDirectoryHandle): Promise<boolean>;
+  requestAccess(handle: FileSystemDirectoryHandle): Promise<boolean>;
+  pickFolder(): Promise<FileSystemDirectoryHandle | null>;
+  createSync(handle: FileSystemDirectoryHandle): SyncService;
+}
+
+export interface SyncBindingState {
+  /** Il servizio attivo: solo con una cartella e il permesso. */
+  sync: SyncService | null;
+  handle: FileSystemDirectoryHandle | null;
+  permission: boolean;
+}
+
+/**
+ * Cartella di sync della configurazione AI (era `useAiSync` di AiSyncSection.tsx): la cartella salvata nei
+ * meta del controller, il permesso, e il servizio di sync che esiste solo con entrambi. Il servizio si
+ * ricrea quando cambiano cartella o permesso; un errore `syncPermission` toglie il permesso; a ogni fine
+ * di sincronizzazione il controller ricarica profili e preset. Una sola istanza per controller, creata
+ * da `hmd-workspace` e passata alla sidebar AI (riattivazione) e alle impostazioni.
+ */
+export class SyncBinding {
+  #host: SyncHost;
+  #deps: SyncBindingDeps;
+  #state: SyncBindingState = { sync: null, handle: null, permission: false };
+  #listeners = new Set<() => void>();
+  #unsubscribe: (() => void) | null = null;
+  #disposed = false;
+
+  constructor(host: SyncHost, deps: SyncBindingDeps) {
+    this.#host = host;
+    this.#deps = deps;
+    void host.store
+      .getMeta<FileSystemDirectoryHandle>('folderHandle')
+      .then(async (handle) => {
+        if (this.#disposed || !handle) return;
+        this.#set({ handle });
+        const permission = await deps.hasAccess(handle);
+        // Una cartella scelta o tolta nel frattempo vince sulla lettura dell'avvio.
+        if (!this.#disposed && this.#state.handle === handle) this.#set({ permission });
+      })
+      .catch((error) => host.report(error));
+  }
+
+  getState = (): SyncBindingState => this.#state;
+
+  subscribe = (listener: () => void): (() => void) => {
+    this.#listeners.add(listener);
+    return () => void this.#listeners.delete(listener);
+  };
+
+  /** La cartella non ha più il permesso: la sidebar AI offre di riattivarlo. */
+  get needsPermission(): boolean {
+    return !!this.#state.handle && !this.#state.permission;
+  }
+
+  async choose(): Promise<void> {
+    const handle = await this.#deps.pickFolder();
+    if (!handle || this.#disposed) return;
+    await this.#host.store.setMeta('folderHandle', handle);
+    this.#set({ handle, permission: true });
+  }
+
+  async reactivate(): Promise<void> {
+    const handle = this.#state.handle;
+    if (!handle) return;
+    const permission = await this.#deps.requestAccess(handle);
+    if (!this.#disposed && this.#state.handle === handle) this.#set({ permission });
+  }
+
+  async disable(): Promise<void> {
+    await this.#host.store.setMeta('folderHandle', null);
+    if (!this.#disposed) this.#set({ handle: null });
+  }
+
+  dispose(): void {
+    this.#disposed = true;
+    this.#stop();
+    this.#listeners.clear();
+  }
+
+  /** Lo stato si salva prima di notificare; il servizio segue cartella e permesso. */
+  #set(patch: Partial<Omit<SyncBindingState, 'sync'>>): void {
+    const before = this.#state;
+    const next = { ...before, ...patch };
+    if (next.handle === before.handle && next.permission === before.permission) return;
+    this.#stop();
+    this.#state = { ...next, sync: null };
+    if (next.handle && next.permission) this.#start(next.handle);
+    for (const listener of [...this.#listeners]) listener();
+  }
+
+  #start(handle: FileSystemDirectoryHandle): void {
+    const host = this.#host;
+    const service = this.#deps.createSync(handle);
+    this.#state = { ...this.#state, sync: service };
+    host.onSettingsChanged = () => service.localChanged();
+    const off = service.subscribe(() => {
+      if (service.getState().error === 'syncPermission') this.#set({ permission: false });
+      if (service.getState().status !== 'syncing') void host.reload().catch((error) => host.report(error));
+    });
+    this.#unsubscribe = () => {
+      host.onSettingsChanged = undefined;
+      off();
+      service.dispose();
+    };
+    service.start();
+  }
+
+  #stop(): void {
+    this.#unsubscribe?.();
+    this.#unsubscribe = null;
+  }
+}
+
+/** La sync di un controller vero: permessi e cartella dalla File System Access API, servizio AiSync. */
+export function browserSyncBinding(controller: AiController): SyncBinding {
+  return new SyncBinding(controller, {
+    hasAccess,
+    requestAccess,
+    pickFolder,
+    createSync: (handle) => new AiSync({ store: controller.store, fs: fsaOps(handle) }),
+  });
+}
+```
+
+- [ ] **Step 3: `hmd-settings-sync`**
+
+`src/elements/settings/sync.element.ts` (i `p` dei backup sono figli diretti di `details`, dopo il `summary`, come in React: niente contenitore in più, l'audit confronta i percorsi):
+
+```ts
+import type { AiController } from '../../ai/aiController';
+import type { SyncBinding, SyncService } from '../../ai/syncBinding';
+import { HmdElement } from '../../dom/element';
+import { el, setText } from '../../dom/el';
+import { RenderLoop } from '../../dom/renderLoop';
+import type { MessageKey } from '../../i18n/messages';
+import type { I18nStore } from '../../state/i18nStore';
+import { showConfirmDialog } from '../dialogs/confirmDialog';
+import { showChildren } from './fields';
+import './sections.css';
+
+/** Quello che la sezione della sync usa del controller. */
+export type SyncController = Pick<AiController, 'report' | 'reload'>;
+/** Il servizio di sync visto dalla sezione: stato, sincronizzazione e backup. */
+export type SyncDetailsService = SyncService & Pick<import('../../ai/aiSync').AiSync, 'syncNow' | 'listBackups' | 'backupCounts' | 'restore'>;
+
+interface Parts {
+  root: HTMLDivElement;
+  notice: HTMLParagraphElement;
+  actions: HTMLDivElement;
+  choose: HTMLButtonElement;
+  folder: HTMLSpanElement;
+  disable: HTMLButtonElement;
+  reactivate: HTMLButtonElement;
+  status: HTMLParagraphElement;
+  error: HTMLParagraphElement;
+  conflicts: HTMLParagraphElement;
+  syncActions: HTMLDivElement;
+  syncNow: HTMLButtonElement;
+  backups: HTMLDetailsElement;
+  backupsSummary: HTMLElement;
+}
+
+/**
+ * Sezione della sync nelle impostazioni (era AiSyncSection.tsx): scegliere, disattivare o riattivare la
+ * cartella di sync (`SyncBinding`), e con il servizio attivo il suo stato, «Sincronizza ora» e i backup.
+ * L'elenco dei backup si chiede a ogni sincronizzazione finita; una risposta superata si scarta. Un
+ * ripristino alla volta, con la conferma che dice quanti profili e preset contiene.
+ */
+export class HmdSettingsSync extends HmdElement {
+  #controller: SyncController | null = null;
+  #binding: SyncBinding | null = null;
+  #i18n: I18nStore | null = null;
+
+  #parts: Parts | null = null;
+  /** Il servizio a cui si è iscritti e la sua iscrizione. */
+  #sync: { service: SyncService; off: () => void } | null = null;
+  #backups: string[] = [];
+  #backupNodes = new Map<string, HTMLParagraphElement>();
+  /** Chiave (servizio + ultima sync) dell'ultimo elenco chiesto, e contatore delle richieste. */
+  #backupsKey: unknown = null;
+  #request = 0;
+  #restoring = false;
+  #dialogs: AbortController | null = null;
+  #loop = new RenderLoop(this, {
+    ready: () => !!this.#parts && !!this.#controller && !!this.#binding && !!this.#i18n && this.isConnected,
+    render: () => this.#render(this.#parts!, this.#binding!, this.#i18n!),
+  });
+
+  get controller(): SyncController | null { return this.#controller; }
+  set controller(value: SyncController | null) {
+    value ??= null;
+    if (value === this.#controller) return;
+    this.#controller = value;
+    this.#loop.update();
+  }
+  get binding(): SyncBinding | null { return this.#binding; }
+  set binding(value: SyncBinding | null) {
+    value ??= null;
+    if (value === this.#binding) return;
+    this.#binding = value;
+    this.reconnect();
+  }
+  get i18n(): I18nStore | null { return this.#i18n; }
+  set i18n(value: I18nStore | null) {
+    value ??= null;
+    if (value === this.#i18n) return;
+    this.#i18n = value;
+    this.reconnect();
+  }
+
+  protected connect(signal: AbortSignal): void {
+    if (!this.#parts) {
+      const report = (error: unknown) => this.#controller?.report(error);
+      const parts: Parts = {
+        root: el('div', { class: 'detail' }),
+        notice: el('p', { class: 'help' }),
+        actions: el('div', { class: 'actions' }),
+        choose: el('button', { type: 'button', on: { click: () => void this.#binding?.choose().catch(report) } }),
+        folder: el('span'),
+        disable: el('button', { type: 'button', on: { click: () => void this.#binding?.disable().catch(report) } }),
+        reactivate: el('button', { type: 'button', on: { click: () => void this.#binding?.reactivate().catch(report) } }),
+        status: el('p', { class: 'help' }),
+        error: el('p', { class: 'help' }),
+        conflicts: el('p', { class: 'help' }),
+        syncActions: el('div', { class: 'actions' }),
+        syncNow: el('button', { type: 'button', on: { click: () => void (this.#sync?.service as SyncDetailsService | undefined)?.syncNow() } }),
+        backups: el('details'),
+        backupsSummary: el('summary'),
+      };
+      parts.syncActions.append(parts.syncNow);
+      parts.backups.append(parts.backupsSummary);
+      this.#parts = parts;
+      this.append(parts.root);
+    }
+    this.#dialogs ??= new AbortController();
+    const { binding, i18n } = { binding: this.#binding, i18n: this.#i18n };
+    if (!binding || !i18n) return;
+    this.watch(binding, () => this.#follow(binding.getState().sync), signal);
+    this.watch(i18n, () => this.#loop.update(), signal);
+  }
+
+  disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.#follow(null);
+    this.#dialogs?.abort();
+    this.#dialogs = null;
+  }
+
+  /** Iscrizione al servizio attivo (cambia con cartella e permesso): i dettagli seguono il suo stato. */
+  #follow(service: SyncService | null): void {
+    if (service !== (this.#sync?.service ?? null)) {
+      this.#sync?.off();
+      this.#sync = service ? { service, off: service.subscribe(() => this.#onSyncState()) } : null;
+      this.#backups = [];
+      this.#backupsKey = null;
+    }
+    this.#onSyncState();
+  }
+
+  /** A ogni sincronizzazione finita (e con un servizio nuovo) si richiede l'elenco dei backup. */
+  #onSyncState(): void {
+    const sync = this.#sync?.service as SyncDetailsService | undefined;
+    if (sync && this.isConnected) {
+      const key = `${sync.getState().lastSync}`;
+      if (this.#backupsKey !== key) {
+        this.#backupsKey = key;
+        const request = ++this.#request;
+        void sync
+          .listBackups()
+          .then((paths) => {
+            if (request !== this.#request || this.#sync?.service !== sync) return;
+            this.#backups = paths;
+            this.#loop.update();
+          })
+          .catch((error) => this.#controller?.report(error));
+      }
+    }
+    this.#loop.update();
+  }
+
+  #restore(path: string): void {
+    const sync = this.#sync?.service as SyncDetailsService | undefined;
+    const t = this.#i18n?.t;
+    const signal = this.#dialogs?.signal;
+    const controller = this.#controller;
+    // Una sola conferma di ripristino alla volta, anche durante backupCounts.
+    if (!sync || !t || !signal || !controller || this.#restoring) return;
+    this.#restoring = true;
+    void sync
+      .backupCounts(path)
+      .then((counts) =>
+        showConfirmDialog({
+          title: t('ai.restoreTitle'),
+          message: t('ai.syncCounts', { profiles: counts.profiles, presets: counts.presets }) + '\n' + t('ai.syncRestoreWarning'),
+          confirmLabel: t('ai.restoreBackup'),
+          t,
+          signal,
+        }),
+      )
+      .then((ok) => (ok ? sync.restore(path).then(() => controller.reload()) : undefined))
+      .catch((error) => controller.report(error))
+      .finally(() => {
+        this.#restoring = false;
+      });
+  }
+
+  #render(parts: Parts, binding: SyncBinding, i18n: I18nStore): void {
+    const t = i18n.t;
+    const { handle, permission } = binding.getState();
+    setText(parts.notice, t('ai.syncNotice'));
+    setText(parts.choose, t('ai.syncChoose'));
+    setText(parts.folder, handle?.name ?? '');
+    setText(parts.disable, t('ai.syncDisable'));
+    setText(parts.reactivate, t('ai.syncReactivate'));
+    showChildren(parts.actions, [parts.choose, ...(handle ? [parts.folder, parts.disable, ...(permission ? [] : [parts.reactivate])] : [])], [parts.folder, parts.disable, parts.reactivate]);
+    const sync = this.#sync?.service;
+    const wanted: Element[] = [parts.notice, parts.actions];
+    if (sync) {
+      const state = sync.getState();
+      setText(parts.status, `${t(`ai.syncStatus.${state.status}` as MessageKey)} ${state.lastSync ? new Date(state.lastSync).toLocaleString() : ''}`);
+      setText(parts.error, state.error ? t(`ai.error.${state.error}` as MessageKey) : '');
+      setText(parts.conflicts, `${t('ai.syncConflict')}: ${state.conflicts.join(', ')}`);
+      setText(parts.syncNow, t('ai.syncNow'));
+      parts.syncNow.disabled = state.status === 'syncing';
+      setText(parts.backupsSummary, t('ai.backups'));
+      this.#renderBackups(parts, t);
+      wanted.push(parts.status, ...(state.error ? [parts.error] : []), ...(state.conflicts.length > 0 ? [parts.conflicts] : []), parts.syncActions, parts.backups);
+    }
+    showChildren(parts.root, wanted, [parts.status, parts.error, parts.conflicts, parts.syncActions, parts.backups]);
+  }
+
+  /** Un `p` per backup, figli diretti di `details` dopo il `summary` (come in AiSyncSection.tsx), riusati per percorso. */
+  #renderBackups(parts: Parts, t: I18nStore['t']): void {
+    const nodes = new Map<string, HTMLParagraphElement>();
+    for (const path of this.#backups) {
+      const node = this.#backupNodes.get(path) ?? el('p', { class: 'help' }, path, el('button', { type: 'button', on: { click: () => this.#restore(path) } }));
+      setText(node.lastElementChild!, t('ai.restoreBackup'));
+      nodes.set(path, node);
+    }
+    showChildren(parts.backups, [parts.backupsSummary, ...nodes.values()], [...this.#backupNodes.values()]);
+    this.#backupNodes = nodes;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'hmd-settings-sync': HmdSettingsSync;
+  }
+}
+```
+
+`src/elements/define.ts`: import `HmdSettingsSync` e voce `['hmd-settings-sync', HmdSettingsSync]` dopo `hmd-settings-profiles`. `src/elements/jsx.d.ts`: `import type { SyncBinding } from '../ai/syncBinding';` e `import type { SyncController } from './settings/sync.element';`, e dopo `'hmd-settings-profiles'`:
+
+```ts
+      'hmd-settings-sync': HmdProps<{ controller: SyncController; binding: SyncBinding | null; i18n: I18nStore }>;
+```
+
+- [ ] **Step 4: I chiamanti React**
+
+`src/ui/WorkspaceView.tsx`: via `import { useAiSync } from './ai/settings/AiSyncSection';`, e:
+
+```tsx
+import { browserSyncBinding, type SyncBinding } from '../ai/syncBinding';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type PointerEvent } from 'react';
+```
+
+```tsx
+const NO_TERMS: string[] = [];
+const noSubscribe = () => () => {};
+```
+
+al posto di `const syncBinding = useAiSync(ai);`:
+
+```tsx
+  // Una sync per controller: la sidebar AI ne legge il permesso, le impostazioni la gestiscono.
+  const [syncBinding, setSyncBinding] = useState<SyncBinding | null>(null);
+  useEffect(() => {
+    if (!ai) return;
+    const binding = browserSyncBinding(ai);
+    setSyncBinding(binding);
+    return () => {
+      binding.dispose();
+      setSyncBinding(null);
+    };
+  }, [ai]);
+  const syncNeedsPermission = useSyncExternalStore(syncBinding?.subscribe ?? noSubscribe, () => !!syncBinding?.needsPermission);
+```
+
+e sulla sidebar AI `syncNeedsPermission={syncNeedsPermission}`.
+
+`src/ui/SettingsView.tsx`: `import type { SyncBinding } from '../ai/syncBinding';` al posto dell'import di `AiSyncSection`; la prop diventa `syncBinding: SyncBinding | null;`; nella sezione della sync:
+
+```tsx
+              <hmd-settings-sync controller={ai} binding={syncBinding} i18n={i18nStore} />
+```
+
+```bash
+git rm src/ui/ai/settings/AiSyncSection.tsx src/ui/ai/settings/Settings.module.css
+grep -rn "useAiSync\|AiSyncSection\|Settings.module" src; echo "uscita $?"   # atteso: uscita 1
+ls src/ui/ai/settings 2>&1                                                  # atteso: No such file or directory
+```
+
+- [ ] **Step 5: Verifica**
+
+```bash
+npx tsc --noEmit && npm test            # 1003 verdi
+npm run lint
+E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npx playwright test -c e2e/playwright.config.ts e2e/ai-composer.spec.ts e2e/settings-sections.spec.ts e2e/settings.spec.ts
+E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npx playwright test -c e2e/dev.config.ts e2e/ai-composer.spec.ts e2e/settings-sections.spec.ts e2e/settings.spec.ts
+E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npx playwright test -c e2e/audit.config.ts -g "settings|ai-sync"
+pgrep -af "vite|chrom|playwright"
+```
+
+Nel prototipo (copia React con le tre sezioni): 41 e2e verdi su questi file più `ai-model.spec.ts`, audit `settings*` e `ai-sync-reactivate` verde (al secondo giro: `start-resume` nel progetto `baseline` era caduto con «Target page… closed», la trappola nota).
+
+- [ ] **Step 6: Commit**
+
+`test:` (Step 1), `feat:` (Step 2–3), `refactor:` (Step 4). Nessun `Co-authored-by`.
