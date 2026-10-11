@@ -1,6 +1,7 @@
 import { HmdAiChatLog } from './ai/chat-log.element';
 import { HmdAiDiffPane } from './ai/diff-pane.element';
 import { HmdAiEffortChip } from './ai/effort-chip.element';
+import { HmdAiModelChip } from './ai/model-chip.element';
 import { HmdAiModelSelect } from './ai/model-select.element';
 import { HmdAiParameters } from './ai/parameters.element';
 import { HmdAiSuggestions } from './ai/suggestions.element';
@@ -28,6 +29,7 @@ const ELEMENTS: Definitions = [
   ['hmd-ai-chat-log', HmdAiChatLog],
   ['hmd-ai-diff-pane', HmdAiDiffPane],
   ['hmd-ai-effort-chip', HmdAiEffortChip],
+  ['hmd-ai-model-chip', HmdAiModelChip],
   ['hmd-ai-model-select', HmdAiModelSelect],
   ['hmd-ai-parameters', HmdAiParameters],
   ['hmd-ai-suggestions', HmdAiSuggestions],

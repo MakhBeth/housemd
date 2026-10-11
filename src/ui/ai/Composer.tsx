@@ -7,7 +7,6 @@ import { sameRange, selectionLabel, type TextRange } from '../../ai/selectionChi
 import type { SelectionScope } from '../../ai/types';
 import { useI18nStore, useT } from '../../i18n/I18nProvider';
 import { Icon } from '../Icon';
-import { ModelChip } from './ModelChip';
 import styles from './Composer.module.css';
 
 export interface ComposerHandle {
@@ -85,7 +84,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer({ co
         }}
       />
       <div className={styles.row}>
-        <ModelChip controller={controller} onManage={onManage} />
+        <hmd-ai-model-chip controller={controller} i18n={i18nStore} onhmd-ai-manage={onManage} />
         <hmd-ai-effort-chip controller={controller} i18n={i18nStore} />
         {running ? (
           <button type="button" className={`${styles.send} tooltip`} aria-label={t('ai.stop')} data-tooltip={t('ai.stop')} onClick={() => controller.stop()}>
