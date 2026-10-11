@@ -1,0 +1,77 @@
+@layer components {
+  /* Il limite inferiore lascia registro, composer e suggerimenti ai loro fogli (il registro ha anche un .file). */
+  @scope (hmd-ai-sidebar) to (hmd-ai-chat-log, hmd-ai-composer, hmd-ai-suggestions) {
+    :scope {
+      display: contents;
+    }
+
+    /* Valori copiati da AiSidebar.module.css. */
+    .sidebar {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      min-height: 0;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--c-border);
+      font-family: var(--font-pixel);
+    }
+
+    .title {
+      flex: 1;
+      margin: 0;
+      font-size: 14px;
+      font-weight: normal;
+    }
+
+    /* Nota sotto la testata: vuota non occupa spazio. */
+    .note {
+      margin: 0;
+      padding: 0 10px;
+      color: var(--c-muted);
+      font-size: 12px;
+    }
+
+    .note:not(:empty) {
+      padding-block: 6px;
+    }
+
+    .iconButton {
+      display: inline-grid;
+      place-items: center;
+      width: 30px;
+      height: 30px;
+      border: none;
+      border-radius: 6px;
+      background: none;
+      cursor: pointer;
+    }
+
+    .iconButton:hover {
+      background: var(--c-accent-soft);
+    }
+
+    .file {
+      display: block;
+      width: 100%;
+      margin: 8px 0;
+      padding: 2px 0;
+      border: none;
+      border-top: 1px solid var(--c-border);
+      background: none;
+      color: var(--c-muted);
+      font-size: 12px;
+      text-align: start;
+      cursor: pointer;
+    }
+
+    .bottom {
+      padding: 10px;
+    }
+  }
+}

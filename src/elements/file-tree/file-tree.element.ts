@@ -2,6 +2,7 @@ import { HmdElement } from '../../dom/element';
 import { el, setText, toggleAttr } from '../../dom/el';
 import { icon } from '../../dom/icon';
 import { reconcileList } from '../../dom/list';
+import { RenderLoop } from '../../dom/renderLoop';
 import { isImage } from '../../lib/paths';
 import type { I18nStore } from '../../state/i18nStore';
 import { ICONS } from '../../ui/icons';
@@ -69,8 +70,17 @@ export class HmdFileTree extends HmdElement {
   #focused: string | null = null;
   #menuNode: TreeNode | null = null;
   #anchor: HTMLElement | null = null;
-  #rendering = false;
-  #again = false;
+  #loop = new RenderLoop(this, {
+    ready: () => !!this.#parts && !!this.#i18n && this.isConnected,
+    render: () => this.#render(this.#parts!, this.#i18n!),
+    focusScope: () => this.#parts?.nav ?? null,
+    // La riga con il focus è sparita (file eliminato o rinominato): il focus va sulla riga col tab stop
+    // (il suo focusin ricalcola i tab stop).
+    refocus: () => {
+      const stop = tabStop(this.#items, this.#focused, this.#openPath);
+      if (stop !== null) this.#focusables.get(stop)?.focus();
+    },
+  });
 
   get nodes(): readonly TreeNode[] { return this.#nodes; }
   set nodes(value: readonly TreeNode[]) {
@@ -117,32 +127,9 @@ export class HmdFileTree extends HmdElement {
     if (i18n) this.watch(i18n, () => this.#update(), signal);
   }
 
+  /** Un render alla volta (RenderLoop): la riga col tab stop può esistere solo nell'albero finale. */
   #update(): void {
-    if (!this.#parts || !this.#i18n || !this.isConnected) return;
-    if (this.#rendering) {
-      this.#again = true;
-      return;
-    }
-    const { nav } = this.#parts;
-    // Il focus si guarda prima della prima passata e si recupera dopo l'ultima: la riga col tab stop può
-    // esistere solo nell'albero finale, e dopo la passata che l'ha tolto il focus è già sul body.
-    const hadFocus = nav.contains(document.activeElement);
-    this.#rendering = true;
-    try {
-      // Un listener sincrono può aver tolto lo store o staccato l'elemento: nessuna passata senza.
-      do {
-        this.#again = false;
-        this.#render(this.#parts, this.#i18n);
-      } while (this.#again && this.#parts && this.#i18n && this.isConnected);
-    } finally {
-      this.#rendering = false;
-    }
-    // La riga con il focus è sparita (file eliminato o rinominato): il focus va sulla riga col tab stop
-    // (il suo focusin ricalcola i tab stop).
-    if (hadFocus && this.isConnected && !nav.contains(document.activeElement)) {
-      const stop = tabStop(this.#items, this.#focused, this.#openPath);
-      if (stop !== null) this.#focusables.get(stop)?.focus();
-    }
+    this.#loop.update();
   }
 
   #render(parts: Parts, i18n: I18nStore): void {
@@ -289,7 +276,7 @@ export class HmdFileTree extends HmdElement {
     if (!row || !this.contains(row)) return;
     this.#focused = row.dataset.treeItem!;
     // Durante un render il tab stop si ricalcola alla fine: qui niente.
-    if (!this.#rendering) this.#applyTabStops();
+    if (!this.#loop.rendering) this.#applyTabStops();
   }
 
   #toggle(path: string, open: boolean): void {

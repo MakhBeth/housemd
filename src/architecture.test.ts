@@ -38,6 +38,13 @@ const FSA_ALLOWED = new Set(['fs/fsaOps.ts', 'fs/access.ts']);
 const NETWORK = /\bfetch\b|\bXMLHttpRequest\b|\bEventSource\b|\bWebSocket\b|\bsendBeacon\b|['"]@anthropic-ai\/sdk['"]/;
 const NETWORK_ALLOWED = (path: string) => path.startsWith('ai/providers/');
 
+/**
+ * Elementi (spec WC §10 R21): la rete passa solo dal controller AI (`controller.provider(...)`), mai da un
+ * modulo di src/ai/providers importato direttamente; le chiavi non passano mai di lì (né lettura né scrittura).
+ */
+const ELEMENT_AI = /\bfrom\s+['"][^'"]*\/ai\/providers(?:\/[^'"]*)?['"]|\bimport\(\s*['"][^'"]*\/ai\/providers|\b(?:getSecret|setSecret|saveSecret|deleteSecret)\s*\(|['"]aiSecrets['"]|\.secret\s*\(/;
+const ELEMENT_AI_ALLOWED = (path: string) => !path.startsWith('elements/');
+
 /** Custom element: un solo punto di registrazione (spec WC §8.3), così l'ordine di definizione è uno. */
 const DEFINE = /\bcustomElements\.define\s*\(/;
 const DEFINE_ALLOWED = new Set(['elements/define.ts']);
@@ -69,6 +76,10 @@ test('only src/ai/providers/ makes network requests', () => {
   assert.deepEqual(offenders(NETWORK, NETWORK_ALLOWED), []);
 });
 
+test('elements reach the AI providers only through the controller and never touch the keys', () => {
+  assert.deepEqual(offenders(ELEMENT_AI, ELEMENT_AI_ALLOWED), []);
+});
+
 test('customElements.define appears only in elements/define.ts', () => {
   assert.deepEqual(offenders(DEFINE, inSet(DEFINE_ALLOWED)), []);
 });
@@ -96,6 +107,12 @@ test('the patterns fire on what they must and ignore what they must', () => {
   for (const ok of ['prefetch()', 'fetchedAt: number', "import type { X } from './sdk'"]) {
     assert.ok(!NETWORK.test(ok), ok);
   }
+  for (const bad of ["import { createProvider } from '../../ai/providers';", "import { x } from '../../ai/providers/anthropic';", "await import('../../ai/providers/index')", 'controller.secret(profile)', 'store.getSecret(id)', "tx.objectStore('aiSecrets')"]) {
+    assert.ok(ELEMENT_AI.test(bad), bad);
+  }
+  for (const ok of ["import type { AiController } from '../../ai/aiController';", 'controller.provider(profile)', '// la rete passa da src/ai/providers', 'profile.secretId']) {
+    assert.ok(!ELEMENT_AI.test(ok), ok);
+  }
   assert.ok(DEFINE.test("customElements.define('hmd-file-tree', HmdFileTree)"));
   assert.ok(!DEFINE.test("customElements.get('hmd-file-tree')"));
   for (const bad of ['dialog.showModal()', '<dialog ref={ref}>', "document.createElement('dialog')", "el('dialog', { class: 'x' })"]) {
@@ -118,12 +135,15 @@ test('offending files are reported by path and allowed files are not (synthetic 
     { path: 'elements/define.ts', source: "customElements.define('hmd-x', X);" },
     { path: 'ui/Probe.tsx', source: 'ref.current?.showModal();' },
     { path: 'elements/dialogs/modal.ts', source: 'dialog.showModal();' },
+    { path: 'elements/ai/probe.element.ts', source: "import { createProvider } from '../../ai/providers';" },
+    { path: 'ui/ai/settings/AiProfilesSection.tsx', source: 'controller.setSecret(draft, key, remember)' },
   ];
   assert.deepEqual(offenders(UNSAFE_DOM, inSet(UNSAFE_DOM_ALLOWED), probes), ['ui/Icon.tsx']);
   assert.deepEqual(offenders(FSA, inSet(FSA_ALLOWED), probes), ['workspace/probe.ts']);
   assert.deepEqual(offenders(NETWORK, NETWORK_ALLOWED, probes), ['ai/aiController.ts']);
   assert.deepEqual(offenders(DEFINE, inSet(DEFINE_ALLOWED), probes), ['dom/element.ts']);
   assert.deepEqual(offenders(DIALOG, DIALOG_ALLOWED, probes), ['ui/Probe.tsx']);
+  assert.deepEqual(offenders(ELEMENT_AI, ELEMENT_AI_ALLOWED, probes), ['elements/ai/probe.element.ts']);
 });
 
 interface Block {

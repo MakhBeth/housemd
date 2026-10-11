@@ -9,7 +9,6 @@ import type { ModelProfile, ProviderKind } from '../../../ai/types';
 import { useI18nStore, useT } from '../../../i18n/I18nProvider';
 import type { MessageKey } from '../../../i18n/messages';
 import { useUnmountSignal } from '../../useUnmountSignal';
-import { ModelSelect } from '../ModelSelect';
 import { ItemList, useDraft } from './ItemList';
 import styles from './Settings.module.css';
 
@@ -82,7 +81,12 @@ export function AiProfilesSection({ controller, onDirty }: { controller: AiContr
             <input type="url" disabled={draft.kind === 'anthropic'} value={draft.baseUrl} onChange={(e) => setDraft({ ...draft, baseUrl: e.target.value })} />
           </label>
           <p className={styles.help}>{t(`ai.help.${draft.kind}` as MessageKey)}</p>
-          <ModelSelect controller={controller} profile={draft} onChange={(selection) => setDraft({ ...draft, ...selection })} />
+          <hmd-ai-model-select
+            controller={controller}
+            profile={draft}
+            i18n={i18nStore}
+            onhmd-ai-model-change={(event) => setDraft({ ...draft, ...event.detail.selection })}
+          />
           <hmd-ai-parameters profile={draft} value={draft.params} i18n={i18nStore} onhmd-params-change={(event) => setDraft({ ...draft, params: event.detail.params })} />
           <label>
             <span>{t('ai.contextTokens')}</span>

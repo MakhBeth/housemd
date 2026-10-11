@@ -1,0 +1,101 @@
+@layer components {
+  /* Il limite inferiore lascia selettore del modello e parametri ai loro fogli. */
+  @scope (hmd-ai-model-chip) to (hmd-ai-model-select, hmd-ai-parameters) {
+    :scope {
+      display: contents;
+    }
+
+    /*
+     * Valori copiati da Composer.module.css (.chip, .chipAnchor, .popover, .popoverSection, .popoverNote,
+     * .popoverActions, .link). Le regole per `label > span` e i campi di .popoverSection stanno nei fogli
+     * del selettore del modello e dei parametri: qui le righe sono solo radio.
+     */
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      max-width: 100%;
+      min-width: 0;
+      padding: 3px 8px;
+      border: 1px solid transparent;
+      border-radius: 999px;
+      background: none;
+      color: var(--c-muted);
+      font: 13px/1.3 var(--font-ui);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      cursor: pointer;
+    }
+
+    .chip:hover {
+      background: var(--c-accent-soft);
+      color: var(--c-text);
+    }
+
+    /* Il bottone porta `.tooltip` (che usa anchor-name per il tooltip): l'ancora del popover sta sul wrapper. */
+    .chipAnchor {
+      anchor-name: --ai-model-chip;
+      min-width: 0;
+    }
+
+    .popover {
+      position-anchor: --ai-model-chip;
+      position-area: block-start span-inline-end;
+      position-try-fallbacks: flip-block;
+      margin: 0 0 6px;
+      width: min(22rem, 90vw);
+      max-height: 70vh;
+      overflow: auto;
+      padding: 12px;
+      border: 1px solid var(--c-border);
+      border-radius: 10px;
+      background: var(--c-surface);
+      color: var(--c-text);
+      box-shadow: 0 4px 20px rgb(0 0 0 / 0.2);
+    }
+
+    .popoverSection {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin: 0 0 10px;
+      padding: 0;
+      border: none;
+    }
+
+    .popoverSection legend {
+      margin-bottom: 4px;
+      color: var(--c-muted);
+      font-size: 12px;
+    }
+
+    .popoverSection label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .popoverNote {
+      margin: 0 0 10px;
+      color: var(--c-muted);
+      font-size: 12px;
+    }
+
+    .popoverActions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .link {
+      align-self: flex-start;
+      padding: 0;
+      border: none;
+      background: none;
+      color: var(--c-accent);
+      font-size: 13px;
+      cursor: pointer;
+    }
+  }
+}

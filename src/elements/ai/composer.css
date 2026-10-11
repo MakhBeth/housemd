@@ -1,0 +1,94 @@
+@layer components {
+  /* Il limite inferiore lascia i due chip ai loro fogli. */
+  @scope (hmd-ai-composer) to (hmd-ai-model-chip, hmd-ai-effort-chip) {
+    :scope {
+      display: contents;
+    }
+
+    /*
+     * Valori copiati da Composer.module.css (.composer, .input, .row, .send, .selection, .selectionClose),
+     * tranne `.send:disabled`: Invia non si disattiva più (decisione 4).
+     */
+    .composer {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 10px;
+      border: 1px solid var(--c-border);
+      border-radius: 14px;
+      background: var(--c-surface);
+    }
+
+    .composer:focus-within {
+      border-color: var(--c-accent);
+    }
+
+    .input {
+      field-sizing: content;
+      min-height: 2lh;
+      max-height: 10lh;
+      resize: none;
+      border: none;
+      outline: none;
+      background: none;
+      color: var(--c-text);
+      font: inherit;
+    }
+
+    .row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .row > :last-child {
+      margin-inline-start: auto;
+    }
+
+    .send {
+      display: inline-grid;
+      place-items: center;
+      width: 30px;
+      height: 30px;
+      border: none;
+      border-radius: 50%;
+      background: var(--c-accent);
+      color: light-dark(#fff, #042f2e);
+      cursor: pointer;
+    }
+
+    .selection {
+      display: inline-flex;
+      align-self: flex-start;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 4px 2px 8px;
+      border-radius: 999px;
+      background: var(--c-accent-soft);
+      font-size: 12px;
+    }
+
+    /* Nota sotto il composer: vuota non occupa spazio. */
+    .note {
+      margin: 0;
+      color: var(--c-muted);
+      font-size: 12px;
+    }
+
+    .note:not(:empty) {
+      margin-top: 6px;
+    }
+
+    .selectionClose {
+      display: inline-grid;
+      place-items: center;
+      width: 18px;
+      height: 18px;
+      border: none;
+      border-radius: 50%;
+      background: none;
+      cursor: pointer;
+    }
+  }
+}
