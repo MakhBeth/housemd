@@ -15,10 +15,10 @@ import type { SettingsSection } from '../lib/route';
 import type { HmdEditor } from '../elements/editor/editor.element';
 import type { HmdPreview } from '../elements/preview/preview.element';
 import type { HmdSearchPanel } from '../elements/search-panel/search-panel.element';
-import { getThemeStore, useTheme } from '../theme/useTheme';
+import type { HmdSettings } from '../elements/settings/settings.element';
+import { getThemeStore } from '../theme/useTheme';
 import type { Workspace } from '../workspace/workspace';
 import { Icon } from './Icon';
-import { SettingsView } from './SettingsView';
 import { useRoute } from './useRoute';
 import { shortcutFor } from './shortcuts';
 import type { ToastItem } from '../elements/toasts/toasts.element';
@@ -83,18 +83,13 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
   const [sidebarWidth, setSidebarWidth] = useState(() => clampWidth('sidebar', readPref('sidebarWidth')));
   const dialogSignal = useUnmountSignal();
   const [highlight, setHighlight] = useState<string[]>(NO_TERMS);
-  const [theme, setTheme] = useTheme();
   const [textWidth, setTextWidth] = useState(() => readValidPref('textWidth', parseTextWidth));
   useEffect(() => {
     const root = document.documentElement.style;
     for (const [name, value] of Object.entries(textWidthVars(textWidth))) root.setProperty(name, value);
   }, [textWidth]);
-  const settingsDirty = useRef(false);
-  const [closeRequest, setCloseRequest] = useState(0);
-  const { route, navigate } = useRoute({ canLeave: () => !settingsDirty.current, onBlocked: () => setCloseRequest((n) => n + 1) });
-  const onSettingsDirty = useCallback((dirty: boolean) => {
-    settingsDirty.current = dirty;
-  }, []);
+  const settingsRef = useRef<HmdSettings>(null);
+  const { route, navigate } = useRoute({ canLeave: () => !settingsRef.current?.dirty, onBlocked: () => settingsRef.current?.requestClose() });
   const settingsOpen = route.view === 'settings';
   // Titolo della scheda; smontando (ritorno alla schermata iniziale) torna il nome dell'app.
   useEffect(() => {
@@ -596,27 +591,26 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
     </div>
 
       {settingsOpen && (
-        <SettingsView
+        <hmd-settings
+          ref={settingsRef}
           section={route.section}
-          onSection={(section) => navigate({ view: 'settings', section })}
-          onClose={() => navigate({ view: 'workspace' })}
-          onDirtyChange={onSettingsDirty}
-          closeRequest={closeRequest}
           ai={ai}
           syncBinding={syncBinding}
-          theme={theme}
-          onTheme={setTheme}
+          theme={getThemeStore()}
           autosave={state.autosave}
-          onAutosave={(next) => {
-            writePref('autosave', next);
-            workspace.setAutosave(next);
-          }}
           textWidth={textWidth}
-          onTextWidth={(next) => {
-            writePref('textWidth', next);
-            setTextWidth(next);
+          i18n={i18nStore}
+          onhmd-settings-section={(event) => navigate({ view: 'settings', section: event.detail.section })}
+          onhmd-settings-close={() => navigate({ view: 'workspace' })}
+          onhmd-settings-autosave={(event) => {
+            writePref('autosave', event.detail.autosave);
+            workspace.setAutosave(event.detail.autosave);
           }}
-          onSaveAll={() => void workspace.saveAll()}
+          onhmd-settings-text-width={(event) => {
+            writePref('textWidth', event.detail.textWidth);
+            setTextWidth(event.detail.textWidth);
+          }}
+          onhmd-settings-save-all={() => void workspace.saveAll()}
         />
       )}
 
