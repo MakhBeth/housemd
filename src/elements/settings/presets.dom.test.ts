@@ -46,7 +46,7 @@ const type = (input: HTMLInputElement, value: string) => {
   input.dispatchEvent(new Event('input', { bubbles: true }));
 };
 
-test('the same DOM as AiPresetsSection.tsx: a split with the sorted list and + Create, no detail until one is opened', () => {
+test('the same DOM as the React section: a split with the sorted list and + Create, no detail until one is opened', () => {
   const { el, items } = mount();
   const split = el.firstElementChild!;
   assert.equal(split.className, 'split');

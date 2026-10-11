@@ -26,7 +26,7 @@ const SECRET_KINDS: readonly ProviderKind[] = ['anthropic', 'openai-compatible']
 interface Detail {
   root: HTMLDivElement;
   captions: Record<'name' | 'provider' | 'url' | 'contextTokens' | 'secret', HTMLSpanElement>;
-  /** Campi sempre presenti, nell'ordine di AiProfilesSection.tsx. */
+  /** Campi sempre presenti, nell'ordine della vecchia sezione React. */
   fixed: HTMLLabelElement[];
   name: HTMLInputElement;
   provider: HTMLSelectElement;
@@ -56,7 +56,7 @@ interface Detail {
 }
 
 /**
- * Sezione dei profili nelle impostazioni (era AiProfilesSection.tsx): elenco con «+ Crea» e dettaglio della
+ * Sezione dei profili nelle impostazioni (era la sezione React): elenco con «+ Crea» e dettaglio della
  * bozza con provider, indirizzo, modello (`hmd-ai-model-select`), parametri (`hmd-ai-parameters`), contesto,
  * effort, chiave e azioni. La chiave scritta resta nel campo password e va al controller solo con «Salva
  * chiave»: l'unica eccezione alla regola «gli elementi non toccano le chiavi» (architecture.test.ts).

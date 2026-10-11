@@ -10,8 +10,6 @@ import { formatRoute, type SettingsSection } from '../lib/route';
 import { clampTextWidth, MAX_TEXT_WIDTH, MIN_TEXT_WIDTH, TEXT_WIDTH_PANES, type TextWidth, type TextWidthPane } from '../lib/textWidth';
 import { THEME_PREFS, type ThemePref } from '../theme/theme';
 import { AUTOSAVE_MODES, clampDelay, MAX_DELAY_MS, MIN_DELAY_MS, type AutosaveSettings } from '../workspace/autosave';
-import { AiPresetsSection } from './ai/settings/AiPresetsSection';
-import { AiProfilesSection } from './ai/settings/AiProfilesSection';
 import { AiSyncSection, type SyncBinding } from './ai/settings/AiSyncSection';
 import dialog from './Dialog.module.css';
 import { Icon } from './Icon';
@@ -45,7 +43,7 @@ const LABELS: Record<SettingsSection, MessageKey> = {
 };
 
 export function SettingsView({ section, onSection, onClose, onDirtyChange, closeRequest, ai, syncBinding, theme, onTheme, autosave, onAutosave, textWidth, onTextWidth, onSaveAll }: Props) {
-  const { t, locale, setLocale } = useI18n();
+  const { t, locale, setLocale, store: i18nStore } = useI18n();
   const [delay, setDelay] = useState(String(autosave.delayMs));
   // Campo vuoto = nessun limite.
   const widthText = (pane: TextWidthPane) => String(textWidth[pane] ?? '');
@@ -67,7 +65,7 @@ export function SettingsView({ section, onSection, onClose, onDirtyChange, close
       return next;
     });
 
-  // Callback stabili: useDraft le mette nelle dipendenze dei suoi effetti.
+  // Callback stabili: restano le stesse tra un render e l'altro.
   const profilesDirty = useCallback(markDirty('ai-profiles'), []);
   const presetsDirty = useCallback(markDirty('ai-presets'), []);
 
@@ -248,11 +246,11 @@ export function SettingsView({ section, onSection, onClose, onDirtyChange, close
           <>
             <section id="settings-ai-profiles" className={styles.section}>
               <h2>{t('settings.aiProfiles')}</h2>
-              <AiProfilesSection controller={ai} onDirty={profilesDirty} />
+              <hmd-settings-profiles controller={ai} i18n={i18nStore} onhmd-settings-dirty={(event) => profilesDirty(event.detail.dirty)} />
             </section>
             <section id="settings-ai-presets" className={styles.section}>
               <h2>{t('settings.aiPresets')}</h2>
-              <AiPresetsSection controller={ai} onDirty={presetsDirty} />
+              <hmd-settings-presets controller={ai} i18n={i18nStore} onhmd-settings-dirty={(event) => presetsDirty(event.detail.dirty)} />
             </section>
             <section id="settings-ai-sync" className={styles.section}>
               <h2>{t('settings.aiSync')}</h2>

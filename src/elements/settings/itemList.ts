@@ -16,7 +16,7 @@ const lists = new WeakMap<Element, ItemListOptions<never>>();
 const rows = new WeakMap<Element, unknown>();
 
 /**
- * Elenco di profili o preset con «+ Crea» in fondo (era ItemList.tsx): un pulsante per voce, la voce aperta
+ * Elenco di profili o preset con «+ Crea» in fondo (era il componente React): un pulsante per voce, la voce aperta
  * con `aria-current`. I pulsanti si riusano per id, così il focus resta su quello premuto.
  */
 export function renderItemList<T extends { id: string }>(list: HTMLDivElement, items: readonly T[], options: ItemListOptions<T>): void {

@@ -40,7 +40,7 @@ interface Detail {
 }
 
 /**
- * Sezione dei preset nelle impostazioni (era AiPresetsSection.tsx): elenco ordinato con «+ Crea», dettaglio
+ * Sezione dei preset nelle impostazioni (era la sezione React): elenco ordinato con «+ Crea», dettaglio
  * della bozza aperta. Passare a un altro preset con modifiche aperte chiede conferma; eliminare chiede
  * conferma. Verso fuori manda solo `hmd-settings-dirty` quando la bozza diventa (o smette di essere) da
  * salvare; i dialog aperti da qui si chiudono al distacco.
