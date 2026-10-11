@@ -26,7 +26,7 @@ function mount() {
     createI18nStore({
       locale: 'en',
       messages: EN_MESSAGES,
-      load: async (locale) => ({ locale, messages: { ...EN_MESSAGES, 'ai.title': 'IA', 'ai.newChat': 'NUOVA' } }),
+      load: async (locale) => ({ locale, messages: { ...EN_MESSAGES, 'ai.title': 'IA', 'ai.newChat': 'NUOVA', 'ai.newChat.alreadyEmpty': 'VUOTA' } }),
       persist() {},
     }),
   );
@@ -42,14 +42,17 @@ function mount() {
   let reactivate = 0;
   el.addEventListener('hmd-ai-sync-reactivate', () => reactivate++);
   const newChat = () => el.querySelector<HTMLButtonElement>('.header button')!;
-  return { el, ai, i18n, listeners, newChat, reactivations: () => reactivate };
+  const note = () => el.querySelector<HTMLElement>(':scope > div > [role="status"]')!;
+  return { el, ai, i18n, listeners, newChat, note, reactivations: () => reactivate };
 }
 
-test('the same DOM as AiSidebar.tsx: header, chat log, bottom with composer and suggestions', () => {
-  const { el, newChat } = mount();
+test('the same DOM as AiSidebar.tsx: header, the empty status note, chat log, bottom with composer and suggestions', () => {
+  const { el, newChat, note } = mount();
   const root = el.firstElementChild!;
   assert.equal(root.className, 'sidebar');
-  assert.deepEqual([...root.children].map((c) => c.localName), ['div', 'hmd-ai-chat-log', 'div']);
+  assert.deepEqual([...root.children].map((c) => c.localName), ['div', 'p', 'hmd-ai-chat-log', 'div']);
+  assert.equal(note().className, 'note');
+  assert.equal(note().textContent, '');
   const header = root.firstElementChild!;
   assert.equal(header.className, 'header');
   assert.equal(header.querySelector('h2')!.className, 'title');
@@ -75,15 +78,22 @@ test('inputs reach the children: messages to the log, text, selection and contro
   assert.deepEqual(el.querySelector('hmd-ai-chat-log')!.messages, [MESSAGE]);
 });
 
-test('New chat: disabled with an empty chat and nothing running, otherwise it starts a new chat', () => {
-  const { ai, newChat } = mount();
-  assert.equal(newChat().disabled, true);
-  ai.set({ running: { messageId: 'm', path: 'a.md', startedAt: 0 } } as Partial<AiState>);
+test('New chat is never disabled: with an empty chat and nothing running it says so and keeps the focus', () => {
+  const { ai, newChat, note } = mount();
   assert.equal(newChat().disabled, false);
-  ai.set({ running: null, chat: { id: 'c', messages: [MESSAGE], overrides: {} } } as Partial<AiState>);
-  assert.equal(newChat().disabled, false);
+  newChat().focus();
   newChat().click();
-  assert.deepEqual(ai.calls, [['newChat']]);
+  assert.deepEqual(ai.calls, []);
+  assert.equal(note().textContent, EN_MESSAGES['ai.newChat.alreadyEmpty']);
+  assert.equal(document.activeElement, newChat());
+  // Qualcosa nella chat (o in corso) toglie la nota; Nuova chat allora la svuota davvero.
+  ai.set({ running: { messageId: 'm', path: 'a.md', startedAt: 0 } } as Partial<AiState>);
+  assert.equal(note().textContent, '');
+  newChat().click();
+  ai.set({ running: null, chat: { id: 'c', messages: [MESSAGE], overrides: {} } } as Partial<AiState>);
+  newChat().click();
+  assert.deepEqual(ai.calls, [['newChat'], ['newChat']]);
+  assert.equal(note().textContent, '');
 });
 
 test('the chat log opens a file and retries through the controller', () => {
@@ -117,9 +127,11 @@ test('the sync button: only when the permission is missing, first in the bottom;
   assert.equal(el.querySelector('button.file'), null);
 });
 
-test('language change relabels; detached, no listener left', async () => {
-  const { el, ai, i18n, listeners, newChat } = mount();
+test('language change relabels, the note too; detached, no listener left', async () => {
+  const { el, ai, i18n, listeners, newChat, note } = mount();
+  newChat().click();
   await i18n.setLocale('it');
+  assert.equal(note().textContent, 'VUOTA');
   assert.equal(el.querySelector('h2')!.textContent, 'IA');
   assert.equal(newChat().getAttribute('aria-label'), 'NUOVA');
   el.remove();

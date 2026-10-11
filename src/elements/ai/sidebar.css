@@ -29,6 +29,18 @@
       font-weight: normal;
     }
 
+    /* Nota sotto la testata: vuota non occupa spazio. */
+    .note {
+      margin: 0;
+      padding: 0 10px;
+      color: var(--c-muted);
+      font-size: 12px;
+    }
+
+    .note:not(:empty) {
+      padding-block: 6px;
+    }
+
     .iconButton {
       display: inline-grid;
       place-items: center;

@@ -314,6 +314,18 @@ const STATES: State[] = [
     },
   },
   {
+    name: 'ai-sidebar-note',
+    async setup(app, page) {
+      await app.openFolder({ 'a.md': 'Alpha' });
+      await app.openFile('a.md');
+      await expect(app.mode('mode.ai')).toBeVisible();
+      await app.mode('mode.ai').click();
+      // Nuova chat con la chat vuota: il pulsante resta attivo e la nota sotto la testata lo dice (decisione 4).
+      await page.getByRole('button', { name: app.t('ai.newChat') }).click();
+      await expect(page.getByRole('status').filter({ hasText: app.t('ai.newChat.alreadyEmpty') })).toBeVisible();
+    },
+  },
+  {
     name: 'model-chip-hover',
     keepMouse: true,
     async setup(app, page) {

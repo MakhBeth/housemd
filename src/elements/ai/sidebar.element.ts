@@ -20,6 +20,8 @@ interface Parts {
   root: HTMLDivElement;
   title: HTMLHeadingElement;
   newChat: HTMLButtonElement;
+  /** Nota sotto la testata (`role="status"`): perché Nuova chat non ha fatto nulla. Vuota di norma. */
+  note: HTMLParagraphElement;
   log: HmdAiChatLog;
   bottom: HTMLDivElement;
   /** «⚠ Riattiva il permesso di sync», solo quando la cartella di sync non ha il permesso. */
@@ -32,7 +34,8 @@ interface Parts {
  * Sidebar della modalità AI (era AiSidebar.tsx): testata con «Nuova chat», registro della chat, composer
  * e suggerimenti (che inviano il preset con `sendPreset` del composer). Aprire un file e riprovare un
  * messaggio passano dal controller come prima; verso fuori manda solo `hmd-ai-sync-reactivate` (e lascia
- * salire `hmd-ai-manage` dal chip del modello).
+ * salire `hmd-ai-manage` dal chip del modello). Nuova chat non si disattiva mai: con la chat già vuota
+ * la nota sotto la testata lo dice, finché nella chat non arriva qualcosa.
  */
 export class HmdAiSidebar extends HmdElement {
   #controller: SidebarController | null = null;
@@ -43,6 +46,8 @@ export class HmdAiSidebar extends HmdElement {
   #i18n: I18nStore | null = null;
 
   #parts: Parts | null = null;
+  /** La nota «la chat è già vuota» è visibile. */
+  #note = false;
   // Nessun recupero del focus qui: il registro e il composer hanno il loro (come con React).
   #loop = new RenderLoop(this, {
     ready: () => !!this.#parts && !!this.#controller && !!this.#i18n && this.isConnected,
@@ -93,7 +98,8 @@ export class HmdAiSidebar extends HmdElement {
       const parts: Parts = {
         root: el('div', { class: 'sidebar' }),
         title: el('h2', { class: 'title' }),
-        newChat: el('button', { type: 'button', class: 'iconButton tooltip', on: { click: () => this.#controller?.newChat() } }, icon('newFile')),
+        newChat: el('button', { type: 'button', class: 'iconButton tooltip', on: { click: () => this.#onNewChat() } }, icon('newFile')),
+        note: el('p', { class: 'note', role: 'status' }),
         log: el('hmd-ai-chat-log', {
           on: {
             'hmd-ai-open-file': (event) => void this.#controller?.workspace.openFile(event.detail.path),
@@ -109,7 +115,7 @@ export class HmdAiSidebar extends HmdElement {
       // Le proprietà dei figli prima dell'inserimento, come fa React con i tag hmd-*.
       this.#passDown();
       parts.bottom.append(parts.composer, parts.suggestions);
-      parts.root.append(el('div', { class: 'header' }, parts.title, parts.newChat), parts.log, parts.bottom);
+      parts.root.append(el('div', { class: 'header' }, parts.title, parts.newChat), parts.note, parts.log, parts.bottom);
       this.append(parts.root);
     }
     const { controller, i18n } = { controller: this.#controller, i18n: this.#i18n };
@@ -132,14 +138,25 @@ export class HmdAiSidebar extends HmdElement {
     parts.suggestions.i18n = this.#i18n;
   }
 
+  #onNewChat(): void {
+    const controller = this.#controller;
+    if (!controller) return;
+    const state = controller.getState();
+    // Mai disattivato (decisione 4): con la chat vuota e niente in corso, la nota dice perché non succede nulla.
+    this.#note = state.chat.messages.length === 0 && !state.running;
+    if (!this.#note) controller.newChat();
+    this.#loop.update();
+  }
+
   #render(parts: Parts, controller: SidebarController, i18n: I18nStore): void {
     const t = i18n.t;
     const state = controller.getState();
     setText(parts.title, t('ai.title'));
     toggleAttr(parts.newChat, 'aria-label', true, t('ai.newChat'));
     toggleAttr(parts.newChat, 'data-tooltip', true, t('ai.newChat'));
-    const empty = state.chat.messages.length === 0 && !state.running;
-    if (parts.newChat.disabled !== empty) parts.newChat.disabled = empty;
+    // Qualcosa nella chat (o in corso) toglie la nota.
+    if (state.chat.messages.length > 0 || state.running) this.#note = false;
+    setText(parts.note, this.#note ? t('ai.newChat.alreadyEmpty') : '');
     // Il setter del registro non confronta: assegnare a ogni passata riconcilierebbe tutto il registro a ogni notifica.
     if (parts.log.messages !== state.chat.messages) parts.log.messages = state.chat.messages;
     if (this.#syncNeedsPermission) {

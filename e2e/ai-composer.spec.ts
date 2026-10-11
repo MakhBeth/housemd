@@ -9,7 +9,6 @@ const newChat = (app: App) => app.page.getByRole('button', { name: app.t('ai.new
 const log = (app: App) => app.page.getByRole('log');
 const acceptAll = (app: App) => app.page.getByRole('button', { name: app.t('ai.acceptAll'), exact: true });
 const chip = (app: App) => app.page.getByRole('button', { name: new RegExp(`^${app.t('ai.profile')}: `) });
-const focusOnBody = (app: App) => app.page.evaluate(() => document.activeElement === document.body);
 
 async function enterAi(app: App): Promise<void> {
   await expect(app.mode('mode.ai')).toBeVisible();
@@ -151,7 +150,8 @@ test.describe('composer', () => {
     const box = page.getByRole('textbox', { name: it('ai.request') });
     await expect(box).toHaveAttribute('placeholder', it('ai.request'));
     await expect(page.getByRole('heading', { name: it('ai.title') })).toBeVisible();
-    await expect(page.getByRole('button', { name: it('ai.newChat') })).toBeDisabled();
+    await page.getByRole('button', { name: it('ai.newChat') }).click();
+    await expect(page.getByRole('status').filter({ hasText: it('ai.newChat.alreadyEmpty') })).toBeVisible();
     await page.getByRole('button', { name: it('ai.send'), exact: true }).click();
     await expect(page.getByRole('status').filter({ hasText: it('ai.composer.needText') })).toBeVisible();
     await box.fill('ciao');
@@ -165,19 +165,24 @@ test.describe('sidebar', () => {
     await app.openFile('a.md');
   });
 
-  test('New chat waits for a message, empties the chat and is disabled again', async ({ app }) => {
+  test('New chat is never disabled: with an empty chat it says so and keeps the focus; after a message it empties the chat', async ({ app }) => {
+    const alreadyEmpty = app.page.getByRole('status').filter({ hasText: app.t('ai.newChat.alreadyEmpty') });
     await enterAi(app);
     await expect(app.page.getByRole('heading', { name: app.t('ai.title') })).toBeVisible();
-    await expect(newChat(app)).toBeDisabled();
+    await expect(newChat(app)).toBeEnabled();
+    await newChat(app).click();
+    await expect(alreadyEmpty).toBeVisible();
+    await expect(newChat(app)).toBeFocused();
     await composer(app).fill('fix');
     await composer(app).press('Enter');
     await expect(acceptAll(app)).toBeEnabled();
-    await expect(newChat(app)).toBeEnabled();
+    // Un messaggio nella chat toglie la nota.
+    await expect(alreadyEmpty).toHaveCount(0);
     await newChat(app).click();
     await expect(log(app).getByRole('article')).toHaveCount(0);
-    await expect(newChat(app)).toBeDisabled();
-    // Comportamento di oggi, conservato (decisione 4): il pulsante si disattiva con il focus e Chromium lo porta sul body.
-    await expect.poll(() => focusOnBody(app)).toBe(true);
+    await expect(alreadyEmpty).toHaveCount(0);
+    // Decisione 4: il pulsante resta attivo e tiene il focus (prima si spegneva e il focus finiva sul body).
+    await expect(newChat(app)).toBeFocused();
   });
 
   test('a sync folder without permission: the sidebar offers to reactivate it, the button opens the sync settings', async ({ app, page }) => {
