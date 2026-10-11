@@ -1,0 +1,36 @@
+@layer components {
+  /* Il limite inferiore lascia la barra, l'editor e il diff ai loro fogli (hmd-editor ha anch'esso una classe .editor). */
+  @scope (hmd-ai-review) to (hmd-ai-review-bar, hmd-editor, hmd-ai-diff-pane) {
+    :scope {
+      display: contents;
+    }
+
+    /* Valori copiati dal modulo CSS di ReviewView (.review, .hint, .stream pre, .editor). */
+    .review {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .hint {
+      margin: 0;
+      padding: 12px;
+      border-bottom: 1px solid var(--c-border);
+      color: var(--c-muted);
+      font-size: 13px;
+    }
+
+    .stream pre {
+      max-height: 15vh;
+      overflow: auto;
+      white-space: pre-wrap;
+    }
+
+    .editor {
+      flex: 1;
+      min-height: 0;
+    }
+  }
+}

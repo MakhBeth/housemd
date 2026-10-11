@@ -2,7 +2,6 @@ import { useAiController } from './ai/useAiController';
 import { useAiState } from './ai/useAiState';
 import { createDocSession } from '../editor/docSession';
 import { sameRange, type TextRange } from '../ai/selectionChip';
-import { ReviewView } from './ai/ReviewView';
 import { useAiSync } from './ai/settings/AiSyncSection';
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 
@@ -492,9 +491,10 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
         )}
 
         {doc && shownMode === 'ai' && ai ? (
-          <ReviewView
+          <hmd-ai-review
             controller={ai}
-            editor={{
+            i18n={i18nStore}
+            doc={{
               path: doc.path,
               text: doc.text,
               resetKey: `${doc.path}#${doc.revision}`,

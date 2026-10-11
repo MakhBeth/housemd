@@ -56,6 +56,24 @@ test.describe('review bar', () => {
     for (const button of [previous(app), next(app), discard(app), acceptAll(app)]) await expect(button).toBeEnabled();
   });
 
+  test('the proposal arrives with the focus on Accept all (keyboard): the focus stays on the button, it does not jump into the diff', async ({ app, ai, page }) => {
+    ai.hold();
+    await composer(app).fill('fix');
+    await composer(app).press('Enter');
+    await expect(acceptAll(app)).toBeVisible();
+    // Tab fino ad Accetta tutto, come un utente da tastiera durante la generazione.
+    for (let i = 0; i < 40 && !(await acceptAll(app).evaluate((b) => b === document.activeElement)); i++) await page.keyboard.press('Tab');
+    await expect(acceptAll(app)).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('status').filter({ hasText: app.t('ai.review.generating') })).toBeVisible();
+    await expect(acceptAll(app)).toBeFocused();
+    ai.release();
+    await proposalShown(app);
+    // Rilievo di A11y su LAB-11: nessun cambio di focus senza un'azione (nel diff un secondo Invio scriverebbe nel documento).
+    await expect(acceptAll(app)).toBeFocused();
+    await expect(documentSide(app)).toHaveText('ABC');
+  });
+
   test('a truncated proposal: Accept all says to accept the changes one at a time and keeps the focus, the block buttons work; the note goes with the proposal', async ({ app, ai, page }) => {
     ai.finishReason = 'length';
     await composer(app).fill('fix');

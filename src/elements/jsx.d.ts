@@ -3,10 +3,8 @@
  * React nella fase 7 (spec WC §5.1).
  */
 import type { Key, Ref } from 'react';
-import type { AcceptBlocker } from '../ai/aiController';
-import type { ReviewStatus } from '../ai/reviewStatus';
 import type { TextRange } from '../ai/selectionChip';
-import type { CheckWarning, GenParams, ModelProfile, SelectionScope } from '../ai/types';
+import type { GenParams, ModelProfile, SelectionScope } from '../ai/types';
 import type { HouseConfig } from '../config/config';
 import type { DocSession } from '../editor/docSession';
 import type { RestoreCommand } from '../editor/restoreCommand';
@@ -16,8 +14,8 @@ import type { UpdateFlow } from '../pwa/updateFlow';
 import type { I18nStore } from '../state/i18nStore';
 import type { ThemeStore } from '../state/themeStore';
 import type { TreeNode } from '../ui/tree';
-import type { HmdAiDiffPane } from './ai/diff-pane.element';
 import type { ModelSelectController } from './ai/modelSelectView';
+import type { ReviewController, ReviewDoc } from './ai/reviewView';
 import type { SidebarController } from './ai/sidebar.element';
 import type { SaveImage } from './editor/docElement';
 import type { HmdEditor } from './editor/editor.element';
@@ -45,13 +43,9 @@ export type HmdDocProps<E extends keyof HmdEvents = never> = HmdProps<
 declare module 'react' {
   namespace JSX {
     interface IntrinsicElements {
-      'hmd-ai-diff-pane': HmdDocProps<'hmd-ai-proposal-edit' | 'hmd-ai-all-rejected'> &
-        HmdProps<{ proposal: string; range: TextRange | null; canAccept: boolean; streaming: boolean; beforeAccept: () => boolean }> & {
-          ref?: Ref<HmdAiDiffPane>;
-        };
       'hmd-ai-model-select': HmdProps<{ controller: ModelSelectController; profile: ModelProfile; i18n: I18nStore }, 'hmd-ai-model-change'>;
       'hmd-ai-parameters': HmdProps<{ profile: ModelProfile; value: GenParams; hideEffort: boolean; i18n: I18nStore }, 'hmd-params-change'>;
-      'hmd-ai-review-bar': HmdProps<{ status: ReviewStatus; warnings: CheckWarning[]; acceptBlocker: AcceptBlocker | null; proposalId: string; i18n: I18nStore }, 'hmd-ai-review-action' | 'hmd-ai-review-warning'>;
+      'hmd-ai-review': HmdProps<{ controller: ReviewController; doc: ReviewDoc; i18n: I18nStore }>;
       'hmd-ai-sidebar': HmdProps<
         {
           controller: SidebarController;

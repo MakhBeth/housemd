@@ -6,7 +6,7 @@
       border-bottom: 1px solid var(--c-border);
     }
 
-    /* Valori copiati da ReviewView.module.css (.bar, .status, .spacer, .iconButton, .secondary, .accept, .warnings). */
+    /* Valori copiati dal modulo CSS di ReviewView (.bar, .status, .spacer, .iconButton, .secondary, .accept, .warnings). */
     .bar {
       display: flex;
       align-items: center;
