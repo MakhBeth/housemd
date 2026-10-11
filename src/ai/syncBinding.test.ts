@@ -154,7 +154,7 @@ test('a failed read of the saved folder is reported to the controller', async ()
 test('rule: the binding never writes to the folder, only the sync service does (backup first)', async () => {
   // Una cartella che esplode a ogni accesso diverso da `name`: scelta, riattivazione e disattivazione non la toccano.
   const touched: string[] = [];
-  const folder = new Proxy({ name: 'sync' }, { get: (target, key) => (key === 'name' ? target.name : (touched.push(String(key)), undefined)) }) as unknown as FileSystemDirectoryHandle;
+  const folder = new Proxy({ name: 'sync' }, { get: (target, key) => (key === 'name' ? target.name : key === 'then' ? undefined : (touched.push(String(key)), undefined)) }) as unknown as FileSystemDirectoryHandle;
   const { binding, deps, services } = setup(null);
   await flush();
   deps.picked = folder;

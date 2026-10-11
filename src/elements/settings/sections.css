@@ -1,6 +1,6 @@
 @layer components {
   /*
-   * Valori copiati da Settings.module.css: le tre sezioni AI condividono elenco e dettaglio. Nessun limite
+   * Valori copiati dal vecchio modulo CSS delle sezioni: le tre sezioni AI condividono elenco e dettaglio. Nessun limite
    * inferiore: oggi `.detail label` e `.detail input` raggiungono anche i campi di hmd-ai-model-select e
    * hmd-ai-parameters, e lì vincevano perché il modulo stava fuori dai layer. Dentro il layer vincerebbe il
    * foglio più vicino (prossimità di @scope) a pari specificità: `:scope` davanti alza la specificità di

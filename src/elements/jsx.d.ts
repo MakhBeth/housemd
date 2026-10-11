@@ -3,6 +3,7 @@
  * React nella fase 7 (spec WC §5.1).
  */
 import type { Key, Ref } from 'react';
+import type { SyncBinding } from '../ai/syncBinding';
 import type { TextRange } from '../ai/selectionChip';
 import type { GenParams, ModelProfile, SelectionScope } from '../ai/types';
 import type { HouseConfig } from '../config/config';
@@ -25,6 +26,7 @@ import type { HmdPreview } from './preview/preview.element';
 import type { HmdSearchPanel, SearchSource } from './search-panel/search-panel.element';
 import type { PresetsController } from './settings/presets.element';
 import type { ProfilesController } from './settings/profiles.element';
+import type { SyncController } from './settings/sync.element';
 import type { StartMode } from './start-screen/startView';
 import type { ToastItem } from './toasts/toasts.element';
 
@@ -82,6 +84,7 @@ declare module 'react' {
       };
       'hmd-settings-presets': HmdProps<{ controller: PresetsController; i18n: I18nStore }, 'hmd-settings-dirty'>;
       'hmd-settings-profiles': HmdProps<{ controller: ProfilesController; i18n: I18nStore }, 'hmd-settings-dirty'>;
+      'hmd-settings-sync': HmdProps<{ controller: SyncController; binding: SyncBinding | null; i18n: I18nStore }>;
       'hmd-start-screen': HmdProps<
         { mode: StartMode; reason: UnsupportedReason; error: string; folderName: string; busy: boolean; i18n: I18nStore },
         'hmd-start-pick' | 'hmd-start-resume'
