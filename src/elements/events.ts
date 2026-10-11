@@ -1,8 +1,9 @@
 import type { ChangeDesc } from '@codemirror/state';
 
 import type { TextRange } from '../ai/selectionChip';
-import type { GenParams, ModelProfile } from '../ai/types';
+import type { CheckWarning, GenParams, ModelProfile } from '../ai/types';
 import type { TreeNode } from '../ui/tree';
+import type { ReviewAction } from './ai/reviewBarView';
 import type { TreeAction } from './workspace/dialogFor';
 
 /**
@@ -22,6 +23,10 @@ export interface HmdEvents {
   'hmd-ai-proposal-edit': CustomEvent<{ text: string }>;
   /** Chat AI: ripetere un messaggio fallito (`removeRejected`: senza i parametri che il provider ha rifiutato). */
   'hmd-ai-retry': CustomEvent<{ id: string; removeRejected: boolean }>;
+  /** Barra della revisione AI: un pulsante attivato (frecce, Accetta tutto, Scarta, Continua). */
+  'hmd-ai-review-action': CustomEvent<{ action: ReviewAction }>;
+  /** Barra della revisione AI: un avviso scelto nel popover (portare in vista la riga). */
+  'hmd-ai-review-warning': CustomEvent<{ warning: CheckWarning }>;
   /** Suggerimento scelto sotto il composer: invia il preset. */
   'hmd-ai-suggestion': CustomEvent<{ presetId: string }>;
   /** Sidebar AI: la cartella di sync ha perso il permesso, aprire le impostazioni della sync per riattivarlo. */

@@ -10,7 +10,6 @@ import type { HmdEditor } from '../../elements/editor/editor.element';
 import type { HmdEvents } from '../../elements/events';
 import { useI18nStore, useT } from '../../i18n/I18nProvider';
 import { useUnmountSignal } from '../useUnmountSignal';
-import { ReviewBar } from './ReviewBar';
 import styles from './ReviewView.module.css';
 import type { ReviewDoc } from './reviewDoc';
 
@@ -94,18 +93,7 @@ export function ReviewView({ controller, editor }: Props) {
     return (
       <section ref={section} className={styles.review}>
         {status.kind === 'generating' ? (
-          <ReviewBar
-            status={status}
-            warnings={[]}
-            onPrevious={() => {}}
-            onNext={() => {}}
-            onWarning={() => {}}
-            canAccept={false}
-            canDiscard={false}
-            onAcceptAll={() => {}}
-            onDiscard={() => {}}
-            onContinue={() => {}}
-          />
+          <hmd-ai-review-bar status={status} warnings={[]} canAccept={false} canDiscard={false} i18n={i18nStore} />
         ) : (
           <p className={styles.hint}>{t('ai.emptyProposal')}</p>
         )}
@@ -130,22 +118,30 @@ export function ReviewView({ controller, editor }: Props) {
 
   return (
     <section ref={section} className={styles.review}>
-      <ReviewBar
+      <hmd-ai-review-bar
         status={status}
         warnings={warnings}
-        onPrevious={() => diff.current?.previous()}
-        onNext={() => diff.current?.next()}
-        onWarning={(w) => diff.current?.scrollToLine((w as { line?: number }).line ?? 0)}
         canAccept={controller.canAccept(p, true)}
         canDiscard={!isBusy(status)}
-        onAcceptAll={() => {
-          if (editor.text === p.baseText || p.scope) return accept();
-          void showConfirmDialog({ title: t('ai.acceptAll'), message: t('ai.changedWarning'), confirmLabel: t('ai.acceptAll'), t, signal: dialogSignal() }).then(
-            (ok) => ok && acceptRef.current(),
-          );
+        i18n={i18nStore}
+        onhmd-ai-review-action={(event) => {
+          switch (event.detail.action) {
+            case 'previous':
+              return diff.current?.previous();
+            case 'next':
+              return diff.current?.next();
+            case 'discard':
+              return controller.discard(p.path);
+            case 'continue':
+              return void controller.continue(p.path);
+            case 'acceptAll':
+              if (editor.text === p.baseText || p.scope) return accept();
+              void showConfirmDialog({ title: t('ai.acceptAll'), message: t('ai.changedWarning'), confirmLabel: t('ai.acceptAll'), t, signal: dialogSignal() }).then(
+                (ok) => ok && acceptRef.current(),
+              );
+          }
         }}
-        onDiscard={() => controller.discard(p.path)}
-        onContinue={() => void controller.continue(p.path)}
+        onhmd-ai-review-warning={(event) => diff.current?.scrollToLine((event.detail.warning as { line?: number }).line ?? 0)}
       />
       {state.streamingPreview && (
         <details className={styles.stream}>
