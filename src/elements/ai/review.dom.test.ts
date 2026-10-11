@@ -163,7 +163,7 @@ test('Accept all after the document changed: the confirmation dialog; confirmed 
   assert.ok(document.querySelector('dialog')!.open);
   el.remove();
   await tick();
-  assert.equal(document.querySelector('dialog'), null);
+  assert.ok(document.querySelector('dialog') === null, 'no dialog left');
 });
 
 test('a proposal edited in the diff reaches the controller; with a selection only the part inside it', async () => {
@@ -230,7 +230,7 @@ test('generation finishes with the focus in the retained bar (Accept all): the f
   await tick();
   // Rilievo di A11y su LAB-11 (WCAG 2.4.3, 3.2.2): nessun cambio di focus senza un'azione; nel diff un secondo Invio scriverebbe nel documento.
   assert.ok(diff().querySelector('.cm-mergeView'));
-  assert.equal(button(EN_MESSAGES['ai.acceptAll']), accept, 'the same Accept all button');
+  assert.ok(button(EN_MESSAGES['ai.acceptAll']) === accept, 'the same Accept all button');
   focusOn(accept, 'Accept all');
 });
 
@@ -247,4 +247,34 @@ test('two truncated proposals: the note of a.md does not follow the view to b.md
   assert.ok(bar() === first, 'the same bar element');
   assert.equal(first.proposalId, 'b.md#2');
   assert.equal(note().textContent, '');
+});
+
+test('a confirmation resolved while the view goes away accepts nothing: detached, or detached and attached again before the answer arrives', async () => {
+  const { el, ai, button } = mount({ proposals: new Map([['a.md', proposal({ baseText: 'altro' })]]) });
+  await tick();
+  const confirm = (onClose: () => void) => {
+    button(EN_MESSAGES['ai.acceptAll']).click();
+    const dialog = document.querySelector('dialog')!;
+    // La Promise del dialog è già risolta quando la vista si stacca: la continuazione arriva dopo (caso di Reviewer su LAB-12).
+    dialog.addEventListener('close', onClose, { once: true });
+    [...dialog.querySelectorAll('button')].find((b) => b.textContent === EN_MESSAGES['ai.acceptAll'])!.click();
+  };
+  confirm(() => el.remove());
+  await tick();
+  assert.ok(!el.isConnected);
+  assert.deepEqual(ai.calls, [], 'no beforeAccept after detach');
+  document.body.append(el);
+  await tick();
+  // Staccato e riattaccato prima della risposta: il riattacco ha un AbortController nuovo, la conferma vecchia resta scartata.
+  confirm(() => {
+    el.remove();
+    document.body.append(el);
+  });
+  await tick();
+  assert.ok(el.isConnected);
+  assert.deepEqual(ai.calls, [], 'no beforeAccept from the confirmation of before');
+  // La stessa vista, confermata senza distacchi, accetta ancora.
+  confirm(() => {});
+  await tick();
+  assert.deepEqual(ai.calls, [['beforeAccept', 'a.md', true]]);
 });

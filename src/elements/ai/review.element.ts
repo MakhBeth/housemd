@@ -205,16 +205,22 @@ export class HmdAiReview extends HmdElement {
     if (p) this.#controller?.discard(p.path);
   }
 
-  /** «Accetta tutto»: con il documento cambiato dopo una proposta intera chiede conferma; la conferma accetta la proposta del momento in cui risponde. */
+  /**
+   * «Accetta tutto»: con il documento cambiato dopo una proposta intera chiede conferma; la conferma accetta
+   * la proposta del momento in cui risponde. La risposta arriva dopo che la Promise si è risolta: se nel
+   * frattempo la vista si è staccata (anche se poi è tornata, con un AbortController nuovo) non si accetta.
+   */
   #acceptAll(): void {
     const p = this.#current();
     const doc = this.#doc;
     const t = this.#i18n?.t;
     if (!p || !doc || !t) return;
     if (!acceptNeedsConfirm(p, doc.text)) return this.#accept();
-    void showConfirmDialog({ title: t('ai.acceptAll'), message: t('ai.changedWarning'), confirmLabel: t('ai.acceptAll'), t, signal: this.#dialogs?.signal }).then(
-      (ok) => ok && this.#accept(),
-    );
+    const signal = this.#dialogs?.signal;
+    if (!signal) return;
+    void showConfirmDialog({ title: t('ai.acceptAll'), message: t('ai.changedWarning'), confirmLabel: t('ai.acceptAll'), t, signal }).then((ok) => {
+      if (ok && !signal.aborted && this.isConnected) this.#accept();
+    });
   }
 
   #accept(): void {
