@@ -8,6 +8,10 @@ import { mapScope, applyScope } from './scope';
 import { runRequest, createCursor, partialText, type RunInput, type RunCursor } from './runner';
 import { checkProposal } from './checks';
 export interface AiWorkspace { getDoc(): { path: string; textLf: string; conflict: unknown; updating: boolean } | null; snapshotBeforeAi(): void; openFile(path:string): unknown; }
+/** Perché un invio non può partire (sendBlocker): generazione in corso, nessun documento aperto, aggiornamento dell'app o del documento. */
+export type SendBlocker='running'|'noDocument'|'updating';
+/** Perché una proposta non si può accettare (acceptBlocker), nell'ordine in cui la barra li mostra. */
+export type AcceptBlocker='generating'|'updating'|'notAcceptable'|'conflict'|'scopeLost'|'truncated';
 export interface AiState { chat: AiChat; proposals: Map<string,Proposal>; running: { messageId:string; path:string; startedAt:number } | null; profiles:ModelProfile[]; presets:PromptPreset[]; profileId:string; error:AiErrorCode|null; streamingPreview:string|null; }
 const uuid=()=>crypto.randomUUID();
 export class AiController {
@@ -45,10 +49,22 @@ export class AiController {
   newChat(){this.stop();this.retries.clear();this.set({chat:{id:uuid(),messages:[],overrides:this.state.chat.overrides}});}
   discard(path:string){if(this.state.running?.path===path)this.stop();const proposals=new Map(this.state.proposals);proposals.delete(path);this.resumeData.delete(path);this.set({proposals});}
   hasPendingWork(){return !!this.state.running||[...this.state.proposals.values()].some(p=>!this.appliedPaths.has(p.path)&&(p.path!==this.workspace.getDoc()?.path||this.proposalText(p)!==this.workspace.getDoc()?.textLf));}
-  prepare=async():Promise<'failed'|'durable'>=>{if(this.hasPendingWork()){this.set({error:'aiPendingUpdate'});return 'failed';}this.updating=true;return 'durable';};
-  cancel=()=>{this.updating=false;};
+  /** Inizio e fine di un aggiornamento: `set({})` notifica gli iscritti (le note «aggiornamento in corso» del composer e della barra si svuotano al render; per React cambia l'identità dello stato). */
+  prepare=async():Promise<'failed'|'durable'>=>{if(this.hasPendingWork()){this.set({error:'aiPendingUpdate'});return 'failed';}this.updating=true;this.set({});return 'durable';};
+  cancel=()=>{this.updating=false;this.set({});};
   proposalText(p:Proposal){const doc=this.workspace.getDoc();return p.scope?doc?.path===p.path?applyScope(doc.textLf,p.scope,p.text):null:p.text;}
-  canAccept(p:Proposal,all=false){const doc=this.workspace.getDoc();return !!doc&&doc.path===p.path&&!doc.conflict&&!doc.updating&&!this.updating&&this.state.running?.path!==p.path&&p.status!=='streaming'&&(!all||p.status!=='truncated')&&(!p.scope||applyScope(doc.textLf,p.scope,p.text)!==null);}
+  /** Perché la proposta non si può accettare adesso (o null), nell'ordine della barra: generazione, aggiornamento, altro documento, conflitto, selezione persa, troncata (solo «tutto»). */
+  acceptBlocker(p:Proposal,all=false):AcceptBlocker|null{
+    if(this.state.running?.path===p.path||p.status==='streaming')return 'generating';
+    const doc=this.workspace.getDoc();
+    if(this.updating||doc?.updating)return 'updating';
+    if(!doc||doc.path!==p.path)return 'notAcceptable';
+    if(doc.conflict)return 'conflict';
+    if(p.scope&&applyScope(doc.textLf,p.scope,p.text)===null)return 'scopeLost';
+    if(all&&p.status==='truncated')return 'truncated';
+    return null;
+  }
+  canAccept(p:Proposal,all=false){return this.acceptBlocker(p,all)===null;}
   beforeAccept(p:Proposal,all=false){if(!this.canAccept(p,all))return false;const current=this.state.proposals.get(p.path);if(!current||current.createdAt!==p.createdAt)return false;this.accepting=true;if(!current.snapshotTaken){this.workspace.snapshotBeforeAi();this.put({...current,snapshotTaken:true});}return true;}
   edited(path:string,text:string){this.appliedPaths.delete(path);const p=this.state.proposals.get(path);if(p&&p.status!=='streaming')this.put({...p,text,origin:'edited'});}
   private put(p:Proposal){const proposals=new Map(this.state.proposals);proposals.set(p.path,p);this.set({proposals});}
@@ -73,10 +89,20 @@ export class AiController {
       this.put({...p,scope});
     }
     if(p&&next!==null&&!reset){const current=this.state.proposals.get(path)!;const target=current.scope?applyScope(next,current.scope,current.text):current.text;if(target===next)this.appliedPaths.add(path);else this.appliedPaths.delete(path);}else if(reset)this.appliedPaths.delete(path);
+    // Un documento aperto o sostituito (reset, da WorkspaceView): chi guarda il documento aperto (la nota «apri un documento» del composer) deve rendere.
+    if(reset)this.set({});
     const pending=this.resumeData.get(path);if(pending?.scope)pending.scope=mapScope(pending.scope,changes,reset);
     // Anche Riprova deve seguire la selezione originale, non un tratto omonimo agli offset iniziali.
     for(const retry of this.retries.values())if(retry.input.path===path&&retry.scope)retry.scope=mapScope(retry.scope,changes,reset);
     this.accepting=false;
+  }
+  /** Perché un invio non può partire adesso (o null): la guardia di send(), da leggere prima di svuotare la casella. Il profilo lo controlla il composer. */
+  sendBlocker():SendBlocker|null{
+    if(this.state.running)return 'running';
+    const doc=this.workspace.getDoc();
+    if(!doc)return 'noDocument';
+    if(this.updating||doc.updating)return 'updating';
+    return null;
   }
   async send(request:string,preset?:PromptPreset,scope?:SelectionScope){
     const doc=this.workspace.getDoc(), profile=this.profile();

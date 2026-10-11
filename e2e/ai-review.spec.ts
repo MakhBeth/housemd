@@ -6,6 +6,8 @@ const composer = (app: App) => app.page.getByRole('textbox', { name: app.t('ai.r
 const acceptAll = (app: App) => app.page.getByRole('button', { name: app.t('ai.acceptAll'), exact: true });
 const discard = (app: App) => app.page.getByRole('button', { name: app.t('ai.discard'), exact: true });
 const mergeView = (app: App) => app.page.locator('.cm-mergeView');
+/** La proposta è arrivata: il diff è visibile. Non «Accetta tutto attivo»: con i pulsanti mai disattivati (6c) passerebbe subito. */
+const proposalShown = (app: App) => expect(mergeView(app)).toBeVisible();
 const blockButtons = (app: App, action: 'accept' | 'reject'): Locator =>
   app.page.locator(`.cm-merge-revert button[data-action=${action}]`);
 /** Testo della proposta: l'ultimo editor della MergeView. */
@@ -34,7 +36,7 @@ async function enterAi(app: App): Promise<void> {
 async function request(app: App): Promise<void> {
   await composer(app).fill('fix');
   await composer(app).press('Enter');
-  await expect(acceptAll(app)).toBeEnabled();
+  await proposalShown(app);
 }
 
 test.describe('whole document', () => {

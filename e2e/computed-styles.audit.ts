@@ -160,7 +160,7 @@ const STATES: State[] = [
       const composer = page.getByRole('textbox', { name: app.t('ai.request') });
       await composer.fill('fix');
       await composer.press('Enter');
-      await expect(page.getByRole('button', { name: app.t('ai.acceptAll'), exact: true })).toBeEnabled();
+      await expect(page.locator('.cm-mergeView')).toBeVisible(); // la proposta è arrivata (non «Accetta tutto attivo»: dalla 6c passerebbe subito)
     },
   },
   {
@@ -213,7 +213,7 @@ const STATES: State[] = [
       const composer = page.getByRole('textbox', { name: app.t('ai.request') });
       await composer.fill('fix');
       await composer.press('Enter');
-      await expect(page.getByRole('button', { name: app.t('ai.acceptAll'), exact: true })).toBeEnabled();
+      await expect(page.locator('.cm-mergeView')).toBeVisible(); // la proposta è arrivata (non «Accetta tutto attivo»: dalla 6c passerebbe subito)
       // Modifica locale non salvata nel documento (lato sinistro del diff) e modifica esterna: conflitto,
       // e i pulsanti «accetta» dei blocchi si disattivano (stile :disabled).
       await page.clock.pauseAt(new Date(Date.now() + 10_000));
@@ -225,6 +225,96 @@ const STATES: State[] = [
       await app.windowFocus();
       await expect(page.getByRole('alert').filter({ hasText: app.t('conflict.message') })).toBeVisible();
       await expect(page.locator('.cm-merge-revert button[data-action=accept]').first()).toBeDisabled();
+    },
+  },
+  {
+    name: 'ai-review-generating',
+    async setup(app, page, ai) {
+      // Generazione senza ancora una proposta: la barra con il contatore al posto del suggerimento, tutti i pulsanti attivi (dalla 6c).
+      await page.clock.install({ time: NOW });
+      ai.hold();
+      await app.openFolder({ 'a.md': 'A\n\nB\n\nC' });
+      await app.openFile('a.md');
+      await expect(app.mode('mode.ai')).toBeVisible();
+      await app.mode('mode.ai').click();
+      const composer = page.getByRole('textbox', { name: app.t('ai.request') });
+      await composer.fill('fix');
+      await composer.press('Enter');
+      await expect(page.getByRole('button', { name: app.t('ai.stop'), exact: true })).toBeVisible();
+      // Il contatore parte dal Date.now() della richiesta, non da NOW: si avanza di 2,1 s da lì e si ferma l'orologio sul valore raggiunto.
+      await page.clock.runFor(2100);
+      await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 50);
+      await expect(page.getByText(app.t('ai.generating', { seconds: 2 }))).toBeVisible();
+    },
+  },
+  {
+    name: 'ai-review-truncated',
+    async setup(app, page, ai) {
+      // Proposta troncata dal limite del modello: stato «Troncata», Accetta tutto attivo (dalla 6c: la nota al clic).
+      ai.reply = 'A2\n\nB\n\nC2';
+      ai.finishReason = 'length';
+      await app.openFolder({ 'a.md': 'A\n\nB\n\nC' });
+      await app.openFile('a.md');
+      await expect(app.mode('mode.ai')).toBeVisible();
+      await app.mode('mode.ai').click();
+      const composer = page.getByRole('textbox', { name: app.t('ai.request') });
+      await composer.fill('fix');
+      await composer.press('Enter');
+      await expect(page.getByText(app.t('ai.status.truncated'))).toBeVisible();
+    },
+  },
+  {
+    name: 'ai-review-warnings',
+    async setup(app, page, ai) {
+      // Il popover degli avvisi aperto sotto il suo pulsante.
+      ai.reply = 'See [[Other]]';
+      await app.openFolder({ 'a.md': 'See [[Target]]' });
+      await app.openFile('a.md');
+      await expect(app.mode('mode.ai')).toBeVisible();
+      await app.mode('mode.ai').click();
+      const composer = page.getByRole('textbox', { name: app.t('ai.request') });
+      await composer.fill('fix');
+      await composer.press('Enter');
+      await page.getByRole('button', { name: app.t('ai.warningsCount', { count: 1 }) }).click();
+      await expect(page.getByRole('button', { name: app.t('ai.warning.wikilinks') })).toBeVisible();
+    },
+  },
+  {
+    name: 'ai-review-applied',
+    async setup(app, page, ai) {
+      // Dopo «Accetta tutto»: editor semplice senza barra né suggerimento, con il focus nel testo.
+      ai.reply = 'A2\n\nB\n\nC2';
+      await app.openFolder({ 'a.md': 'A\n\nB\n\nC' });
+      await app.openFile('a.md');
+      await expect(app.mode('mode.ai')).toBeVisible();
+      await app.mode('mode.ai').click();
+      const composer = page.getByRole('textbox', { name: app.t('ai.request') });
+      await composer.fill('fix');
+      await composer.press('Enter');
+      await expect(page.locator('.cm-mergeView')).toBeVisible();
+      await page.getByRole('button', { name: app.t('ai.acceptAll'), exact: true }).click();
+      await expect(page.locator('.cm-mergeView')).toHaveCount(0);
+      await expect(page.locator('.cm-content')).toBeFocused();
+    },
+  },
+  {
+    name: 'ai-review-note',
+    async setup(app, page, ai) {
+      // Generazione tenuta, clic su Accetta tutto: il pulsante resta attivo e la nota sotto la riga dice perché (spec §2 vincolo 4).
+      await page.clock.install({ time: NOW });
+      ai.hold();
+      await app.openFolder({ 'a.md': 'A\n\nB\n\nC' });
+      await app.openFile('a.md');
+      await expect(app.mode('mode.ai')).toBeVisible();
+      await app.mode('mode.ai').click();
+      const composer = page.getByRole('textbox', { name: app.t('ai.request') });
+      await composer.fill('fix');
+      await composer.press('Enter');
+      await expect(page.getByRole('button', { name: app.t('ai.stop'), exact: true })).toBeVisible();
+      await page.clock.runFor(2100);
+      await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 50);
+      await page.getByRole('button', { name: app.t('ai.acceptAll'), exact: true }).click();
+      await expect(page.getByRole('status').filter({ hasText: app.t('ai.review.generating') })).toBeVisible();
     },
   },
   {
@@ -252,7 +342,7 @@ const STATES: State[] = [
       await expect(app.mode('mode.ai')).toBeVisible();
       await app.mode('mode.ai').click();
       await page.getByRole('group', { name: app.t('ai.suggestions') }).getByRole('button').first().click();
-      await expect(page.getByRole('button', { name: app.t('ai.acceptAll'), exact: true })).toBeEnabled();
+      await expect(page.locator('.cm-mergeView')).toBeVisible(); // la proposta è arrivata (non «Accetta tutto attivo»: dalla 6c passerebbe subito)
       // Il riepilogo di un preset: «parti · parole → parole words».
       await expect(page.getByRole('log').getByText(new RegExp(`${app.t('ai.words')}$`))).toBeVisible();
     },
@@ -298,7 +388,9 @@ const STATES: State[] = [
       await composer.fill('fix');
       await composer.press('Enter');
       await expect(page.getByRole('button', { name: app.t('ai.stop'), exact: true })).toBeVisible();
-      await page.clock.pauseAt(NOW.getTime() + 2000);
+      // Il contatore parte dal Date.now() della richiesta, non da NOW: si avanza di 2,1 s da lì e si ferma l'orologio sul valore raggiunto.
+      await page.clock.runFor(2100);
+      await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 50);
     },
   },
   {
@@ -311,6 +403,18 @@ const STATES: State[] = [
       // Invia a casella vuota: il pulsante resta attivo e la nota sotto il composer dice perché (decisione 4).
       await page.getByRole('button', { name: app.t('ai.send'), exact: true }).click();
       await expect(page.getByRole('status').filter({ hasText: app.t('ai.composer.needText') })).toBeVisible();
+    },
+  },
+  {
+    name: 'ai-composer-note-no-document',
+    async setup(app, page) {
+      // Modalità AI senza un documento aperto: Invia resta attivo e la nota dice di aprire un documento.
+      await app.openFolder({ 'a.md': 'Alpha' });
+      await expect(app.mode('mode.ai')).toBeVisible();
+      await app.mode('mode.ai').click();
+      await page.getByRole('textbox', { name: app.t('ai.request') }).fill('fix');
+      await page.getByRole('button', { name: app.t('ai.send'), exact: true }).click();
+      await expect(page.getByRole('status').filter({ hasText: app.t('ai.composer.noDocument') })).toBeVisible();
     },
   },
   {

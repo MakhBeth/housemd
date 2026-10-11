@@ -6,6 +6,8 @@ const composer = (app: App) => app.page.getByRole('textbox', { name: app.t('ai.r
 const acceptAll = (app: App) => app.page.getByRole('button', { name: app.t('ai.acceptAll'), exact: true });
 // .cm-mergeView, .cm-content e i pulsanti .cm-merge-revert: eccezioni ammesse dalla spec (§8.4).
 const mergeView = (app: App) => app.page.locator('.cm-mergeView');
+/** La proposta è arrivata: il diff è visibile. Non «Accetta tutto attivo»: con i pulsanti mai disattivati (6c) passerebbe subito. */
+const proposalShown = (app: App) => expect(mergeView(app)).toBeVisible();
 const blockButtons = (app: App, action: 'accept' | 'reject'): Locator =>
   app.page.locator(`.cm-merge-revert button[data-action=${action}]`);
 /** Il documento (primo editor della MergeView) e la proposta (l'ultimo). */
@@ -28,7 +30,7 @@ async function review(app: App, original: string): Promise<void> {
   await app.mode('mode.ai').click();
   await composer(app).fill('fix');
   await composer(app).press('Enter');
-  await expect(acceptAll(app)).toBeEnabled();
+  await proposalShown(app);
 }
 
 test.describe('blocks', () => {
@@ -82,7 +84,7 @@ test('a proposal on a selection: edits outside the selection are dropped', async
   await app.mode('mode.ai').click();
   await composer(app).fill('fix');
   await composer(app).press('Enter');
-  await expect(acceptAll(app)).toBeEnabled();
+  await proposalShown(app);
   const before = await lines(proposal(app));
   expect(before).toBe('prefisso GOOD\none\nGOOD suffisso');
   await proposal(app).click();
