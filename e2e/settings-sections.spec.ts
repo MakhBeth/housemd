@@ -82,14 +82,15 @@ test('a cloud profile asks for the key: the address is fixed, Save key is off un
   await expect(settings(app).getByRole('textbox', { name: app.t('ai.url') })).toHaveValue('http://localhost:11434');
 });
 
-test('the key typed in the password field: where it ends up in the DOM', async ({ app, page }) => {
+test('the key typed in the password field stays in the field, never in the serialized DOM', async ({ app, page }) => {
   await openSettings(app);
   await settings(app).getByRole('link', { name: app.t('settings.aiProfiles') }).click();
   await settings(app).getByRole('button', { name: `+ ${app.t('ai.create')}` }).first().click();
   await settings(app).getByRole('combobox', { name: app.t('ai.provider'), exact: true }).selectOption('anthropic');
   await settings(app).getByLabel(app.t('ai.secret')).fill('sk-test');
-  // React tiene sincronizzato l'attributo `value` dei campi controllati: oggi la chiave sta anche nel DOM serializzato (il Task 2 lo rovescia).
-  expect(await page.evaluate(() => document.body.outerHTML.includes('sk-test'))).toBe(true);
+  await expect(settings(app).getByLabel(app.t('ai.secret'))).toHaveValue('sk-test');
+  // Con React l'attributo `value` dei campi controllati seguiva la chiave; l'elemento scrive solo la proprietà (spec R21).
+  expect(await page.evaluate(() => document.body.outerHTML.includes('sk-test'))).toBe(false);
 });
 
 test('Connection on the local profile says Connected (fake Ollama)', async ({ app }) => {
