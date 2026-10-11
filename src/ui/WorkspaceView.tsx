@@ -2,8 +2,8 @@ import { useAiController } from './ai/useAiController';
 import { useAiState } from './ai/useAiState';
 import { createDocSession } from '../editor/docSession';
 import { sameRange, type TextRange } from '../ai/selectionChip';
-import { useAiSync } from './ai/settings/AiSyncSection';
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
+import { browserSyncBinding, type SyncBinding } from '../ai/syncBinding';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type PointerEvent } from 'react';
 
 import { requestAccess } from '../fs/access';
 import { useI18n, useI18nStore } from '../i18n/I18nProvider';
@@ -47,6 +47,7 @@ interface Props {
 }
 
 const NO_TERMS: string[] = [];
+const noSubscribe = () => () => {};
 
 export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, switchingFolder = false }: Props) {
   const { t, locale } = useI18n();
@@ -61,7 +62,18 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
   // onSelection scatta a ogni movimento del cursore: si aggiorna lo stato solo se il tratto cambia.
   const onSelection = useCallback((range: TextRange | null) => setAiSelection((prev) => (sameRange(prev, range) ? prev : range)), []);
   useEffect(() => setAiSelection(null), [doc?.path, doc?.revision]);
-  const syncBinding = useAiSync(ai);
+  // Una sync per controller: la sidebar AI ne legge il permesso, le impostazioni la gestiscono.
+  const [syncBinding, setSyncBinding] = useState<SyncBinding | null>(null);
+  useEffect(() => {
+    if (!ai) return;
+    const binding = browserSyncBinding(ai);
+    setSyncBinding(binding);
+    return () => {
+      binding.dispose();
+      setSyncBinding(null);
+    };
+  }, [ai]);
+  const syncNeedsPermission = useSyncExternalStore(syncBinding?.subscribe ?? noSubscribe, () => !!syncBinding?.needsPermission);
   useEffect(() => { if (doc) ai?.documentChanged(doc.path, { iterChangedRanges: () => {}, mapPos: (n: number) => n } as never, true); }, [doc?.path, doc?.revision]);
   const [mode, setMode] = useState<Mode>(() => readPref('mode'));
   // Preferenza 'ai' con il controller non ancora pronto (IndexedDB lento): intanto la vista divisa.
@@ -372,7 +384,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
                   ? { from: selected.from, to: selected.to, originalText: session.textLf.slice(selected.from, selected.to), status: 'valid' }
                   : undefined;
               }}
-              syncNeedsPermission={!!syncBinding.handle && !syncBinding.permission}
+              syncNeedsPermission={syncNeedsPermission}
               i18n={i18nStore}
               onhmd-ai-manage={() => openSettings('ai-profiles')}
               onhmd-ai-sync-reactivate={() => openSettings('ai-sync')}

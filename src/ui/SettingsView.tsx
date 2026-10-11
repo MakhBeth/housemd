@@ -10,7 +10,7 @@ import { formatRoute, type SettingsSection } from '../lib/route';
 import { clampTextWidth, MAX_TEXT_WIDTH, MIN_TEXT_WIDTH, TEXT_WIDTH_PANES, type TextWidth, type TextWidthPane } from '../lib/textWidth';
 import { THEME_PREFS, type ThemePref } from '../theme/theme';
 import { AUTOSAVE_MODES, clampDelay, MAX_DELAY_MS, MIN_DELAY_MS, type AutosaveSettings } from '../workspace/autosave';
-import { AiSyncSection, type SyncBinding } from './ai/settings/AiSyncSection';
+import type { SyncBinding } from '../ai/syncBinding';
 import dialog from './Dialog.module.css';
 import { Icon } from './Icon';
 import styles from './SettingsView.module.css';
@@ -25,7 +25,7 @@ interface Props {
   /** Incrementato quando Indietro è stato bloccato: chiude passando dalla conferma. */
   closeRequest: number;
   ai: AiController | null;
-  syncBinding: SyncBinding;
+  syncBinding: SyncBinding | null;
   theme: ThemePref;
   onTheme: (next: ThemePref) => void;
   autosave: AutosaveSettings;
@@ -254,7 +254,7 @@ export function SettingsView({ section, onSection, onClose, onDirtyChange, close
             </section>
             <section id="settings-ai-sync" className={styles.section}>
               <h2>{t('settings.aiSync')}</h2>
-              <AiSyncSection controller={ai} binding={syncBinding} />
+              <hmd-settings-sync controller={ai} binding={syncBinding} i18n={i18nStore} />
             </section>
           </>
         )}
