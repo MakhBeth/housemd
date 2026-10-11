@@ -569,3 +569,1175 @@ git -c core.hooksPath=/dev/null commit -m "test: rete della fase 7 su impostazio
 git log --format=%B -n 1        # nessun Co-authored-by
 git push
 ```
+
+### Task 2: `hmd-settings-profiles` e `hmd-settings-presets` (Builder)
+
+Le due sezioni con elenco e bozza diventano elementi, montati da `SettingsView.tsx` (React) al posto di `AiProfilesSection` e `AiPresetsSection`; l'elenco (`ItemList.tsx`) e l'adattatore `useDraft` diventano `itemList.ts` e `#setDraft`. Il foglio comune delle tre sezioni AI (`sections.css`) nasce qui, con le due eccezioni di `architecture.test.ts` (decisioni 2 e 4). Il test e2e della chiave si rovescia (decisione 5). `AiSyncSection.tsx` e `Settings.module.css` restano fino al Task 3.
+
+**Files:**
+- Create: `src/elements/settings/fields.ts`, `itemList.ts`, `sections.css`, `presets.element.ts`, `profiles.element.ts`, `presets.dom.test.ts`, `profiles.dom.test.ts`
+- Modify: `src/architecture.test.ts` (radici multiple, eccezione `setSecret`), `src/elements/events.ts` (`hmd-settings-dirty`), `src/elements/define.ts`, `src/elements/jsx.d.ts`, `src/ui/SettingsView.tsx`, `e2e/settings-sections.spec.ts` (test della chiave)
+- Delete: `src/ui/ai/settings/AiProfilesSection.tsx`, `AiPresetsSection.tsx`, `ItemList.tsx`
+
+**Interfaces:**
+- Consumes: `state/draftState.ts`, `ai/presets.ts`, `ai/presetName.ts`, `ai/profiles.ts`, `ai/models.ts` (`changeProvider`), `elements/dialogs/confirmDialog.ts`, `hmd-ai-model-select`, `hmd-ai-parameters`.
+- Produces: `HmdSettingsProfiles` (`controller: ProfilesController`, `i18n`, getter `dirty`; evento `hmd-settings-dirty { dirty }`), `HmdSettingsPresets` (idem con `PresetsController`), `ProfilesController = Pick<AiController, 'subscribe' | 'getState' | 'report' | 'provider' | 'saveProfile' | 'deleteProfile' | 'setSecret'>`, `PresetsController = Pick<AiController, 'subscribe' | 'getState' | 'report' | 'savePreset' | 'deletePreset'>`, `renderItemList(list, items, options)`, `field`, `checkbox`, `syncValue`, `syncChecked`, `showChildren`.
+
+**Criteri di accettazione:** RED dei due test jsdom annotato; `npm test` 980 + 12 (6 + 6) = **992**, verde; lint pulito; `settings.spec.ts`, `settings-sections.spec.ts`, `ai-model.spec.ts`, `ai-chips.spec.ts` verdi in build e in sviluppo (con il test della chiave rovesciato); audit `settings-profile`, `settings-preset`, `settings-cloud-profile`, `settings-connected`, `settings-narrow`, `settings` verdi contro `dist-baseline/`; `grep -rn "AiProfilesSection\|AiPresetsSection\|ItemList\|useDraft" src` → uscita 1.
+
+- [ ] **Step 1: I test jsdom, prima del codice**
+
+`src/elements/settings/presets.dom.test.ts`:
+
+```ts
+import '../../testing/domEnv';
+
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+import '../define';
+import type { AiState } from '../../ai/aiController';
+import { builtInPresets } from '../../ai/presets';
+import type { PromptPreset } from '../../ai/types';
+import { EN_MESSAGES } from '../../i18n/messages';
+import { createI18nStore } from '../../state/i18nStore';
+import { countListeners } from '../../testing/countListeners';
+import { installDialogStub } from '../../testing/dialogStub';
+import { fakeAi } from '../../testing/fakeAi';
+import { waitFor } from '../../testing/waitFor';
+
+installDialogStub();
+test.afterEach(() => document.body.replaceChildren());
+
+const MINE: PromptPreset = { ...builtInPresets()[0], id: 'mine', builtInId: undefined, name: 'Mine', instructions: 'do it', order: 5 };
+const BUILT_IN: PromptPreset = { ...builtInPresets()[0], order: 1 };
+
+function mount(presets: PromptPreset[] = [MINE, BUILT_IN]) {
+  const { store: i18n, listeners } = countListeners(createI18nStore({ locale: 'en', messages: EN_MESSAGES, load: async (locale) => ({ locale, messages: EN_MESSAGES }), persist() {} }));
+  const ai = fakeAi({ presets } as Partial<AiState>);
+  const saved: PromptPreset[] = [];
+  const deleted: string[] = [];
+  Object.assign(ai, {
+    savePreset: async (p: PromptPreset) => void saved.push(p),
+    deletePreset: async (id: string) => void deleted.push(id),
+  });
+  const el = document.createElement('hmd-settings-presets');
+  el.controller = ai as never;
+  el.i18n = i18n;
+  document.body.append(el);
+  const dirty: boolean[] = [];
+  el.addEventListener('hmd-settings-dirty', (event) => dirty.push(event.detail.dirty));
+  const items = () => [...el.querySelectorAll<HTMLButtonElement>('.list > button')];
+  const button = (label: string) => [...el.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent === label)!;
+  const name = () => el.querySelector<HTMLInputElement>('.detail input')!;
+  return { el, ai, i18n, listeners, saved, deleted, dirty, items, button, name };
+}
+
+const type = (input: HTMLInputElement, value: string) => {
+  input.value = value;
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+};
+
+test('the same DOM as AiPresetsSection.tsx: a split with the sorted list and + Create, no detail until one is opened', () => {
+  const { el, items } = mount();
+  const split = el.firstElementChild!;
+  assert.equal(split.className, 'split');
+  assert.deepEqual([...split.children].map((c) => c.className), ['list']);
+  assert.deepEqual(items().map((b) => b.textContent), [EN_MESSAGES[`ai.preset.${BUILT_IN.builtInId}` as keyof typeof EN_MESSAGES] ?? BUILT_IN.name, 'Mine', `+ ${EN_MESSAGES['ai.create']}`]);
+  assert.equal(items().at(-1)!.className, 'create');
+});
+
+test('opening a preset shows its detail in the order of the React form; the open item is aria-current', () => {
+  const { el, items, name } = mount();
+  items()[1].click();
+  const detail = el.querySelector('.detail')!;
+  assert.deepEqual([...detail.children].map((c) => c.localName), ['label', 'label', 'label', 'label', 'label', 'label', 'label', 'hmd-ai-parameters', 'div']);
+  assert.equal(name().value, 'Mine');
+  assert.equal(items()[1].getAttribute('aria-current'), 'true');
+  assert.equal(items()[0].hasAttribute('aria-current'), false);
+  // Un preset suo: Elimina; uno predefinito: Ripristina l'originale, nello stesso posto.
+  assert.deepEqual([...detail.querySelectorAll('.actions button')].map((b) => b.textContent), [EN_MESSAGES['ai.duplicate'], EN_MESSAGES['ai.delete'], EN_MESSAGES['ai.save']]);
+  items()[0].click();
+  assert.deepEqual([...detail.querySelectorAll('.actions button')].map((b) => b.textContent), [EN_MESSAGES['ai.duplicate'], EN_MESSAGES['ai.restoreOriginal'], EN_MESSAGES['ai.save']]);
+});
+
+test('typing makes the draft dirty (one event), the focused field is never rewritten, Save makes it clean again', async () => {
+  const { el, items, name, dirty, saved, button } = mount();
+  items()[1].click();
+  name().focus();
+  type(name(), 'Mine 2');
+  type(name(), 'Mine 23');
+  assert.deepEqual(dirty, [true]);
+  assert.equal(el.dirty, true);
+  assert.equal(name().value, 'Mine 23');
+  button(EN_MESSAGES['ai.save']).click();
+  await waitFor(() => saved.length === 1);
+  assert.equal(saved[0].name, 'Mine 23');
+  await waitFor(() => dirty.length === 2);
+  assert.deepEqual(dirty, [true, false]);
+});
+
+test('switching with unsaved changes asks first: Cancel keeps the draft, Discard opens the other preset', async () => {
+  const { items, name, button } = mount();
+  items()[1].click();
+  type(name(), 'Draft');
+  items()[0].click();
+  const dialog = document.querySelector('dialog')!;
+  assert.ok(dialog.open);
+  [...dialog.querySelectorAll('button')].find((b) => b.textContent === EN_MESSAGES['dialog.cancel'])!.click();
+  await waitFor(() => document.querySelector('dialog') === null);
+  assert.equal(name().value, 'Draft');
+  items()[0].click();
+  [...document.querySelector('dialog')!.querySelectorAll('button')].find((b) => b.textContent === EN_MESSAGES['ai.discardChanges'])!.click();
+  await waitFor(() => name().value !== 'Draft');
+  assert.ok(button(EN_MESSAGES['ai.restoreOriginal']));
+});
+
+test('Delete asks first and removes the preset; the detail goes away', async () => {
+  const { el, items, button, deleted } = mount();
+  items()[1].click();
+  button(EN_MESSAGES['ai.delete']).click();
+  const dialog = document.querySelector('dialog')!;
+  assert.ok(dialog.textContent!.includes(EN_MESSAGES['ai.deleteMessage']));
+  [...dialog.querySelectorAll('button')].find((b) => b.textContent === EN_MESSAGES['ai.delete'])!.click();
+  await waitFor(() => deleted.length === 1);
+  assert.deepEqual(deleted, ['mine']);
+  await waitFor(() => el.querySelector('.detail') === null);
+});
+
+test('detached: the confirmation closes, the store and language listeners are gone', async () => {
+  const { el, ai, listeners, items, name } = mount();
+  items()[1].click();
+  type(name(), 'Draft');
+  items()[0].click();
+  assert.ok(document.querySelector('dialog'));
+  el.remove();
+  await waitFor(() => document.querySelector('dialog') === null);
+  assert.equal(listeners(), 0);
+  assert.equal(ai.listeners(), 0);
+});
+```
+
+`src/elements/settings/profiles.dom.test.ts`:
+
+```ts
+import '../../testing/domEnv';
+
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+import '../define';
+import type { AiState } from '../../ai/aiController';
+import { defaultProfile } from '../../ai/profiles';
+import type { ChatProvider, ModelProfile } from '../../ai/types';
+import { EN_MESSAGES } from '../../i18n/messages';
+import { createI18nStore } from '../../state/i18nStore';
+import { installDialogStub } from '../../testing/dialogStub';
+import { fakeAi } from '../../testing/fakeAi';
+import { installPopoverStub } from '../../testing/popoverStub';
+import { waitFor } from '../../testing/waitFor';
+
+installDialogStub();
+installPopoverStub();
+test.afterEach(() => document.body.replaceChildren());
+
+const OLLAMA = defaultProfile('ollama', 'o');
+const CLOUD: ModelProfile = { ...defaultProfile('anthropic', 'c'), name: 'Cloud' };
+
+function mount() {
+  const i18n = createI18nStore({ locale: 'en', messages: EN_MESSAGES, load: async (locale) => ({ locale, messages: EN_MESSAGES }), persist() {} });
+  const ai = fakeAi({ profiles: [OLLAMA, CLOUD] } as Partial<AiState>);
+  const secrets: unknown[][] = [];
+  const saved: ModelProfile[] = [];
+  let connection: 'ok' | 'down' = 'ok';
+  Object.assign(ai, {
+    setSecret: async (...args: unknown[]) => void secrets.push(args),
+    saveProfile: async (p: ModelProfile) => void saved.push(p),
+    deleteProfile: async () => {},
+    provider: async () => ({ listModels: async () => (connection === 'ok' ? [] : null) }) as unknown as ChatProvider,
+  });
+  const el = document.createElement('hmd-settings-profiles');
+  el.controller = ai as never;
+  el.i18n = i18n;
+  document.body.append(el);
+  const button = (label: string) => [...el.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent === label);
+  const field = (label: string) => ([...el.querySelectorAll('label')].find((l) => l.querySelector('span')?.textContent === label)?.querySelector('input, select') ?? null) as HTMLInputElement | null;
+  return { el, ai, secrets, saved, button, field, down: () => (connection = 'down') };
+}
+
+const type = (input: HTMLInputElement, value: string) => {
+  input.value = value;
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+};
+
+test('a local profile: name, provider, url, help, model, parameters, context, effort and the actions; no key field', () => {
+  const { el, button, field } = mount();
+  button('ollama')!.click();
+  const detail = el.querySelector('.detail')!;
+  assert.deepEqual([...detail.children].map((c) => c.localName), ['label', 'label', 'label', 'p', 'hmd-ai-model-select', 'hmd-ai-parameters', 'label', 'label', 'div']);
+  assert.equal(field(EN_MESSAGES['ai.provider'])!.value, 'ollama');
+  assert.equal(field(EN_MESSAGES['ai.secret']), null);
+  assert.equal(el.querySelector('hmd-ai-model-select')!.profile?.id, 'o');
+});
+
+test('a cloud profile: the key field, Remember, the notice and Save key (off while the field is empty); the url is off for Anthropic', () => {
+  const { el, button, field } = mount();
+  button('Cloud')!.click();
+  assert.equal(field(EN_MESSAGES['ai.url'])!.disabled, true);
+  const key = field(EN_MESSAGES['ai.secret'])!;
+  assert.equal(key.type, 'password');
+  assert.equal(key.autocomplete, 'off');
+  assert.equal(button(EN_MESSAGES['ai.saveSecret'])!.disabled, true);
+  type(key, 'sk-test');
+  assert.equal(button(EN_MESSAGES['ai.saveSecret'])!.disabled, false);
+  // La chiave non finisce mai in un attributo.
+  assert.ok(!el.outerHTML.includes('sk-test'));
+});
+
+test('Save key hands the key to the controller once and empties the field', async () => {
+  const { button, field, secrets } = mount();
+  button('Cloud')!.click();
+  type(field(EN_MESSAGES['ai.secret'])!, 'sk-test');
+  button(EN_MESSAGES['ai.saveSecret'])!.click();
+  await waitFor(() => secrets.length === 1);
+  assert.equal(secrets[0][1], 'sk-test');
+  assert.equal(secrets[0][2], false);
+  await waitFor(() => field(EN_MESSAGES['ai.secret'])!.value === '');
+});
+
+test('changing provider sets its default url and forgets the typed key', () => {
+  const { button, field } = mount();
+  button('Cloud')!.click();
+  type(field(EN_MESSAGES['ai.secret'])!, 'sk-test');
+  const provider = field(EN_MESSAGES['ai.provider'])! as unknown as HTMLSelectElement;
+  provider.value = 'openai-compatible';
+  provider.dispatchEvent(new Event('change', { bubbles: true }));
+  assert.equal(field(EN_MESSAGES['ai.url'])!.value, 'https://api.openai.com');
+  assert.equal(field(EN_MESSAGES['ai.secret'])!.value, '');
+});
+
+test('Connection: «Connected» as a status only after a good answer; an unreachable server is reported', async () => {
+  const { el, ai, button, down } = mount();
+  button('ollama')!.click();
+  button(EN_MESSAGES['ai.connection'])!.click();
+  await waitFor(() => el.querySelector('[role="status"]') !== null);
+  assert.equal(el.querySelector('[role="status"]')!.textContent, EN_MESSAGES['ai.connected']);
+  down();
+  button(EN_MESSAGES['ai.connection'])!.click();
+  assert.equal(el.querySelector('[role="status"]'), null);
+  await waitFor(() => ai.reports.length === 1);
+  assert.deepEqual(ai.reports, [{ code: 'unreachable' }]);
+});
+
+test('Save validates the profile and makes the draft clean', async () => {
+  const { el, button, field, saved } = mount();
+  button('ollama')!.click();
+  type(field(EN_MESSAGES['ai.name'])!, 'Local');
+  assert.equal(el.dirty, true);
+  button(EN_MESSAGES['ai.save'])!.click();
+  await waitFor(() => saved.length === 1 && !el.dirty);
+  assert.equal(saved[0].name, 'Local');
+});
+```
+
+```bash
+npx tsx --import ./src/testing/assetHooks.ts --test --test-timeout=20000 src/elements/settings/presets.dom.test.ts src/elements/settings/profiles.dom.test.ts
+```
+
+RED atteso (annotarlo): il modulo `../define` non conosce ancora i due tag, quindi `document.createElement('hmd-settings-presets')` è un `HTMLElement` vuoto: i test cadono su `el.firstElementChild!` (null) o sui pulsanti che non ci sono; `npx tsc --noEmit` segnala `el.dirty` e `el.controller` sconosciuti.
+
+- [ ] **Step 2: Campi ed elenco condivisi**
+
+`src/elements/settings/fields.ts`:
+
+```ts
+import { el } from '../../dom/el';
+
+type Field = HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
+
+/** `label > span + campo`, come i campi del dettaglio di profili e preset. */
+export function field(caption: HTMLSpanElement, control: Field): HTMLLabelElement {
+  return el('label', null, caption, control);
+}
+
+/** `label > checkbox + testo`. */
+export function checkbox(control: HTMLInputElement, text: Text): HTMLLabelElement {
+  return el('label', null, control, text);
+}
+
+/**
+ * Valore di un campo dalla bozza. Un campo con il focus non si riscrive mai (lezione delle fasi 4–6b): il
+ * testo che l'utente scrive è già la bozza; si riallinea al `focusout` (per esempio un numero non valido).
+ */
+export function syncValue(control: Field, value: string): void {
+  if (control.value !== value && control.ownerDocument.activeElement !== control) control.value = value;
+}
+
+export function syncChecked(control: HTMLInputElement, checked: boolean): void {
+  if (control.checked !== checked) control.checked = checked;
+}
+
+/**
+ * Figli condizionali di `parent` (come `{cond && <x/>}` di React): toglie quelli di `all` non voluti e
+ * inserisce i voluti mancanti nell'ordine di `wanted`, senza mai spostare un nodo già al suo posto.
+ */
+export function showChildren(parent: Element, wanted: readonly Element[], all: readonly Element[]): void {
+  for (const node of all) if (!wanted.includes(node) && node.parentNode === parent) node.remove();
+  let cursor: Element | null = parent.firstElementChild;
+  for (const node of wanted) {
+    if (node === cursor) cursor = cursor.nextElementSibling;
+    else parent.insertBefore(node, cursor);
+  }
+}
+```
+
+`src/elements/settings/itemList.ts`:
+
+```ts
+import { el, setText, toggleAttr } from '../../dom/el';
+import { reconcileList } from '../../dom/list';
+
+export interface ItemListOptions<T> {
+  selectedId: string | null;
+  label(item: T): string;
+  createLabel: string;
+  onSelect(item: T): void;
+  onCreate(): void;
+}
+
+type Row<T> = { kind: 'item'; item: T } | { kind: 'create' };
+
+/** Le opzioni dell'ultimo render di ogni elenco e la voce di ogni pulsante: i clic leggono sempre quelle. */
+const lists = new WeakMap<Element, ItemListOptions<never>>();
+const rows = new WeakMap<Element, unknown>();
+
+/**
+ * Elenco di profili o preset con «+ Crea» in fondo (era ItemList.tsx): un pulsante per voce, la voce aperta
+ * con `aria-current`. I pulsanti si riusano per id, così il focus resta su quello premuto.
+ */
+export function renderItemList<T extends { id: string }>(list: HTMLDivElement, items: readonly T[], options: ItemListOptions<T>): void {
+  lists.set(list, options as ItemListOptions<never>);
+  const select = (node: Element) => (lists.get(list) as ItemListOptions<T> | undefined)?.onSelect(rows.get(node) as T);
+  const all: Row<T>[] = [...items.map((item) => ({ kind: 'item' as const, item })), { kind: 'create' }];
+  reconcileList(
+    list,
+    all,
+    (row) => (row.kind === 'item' ? `item:${row.item.id}` : 'create'),
+    (row) =>
+      row.kind === 'item'
+        ? el('button', { type: 'button', class: 'item', on: { click: (event) => select(event.currentTarget as Element) } })
+        : el('button', { type: 'button', class: 'create', on: { click: () => lists.get(list)?.onCreate() } }),
+    (node, row) => {
+      if (row.kind === 'create') return setText(node, `+ ${options.createLabel}`);
+      rows.set(node, row.item);
+      setText(node, options.label(row.item));
+      toggleAttr(node, 'aria-current', row.item.id === options.selectedId, 'true');
+    },
+  );
+}
+```
+
+- [ ] **Step 3: Il foglio comune e le radici multiple (decisioni 2 e 3)**
+
+`src/elements/settings/sections.css`:
+
+```css
+@layer components {
+  /*
+   * Valori copiati da Settings.module.css: le tre sezioni AI condividono elenco e dettaglio. Nessun limite
+   * inferiore: oggi `.detail label` e `.detail input` raggiungono anche i campi di hmd-ai-model-select e
+   * hmd-ai-parameters, e lì vincevano perché il modulo stava fuori dai layer. Dentro il layer vincerebbe il
+   * foglio più vicino (prossimità di @scope) a pari specificità: `:scope` davanti alza la specificità di
+   * una classe e tiene il risultato di oggi (misurato con l'audit «settings-profile»).
+   */
+  @scope (hmd-settings-profiles, hmd-settings-presets, hmd-settings-sync) {
+    :scope {
+      display: contents;
+    }
+
+    .split {
+      display: grid;
+      grid-template-columns: 12rem minmax(0, 1fr);
+      gap: 16px;
+      align-items: start;
+    }
+
+    .list {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding: 6px;
+      border: 1px solid var(--c-border);
+      border-radius: 8px;
+    }
+
+    .item,
+    .create {
+      padding: 6px 8px;
+      border: none;
+      border-radius: 6px;
+      background: none;
+      color: var(--c-text);
+      text-align: start;
+      cursor: pointer;
+    }
+
+    .item[aria-current='true'] {
+      background: var(--c-accent-soft);
+    }
+
+    .create {
+      color: var(--c-accent);
+    }
+
+    .detail {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    :scope .detail label {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    :scope .detail label > span {
+      flex: 0 0 11rem;
+    }
+
+    :scope .detail input:not([type='checkbox']):not([type='radio']),
+    :scope .detail select,
+    :scope .detail textarea {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .detail textarea {
+      min-height: 8rem;
+    }
+
+    .help {
+      margin: 0;
+      color: var(--c-muted);
+      font-size: 13px;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 6px;
+    }
+
+    .actions > :last-child {
+      margin-inline-start: auto;
+    }
+
+    @media (width < 700px) {
+      .split {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+  }
+}
+```
+
+In `src/architecture.test.ts`, dentro `scopeProblems`, la riga del `const m = …` e la successiva diventano (le radici separate da virgola, ognuna controllata):
+
+```ts
+      // Più radici separate da virgola (sezioni con un foglio comune), ognuna ammessa nella cartella.
+      const m = /^@scope\s*\(\s*([^)\s,]+(?:\s*,\s*[^)\s,]+)*)\s*\)(?:\s+to\s*\(\s*(hmd-[a-z-]+(?:\s*,\s*hmd-[a-z-]+)*)\s*\))?$/.exec(scope.prelude);
+      if (!m || scope.body === null) problems.push(`non è un @scope: ${scope.prelude}`);
+      else for (const root of m[1].split(/\s*,\s*/)) if (!rootAllowed(folder, root)) problems.push(`radice non ammessa in ${folder}/: ${root}`);
+```
+
+e nel test «the @scope check accepts the allowed shapes…», dopo la riga di `hmd-settings-profiles`:
+
+```ts
+  assert.deepEqual(scopeProblems('settings', '@layer components { @scope (hmd-settings-profiles, hmd-settings-presets) {} }'), []);
+  assert.deepEqual(scopeProblems('settings', '@layer components { @scope (hmd-settings-sync, hmd-preview) {} }'), ['radice non ammessa in settings/: hmd-preview']);
+```
+
+(RED: con la regex di oggi la prima riga dà `non è un @scope: …`.)
+
+- [ ] **Step 4: `hmd-settings-presets`**
+
+`src/elements/settings/presets.element.ts`:
+
+```ts
+import type { AiController } from '../../ai/aiController';
+import { presetLabel } from '../../ai/presetName';
+import { builtInPresets, restorePreset } from '../../ai/presets';
+import { defaultProfile } from '../../ai/profiles';
+import type { PromptPreset } from '../../ai/types';
+import { HmdElement } from '../../dom/element';
+import { el, setText } from '../../dom/el';
+import { RenderLoop } from '../../dom/renderLoop';
+import { cancelSwitch, confirmSwitch, editDraft, emptyDraft, isDirty, openDraft, selectDraft, type DraftState } from '../../state/draftState';
+import type { I18nStore } from '../../state/i18nStore';
+import type { HmdAiParameters } from '../ai/parameters.element';
+import { showConfirmDialog, showDiscardChangesDialog } from '../dialogs/confirmDialog';
+import { emit } from '../events';
+import { checkbox, field, syncChecked, syncValue } from './fields';
+import { renderItemList } from './itemList';
+import './sections.css';
+
+/** Quello che la sezione dei preset usa del controller. */
+export type PresetsController = Pick<AiController, 'subscribe' | 'getState' | 'report' | 'savePreset' | 'deletePreset'>;
+
+const STRATEGIES = ['whole', 'chunked'] as const;
+const FRONTMATTER = ['keep', 'include'] as const;
+
+interface Detail {
+  root: HTMLDivElement;
+  captions: Record<'name' | 'instructions' | 'targetLanguage' | 'strategy' | 'frontmatter' | 'order', HTMLSpanElement>;
+  name: HTMLInputElement;
+  instructions: HTMLTextAreaElement;
+  targetLanguage: HTMLInputElement;
+  strategy: HTMLSelectElement;
+  frontmatter: HTMLSelectElement;
+  order: HTMLInputElement;
+  hidden: HTMLInputElement;
+  hiddenText: Text;
+  params: HmdAiParameters;
+  duplicate: HTMLButtonElement;
+  restore: HTMLButtonElement;
+  remove: HTMLButtonElement;
+  save: HTMLButtonElement;
+}
+
+/**
+ * Sezione dei preset nelle impostazioni (era AiPresetsSection.tsx): elenco ordinato con «+ Crea», dettaglio
+ * della bozza aperta. Passare a un altro preset con modifiche aperte chiede conferma; eliminare chiede
+ * conferma. Verso fuori manda solo `hmd-settings-dirty` quando la bozza diventa (o smette di essere) da
+ * salvare; i dialog aperti da qui si chiudono al distacco.
+ */
+export class HmdSettingsPresets extends HmdElement {
+  #controller: PresetsController | null = null;
+  #i18n: I18nStore | null = null;
+
+  #list: HTMLDivElement | null = null;
+  #detail: Detail | null = null;
+  #draft: DraftState<PromptPreset> = emptyDraft();
+  #dialogs: AbortController | null = null;
+  #loop = new RenderLoop(this, {
+    ready: () => !!this.#list && !!this.#controller && !!this.#i18n && this.isConnected,
+    render: () => this.#render(this.#list!, this.#controller!, this.#i18n!),
+  });
+
+  get controller(): PresetsController | null { return this.#controller; }
+  set controller(value: PresetsController | null) {
+    value ??= null;
+    if (value === this.#controller) return;
+    this.#controller = value;
+    this.reconnect();
+  }
+  get i18n(): I18nStore | null { return this.#i18n; }
+  set i18n(value: I18nStore | null) {
+    value ??= null;
+    if (value === this.#i18n) return;
+    this.#i18n = value;
+    this.reconnect();
+  }
+  /** La bozza aperta ha modifiche non salvate. */
+  get dirty(): boolean { return isDirty(this.#draft); }
+
+  protected connect(signal: AbortSignal): void {
+    if (!this.#list) {
+      this.#list = el('div', { class: 'list' });
+      this.append(el('div', { class: 'split' }, this.#list));
+    }
+    this.#dialogs ??= new AbortController();
+    // Un campo riallineato quando perde il focus (mai riscritto mentre lo ha).
+    this.addEventListener('focusout', () => queueMicrotask(() => this.#loop.update()), { signal });
+    const { controller, i18n } = { controller: this.#controller, i18n: this.#i18n };
+    if (!controller || !i18n) return;
+    this.watch(controller, () => this.#loop.update(), signal);
+    this.watch(i18n, () => this.#loop.update(), signal);
+  }
+
+  disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.#dialogs?.abort();
+    this.#dialogs = null;
+  }
+
+  /** Stato salvato e disegnato prima di dire fuori che la bozza è cambiata. */
+  #setDraft(next: DraftState<PromptPreset>): void {
+    const was = isDirty(this.#draft);
+    this.#draft = next;
+    this.#loop.update();
+    if (isDirty(next) !== was) emit(this, 'hmd-settings-dirty', { dirty: isDirty(next) });
+  }
+
+  #edit(patch: Partial<PromptPreset>): void {
+    const draft = this.#draft.draft;
+    if (draft) this.#setDraft(editDraft(this.#draft, { ...draft, ...patch }));
+  }
+
+  #run(job: Promise<unknown>): void {
+    void job.catch((error) => this.#controller?.report(error));
+  }
+
+  #choose(preset: PromptPreset): void {
+    const t = this.#i18n?.t;
+    const dirty = isDirty(this.#draft);
+    this.#setDraft(selectDraft(this.#draft, preset));
+    const signal = this.#dialogs?.signal;
+    if (!dirty || !t || !signal) return;
+    void showDiscardChangesDialog({ t, signal }).then((discard) => {
+      if (!signal.aborted) this.#setDraft(discard ? confirmSwitch(this.#draft) : cancelSwitch(this.#draft));
+    });
+  }
+
+  #remove(preset: PromptPreset): void {
+    const t = this.#i18n?.t;
+    const signal = this.#dialogs?.signal;
+    if (!t || !signal) return;
+    const name = presetLabel(preset, t);
+    void showConfirmDialog({ title: t('ai.deleteTitle', { name }), message: t('ai.deleteMessage'), confirmLabel: t('ai.delete'), t, signal }).then((ok) => {
+      if (ok && this.#controller) this.#run(this.#controller.deletePreset(preset.id).then(() => this.#setDraft(openDraft(this.#draft, null))));
+    });
+  }
+
+  #createDetail(): Detail {
+    const caption = () => el('span');
+    const value = (event: Event) => (event.currentTarget as HTMLInputElement).value;
+    const captions = { name: caption(), instructions: caption(), targetLanguage: caption(), strategy: caption(), frontmatter: caption(), order: caption() };
+    const detail: Detail = {
+      root: el('div', { class: 'detail' }),
+      captions,
+      name: el('input', { on: { input: (e) => this.#edit({ name: value(e) }) } }),
+      instructions: el('textarea', { on: { input: (e) => this.#edit({ instructions: value(e) }) } }),
+      targetLanguage: el('input', { on: { input: (e) => this.#edit({ variables: { targetLanguage: value(e) } }) } }),
+      strategy: el('select', { on: { change: (e) => this.#edit({ strategy: value(e) as PromptPreset['strategy'] }) } }, STRATEGIES.map((v) => el('option', { value: v }))),
+      frontmatter: el('select', { on: { change: (e) => this.#edit({ frontmatter: value(e) as PromptPreset['frontmatter'] }) } }, FRONTMATTER.map((v) => el('option', { value: v }))),
+      order: el('input', { type: 'number', min: '0', on: { input: (e) => this.#edit({ order: Math.max(0, Number(value(e)) || 0) }) } }),
+      hidden: el('input', { type: 'checkbox', on: { change: (e) => this.#edit({ hidden: (e.currentTarget as HTMLInputElement).checked }) } }),
+      hiddenText: document.createTextNode(''),
+      params: el('hmd-ai-parameters', { on: { 'hmd-params-change': (e) => this.#edit({ params: e.detail.params }) } }),
+      duplicate: el('button', { type: 'button', on: { click: () => this.#duplicate() } }),
+      restore: el('button', { type: 'button', on: { click: () => this.#restore() } }),
+      remove: el('button', { type: 'button', on: { click: () => this.#draft.draft && this.#remove(this.#draft.draft) } }),
+      save: el('button', { type: 'button', on: { click: () => this.#save() } }),
+    };
+    detail.params.profile = defaultProfile();
+    detail.root.append(
+      field(captions.name, detail.name),
+      field(captions.instructions, detail.instructions),
+      field(captions.targetLanguage, detail.targetLanguage),
+      field(captions.strategy, detail.strategy),
+      field(captions.frontmatter, detail.frontmatter),
+      field(captions.order, detail.order),
+      checkbox(detail.hidden, detail.hiddenText),
+      detail.params,
+      el('div', { class: 'actions' }, detail.duplicate, detail.restore, detail.save),
+    );
+    return detail;
+  }
+
+  #duplicate(): void {
+    const draft = this.#draft.draft;
+    const t = this.#i18n?.t;
+    if (draft && t) this.#edit({ id: crypto.randomUUID(), builtInId: undefined, name: presetLabel(draft, t) });
+  }
+
+  #restore(): void {
+    const draft = this.#draft.draft;
+    if (draft) this.#setDraft(editDraft(this.#draft, restorePreset(draft)));
+  }
+
+  #save(): void {
+    const draft = this.#draft.draft;
+    if (draft && this.#controller) this.#run(this.#controller.savePreset(draft).then(() => this.#setDraft(openDraft(this.#draft, draft))));
+  }
+
+  #render(list: HTMLDivElement, controller: PresetsController, i18n: I18nStore): void {
+    const t = i18n.t;
+    const state = controller.getState();
+    const draft = this.#draft.draft;
+    const sorted = [...state.presets].sort((a, b) => a.order - b.order);
+    renderItemList(list, sorted, {
+      selectedId: draft?.id ?? null,
+      label: (p) => presetLabel(p, t),
+      createLabel: t('ai.create'),
+      onSelect: (p) => this.#choose({ ...p }),
+      onCreate: () => this.#choose({ ...builtInPresets()[0], id: crypto.randomUUID(), builtInId: undefined, name: '', instructions: '', order: controller.getState().presets.length }),
+    });
+    const split = list.parentElement!;
+    if (!draft) {
+      this.#detail?.root.remove();
+      return;
+    }
+    const d = (this.#detail ??= this.#createDetail());
+    setText(d.captions.name, t('ai.name'));
+    setText(d.captions.instructions, t('ai.instructions'));
+    setText(d.captions.targetLanguage, t('ai.targetLanguage'));
+    setText(d.captions.strategy, t('ai.strategy'));
+    setText(d.captions.frontmatter, t('ai.frontmatter'));
+    setText(d.captions.order, t('ai.order'));
+    [...d.strategy.options].forEach((o) => setText(o, t(`ai.strategy.${o.value as (typeof STRATEGIES)[number]}`)));
+    [...d.frontmatter.options].forEach((o) => setText(o, t(`ai.frontmatter.${o.value as (typeof FRONTMATTER)[number]}`)));
+    setText(d.hiddenText, t('ai.hidden'));
+    setText(d.duplicate, t('ai.duplicate'));
+    setText(d.restore, t('ai.restoreOriginal'));
+    setText(d.remove, t('ai.delete'));
+    setText(d.save, t('ai.save'));
+    syncValue(d.name, draft.name);
+    syncValue(d.instructions, draft.instructions);
+    syncValue(d.targetLanguage, draft.variables?.targetLanguage ?? '');
+    syncValue(d.strategy, draft.strategy);
+    syncValue(d.frontmatter, draft.frontmatter);
+    syncValue(d.order, String(draft.order));
+    syncChecked(d.hidden, draft.hidden);
+    const params = draft.params ?? {};
+    if (d.params.i18n !== i18n) d.params.i18n = i18n;
+    if (d.params.value !== params) d.params.value = params;
+    // Ripristina (preset predefinito) o Elimina, nello stesso posto.
+    const second = draft.builtInId ? d.restore : d.remove;
+    const other = draft.builtInId ? d.remove : d.restore;
+    if (second.parentNode !== d.save.parentNode) d.save.before(second);
+    other.remove();
+    if (d.root.parentNode !== split) split.append(d.root);
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'hmd-settings-presets': HmdSettingsPresets;
+  }
+}
+```
+
+- [ ] **Step 5: `hmd-settings-profiles` e l'eccezione della chiave (decisione 4)**
+
+`src/elements/settings/profiles.element.ts` (i metodi privati si chiamano `#storeKey` e `#forgetKey`: `#saveSecret(` farebbe scattare `ELEMENT_AI`, misurato):
+
+```ts
+import type { AiController } from '../../ai/aiController';
+import { changeProvider } from '../../ai/models';
+import { DEFAULT_URLS, defaultProfile, PROVIDER_KINDS, validateProfile } from '../../ai/profiles';
+import type { ModelProfile, ProviderKind } from '../../ai/types';
+import { HmdElement } from '../../dom/element';
+import { el, setText } from '../../dom/el';
+import { RenderLoop } from '../../dom/renderLoop';
+import type { MessageKey } from '../../i18n/messages';
+import { cancelSwitch, confirmSwitch, editDraft, emptyDraft, isDirty, openDraft, selectDraft, type DraftState } from '../../state/draftState';
+import type { I18nStore } from '../../state/i18nStore';
+import type { HmdAiModelSelect } from '../ai/model-select.element';
+import type { HmdAiParameters } from '../ai/parameters.element';
+import { showConfirmDialog, showDiscardChangesDialog } from '../dialogs/confirmDialog';
+import { emit } from '../events';
+import { checkbox, field, showChildren, syncChecked, syncValue } from './fields';
+import { renderItemList } from './itemList';
+import './sections.css';
+
+/** Quello che la sezione dei profili usa del controller (il selettore del modello compreso). */
+export type ProfilesController = Pick<AiController, 'subscribe' | 'getState' | 'report' | 'provider' | 'saveProfile' | 'deleteProfile' | 'setSecret'>;
+
+/** Provider con l'effort come opzione del profilo, e provider con una chiave. */
+const EFFORT_KINDS: readonly ProviderKind[] = ['ollama', 'lmstudio', 'openai-compatible'];
+const SECRET_KINDS: readonly ProviderKind[] = ['anthropic', 'openai-compatible'];
+
+interface Detail {
+  root: HTMLDivElement;
+  captions: Record<'name' | 'provider' | 'url' | 'contextTokens' | 'secret', HTMLSpanElement>;
+  /** Campi sempre presenti, nell'ordine di AiProfilesSection.tsx. */
+  fixed: HTMLLabelElement[];
+  name: HTMLInputElement;
+  provider: HTMLSelectElement;
+  url: HTMLInputElement;
+  help: HTMLParagraphElement;
+  model: HmdAiModelSelect;
+  params: HmdAiParameters;
+  contextTokensLabel: HTMLLabelElement;
+  contextTokens: HTMLInputElement;
+  effortLabel: HTMLLabelElement;
+  effort: HTMLInputElement;
+  effortText: Text;
+  secretLabel: HTMLLabelElement;
+  /** La chiave scritta: solo nel campo e qui finché non si salva, mai in attributi o nella bozza. */
+  secret: HTMLInputElement;
+  rememberLabel: HTMLLabelElement;
+  remember: HTMLInputElement;
+  rememberText: Text;
+  secretNotice: HTMLParagraphElement;
+  saveSecret: HTMLButtonElement;
+  actions: HTMLDivElement;
+  connection: HTMLButtonElement;
+  duplicate: HTMLButtonElement;
+  remove: HTMLButtonElement;
+  save: HTMLButtonElement;
+  connected: HTMLParagraphElement;
+}
+
+/**
+ * Sezione dei profili nelle impostazioni (era AiProfilesSection.tsx): elenco con «+ Crea» e dettaglio della
+ * bozza con provider, indirizzo, modello (`hmd-ai-model-select`), parametri (`hmd-ai-parameters`), contesto,
+ * effort, chiave e azioni. La chiave scritta resta nel campo password e va al controller solo con «Salva
+ * chiave»: l'unica eccezione alla regola «gli elementi non toccano le chiavi» (architecture.test.ts).
+ * Verso fuori manda solo `hmd-settings-dirty`; i dialog aperti da qui si chiudono al distacco.
+ */
+export class HmdSettingsProfiles extends HmdElement {
+  #controller: ProfilesController | null = null;
+  #i18n: I18nStore | null = null;
+
+  #list: HTMLDivElement | null = null;
+  #detail: Detail | null = null;
+  #draft: DraftState<ModelProfile> = emptyDraft();
+  #connected = false;
+  #dialogs: AbortController | null = null;
+  #loop = new RenderLoop(this, {
+    ready: () => !!this.#list && !!this.#controller && !!this.#i18n && this.isConnected,
+    render: () => this.#render(this.#list!, this.#controller!, this.#i18n!),
+  });
+
+  get controller(): ProfilesController | null { return this.#controller; }
+  set controller(value: ProfilesController | null) {
+    value ??= null;
+    if (value === this.#controller) return;
+    this.#controller = value;
+    this.reconnect();
+  }
+  get i18n(): I18nStore | null { return this.#i18n; }
+  set i18n(value: I18nStore | null) {
+    value ??= null;
+    if (value === this.#i18n) return;
+    this.#i18n = value;
+    this.reconnect();
+  }
+  /** La bozza aperta ha modifiche non salvate. */
+  get dirty(): boolean { return isDirty(this.#draft); }
+
+  protected connect(signal: AbortSignal): void {
+    if (!this.#list) {
+      this.#list = el('div', { class: 'list' });
+      this.append(el('div', { class: 'split' }, this.#list));
+    }
+    this.#dialogs ??= new AbortController();
+    this.addEventListener('focusout', () => queueMicrotask(() => this.#loop.update()), { signal });
+    const { controller, i18n } = { controller: this.#controller, i18n: this.#i18n };
+    if (!controller || !i18n) return;
+    this.watch(controller, () => this.#loop.update(), signal);
+    this.watch(i18n, () => this.#loop.update(), signal);
+  }
+
+  disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.#dialogs?.abort();
+    this.#dialogs = null;
+  }
+
+  #setDraft(next: DraftState<ModelProfile>): void {
+    const was = isDirty(this.#draft);
+    this.#draft = next;
+    this.#loop.update();
+    if (isDirty(next) !== was) emit(this, 'hmd-settings-dirty', { dirty: isDirty(next) });
+  }
+
+  #edit(patch: Partial<ModelProfile>): void {
+    const draft = this.#draft.draft;
+    if (draft) this.#setDraft(editDraft(this.#draft, { ...draft, ...patch }));
+  }
+
+  #run(job: Promise<unknown>): void {
+    void job.catch((error) => this.#controller?.report(error));
+  }
+
+  /** Apre un profilo (o un profilo nuovo): la chiave scritta e «Connesso» si dimenticano subito. */
+  #pick(profile: ModelProfile | null): void {
+    const t = this.#i18n?.t;
+    const dirty = isDirty(this.#draft);
+    this.#forgetKey();
+    this.#connected = false;
+    this.#setDraft(selectDraft(this.#draft, profile && { ...profile, params: { ...profile.params } }));
+    const signal = this.#dialogs?.signal;
+    if (!dirty || !t || !signal) return;
+    void showDiscardChangesDialog({ t, signal }).then((discard) => {
+      if (!signal.aborted) this.#setDraft(discard ? confirmSwitch(this.#draft) : cancelSwitch(this.#draft));
+    });
+  }
+
+  #forgetKey(): void {
+    if (this.#detail) this.#detail.secret.value = '';
+  }
+
+  #remove(profile: ModelProfile): void {
+    const t = this.#i18n?.t;
+    const signal = this.#dialogs?.signal;
+    if (!t || !signal) return;
+    void showConfirmDialog({ title: t('ai.deleteTitle', { name: profile.name }), message: t('ai.deleteMessage'), confirmLabel: t('ai.delete'), t, signal }).then((ok) => {
+      if (ok && this.#controller) this.#run(this.#controller.deleteProfile(profile.id).then(() => this.#setDraft(openDraft(this.#draft, null))));
+    });
+  }
+
+  #testConnection(profile: ModelProfile): void {
+    const controller = this.#controller;
+    if (!controller) return;
+    this.#connected = false;
+    this.#loop.update();
+    this.#run(
+      controller.provider(profile).then(async (p) => {
+        const signal = new AbortController().signal;
+        if (p.testConnection) await p.testConnection(signal);
+        else if ((await p.listModels(signal)) === null) throw { code: 'unreachable' };
+        this.#connected = true;
+        this.#loop.update();
+      }),
+    );
+  }
+
+  #storeKey(): void {
+    const draft = this.#draft.draft;
+    const controller = this.#controller;
+    const detail = this.#detail;
+    if (!draft || !controller || !detail) return;
+    this.#run(
+      controller.setSecret(validateProfile(draft), detail.secret.value, detail.remember.checked).then(() => {
+        this.#forgetKey();
+        this.#setDraft(openDraft(this.#draft, controller.getState().profiles.find((p) => p.id === draft.id) ?? draft));
+      }),
+    );
+  }
+
+  #save(): void {
+    const draft = this.#draft.draft;
+    if (!draft || !this.#controller) return;
+    const valid = validateProfile(draft);
+    this.#run(this.#controller.saveProfile(valid).then(() => this.#setDraft(openDraft(this.#draft, valid))));
+  }
+
+  #createDetail(): Detail {
+    const caption = () => el('span');
+    const value = (event: Event) => (event.currentTarget as HTMLInputElement).value;
+    const draft = () => this.#draft.draft!;
+    const captions = { name: caption(), provider: caption(), url: caption(), contextTokens: caption(), secret: caption() };
+    const effortText = document.createTextNode('');
+    const rememberText = document.createTextNode('');
+    const contextTokens = el('input', { type: 'number', min: '1', on: { input: (e) => this.#edit({ contextTokens: value(e) ? Number(value(e)) : null }) } });
+    const effort = el('input', {
+      type: 'checkbox',
+      on: { change: (e) => this.#edit({ params: { ...draft().params, effort: (e.currentTarget as HTMLInputElement).checked ? 'medium' : undefined } }) },
+    });
+    const secret = el('input', { type: 'password', autocomplete: 'off', on: { input: () => this.#loop.update() } });
+    const remember = el('input', { type: 'checkbox' });
+    const d: Detail = {
+      root: el('div', { class: 'detail' }),
+      captions,
+      fixed: [],
+      name: el('input', { on: { input: (e) => this.#edit({ name: value(e) }) } }),
+      provider: el(
+        'select',
+        {
+          on: {
+            change: (e) => {
+              const kind = value(e) as ProviderKind;
+              this.#forgetKey();
+              this.#setDraft(editDraft(this.#draft, { ...changeProvider(draft(), kind), baseUrl: DEFAULT_URLS[kind] }));
+            },
+          },
+        },
+        PROVIDER_KINDS.map((k) => el('option', null, k)),
+      ),
+      url: el('input', { type: 'url', on: { input: (e) => this.#edit({ baseUrl: value(e) }) } }),
+      help: el('p', { class: 'help' }),
+      model: el('hmd-ai-model-select', { on: { 'hmd-ai-model-change': (e) => this.#edit({ ...e.detail.selection }) } }),
+      params: el('hmd-ai-parameters', { on: { 'hmd-params-change': (e) => this.#edit({ params: e.detail.params }) } }),
+      contextTokensLabel: field(captions.contextTokens, contextTokens),
+      contextTokens,
+      effortLabel: checkbox(effort, effortText),
+      effort,
+      effortText,
+      secretLabel: field(captions.secret, secret),
+      secret,
+      rememberLabel: checkbox(remember, rememberText),
+      remember,
+      rememberText,
+      secretNotice: el('p', { class: 'help' }),
+      saveSecret: el('button', { type: 'button', on: { click: () => this.#storeKey() } }),
+      actions: el('div', { class: 'actions' }),
+      connection: el('button', { type: 'button', on: { click: () => this.#testConnection(draft()) } }),
+      duplicate: el('button', { type: 'button', on: { click: () => this.#edit({ id: crypto.randomUUID(), secretId: null }) } }),
+      remove: el('button', { type: 'button', on: { click: () => this.#remove(draft()) } }),
+      save: el('button', { type: 'button', on: { click: () => this.#save() } }),
+      connected: el('p', { role: 'status' }),
+    };
+    d.fixed = [field(captions.name, d.name), field(captions.provider, d.provider), field(captions.url, d.url)];
+    d.actions.append(d.connection, d.duplicate, d.remove, d.save);
+    return d;
+  }
+
+  #render(list: HTMLDivElement, controller: ProfilesController, i18n: I18nStore): void {
+    const t = i18n.t;
+    const state = controller.getState();
+    const draft = this.#draft.draft;
+    renderItemList(list, state.profiles, {
+      selectedId: draft?.id ?? null,
+      label: (p) => p.name,
+      createLabel: t('ai.create'),
+      onSelect: (p) => this.#pick(p),
+      onCreate: () => this.#pick(defaultProfile('ollama', crypto.randomUUID())),
+    });
+    const split = list.parentElement!;
+    if (!draft) {
+      this.#detail?.root.remove();
+      return;
+    }
+    const d = (this.#detail ??= this.#createDetail());
+    setText(d.captions.name, t('ai.name'));
+    setText(d.captions.provider, t('ai.provider'));
+    setText(d.captions.url, t('ai.url'));
+    setText(d.help, t(`ai.help.${draft.kind}` as MessageKey));
+    setText(d.captions.contextTokens, t('ai.contextTokens'));
+    setText(d.effortText, t('ai.enableEffort'));
+    setText(d.captions.secret, t('ai.secret'));
+    setText(d.rememberText, t('ai.remember'));
+    setText(d.secretNotice, t('ai.secretNotice'));
+    setText(d.saveSecret, t('ai.saveSecret'));
+    setText(d.connection, t('ai.connection'));
+    setText(d.duplicate, t('ai.duplicate'));
+    setText(d.remove, t('ai.delete'));
+    setText(d.save, t('ai.save'));
+    setText(d.connected, t('ai.connected'));
+    syncValue(d.name, draft.name);
+    syncValue(d.provider, draft.kind);
+    syncValue(d.url, draft.baseUrl);
+    // Campi e pulsanti spenti come oggi: la regola «mai disabled» sulle impostazioni è della fase 8.
+    d.url.disabled = draft.kind === 'anthropic';
+    syncValue(d.contextTokens, draft.contextTokens === null ? '' : String(draft.contextTokens));
+    syncChecked(d.effort, !!draft.params.effort);
+    d.saveSecret.disabled = !d.secret.value;
+    // Proprietà dei figli hmd-* prima dell'inserimento, e solo se cambiano.
+    if (d.model.controller !== controller) d.model.controller = controller;
+    if (d.model.i18n !== i18n) d.model.i18n = i18n;
+    if (d.model.profile !== draft) d.model.profile = draft;
+    if (d.params.i18n !== i18n) d.params.i18n = i18n;
+    if (d.params.profile !== draft) d.params.profile = draft;
+    if (d.params.value !== draft.params) d.params.value = draft.params;
+    showChildren(
+      d.root,
+      [
+        ...d.fixed,
+        d.help,
+        d.model,
+        d.params,
+        d.contextTokensLabel,
+        ...(EFFORT_KINDS.includes(draft.kind) ? [d.effortLabel] : []),
+        ...(SECRET_KINDS.includes(draft.kind) ? [d.secretLabel, d.rememberLabel, d.secretNotice, d.saveSecret] : []),
+        d.actions,
+        ...(this.#connected ? [d.connected] : []),
+      ],
+      [d.effortLabel, d.secretLabel, d.rememberLabel, d.secretNotice, d.saveSecret, d.connected],
+    );
+    if (d.root.parentNode !== split) split.append(d.root);
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'hmd-settings-profiles': HmdSettingsProfiles;
+  }
+}
+```
+
+In `src/architecture.test.ts` il test «elements reach the AI providers only through the controller and never touch the keys» diventa:
+
+```ts
+/**
+ * La sola eccezione: il campo della chiave nella sezione dei profili la passa al controller con
+ * `controller.setSecret(…)` (scritta, mai letta, mai in attributi o `dataset`). Tutto il resto vale anche lì.
+ */
+const SECRET_WRITE_ALLOWED = new Set(['elements/settings/profiles.element.ts']);
+const withoutAllowedSecretWrite = (list: SourceFile[]) =>
+  list.map((file) => (SECRET_WRITE_ALLOWED.has(file.path) ? { ...file, source: file.source.replace(/\bcontroller\.setSecret\s*\(/g, '') } : file));
+
+test('elements reach the AI providers only through the controller and never touch the keys', () => {
+  assert.deepEqual(offenders(ELEMENT_AI, ELEMENT_AI_ALLOWED, withoutAllowedSecretWrite(sources)), []);
+});
+```
+
+e nel test «offending files are reported by path…», dopo l'ultima `assert.deepEqual`:
+
+```ts
+  // L'eccezione della chiave vale solo per setSecret nella sezione dei profili.
+  const secrets: SourceFile[] = [
+    { path: 'elements/settings/profiles.element.ts', source: 'controller.setSecret(validateProfile(draft), key, remember)' },
+    { path: 'elements/settings/presets.element.ts', source: 'controller.setSecret(draft, key, remember)' },
+    { path: 'elements/settings/sync.element.ts', source: 'await controller.secret(profile)' },
+  ];
+  assert.deepEqual(offenders(ELEMENT_AI, ELEMENT_AI_ALLOWED, withoutAllowedSecretWrite(secrets)), ['elements/settings/presets.element.ts', 'elements/settings/sync.element.ts']);
+  assert.deepEqual(offenders(ELEMENT_AI, ELEMENT_AI_ALLOWED, withoutAllowedSecretWrite([{ path: 'elements/settings/profiles.element.ts', source: 'controller.secret(p); controller.setSecret(p, k, r)' }])), ['elements/settings/profiles.element.ts']);
+```
+
+- [ ] **Step 6: Evento, registrazione, tipi JSX**
+
+`src/elements/events.ts`, subito sopra il JSDoc di `hmd-start-pick` (e gli import dei tipi in testa: qui nessuno nuovo):
+
+```ts
+  /** Sezione di profili o preset: la bozza aperta è diventata (o non è più) da salvare. */
+  'hmd-settings-dirty': CustomEvent<{ dirty: boolean }>;
+```
+
+`src/elements/define.ts`: gli import `HmdSettingsPresets` e `HmdSettingsProfiles` dopo quello di `HmdSearchPanel`, e le voci `['hmd-settings-presets', HmdSettingsPresets]`, `['hmd-settings-profiles', HmdSettingsProfiles]` dopo `hmd-search-panel`.
+
+`src/elements/jsx.d.ts`: gli import `import type { PresetsController } from './settings/presets.element';` e `import type { ProfilesController } from './settings/profiles.element';` dopo quello della ricerca, e prima di `'hmd-start-screen'`:
+
+```ts
+      'hmd-settings-presets': HmdProps<{ controller: PresetsController; i18n: I18nStore }, 'hmd-settings-dirty'>;
+      'hmd-settings-profiles': HmdProps<{ controller: ProfilesController; i18n: I18nStore }, 'hmd-settings-dirty'>;
+```
+
+- [ ] **Step 7: `SettingsView.tsx` monta le due sezioni**
+
+Via gli import di `AiPresetsSection` e `AiProfilesSection`; `const { t, locale, setLocale, store: i18nStore } = useI18n();`; nelle due sezioni:
+
+```tsx
+              <hmd-settings-profiles controller={ai} i18n={i18nStore} onhmd-settings-dirty={(event) => profilesDirty(event.detail.dirty)} />
+```
+
+```tsx
+              <hmd-settings-presets controller={ai} i18n={i18nStore} onhmd-settings-dirty={(event) => presetsDirty(event.detail.dirty)} />
+```
+
+(`profilesDirty` e `presetsDirty` restano come sono: ricevono il booleano.) Poi:
+
+```bash
+git rm src/ui/ai/settings/AiProfilesSection.tsx src/ui/ai/settings/AiPresetsSection.tsx src/ui/ai/settings/ItemList.tsx
+grep -rn "AiProfilesSection\|AiPresetsSection\|ItemList\|useDraft" src; echo "uscita $?"   # atteso: uscita 1
+```
+
+- [ ] **Step 8: Il test della chiave si rovescia (decisione 5)**
+
+In `e2e/settings-sections.spec.ts` il test «the key typed in the password field: where it ends up in the DOM» diventa:
+
+```ts
+test('the key typed in the password field stays in the field, never in the serialized DOM', async ({ app, page }) => {
+  await openSettings(app);
+  await settings(app).getByRole('link', { name: app.t('settings.aiProfiles') }).click();
+  await settings(app).getByRole('button', { name: `+ ${app.t('ai.create')}` }).first().click();
+  await settings(app).getByRole('combobox', { name: app.t('ai.provider'), exact: true }).selectOption('anthropic');
+  await settings(app).getByLabel(app.t('ai.secret')).fill('sk-test');
+  await expect(settings(app).getByLabel(app.t('ai.secret'))).toHaveValue('sk-test');
+  // Con React l'attributo `value` dei campi controllati seguiva la chiave (Task 1); l'elemento scrive solo la proprietà (spec R21).
+  expect(await page.evaluate(() => document.body.outerHTML.includes('sk-test'))).toBe(false);
+});
+```
+
+- [ ] **Step 9: Verifica**
+
+```bash
+npx tsc --noEmit && npm test            # 992 verdi
+npm run lint
+E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npx playwright test -c e2e/playwright.config.ts e2e/settings.spec.ts e2e/settings-sections.spec.ts e2e/ai-model.spec.ts e2e/ai-chips.spec.ts
+E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npx playwright test -c e2e/dev.config.ts e2e/settings.spec.ts e2e/settings-sections.spec.ts e2e/ai-model.spec.ts e2e/ai-chips.spec.ts
+E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npx playwright test -c e2e/audit.config.ts -g "settings"
+pgrep -af "vite|chrom|playwright"
+```
+
+Nel prototipo, sulla copia React con le tre sezioni: questi e2e verdi, audit `settings*` verde (il `:scope` delle regole `.detail` è necessario: senza, `settings-profile` cade).
+
+- [ ] **Step 10: Commit**
+
+Commit separati: `test:` (Step 1 e casi sintetici), `feat:` (Step 2–6), `refactor:` (Step 7), `test:` (Step 8). `git log --format=%B -n 4`: nessun `Co-authored-by`.
