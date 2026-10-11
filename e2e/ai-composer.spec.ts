@@ -62,11 +62,12 @@ test.describe('composer', () => {
     await expect(settings.getByRole('button', { name: 'ollama', exact: true })).toHaveCount(0);
     await settings.getByRole('button', { name: app.t('settings.close') }).click();
     await composer(app).fill('draft');
-    await page.getByRole('group', { name: app.t('ai.suggestions') }).getByRole('button').first().click();
+    const suggestion = page.getByRole('group', { name: app.t('ai.suggestions') }).getByRole('button').first();
+    await suggestion.click();
     await expect(page.getByRole('status').filter({ hasText: app.t('ai.composer.needProfile') })).toBeVisible();
     await expect(composer(app)).toHaveValue('draft');
     expect(ai.requests).toBe(0);
-    expect(await page.evaluate(() => document.activeElement === document.body)).toBe(false);
+    await expect(suggestion).toBeFocused();
   });
 
   test('while the reply is generated the button is Stop and Enter does not send again; Escape in the box stops it', async ({ app, ai }) => {

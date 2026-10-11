@@ -191,6 +191,9 @@ export class HmdAiComposer extends HmdElement {
     const scoped = selectionChipText(i18n.t, this.#text, this.#selection, this.#ignored) !== null;
     const scope = scoped ? this.#getSelection() : undefined;
     if (scoped && !scope) {
+      // Una nota di prima (es. needText) non deve restare su questo percorso.
+      this.#note = null;
+      this.#loop.update();
       controller.report({ code: 'scopeLost' });
       return;
     }

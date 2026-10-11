@@ -4,6 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import '../define';
+import { emit } from '../events';
 import type { AiState } from '../../ai/aiController';
 import { defaultProfile } from '../../ai/profiles';
 import type { ChatMessage, PromptPreset } from '../../ai/types';
@@ -11,7 +12,6 @@ import { EN_MESSAGES } from '../../i18n/messages';
 import { createI18nStore } from '../../state/i18nStore';
 import { countListeners } from '../../testing/countListeners';
 import { fakeAi } from '../../testing/fakeAi';
-import { emit } from '../events';
 import { installPopoverStub } from '../../testing/popoverStub';
 
 installPopoverStub();
@@ -180,4 +180,34 @@ test('hmd-ai-manage from the composer bubbles to the host exactly once', () => {
   el.addEventListener('hmd-ai-manage', () => manage++);
   emit(el.querySelector('hmd-ai-composer')!, 'hmd-ai-manage', null);
   assert.equal(manage, 1);
+});
+
+test('the chat log gets the controller messages before insertion, so it renders in the same pass', () => {
+  const ai = fakeAi({ presets: [PRESET] }, defaultProfile('ollama', 'o'));
+  ai.set({ chat: { id: 'c', messages: [MESSAGE], overrides: {} } } as Partial<AiState>);
+  const logProto = customElements.get('hmd-ai-chat-log')!.prototype;
+  const descriptor = Object.getOwnPropertyDescriptor(logProto, 'messages')!;
+  const connectedAtSet: boolean[] = [];
+  Object.defineProperty(logProto, 'messages', {
+    ...descriptor,
+    set(this: HTMLElement, value: unknown) {
+      connectedAtSet.push(this.isConnected);
+      descriptor.set!.call(this, value);
+    },
+  });
+  try {
+    const i18n = createI18nStore({ locale: 'en', messages: EN_MESSAGES, load: async (locale) => ({ locale, messages: EN_MESSAGES }), persist() {} });
+    const el = document.createElement('hmd-ai-sidebar');
+    el.controller = ai;
+    el.text = '';
+    el.selection = null;
+    el.getSelection = () => undefined;
+    el.syncNeedsPermission = false;
+    el.i18n = i18n;
+    document.body.append(el);
+    assert.deepEqual(el.querySelector('hmd-ai-chat-log')!.messages, [MESSAGE]);
+    assert.equal(connectedAtSet[0], false);
+  } finally {
+    Object.defineProperty(logProto, 'messages', descriptor);
+  }
 });

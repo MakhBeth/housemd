@@ -228,6 +228,19 @@ test('a selection lost before sending reports scopeLost and keeps the text', () 
   assert.equal(input().value, 'fix');
 });
 
+test('a scopeLost send clears a stale note', () => {
+  const { el, ai, send, input, note } = mount();
+  send().click();
+  assert.equal(note().textContent, EN_MESSAGES['ai.composer.needText']);
+  // Testo inserito da script, senza evento input: la nota resterebbe.
+  input().value = 'fix';
+  el.selection = { from: 0, to: 3 };
+  el.getSelection = () => undefined;
+  send().click();
+  assert.equal(note().textContent, '');
+  assert.deepEqual(ai.reports, [{ code: 'scopeLost' }]);
+});
+
 test('sendPreset sends the preset label and keeps what is typed; nothing while running', () => {
   const { el, ai, type, input, running } = mount();
   type('draft');

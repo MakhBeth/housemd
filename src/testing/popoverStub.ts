@@ -18,6 +18,8 @@ export function installPopoverStub(): void {
       this.setAttribute(OPEN, '');
     },
     hidePopover(this: HTMLElement) {
+      // Come l'algoritmo «hide popover» di Chromium: se non è aperto ritorna in silenzio, prima del controllo di connessione.
+      if (!this.hasAttribute(OPEN)) return;
       if (!this.isConnected) throw new DOMException('elemento non collegato', 'InvalidStateError');
       this.removeAttribute(OPEN);
     },
