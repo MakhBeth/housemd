@@ -11,6 +11,7 @@ import { EN_MESSAGES } from '../../i18n/messages';
 import { createI18nStore } from '../../state/i18nStore';
 import { countListeners } from '../../testing/countListeners';
 import { fakeAi } from '../../testing/fakeAi';
+import { emit } from '../events';
 import { installPopoverStub } from '../../testing/popoverStub';
 
 installPopoverStub();
@@ -124,4 +125,47 @@ test('language change relabels; detached, no listener left', async () => {
   el.remove();
   assert.equal(listeners(), 0);
   assert.equal(ai.listeners(), 0);
+});
+
+test('the messages reach the log only when they change, not on every notification', () => {
+  const { el, ai } = mount();
+  const log = el.querySelector('hmd-ai-chat-log')!;
+  const proto = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(log), 'messages')!;
+  let assigned = 0;
+  Object.defineProperty(log, 'messages', {
+    configurable: true,
+    get: () => proto.get!.call(log),
+    set: (value) => { assigned++; proto.set!.call(log, value); },
+  });
+  ai.set({ running: { messageId: 'm', path: 'a.md', startedAt: 0 } } as Partial<AiState>);
+  ai.set({ running: null } as Partial<AiState>);
+  assert.equal(assigned, 0);
+  ai.set({ chat: { id: 'c', messages: [MESSAGE], overrides: {} } } as Partial<AiState>);
+  assert.equal(assigned, 1);
+});
+
+test('swapping controller and i18n while connected moves the children and releases the old subscriptions', () => {
+  const { el, ai, listeners } = mount();
+  const ai2 = fakeAi({ presets: [PRESET] }, defaultProfile('ollama', 'o'));
+  const { store: i18n2, listeners: listeners2 } = countListeners(
+    createI18nStore({ locale: 'en', messages: EN_MESSAGES, load: async (locale) => ({ locale, messages: EN_MESSAGES }), persist() {} }),
+  );
+  el.controller = ai2;
+  el.i18n = i18n2;
+  for (const child of [el.querySelector('hmd-ai-chat-log'), el.querySelector('hmd-ai-composer'), el.querySelector('hmd-ai-suggestions')] as Array<Element & { controller?: unknown; i18n: unknown }>) {
+    assert.equal(child.i18n, i18n2);
+    if ('controller' in child) assert.equal(child.controller, ai2);
+  }
+  assert.equal(ai.listeners(), 0);
+  assert.equal(listeners(), 0);
+  assert.ok(ai2.listeners() > 0);
+  assert.ok(listeners2() > 0);
+});
+
+test('hmd-ai-manage from the composer bubbles to the host exactly once', () => {
+  const { el } = mount();
+  let manage = 0;
+  el.addEventListener('hmd-ai-manage', () => manage++);
+  emit(el.querySelector('hmd-ai-composer')!, 'hmd-ai-manage', null);
+  assert.equal(manage, 1);
 });

@@ -140,7 +140,8 @@ export class HmdAiSidebar extends HmdElement {
     toggleAttr(parts.newChat, 'data-tooltip', true, t('ai.newChat'));
     const empty = state.chat.messages.length === 0 && !state.running;
     if (parts.newChat.disabled !== empty) parts.newChat.disabled = empty;
-    parts.log.messages = state.chat.messages;
+    // Il setter del registro non confronta: assegnare a ogni passata riconcilierebbe tutto il registro a ogni notifica.
+    if (parts.log.messages !== state.chat.messages) parts.log.messages = state.chat.messages;
     if (this.#syncNeedsPermission) {
       setText(parts.sync, `⚠ ${t('ai.syncReactivate')}`);
       if (parts.sync.parentNode !== parts.bottom) parts.bottom.prepend(parts.sync);
