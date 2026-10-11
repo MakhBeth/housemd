@@ -15,6 +15,23 @@ export class FakeModel {
   /** Stato HTTP delle risposte di chat: diverso da 200 = errore del provider, con `errorBody` come corpo. */
   status = 200;
   errorBody = '';
+  /** Modelli dell'elenco (`/api/tags`), e quante volte l'app lo ha chiesto. */
+  models = ['qwen3.6:35b-mlx'];
+  modelLists = 0;
+  /** true = il server dei modelli non risponde (connessione rifiutata): l'elenco è «non raggiungibile». */
+  modelsDown = false;
+  /** Risposte di chat trattenute finché `release()`: per vedere la generazione in corso. */
+  #held: (() => void)[] | null = null;
+
+  hold(): void {
+    this.#held ??= [];
+  }
+
+  release(): void {
+    const held = this.#held ?? [];
+    this.#held = null;
+    for (const go of held) go();
+  }
 
   async install(page: Page): Promise<void> {
     // Un reload interrompe le richieste in volo (l'app chiede l'elenco dei modelli all'avvio): la route
@@ -38,10 +55,17 @@ export class FakeModel {
       return;
     }
     if (request.url().includes('/api/tags')) {
-      await route.fulfill({ headers: cors, contentType: 'application/json', body: JSON.stringify({ models: [{ name: 'qwen3.6:35b-mlx' }] }) });
+      this.modelLists++;
+      if (this.modelsDown) {
+        await route.abort('connectionrefused');
+        return;
+      }
+      await route.fulfill({ headers: cors, contentType: 'application/json', body: JSON.stringify({ models: this.models.map((name) => ({ name })) }) });
       return;
     }
     this.requests++;
+    const held = this.#held;
+    if (held) await new Promise<void>((go) => held.push(go));
     if (this.status !== 200) {
       await route.fulfill({ status: this.status, headers: cors, contentType: 'text/plain', body: this.errorBody });
       return;

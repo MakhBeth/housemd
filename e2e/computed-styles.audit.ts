@@ -258,6 +258,129 @@ const STATES: State[] = [
     },
   },
   {
+    name: 'ai-composer-selection',
+    async setup(app, page) {
+      await app.openFolder({ 'a.md': 'uno\ndue\ntre' });
+      await app.openFile('a.md');
+      await expect(app.mode('mode.ai')).toBeVisible();
+      await app.mode('mode.editor').click();
+      await app.selectRange(0, 7);
+      await app.mode('mode.ai').click();
+      await expect(page.getByText(app.t('ai.selectionLines', { count: 2 }), { exact: true })).toBeVisible();
+    },
+  },
+  {
+    name: 'ai-composer-typed',
+    async setup(app, page) {
+      await app.openFolder({ 'a.md': 'Alpha' });
+      await app.openFile('a.md');
+      await expect(app.mode('mode.ai')).toBeVisible();
+      await app.mode('mode.ai').click();
+      // Testo scritto (Invia attivo) e casella con il focus (bordo del composer con :focus-within).
+      const composer = page.getByRole('textbox', { name: app.t('ai.request') });
+      await composer.fill('fix this');
+      await expect(page.getByRole('button', { name: app.t('ai.send'), exact: true })).toBeEnabled();
+      await expect(composer).toBeFocused();
+    },
+  },
+  {
+    name: 'ai-composer-running',
+    async setup(app, page, ai) {
+      ai.hold();
+      await app.openFolder({ 'a.md': 'Alpha' });
+      await app.openFile('a.md');
+      await expect(app.mode('mode.ai')).toBeVisible();
+      await app.mode('mode.ai').click();
+      const composer = page.getByRole('textbox', { name: app.t('ai.request') });
+      await composer.fill('fix');
+      await composer.press('Enter');
+      await expect(page.getByRole('button', { name: app.t('ai.stop'), exact: true })).toBeVisible();
+      // Il contatore dei secondi della generazione cambia la larghezza del testo: si ferma l'orologio.
+      await page.clock.install();
+      await page.clock.pauseAt(new Date(Date.now() + 1000));
+    },
+  },
+  {
+    name: 'model-chip-hover',
+    keepMouse: true,
+    async setup(app, page) {
+      await app.openFolder({ 'a.md': 'Alpha' });
+      await app.openFile('a.md');
+      await expect(app.mode('mode.ai')).toBeVisible();
+      await app.mode('mode.ai').click();
+      // Un override (pallino nel chip), poi il puntatore sul chip: sfondo e tooltip con la nota privacy.
+      const chip = page.getByRole('button', { name: new RegExp(`^${app.t('ai.profile')}: `) });
+      await chip.click();
+      await page.getByRole('spinbutton', { name: app.t('ai.param.temperature') }).fill('1');
+      await page.keyboard.press('Escape');
+      await expect(chip).toContainText('•');
+      await chip.hover();
+      await expect.poll(() => chip.evaluate((b) => getComputedStyle(b, '::after').visibility)).toBe('visible');
+    },
+  },
+  {
+    name: 'model-popover-groups',
+    async setup(app, page) {
+      await page.route('https://api.anthropic.com/**', (route) => route.abort());
+      await app.openFolder({ 'a.md': 'Alpha' });
+      await app.openFile('a.md');
+      await expect(app.mode('mode.ai')).toBeVisible();
+      await app.createProfile('anthropic', 'Cloud');
+      await app.mode('mode.ai').click();
+      await page.getByRole('button', { name: new RegExp(`^${app.t('ai.profile')}: `) }).click();
+      await expect(page.getByRole('group', { name: app.t('ai.cloud') }).getByRole('radio', { name: 'Cloud ⚠' })).toBeVisible();
+      await expect(page.getByRole('combobox', { name: app.t('ai.model') }).getByRole('option', { name: 'qwen3.6:35b-mlx' })).toHaveCount(1);
+    },
+  },
+  {
+    name: 'model-popover-custom',
+    async setup(app, page) {
+      await app.openFolder({ 'a.md': 'Alpha' });
+      await app.openFile('a.md');
+      await expect(app.mode('mode.ai')).toBeVisible();
+      await app.mode('mode.ai').click();
+      await page.getByRole('button', { name: new RegExp(`^${app.t('ai.profile')}: `) }).click();
+      const models = page.getByRole('combobox', { name: app.t('ai.model') });
+      await expect(models.getByRole('option', { name: 'qwen3.6:35b-mlx' })).toHaveCount(1);
+      await models.selectOption('__custom');
+      await expect(page.getByRole('textbox', { name: app.t('ai.model'), exact: true })).toBeVisible();
+    },
+  },
+  {
+    name: 'model-popover-unreachable',
+    async setup(app, page, ai) {
+      ai.modelsDown = true;
+      await app.openFolder({ 'a.md': 'Alpha' });
+      await app.openFile('a.md');
+      await expect(app.mode('mode.ai')).toBeVisible();
+      await app.mode('mode.ai').click();
+      await page.getByRole('button', { name: new RegExp(`^${app.t('ai.profile')}: `) }).click();
+      await expect(page.getByText(app.t('ai.error.unreachable'), { exact: true })).toBeVisible();
+    },
+  },
+  {
+    name: 'ai-sync-reactivate',
+    async setup(app, page) {
+      await app.openFolder({ 'a.md': 'Alpha' });
+      await app.openFile('a.md');
+      await expect(app.mode('mode.ai')).toBeVisible();
+      // Cartella di sync scelta, poi un avvio senza permesso: la sidebar AI propone di riattivarla.
+      const settings = page.getByRole('region', { name: app.t('settings.title') });
+      await page.getByRole('button', { name: app.t('toolbar.settings') }).click();
+      await settings.getByRole('link', { name: app.t('settings.aiSync') }).click();
+      await app.setFlags({ folder: 'sync' });
+      await settings.getByRole('button', { name: app.t('ai.syncChoose') }).click();
+      await expect(settings.getByRole('button', { name: app.t('ai.syncDisable') })).toBeVisible();
+      await settings.getByRole('button', { name: app.t('settings.close') }).click();
+      await app.setFlags({ query: 'prompt', request: 'granted' });
+      await page.reload();
+      await page.getByRole('button', { name: app.t('start.resume', { folder: 'notes' }) }).click();
+      await expect(app.mode('mode.ai')).toBeVisible();
+      await app.mode('mode.ai').click();
+      await expect(page.getByRole('button', { name: `⚠ ${app.t('ai.syncReactivate')}` })).toBeVisible();
+    },
+  },
+  {
     name: 'tree-menu',
     async setup(app, page) {
       await app.openFolder({ 'note.md': '# Note', 'docs/guide.md': '# Guide' });
