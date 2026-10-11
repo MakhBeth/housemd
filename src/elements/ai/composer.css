@@ -5,7 +5,10 @@
       display: contents;
     }
 
-    /* Valori copiati da Composer.module.css (.composer, .input, .row, .send, .selection, .selectionClose). */
+    /*
+     * Valori copiati da Composer.module.css (.composer, .input, .row, .send, .selection, .selectionClose),
+     * tranne `.send:disabled`: Invia non si disattiva più (decisione 4).
+     */
     .composer {
       display: flex;
       flex-direction: column;
@@ -55,12 +58,6 @@
       cursor: pointer;
     }
 
-    .send:disabled {
-      background: var(--c-border);
-      color: var(--c-muted);
-      cursor: default;
-    }
-
     .selection {
       display: inline-flex;
       align-self: flex-start;
@@ -70,6 +67,17 @@
       border-radius: 999px;
       background: var(--c-accent-soft);
       font-size: 12px;
+    }
+
+    /* Nota sotto il composer: vuota non occupa spazio. */
+    .note {
+      margin: 0;
+      color: var(--c-muted);
+      font-size: 12px;
+    }
+
+    .note:not(:empty) {
+      margin-top: 6px;
     }
 
     .selectionClose {

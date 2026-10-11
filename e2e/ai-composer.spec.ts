@@ -24,11 +24,17 @@ test.describe('composer', () => {
     await enterAi(app);
   });
 
-  test('Send waits for some text; Shift+Enter and Ctrl+Enter do not send; Enter sends and empties the box', async ({ app, ai }) => {
-    await expect(send(app)).toBeDisabled();
+  test('Send is never disabled: without text it says why and keeps the focus, typing clears the note; Shift+Enter and Ctrl+Enter do not send; Enter sends and empties the box', async ({ app, ai }) => {
+    const needText = app.page.getByRole('status').filter({ hasText: app.t('ai.composer.needText') });
+    await expect(send(app)).toBeEnabled();
     await composer(app).fill('   ');
-    await expect(send(app)).toBeDisabled();
+    await send(app).click();
+    await expect(needText).toBeVisible();
+    // Decisione 4: il pulsante resta attivo e tiene il focus (prima si spegneva e il focus finiva sul body).
+    await expect(send(app)).toBeFocused();
+    expect(ai.requests).toBe(0);
     await composer(app).fill('first');
+    await expect(needText).toHaveCount(0);
     await expect(send(app)).toBeEnabled();
     await composer(app).press('Control+Enter');
     await composer(app).press('Shift+Enter');
@@ -38,7 +44,30 @@ test.describe('composer', () => {
     await composer(app).press('Enter');
     await expect.poll(() => ai.requests).toBe(1);
     await expect(composer(app)).toHaveValue('');
-    await expect(send(app)).toBeDisabled();
+    await expect(send(app)).toBeEnabled();
+    // Finita la risposta (durante la generazione il pulsante è Stop e la nota non c'è), Invio a vuoto la mostra.
+    await expect(acceptAll(app)).toBeEnabled();
+    await composer(app).press('Enter');
+    await expect(needText).toBeVisible();
+    expect(ai.requests).toBe(1);
+  });
+
+  test('without a profile a suggestion says why, keeps the draft and sends nothing', async ({ app, ai, page }) => {
+    // Nessun profilo: si cancella l'unico (quello predefinito) dalle impostazioni.
+    const settings = page.getByRole('region', { name: app.t('settings.title') });
+    await page.getByRole('button', { name: app.t('toolbar.settings') }).click();
+    await settings.getByRole('link', { name: app.t('settings.aiProfiles') }).click();
+    await settings.getByRole('button', { name: 'ollama', exact: true }).click();
+    await settings.getByRole('button', { name: app.t('ai.delete'), exact: true }).click();
+    await page.getByRole('dialog').getByRole('button', { name: app.t('ai.delete'), exact: true }).click();
+    await expect(settings.getByRole('button', { name: 'ollama', exact: true })).toHaveCount(0);
+    await settings.getByRole('button', { name: app.t('settings.close') }).click();
+    await composer(app).fill('draft');
+    await page.getByRole('group', { name: app.t('ai.suggestions') }).getByRole('button').first().click();
+    await expect(page.getByRole('status').filter({ hasText: app.t('ai.composer.needProfile') })).toBeVisible();
+    await expect(composer(app)).toHaveValue('draft');
+    expect(ai.requests).toBe(0);
+    expect(await page.evaluate(() => document.activeElement === document.body)).toBe(false);
   });
 
   test('while the reply is generated the button is Stop and Enter does not send again; Escape in the box stops it', async ({ app, ai }) => {
@@ -123,9 +152,10 @@ test.describe('composer', () => {
     await expect(box).toHaveAttribute('placeholder', it('ai.request'));
     await expect(page.getByRole('heading', { name: it('ai.title') })).toBeVisible();
     await expect(page.getByRole('button', { name: it('ai.newChat') })).toBeDisabled();
-    await expect(page.getByRole('button', { name: it('ai.send'), exact: true })).toBeDisabled();
+    await page.getByRole('button', { name: it('ai.send'), exact: true }).click();
+    await expect(page.getByRole('status').filter({ hasText: it('ai.composer.needText') })).toBeVisible();
     await box.fill('ciao');
-    await expect(page.getByRole('button', { name: it('ai.send'), exact: true })).toBeEnabled();
+    await expect(page.getByRole('status').filter({ hasText: it('ai.composer.needText') })).toHaveCount(0);
   });
 });
 

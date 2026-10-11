@@ -30,11 +30,23 @@ export function outgoing(request: string, preset: PromptPreset | undefined, t: I
 export interface SendButton {
   label: 'ai.send' | 'ai.stop';
   icon: 'send' | 'stop';
-  disabled: boolean;
 }
 
-/** Il pulsante della riga: Stop durante la generazione, altrimenti Invia (spento senza testo o senza profilo). */
-export function sendButton(running: boolean, request: string, hasProfile: boolean): SendButton {
-  if (running) return { label: 'ai.stop', icon: 'stop', disabled: false };
-  return { label: 'ai.send', icon: 'send', disabled: !request.trim() || !hasProfile };
+/**
+ * Il pulsante della riga: Stop durante la generazione, altrimenti Invia. Mai disattivato (regola di
+ * Davide, decisione 4): quando l'invio non è possibile, il perché lo dice la nota (`sendBlocker`).
+ */
+export function sendButton(running: boolean): SendButton {
+  return running ? { label: 'ai.stop', icon: 'stop' } : { label: 'ai.send', icon: 'send' };
+}
+
+export type SendBlocker = 'ai.composer.needProfile' | 'ai.composer.needText';
+
+/**
+ * Perché il messaggio non può partire, o null: prima il profilo (senza non si invia comunque, preset
+ * compresi), poi il testo (solo per un messaggio scritto: un preset non ne ha bisogno).
+ */
+export function sendBlocker(request: string, hasProfile: boolean, preset: boolean): SendBlocker | null {
+  if (!hasProfile) return 'ai.composer.needProfile';
+  return preset || request.trim() ? null : 'ai.composer.needText';
 }

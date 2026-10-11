@@ -276,7 +276,7 @@ const STATES: State[] = [
       await app.openFile('a.md');
       await expect(app.mode('mode.ai')).toBeVisible();
       await app.mode('mode.ai').click();
-      // Testo scritto (Invia attivo) e casella con il focus (bordo del composer con :focus-within).
+      // Testo scritto e casella con il focus (bordo del composer con :focus-within).
       const composer = page.getByRole('textbox', { name: app.t('ai.request') });
       await composer.fill('fix this');
       await expect(page.getByRole('button', { name: app.t('ai.send'), exact: true })).toBeEnabled();
@@ -299,6 +299,18 @@ const STATES: State[] = [
       await composer.press('Enter');
       await expect(page.getByRole('button', { name: app.t('ai.stop'), exact: true })).toBeVisible();
       await page.clock.pauseAt(NOW.getTime() + 2000);
+    },
+  },
+  {
+    name: 'ai-composer-note',
+    async setup(app, page) {
+      await app.openFolder({ 'a.md': 'Alpha' });
+      await app.openFile('a.md');
+      await expect(app.mode('mode.ai')).toBeVisible();
+      await app.mode('mode.ai').click();
+      // Invia a casella vuota: il pulsante resta attivo e la nota sotto il composer dice perché (decisione 4).
+      await page.getByRole('button', { name: app.t('ai.send'), exact: true }).click();
+      await expect(page.getByRole('status').filter({ hasText: app.t('ai.composer.needText') })).toBeVisible();
     },
   },
   {

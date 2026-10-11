@@ -28,7 +28,7 @@ function mount(withProfile = true) {
     createI18nStore({
       locale: 'en',
       messages: EN_MESSAGES,
-      load: async (locale) => ({ locale, messages: { ...EN_MESSAGES, 'ai.request': 'CHIEDI', 'ai.send': 'INVIA' } }),
+      load: async (locale) => ({ locale, messages: { ...EN_MESSAGES, 'ai.request': 'CHIEDI', 'ai.send': 'INVIA', 'ai.composer.needText': 'SCRIVI' } }),
       persist() {},
     }),
   );
@@ -43,6 +43,7 @@ function mount(withProfile = true) {
   const input = () => el.querySelector('textarea')!;
   const send = () => el.querySelector<HTMLButtonElement>('button.send')!;
   const chip = () => el.querySelector<HTMLElement>('.selection');
+  const note = () => el.querySelector<HTMLElement>('[role="status"]')!;
   const type = (value: string) => {
     input().value = value;
     input().dispatchEvent(new Event('input', { bubbles: true }));
@@ -53,7 +54,7 @@ function mount(withProfile = true) {
     return event;
   };
   const running = (on: boolean) => ai.set({ running: on ? { messageId: 'm', path: 'a.md', startedAt: 0 } : null } as Partial<AiState>);
-  return { el, ai, i18n, listeners, input, send, chip, type, key, running };
+  return { el, ai, i18n, listeners, input, send, chip, note, type, key, running };
 }
 
 /**
@@ -68,8 +69,10 @@ function focusoutOnRemove(node: Element): void {
   };
 }
 
-test('the same DOM as Composer.tsx: box, textarea, row with the two chips and Send', () => {
-  const { el, input, send, chip } = mount();
+test('the same DOM as Composer.tsx: box, textarea, row with the two chips and Send; then the empty status note', () => {
+  const { el, input, send, chip, note } = mount();
+  assert.deepEqual([...el.children].map((c) => `${c.localName}.${c.className}`), ['div.composer', 'p.note']);
+  assert.equal(note().textContent, '');
   const box = el.firstElementChild!;
   assert.equal(box.className, 'composer');
   assert.deepEqual([...box.children].map((c) => c.localName), ['textarea', 'div']);
@@ -83,21 +86,76 @@ test('the same DOM as Composer.tsx: box, textarea, row with the two chips and Se
   assert.equal(send().type, 'button');
   assert.equal(send().getAttribute('aria-label'), EN_MESSAGES['ai.send']);
   assert.equal(send().getAttribute('data-tooltip'), EN_MESSAGES['ai.send']);
-  assert.equal(send().disabled, true);
+  assert.equal(send().disabled, false);
+  assert.equal(send().hasAttribute('aria-disabled'), false);
   assert.equal(chip(), null);
   assert.equal(el.querySelector('hmd-ai-model-chip')!.controller, el.controller);
   assert.equal(el.querySelector('hmd-ai-effort-chip')!.i18n, el.i18n);
 });
 
-test('Send follows the text and the profile', () => {
-  const { send, type } = mount();
+test('Send is never disabled: without text it says why in the status note, keeps the focus, and typing clears the note', () => {
+  const { ai, send, type, note } = mount();
   type('  ');
-  assert.equal(send().disabled, true);
-  type('fix');
   assert.equal(send().disabled, false);
-  const without = mount(false);
-  without.type('fix');
-  assert.equal(without.send().disabled, true);
+  send().focus();
+  send().click();
+  assert.deepEqual(ai.calls, []);
+  assert.equal(note().textContent, EN_MESSAGES['ai.composer.needText']);
+  assert.equal(document.activeElement, send());
+  type('fix');
+  assert.equal(note().textContent, '');
+  send().click();
+  assert.deepEqual(ai.calls, [['send', 'fix', undefined, undefined]]);
+});
+
+test('Enter with an empty box shows the note too; a successful send clears it', () => {
+  const { ai, key, note, input } = mount();
+  assert.equal(key('Enter').defaultPrevented, true);
+  assert.equal(note().textContent, EN_MESSAGES['ai.composer.needText']);
+  // Il testo arriva senza evento input (incollato da uno script): l'invio riuscito toglie comunque la nota.
+  input().value = 'fix';
+  key('Enter');
+  assert.deepEqual(ai.calls, [['send', 'fix', undefined, undefined]]);
+  assert.equal(note().textContent, '');
+});
+
+test('without a profile Send asks for one first, even with text; choosing a profile clears the note', () => {
+  const { ai, send, type, note } = mount(false);
+  send().click();
+  assert.equal(note().textContent, EN_MESSAGES['ai.composer.needProfile']);
+  type('fix');
+  send().click();
+  assert.equal(note().textContent, EN_MESSAGES['ai.composer.needProfile']);
+  assert.deepEqual(ai.calls, []);
+  ai.set({ profiles: [defaultProfile('ollama', 'o')], profileId: 'o' });
+  assert.equal(note().textContent, '');
+});
+
+test('a generation that starts from anywhere clears the note; while running a click on Stop shows none', () => {
+  const { send, note, running } = mount();
+  send().click();
+  assert.equal(note().textContent, EN_MESSAGES['ai.composer.needText']);
+  // Per esempio «Riprova» nel registro: la generazione parte dal controller, non dal composer.
+  running(true);
+  assert.equal(note().textContent, '');
+  send().click();
+  assert.equal(note().textContent, '');
+});
+
+test('a preset without a profile shows the profile note, keeps the draft and the focus; with a profile it sends even with an empty box', () => {
+  const { el, ai, input, type, note } = mount(false);
+  type('draft');
+  input().focus();
+  el.sendPreset('p1');
+  assert.equal(note().textContent, EN_MESSAGES['ai.composer.needProfile']);
+  assert.equal(input().value, 'draft');
+  assert.deepEqual(ai.calls, []);
+  assert.notEqual(document.activeElement, document.body);
+  ai.set({ profiles: [defaultProfile('ollama', 'o')], profileId: 'o' });
+  type('');
+  el.sendPreset('p1');
+  assert.deepEqual(ai.calls, [['send', 'Fix it', PRESET, undefined]]);
+  assert.equal(note().textContent, '');
 });
 
 test('Enter sends the trimmed text and empties the box; Shift+Enter, Ctrl+Enter and IME do not', () => {
@@ -208,9 +266,11 @@ test('a listener that changes the selection from a focusout while the chip is be
   assert.equal(document.activeElement, input());
 });
 
-test('language change relabels; detached, no listener left', async () => {
-  const { el, ai, i18n, listeners, input, send } = mount();
+test('language change relabels, the note too; detached, no listener left', async () => {
+  const { el, ai, i18n, listeners, input, send, note } = mount();
+  send().click();
   await i18n.setLocale('it');
+  assert.equal(note().textContent, 'SCRIVI');
   assert.equal(input().getAttribute('placeholder'), 'CHIEDI');
   assert.equal(send().getAttribute('aria-label'), 'INVIA');
   el.remove();

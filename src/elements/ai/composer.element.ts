@@ -9,7 +9,7 @@ import type { I18nStore } from '../../state/i18nStore';
 import { ICONS } from '../../ui/icons';
 import type { HmdAiEffortChip } from './effort-chip.element';
 import type { HmdAiModelChip } from './model-chip.element';
-import { outgoing, selectionChipText, sendButton, type ComposerController } from './composerView';
+import { outgoing, selectionChipText, sendBlocker, sendButton, type ComposerController, type SendBlocker } from './composerView';
 import './composer.css';
 
 interface Parts {
@@ -24,13 +24,17 @@ interface Parts {
   /** Un solo pulsante, Invia o Stop, come il nodo che React riusava: il focus non salta. */
   send: HTMLButtonElement;
   sendIcon: HTMLSpanElement;
+  /** Nota sotto il composer (`role="status"`): perché Invia non ha inviato. Vuota di norma. */
+  note: HTMLParagraphElement;
 }
 
 /**
  * Composer della chat AI (era Composer.tsx): chip della selezione, casella della richiesta, riga con il
  * chip del modello, il chip dell'effort e Invia/Stop. La casella è dell'elemento: si crea una volta e
  * l'elemento la svuota solo dopo l'invio di un testo scritto (nessun eco da fuori la riscrive). Invio
- * invia, Shift+Invio va a capo, Esc ferma (composerKeys.ts). `sendPreset()` per i suggerimenti.
+ * invia, Shift+Invio va a capo, Esc ferma (composerKeys.ts). `sendPreset()` per i suggerimenti. Invia
+ * non si disattiva mai: senza testo o senza profilo (anche per un suggerimento) la nota sotto il composer
+ * dice perché, e si svuota scrivendo, cambiando profilo, con un invio riuscito o quando parte una generazione.
  */
 export class HmdAiComposer extends HmdElement {
   #controller: ComposerController | null = null;
@@ -42,6 +46,8 @@ export class HmdAiComposer extends HmdElement {
   #parts: Parts | null = null;
   /** Selezione ignorata con ✕: il chip ricompare con una selezione diversa. */
   #ignored: TextRange | null = null;
+  /** Nota mostrata e il profilo di quel momento: un cambio di profilo la toglie. */
+  #note: { key: SendBlocker; profileId: string | undefined } | null = null;
   #loop = new RenderLoop(this, {
     ready: () => !!this.#parts && !!this.#controller && !!this.#i18n && this.isConnected,
     render: () => this.#render(this.#parts!, this.#controller!, this.#i18n!),
@@ -102,17 +108,18 @@ export class HmdAiComposer extends HmdElement {
         chip: el('span', { class: 'selection' }, chipText, ignore),
         chipText,
         ignore,
-        input: el('textarea', { class: 'input', on: { input: () => this.#loop.update(), keydown: (event) => this.#onKeyDown(event) } }),
+        input: el('textarea', { class: 'input', on: { input: () => this.#onInput(), keydown: (event) => this.#onKeyDown(event) } }),
         modelChip: el('hmd-ai-model-chip'),
         effortChip: el('hmd-ai-effort-chip'),
         send: el('button', { type: 'button', class: 'send tooltip', on: { click: () => this.#onButton() } }, sendIcon),
         sendIcon,
+        note: el('p', { class: 'note', role: 'status' }),
       };
       this.#parts = parts;
       // Le proprietà dei chip prima dell'inserimento, come fa React con i tag hmd-*.
       this.#passDown();
       parts.box.append(parts.input, el('div', { class: 'row' }, parts.modelChip, parts.effortChip, parts.send));
-      this.append(parts.box);
+      this.append(parts.box, parts.note);
     }
     const { controller, i18n } = { controller: this.#controller, i18n: this.#i18n };
     if (!controller || !i18n) return;
@@ -128,6 +135,11 @@ export class HmdAiComposer extends HmdElement {
     parts.modelChip.i18n = this.#i18n;
     parts.effortChip.controller = this.#controller;
     parts.effortChip.i18n = this.#i18n;
+  }
+
+  #onInput(): void {
+    this.#note = null;
+    this.#loop.update();
   }
 
   #ignore(): void {
@@ -156,6 +168,10 @@ export class HmdAiComposer extends HmdElement {
     else this.#send();
   }
 
+  /**
+   * Invio chiesto dall'utente (Invia, Invio, un suggerimento): se il messaggio risolto (testo scritto o
+   * preset) non può partire, la nota dice perché; la casella e il focus restano come sono.
+   */
   #send(presetId?: string): void {
     const controller = this.#controller;
     const parts = this.#parts;
@@ -164,8 +180,14 @@ export class HmdAiComposer extends HmdElement {
     const state = controller.getState();
     if (state.running) return;
     const preset = presetId ? state.presets.find((p) => p.id === presetId) : undefined;
+    const blocker = sendBlocker(parts.input.value, !!controller.profile(), !!preset);
+    if (blocker) {
+      this.#note = { key: blocker, profileId: controller.profile()?.id };
+      this.#loop.update();
+      return;
+    }
     const message = outgoing(parts.input.value, preset, i18n.t);
-    if (!message || !controller.profile()) return;
+    if (!message) return;
     const scoped = selectionChipText(i18n.t, this.#text, this.#selection, this.#ignored) !== null;
     const scope = scoped ? this.#getSelection() : undefined;
     if (scoped && !scope) {
@@ -173,7 +195,11 @@ export class HmdAiComposer extends HmdElement {
       return;
     }
     void controller.send(message, preset, scope).catch((error: unknown) => controller.report(error));
-    if (preset) return;
+    this.#note = null;
+    if (preset) {
+      this.#loop.update();
+      return;
+    }
     // L'unica scrittura della casella: dopo l'invio di un testo scritto si svuota (spec AI UI §4.2).
     parts.input.value = '';
     this.#loop.update();
@@ -192,11 +218,14 @@ export class HmdAiComposer extends HmdElement {
     }
     toggleAttr(parts.input, 'aria-label', true, t('ai.request'));
     toggleAttr(parts.input, 'placeholder', true, t('ai.request'));
-    const button = sendButton(!!controller.getState().running, parts.input.value, !!controller.profile());
+    const button = sendButton(!!controller.getState().running);
     toggleAttr(parts.send, 'aria-label', true, t(button.label));
     toggleAttr(parts.send, 'data-tooltip', true, t(button.label));
-    if (parts.send.disabled !== button.disabled) parts.send.disabled = button.disabled;
     parts.sendIcon.style.setProperty('mask-image', `url("${ICONS[button.icon]}")`);
+    // Un cambio di profilo o una generazione partita da qualunque parte (anche «Riprova» nel registro)
+    // toglie la nota; la stessa nota due volte di fila non si ri-annuncia (stesso testo nella regione): accettato.
+    if (this.#note && (this.#note.profileId !== controller.profile()?.id || controller.getState().running)) this.#note = null;
+    setText(parts.note, this.#note ? t(this.#note.key) : '');
   }
 }
 
