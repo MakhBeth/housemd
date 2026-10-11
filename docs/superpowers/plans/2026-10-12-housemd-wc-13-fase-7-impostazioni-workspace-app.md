@@ -2496,3 +2496,989 @@ Nel prototipo (copia React con le tre sezioni): 41 e2e verdi su questi file più
 - [ ] **Step 6: Commit**
 
 `test:` (Step 1), `feat:` (Step 2–3), `refactor:` (Step 4). Nessun `Co-authored-by`.
+
+### Task 4: `hmd-settings`, cornice e sezione generale (Builder)
+
+`SettingsView.tsx` diventa `hmd-settings`: indice, sezione generale (lingua, tema, autosalvataggio con il ritardo, larghezze del testo, Salva tutto) e le tre sezioni AI create dall'elemento. La logica (sezioni, conferma dei campi numerici, voce dell'indice) va in `settingsView.ts`. `WorkspaceView.tsx` monta il tag e collega la rotta: la guardia legge `settings.dirty`, Indietro bloccato chiama `settings.requestClose()` (al posto del contatore `closeRequest` e di `onDirtyChange`). Lingua e tema vanno direttamente ai loro store; il resto esce come eventi. Fine della 7a (decisione 1).
+
+**Files:**
+- Create: `src/elements/settings/settingsView.ts`, `settingsView.test.ts`, `settings.element.ts`, `settings.css`, `settings.dom.test.ts`
+- Modify: `src/elements/events.ts` (5 voci), `src/elements/define.ts`, `src/elements/jsx.d.ts`, `src/ui/WorkspaceView.tsx`
+- Delete: `src/ui/SettingsView.tsx`, `src/ui/SettingsView.module.css`, `src/ui/Dialog.module.css`
+
+**Interfaces:**
+- Consumes: le tre sezioni (Task 2–3), `SyncBinding`, `ThemeStore` (`getThemeStore()` finché c'è React), `I18nStore.setLocale`, `showDiscardChangesDialog`, `lib/route.ts` (`formatRoute`), `lib/textWidth.ts`, `workspace/autosave.ts`.
+- Produces: `HmdSettings` — ingressi `section`, `ai: SettingsController | null`, `syncBinding`, `theme`, `autosave`, `textWidth`, `i18n`; getter `dirty`; metodo `requestClose()`; eventi `hmd-settings-section { section }`, `hmd-settings-close`, `hmd-settings-autosave { autosave }`, `hmd-settings-text-width { textWidth }`, `hmd-settings-save-all`. `SettingsController = ProfilesController & PresetsController & SyncController`. In `settingsView.ts`: `SECTION_LABELS`, `settingsSections`, `sectionId`, `sectionOf`, `topSection`, `widthText`, `commitWidths`, `commitDelay`.
+
+**Criteri di accettazione:** RED annotato; `npm test` 1003 + 13 = **1016**; lint pulito; `settings.spec.ts`, `settings-sections.spec.ts`, `theme-i18n.spec.ts`, `ai-model.spec.ts`, `ai-composer.spec.ts`, `visual.spec.ts` («settings») verdi in build e in sviluppo; audit `settings*`, `unsaved-dialog`, `ai-sync-reactivate` verdi; `grep -rn "SettingsView\|Dialog.module\|closeRequest\|onDirtyChange" src` → solo i commenti di `elements/settings/*` che citano `SettingsView.tsx` (`grep -rn "SettingsView" src --include=*.tsx` → uscita 1).
+
+- [ ] **Step 1: I test, prima del codice**
+
+`src/elements/settings/settingsView.test.ts`:
+
+```ts
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+import { commitDelay, commitWidths, sectionId, sectionOf, settingsSections, topSection, widthText } from './settingsView';
+
+test('without the AI controller only the general section is shown, with it all four in order', () => {
+  assert.deepEqual(settingsSections(false), ['general']);
+  assert.deepEqual(settingsSections(true), ['general', 'ai-profiles', 'ai-presets', 'ai-sync']);
+});
+
+test('section ids go both ways; an unknown or hidden section is null', () => {
+  assert.equal(sectionId('ai-sync'), 'settings-ai-sync');
+  assert.equal(sectionOf('settings-ai-sync', settingsSections(true)), 'ai-sync');
+  assert.equal(sectionOf('settings-ai-sync', settingsSections(false)), null);
+  assert.equal(sectionOf('settings-nope', settingsSections(true)), null);
+});
+
+test('the index follows the topmost intersecting section; none intersecting leaves it alone', () => {
+  const sections = settingsSections(true);
+  const entries = [
+    { id: 'settings-ai-presets', top: 300, intersecting: true },
+    { id: 'settings-general', top: -900, intersecting: false },
+    { id: 'settings-ai-profiles', top: 20, intersecting: true },
+  ];
+  assert.equal(topSection(entries, sections), 'ai-profiles');
+  assert.equal(topSection([{ id: 'settings-general', top: 0, intersecting: false }], sections), null);
+});
+
+test('text widths: an empty field is no limit, values are clamped, unchanged widths give no update', () => {
+  assert.equal(widthText({ editor: null, preview: 72 }, 'editor'), '');
+  assert.equal(widthText({ editor: null, preview: 72 }, 'preview'), '72');
+  assert.deepEqual(commitWidths({ editor: '10', preview: '' }, { editor: null, preview: 72 }), {
+    texts: { editor: '30', preview: '' },
+    next: { editor: 30, preview: null },
+  });
+  assert.deepEqual(commitWidths({ editor: '', preview: '72' }, { editor: null, preview: 72 }), { texts: { editor: '', preview: '72' }, next: null });
+});
+
+test('the autosave delay is clamped; the same delay gives no update', () => {
+  const autosave = { mode: 'afterDelay' as const, delayMs: 1000 };
+  assert.deepEqual(commitDelay('50', autosave), { text: '500', next: { mode: 'afterDelay', delayMs: 500 } });
+  assert.deepEqual(commitDelay('1000', autosave), { text: '1000', next: null });
+  // Non numerico → il default (1000): uguale a quello di adesso, nessun aggiornamento. Vuoto = 0 → il minimo.
+  assert.deepEqual(commitDelay('abc', autosave), { text: '1000', next: null });
+  assert.deepEqual(commitDelay('', autosave), { text: '500', next: { mode: 'afterDelay', delayMs: 500 } });
+});
+```
+
+`src/elements/settings/settings.dom.test.ts` (jsdom non scorre: uno stub di `scrollIntoView` registra la sezione portata in vista; senza `IntersectionObserver` l'elemento salta l'indice che segue lo scorrimento, lo prova `settings-sections.spec.ts`):
+
+```ts
+import '../../testing/domEnv';
+
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+import '../define';
+import type { AiState } from '../../ai/aiController';
+import { builtInPresets } from '../../ai/presets';
+import { defaultProfile } from '../../ai/profiles';
+import { EN_MESSAGES } from '../../i18n/messages';
+import { createI18nStore } from '../../state/i18nStore';
+import { createThemeStore } from '../../state/themeStore';
+import { countListeners } from '../../testing/countListeners';
+import { installDialogStub } from '../../testing/dialogStub';
+import { fakeAi } from '../../testing/fakeAi';
+import { installPopoverStub } from '../../testing/popoverStub';
+import { waitFor } from '../../testing/waitFor';
+
+installDialogStub();
+installPopoverStub();
+test.afterEach(() => document.body.replaceChildren());
+
+/** jsdom non scorre: si registra quale sezione è stata portata in vista. */
+const scrolled: string[] = [];
+window.HTMLElement.prototype.scrollIntoView = function (this: HTMLElement) {
+  scrolled.push(this.id);
+};
+
+const IT = { ...EN_MESSAGES, 'settings.title': 'Impostazioni' };
+
+function mount(options: { ai?: boolean } = {}) {
+  const loaded: string[] = [];
+  const { store: i18n, listeners } = countListeners(
+    createI18nStore({ locale: 'en', messages: EN_MESSAGES, load: async (locale) => (loaded.push(locale), { locale, messages: locale === 'it' ? IT : EN_MESSAGES }), persist() {} }),
+  );
+  const theme = createThemeStore({ initial: 'auto', persist() {}, transition: (apply) => apply(), apply() {}, watchSystem: () => () => {} });
+  const ai = fakeAi({ profiles: [defaultProfile()], presets: [builtInPresets()[0]] } as Partial<AiState>);
+  Object.assign(ai, { reload: async () => {}, store: { getMeta: async () => null, setMeta: async () => {} } });
+  const el = document.createElement('hmd-settings');
+  el.section = 'general';
+  el.ai = options.ai ? (ai as never) : null;
+  el.syncBinding = null;
+  el.theme = theme;
+  el.autosave = { mode: 'afterDelay', delayMs: 1000 };
+  el.textWidth = { editor: null, preview: 72 };
+  el.i18n = i18n;
+  scrolled.length = 0;
+  document.body.append(el);
+  const events: [string, unknown][] = [];
+  for (const type of ['hmd-settings-section', 'hmd-settings-close', 'hmd-settings-autosave', 'hmd-settings-text-width', 'hmd-settings-save-all'] as const) {
+    el.addEventListener(type, (event) => events.push([type, event.detail]));
+  }
+  const field = (label: string) => [...el.querySelectorAll('label')].find((l) => l.querySelector('span')?.textContent === label)!.querySelector('input, select') as HTMLInputElement;
+  const radio = (text: string) => [...el.querySelectorAll('label')].find((l) => l.textContent === text)!.querySelector('input')!;
+  const close = () => el.querySelector<HTMLButtonElement>('.navHeader button')!;
+  return { el, i18n, theme, ai, listeners, loaded, events, field, radio, close };
+}
+
+test('the same DOM as SettingsView.tsx: a region with the index and the general section; the focus goes to the title', () => {
+  const { el } = mount();
+  const view = el.firstElementChild!;
+  assert.equal(view.getAttribute('role'), 'region');
+  assert.equal(view.getAttribute('aria-label'), EN_MESSAGES['settings.title']);
+  assert.deepEqual([...view.children].map((c) => `${c.localName}.${c.className}`), ['nav.nav', 'div.content']);
+  const nav = view.firstElementChild!;
+  assert.deepEqual([...nav.children].map((c) => c.localName), ['div', 'a']);
+  assert.equal(nav.querySelector('a')!.getAttribute('href'), '#settings');
+  assert.equal(nav.querySelector('a')!.getAttribute('aria-current'), 'true');
+  const general = el.querySelector('#settings-general')!;
+  assert.deepEqual([...general.children].map((c) => c.localName), ['h2', 'label', 'fieldset', 'fieldset', 'fieldset', 'button']);
+  assert.ok(document.activeElement === el.querySelector('h1'), 'focus on the title');
+});
+
+test('with the AI controller: four links and the three AI sections with their elements, in order', () => {
+  const { el } = mount({ ai: true });
+  assert.deepEqual([...el.querySelectorAll('nav a')].map((a) => a.getAttribute('href')), ['#settings', '#settings/ai-profiles', '#settings/ai-presets', '#settings/ai-sync']);
+  assert.deepEqual([...el.querySelectorAll('.content > section')].map((s) => s.id), ['settings-general', 'settings-ai-profiles', 'settings-ai-presets', 'settings-ai-sync']);
+  assert.deepEqual([...el.querySelectorAll('.content > section > :last-child')].slice(1).map((c) => c.localName), ['hmd-settings-profiles', 'hmd-settings-presets', 'hmd-settings-sync']);
+});
+
+test('the section of the route is scrolled into view, again when it changes; a link asks for its section and scrolls', () => {
+  const { el, events } = mount({ ai: true });
+  assert.deepEqual(scrolled, ['settings-general']);
+  el.section = 'ai-sync';
+  assert.deepEqual(scrolled, ['settings-general', 'settings-ai-sync']);
+  el.querySelectorAll<HTMLAnchorElement>('nav a')[2].click();
+  assert.deepEqual(events, [['hmd-settings-section', { section: 'ai-presets' }]]);
+  assert.equal(scrolled.at(-1), 'settings-ai-presets');
+});
+
+test('language and theme go straight to their stores; the radios and the select follow them', async () => {
+  const { field, radio, theme, loaded, i18n, el } = mount();
+  const language = field(EN_MESSAGES['settings.language']) as unknown as HTMLSelectElement;
+  language.value = 'it';
+  language.dispatchEvent(new Event('change', { bubbles: true }));
+  await waitFor(() => i18n.getState().locale === 'it');
+  assert.deepEqual(loaded, ['it']);
+  assert.equal(el.firstElementChild!.getAttribute('aria-label'), 'Impostazioni');
+  radio(EN_MESSAGES['theme.option.dark']).click();
+  assert.equal(theme.getState(), 'dark');
+  assert.equal(radio(EN_MESSAGES['theme.option.dark']).checked, true);
+});
+
+test('autosave: a mode is an event; the delay field shows only for afterDelay and is committed on Enter and blur, clamped', () => {
+  const { el, field, radio, events } = mount();
+  const delay = field(EN_MESSAGES['settings.delay']);
+  delay.value = '50';
+  delay.dispatchEvent(new Event('input', { bubbles: true }));
+  delay.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  assert.equal(delay.value, '500');
+  assert.deepEqual(events, [['hmd-settings-autosave', { autosave: { mode: 'afterDelay', delayMs: 500 } }]]);
+  radio(EN_MESSAGES['settings.autosave.off']).click();
+  assert.deepEqual(events.at(-1), ['hmd-settings-autosave', { autosave: { mode: 'off', delayMs: 1000 } }]);
+  el.autosave = { mode: 'off', delayMs: 1000 };
+  assert.ok(!el.textContent!.includes(EN_MESSAGES['settings.delay']));
+});
+
+test('closing commits both width fields, then closes; Save all is an event', () => {
+  const { field, close, events, el } = mount();
+  const editor = field(EN_MESSAGES['settings.textWidth.editor']);
+  editor.value = '10';
+  editor.dispatchEvent(new Event('input', { bubbles: true }));
+  close().click();
+  assert.deepEqual(events, [
+    ['hmd-settings-text-width', { textWidth: { editor: 30, preview: 72 } }],
+    ['hmd-settings-close', null],
+  ]);
+  assert.equal(editor.value, '30');
+  [...el.querySelectorAll('button')].find((b) => b.textContent === EN_MESSAGES['settings.saveAll'])!.click();
+  assert.deepEqual(events.at(-1), ['hmd-settings-save-all', null]);
+});
+
+test('with a dirty section, closing (✕, Esc, requestClose) asks once; Discard clears dirty and closes', async () => {
+  const { el, close, events } = mount({ ai: true });
+  const presets = el.querySelector('hmd-settings-presets')!;
+  presets.querySelector<HTMLButtonElement>('.list button')!.click();
+  const name = presets.querySelector<HTMLInputElement>('.detail input')!;
+  name.value = 'Changed';
+  name.dispatchEvent(new Event('input', { bubbles: true }));
+  assert.equal(el.dirty, true);
+  close().click();
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+  el.requestClose();
+  assert.equal(document.querySelectorAll('dialog').length, 1);
+  assert.deepEqual(events, []);
+  [...document.querySelector('dialog')!.querySelectorAll('button')].find((b) => b.textContent === EN_MESSAGES['ai.discardChanges'])!.click();
+  await waitFor(() => events.length === 1);
+  assert.deepEqual(events, [['hmd-settings-close', null]]);
+  assert.equal(el.dirty, false);
+});
+
+test('detached: no keydown listener left (Esc does nothing), the dialog closes, the stores are free', async () => {
+  const { el, listeners, events } = mount({ ai: true });
+  el.remove();
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+  assert.deepEqual(events, []);
+  assert.equal(listeners(), 0);
+});
+```
+
+RED atteso: `Cannot find module './settingsView'`; poi, con il modulo, il tag non definito (`el.firstElementChild` null).
+
+- [ ] **Step 2: La logica pura**
+
+`src/elements/settings/settingsView.ts`:
+
+```ts
+import type { MessageKey } from '../../i18n/messages';
+import type { SettingsSection } from '../../lib/route';
+import { clampTextWidth, type TextWidth, type TextWidthPane } from '../../lib/textWidth';
+import { clampDelay, type AutosaveSettings } from '../../workspace/autosave';
+
+/** Etichetta di ogni sezione: voce dell'indice e titolo `h2`. */
+export const SECTION_LABELS: Record<SettingsSection, MessageKey> = {
+  general: 'settings.general',
+  'ai-profiles': 'settings.aiProfiles',
+  'ai-presets': 'settings.aiPresets',
+  'ai-sync': 'settings.aiSync',
+};
+
+/** Sezioni mostrate: quelle AI solo con il controller pronto (come SettingsView.tsx). */
+export function settingsSections(hasAi: boolean): SettingsSection[] {
+  return hasAi ? ['general', 'ai-profiles', 'ai-presets', 'ai-sync'] : ['general'];
+}
+
+/** Id del `section` di una sezione, bersaglio dello scorrimento e dell'IntersectionObserver. */
+export const sectionId = (section: SettingsSection) => `settings-${section}`;
+
+/** Sezione di un id `settings-…` (l'inverso di `sectionId`), o null. */
+export function sectionOf(id: string, sections: readonly SettingsSection[]): SettingsSection | null {
+  const section = id.replace(/^settings-/, '');
+  return (sections as readonly string[]).includes(section) ? (section as SettingsSection) : null;
+}
+
+/**
+ * Sezione da segnare nell'indice: la più in alto tra quelle che si intersecano (come il callback
+ * dell'IntersectionObserver di SettingsView.tsx). Null = nessuna, l'indice resta com'è.
+ */
+export function topSection(entries: readonly { id: string; top: number; intersecting: boolean }[], sections: readonly SettingsSection[]): SettingsSection | null {
+  const top = entries.filter((e) => e.intersecting).sort((a, b) => a.top - b.top)[0];
+  return top ? sectionOf(top.id, sections) : null;
+}
+
+/** Testo del campo di una larghezza: vuoto = nessun limite. */
+export const widthText = (width: TextWidth, pane: TextWidthPane) => String(width[pane] ?? '');
+
+/**
+ * Conferma dei due campi delle larghezze insieme (chiudendo con un campo ancora a fuoco la modifica non va
+ * persa): i testi riscritti nei limiti e il valore nuovo, o `next: null` se non cambia nulla.
+ */
+export function commitWidths(texts: Record<TextWidthPane, string>, current: TextWidth): { texts: Record<TextWidthPane, string>; next: TextWidth | null } {
+  const next: TextWidth = { editor: clampTextWidth(texts.editor), preview: clampTextWidth(texts.preview) };
+  const changed = next.editor !== current.editor || next.preview !== current.preview;
+  return { texts: { editor: widthText(next, 'editor'), preview: widthText(next, 'preview') }, next: changed ? next : null };
+}
+
+/** Conferma del ritardo dell'autosalvataggio: il testo nei limiti e le impostazioni nuove, o `next: null`. */
+export function commitDelay(text: string, autosave: AutosaveSettings): { text: string; next: AutosaveSettings | null } {
+  const delayMs = clampDelay(Number(text));
+  return { text: String(delayMs), next: delayMs === autosave.delayMs ? null : { ...autosave, delayMs } };
+}
+```
+
+- [ ] **Step 3: Gli eventi**
+
+`src/elements/events.ts`: gli import `import type { SettingsSection } from '../lib/route';`, `import type { TextWidth } from '../lib/textWidth';`, `import type { AutosaveSettings } from '../workspace/autosave';` (in ordine con gli altri), e intorno a `hmd-settings-dirty` (sopra il JSDoc di `hmd-start-pick`, in ordine alfabetico):
+
+```ts
+  /** Impostazioni: il ritardo o la modalità dell'autosalvataggio confermati (da salvare e applicare). */
+  'hmd-settings-autosave': CustomEvent<{ autosave: AutosaveSettings }>;
+  /** Impostazioni: chiuse (con la conferma, se c'erano modifiche aperte). */
+  'hmd-settings-close': CustomEvent<null>;
+  /** Sezione di profili o preset: la bozza aperta è diventata (o non è più) da salvare. */
+  'hmd-settings-dirty': CustomEvent<{ dirty: boolean }>;
+  /** Impostazioni: «Salva tutto». */
+  'hmd-settings-save-all': CustomEvent<null>;
+  /** Impostazioni: voce dell'indice scelta (la rotta passa a quella sezione). */
+  'hmd-settings-section': CustomEvent<{ section: SettingsSection }>;
+  /** Impostazioni: larghezze del testo confermate (da salvare e applicare). */
+  'hmd-settings-text-width': CustomEvent<{ textWidth: TextWidth }>;
+```
+
+- [ ] **Step 4: `hmd-settings` e il suo foglio**
+
+`src/elements/settings/settings.element.ts` (focus sul titolo solo alla prima connessione; Esc sulla finestra legato al `signal`; i testi dei campi numerici partono dai valori di adesso e si riscrivono solo alla conferma; una conferma alla volta, e Scarta svuota `dirty` **prima** di emettere `hmd-settings-close`, altrimenti la guardia bloccherebbe di nuovo; l'indice con un `IntersectionObserver` rifatto solo quando cambiano le sezioni; lo scorrimento solo quando cambiano sezione o controller, come l'effetto `[section, ai]`):
+
+```ts
+import type { SyncBinding } from '../../ai/syncBinding';
+import { HmdElement } from '../../dom/element';
+import { el, setText, toggleAttr } from '../../dom/el';
+import { icon } from '../../dom/icon';
+import { RenderLoop } from '../../dom/renderLoop';
+import { LOCALE_NAMES, SUPPORTED_LOCALES, type Locale } from '../../i18n/i18n';
+import { formatRoute, type SettingsSection } from '../../lib/route';
+import { MAX_TEXT_WIDTH, MIN_TEXT_WIDTH, TEXT_WIDTH_PANES, type TextWidth, type TextWidthPane } from '../../lib/textWidth';
+import type { I18nStore } from '../../state/i18nStore';
+import type { ThemeStore } from '../../state/themeStore';
+import { THEME_PREFS } from '../../theme/theme';
+import { AUTOSAVE_MODES, DEFAULT_AUTOSAVE, MAX_DELAY_MS, MIN_DELAY_MS, type AutosaveSettings } from '../../workspace/autosave';
+import { showDiscardChangesDialog } from '../dialogs/confirmDialog';
+import { emit } from '../events';
+import { showChildren } from './fields';
+import type { HmdSettingsPresets, PresetsController } from './presets.element';
+import type { HmdSettingsProfiles, ProfilesController } from './profiles.element';
+import { SECTION_LABELS, commitDelay, commitWidths, sectionId, settingsSections, topSection, widthText } from './settingsView';
+import type { HmdSettingsSync, SyncController } from './sync.element';
+import './settings.css';
+
+/** Quello che le impostazioni usano del controller AI: quello delle tre sezioni. */
+export type SettingsController = ProfilesController & PresetsController & SyncController;
+
+interface Parts {
+  view: HTMLDivElement;
+  nav: HTMLElement;
+  close: HTMLButtonElement;
+  title: HTMLHeadingElement;
+  links: Map<SettingsSection, HTMLAnchorElement>;
+  content: HTMLDivElement;
+  general: HTMLElement;
+  generalTitle: HTMLHeadingElement;
+  languageCaption: HTMLSpanElement;
+  language: HTMLSelectElement;
+  themeLegend: HTMLLegendElement;
+  themes: Map<string, { input: HTMLInputElement; text: Text }>;
+  autosaveGroup: HTMLFieldSetElement;
+  autosaveLegend: HTMLLegendElement;
+  autosaves: Map<string, { input: HTMLInputElement; text: Text }>;
+  delayLabel: HTMLLabelElement;
+  delayCaption: HTMLSpanElement;
+  delay: HTMLInputElement;
+  widthLegend: HTMLLegendElement;
+  widths: Record<TextWidthPane, { caption: HTMLSpanElement; input: HTMLInputElement }>;
+  widthHint: HTMLParagraphElement;
+  saveAll: HTMLButtonElement;
+  ai: { profiles: HTMLElement; presets: HTMLElement; sync: HTMLElement; titles: HTMLHeadingElement[] };
+  profiles: HmdSettingsProfiles;
+  presets: HmdSettingsPresets;
+  sync: HmdSettingsSync;
+}
+
+/**
+ * Impostazioni a pagina, sopra l'area di lavoro (era SettingsView.tsx): indice delle sezioni, generale
+ * (lingua, tema, autosalvataggio, larghezze del testo, Salva tutto) e, con il controller AI pronto, profili,
+ * preset e sync. La sezione arriva dalla rotta (`section`) e si porta in vista; la voce dell'indice segue
+ * lo scorrimento. Chiudere (✕, Esc, `requestClose()` quando Indietro è bloccato) conferma prima i campi e,
+ * con bozze aperte, chiede se scartarle. Lingua e tema vanno direttamente ai loro store; il resto esce come
+ * eventi `hmd-settings-*` verso `hmd-workspace`.
+ */
+export class HmdSettings extends HmdElement {
+  #section: SettingsSection = 'general';
+  #ai: SettingsController | null = null;
+  #syncBinding: SyncBinding | null = null;
+  #theme: ThemeStore | null = null;
+  #autosave: AutosaveSettings = DEFAULT_AUTOSAVE;
+  #textWidth: TextWidth = { editor: null, preview: null };
+  #i18n: I18nStore | null = null;
+
+  #parts: Parts | null = null;
+  /** Testi dei campi numerici: si confermano al blur, a Invio e alla chiusura (come lo stato di SettingsView.tsx). */
+  #delayText = '';
+  #widthTexts: Record<TextWidthPane, string> = { editor: '', preview: '' };
+  #dirty = new Set<SettingsSection>();
+  #visible: SettingsSection = 'general';
+  #confirming = false;
+  #observer: IntersectionObserver | null = null;
+  /** Sezioni osservate (cambiano solo con il controller AI). */
+  #observed: SettingsSection[] = [];
+  /** Sezione e controller dell'ultimo scorrimento: si scorre solo quando cambiano (l'effetto `[section, ai]`). */
+  #scrolled: { section: SettingsSection; ai: SettingsController | null } | null = null;
+  #dialogs: AbortController | null = null;
+  #loop = new RenderLoop(this, {
+    ready: () => !!this.#parts && !!this.#theme && !!this.#i18n && this.isConnected,
+    render: () => this.#render(this.#parts!, this.#theme!, this.#i18n!),
+  });
+
+  get section(): SettingsSection { return this.#section; }
+  set section(value: SettingsSection) {
+    this.#section = value ?? 'general';
+    this.#loop.update();
+  }
+  get ai(): SettingsController | null { return this.#ai; }
+  set ai(value: SettingsController | null) {
+    value ??= null;
+    if (value === this.#ai) return;
+    this.#ai = value;
+    // Senza controller le sezioni AI spariscono con le loro bozze.
+    if (!value) this.#dirty.clear();
+    this.#loop.update();
+  }
+  get syncBinding(): SyncBinding | null { return this.#syncBinding; }
+  set syncBinding(value: SyncBinding | null) {
+    value ??= null;
+    if (value === this.#syncBinding) return;
+    this.#syncBinding = value;
+    this.#loop.update();
+  }
+  get theme(): ThemeStore | null { return this.#theme; }
+  set theme(value: ThemeStore | null) {
+    value ??= null;
+    if (value === this.#theme) return;
+    this.#theme = value;
+    this.reconnect();
+  }
+  get autosave(): AutosaveSettings { return this.#autosave; }
+  set autosave(value: AutosaveSettings) {
+    this.#autosave = value ?? DEFAULT_AUTOSAVE;
+    this.#loop.update();
+  }
+  get textWidth(): TextWidth { return this.#textWidth; }
+  set textWidth(value: TextWidth) {
+    this.#textWidth = value ?? { editor: null, preview: null };
+    this.#loop.update();
+  }
+  get i18n(): I18nStore | null { return this.#i18n; }
+  set i18n(value: I18nStore | null) {
+    value ??= null;
+    if (value === this.#i18n) return;
+    this.#i18n = value;
+    this.reconnect();
+  }
+  /** Qualche sezione ha bozze non salvate: la guardia della rotta blocca Indietro. */
+  get dirty(): boolean { return this.#dirty.size > 0; }
+
+  /** Indietro del browser bloccato dalla guardia: si chiude passando dalla conferma. */
+  requestClose(): void {
+    this.#close();
+  }
+
+  protected connect(signal: AbortSignal): void {
+    const first = !this.#parts;
+    if (first) {
+      // I testi dei campi partono dai valori di adesso (come gli useState iniziali di SettingsView.tsx).
+      this.#delayText = String(this.#autosave.delayMs);
+      this.#widthTexts = { editor: widthText(this.#textWidth, 'editor'), preview: widthText(this.#textWidth, 'preview') };
+      this.#visible = this.#section;
+      this.#parts = this.#build();
+      this.append(this.#parts.view);
+    }
+    this.#dialogs ??= new AbortController();
+    const parts = this.#parts!;
+    parts.content.addEventListener('hmd-settings-dirty', (event) => this.#onDirty(event), { signal });
+    window.addEventListener(
+      'keydown',
+      (event) => {
+        if (event.key === 'Escape' && !document.querySelector('dialog[open]')) this.#close();
+      },
+      { signal },
+    );
+    const { theme, i18n } = { theme: this.#theme, i18n: this.#i18n };
+    if (!theme || !i18n) return;
+    this.watch(theme, () => this.#loop.update(), signal);
+    this.watch(i18n, () => this.#loop.update(), signal);
+    // Aprendo, il focus va sul titolo: il resto dell'app è inerte e il focus precedente andrebbe perso.
+    if (first) parts.title.focus({ preventScroll: true });
+  }
+
+  disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.#observer?.disconnect();
+    this.#observer = null;
+    this.#observed = [];
+    this.#scrolled = null;
+    this.#dialogs?.abort();
+    this.#dialogs = null;
+  }
+
+  #onDirty(event: HTMLElementEventMap['hmd-settings-dirty']): void {
+    const target = event.target as Element;
+    const parts = this.#parts!;
+    const section: SettingsSection | null = target === parts.profiles ? 'ai-profiles' : target === parts.presets ? 'ai-presets' : null;
+    if (!section) return;
+    if (event.detail.dirty) this.#dirty.add(section);
+    else this.#dirty.delete(section);
+  }
+
+  #commitDelay(): void {
+    const { text, next } = commitDelay(this.#delayText, this.#autosave);
+    this.#delayText = text;
+    if (this.#parts) this.#parts.delay.value = text;
+    if (next) emit(this, 'hmd-settings-autosave', { autosave: next });
+  }
+
+  // Entrambi i campi insieme: chiudendo con un campo ancora a fuoco (Esc) la modifica non va persa.
+  #commitWidths(): void {
+    const { texts, next } = commitWidths(this.#widthTexts, this.#textWidth);
+    this.#widthTexts = texts;
+    if (this.#parts) for (const pane of TEXT_WIDTH_PANES) this.#parts.widths[pane].input.value = texts[pane];
+    if (next) emit(this, 'hmd-settings-text-width', { textWidth: next });
+  }
+
+  #close(): void {
+    this.#commitDelay();
+    this.#commitWidths();
+    if (this.#dirty.size === 0) return emit(this, 'hmd-settings-close', null);
+    // Una conferma alla volta: «Indietro» con la conferma già aperta richiama la chiusura.
+    const t = this.#i18n?.t;
+    const signal = this.#dialogs?.signal;
+    if (this.#confirming || !t || !signal) return;
+    this.#confirming = true;
+    void showDiscardChangesDialog({ t, signal }).then((discard) => {
+      this.#confirming = false;
+      if (!discard || signal.aborted) return;
+      // Prima di uscire: altrimenti la guardia della rotta bloccherebbe di nuovo la cronologia.
+      this.#dirty.clear();
+      emit(this, 'hmd-settings-close', null);
+    });
+  }
+
+  #scrollTo(section: SettingsSection): void {
+    this.#parts?.content.querySelector(`#${sectionId(section)}`)?.scrollIntoView({ block: 'start' });
+  }
+
+  #build(): Parts {
+    const value = (event: Event) => (event.currentTarget as HTMLInputElement).value;
+    const onEnter = (commit: () => void) => (event: KeyboardEvent) => {
+      if (event.key === 'Enter') commit();
+    };
+    const radio = (name: string, v: string, onChange: () => void) => {
+      const input = el('input', { type: 'radio', name, value: v, on: { change: onChange } });
+      return { input, text: document.createTextNode('') };
+    };
+    const themes = new Map(THEME_PREFS.map((v) => [v, radio('theme', v, () => this.#theme?.setTheme(v))]));
+    const autosaves = new Map(AUTOSAVE_MODES.map((mode) => [mode, radio('autosave', mode, () => emit(this, 'hmd-settings-autosave', { autosave: { ...this.#autosave, mode } }))]));
+    const option = (r: { input: HTMLInputElement; text: Text }) => el('label', { class: 'option' }, r.input, r.text);
+    const delayCaption = el('span');
+    const delay = el('input', {
+      class: 'input',
+      type: 'number',
+      min: String(MIN_DELAY_MS),
+      max: String(MAX_DELAY_MS),
+      step: '100',
+      on: { input: (e) => (this.#delayText = value(e)), blur: () => this.#commitDelay(), keydown: onEnter(() => this.#commitDelay()) },
+    });
+    const widths = Object.fromEntries(
+      TEXT_WIDTH_PANES.map((pane) => [
+        pane,
+        {
+          caption: el('span'),
+          input: el('input', {
+            class: 'input',
+            type: 'number',
+            min: String(MIN_TEXT_WIDTH),
+            max: String(MAX_TEXT_WIDTH),
+            step: '1',
+            on: { input: (e) => (this.#widthTexts = { ...this.#widthTexts, [pane]: value(e) }), blur: () => this.#commitWidths(), keydown: onEnter(() => this.#commitWidths()) },
+          }),
+        },
+      ]),
+    ) as Parts['widths'];
+    delay.value = this.#delayText;
+    for (const pane of TEXT_WIDTH_PANES) widths[pane].input.value = this.#widthTexts[pane];
+    const sectionBox = (id: SettingsSection, ...children: Node[]) => el('section', { id: sectionId(id), class: 'section' }, ...children);
+    const titles = [el('h2'), el('h2'), el('h2')];
+    const parts: Parts = {
+      view: el('div', { class: 'view', role: 'region' }),
+      nav: el('nav', { class: 'nav' }),
+      close: el('button', { type: 'button', class: 'iconButton tooltip', on: { click: () => this.#close() } }, icon('close')),
+      title: el('h1', { tabIndex: -1 }),
+      links: new Map(),
+      content: el('div', { class: 'content' }),
+      general: el('section', { id: sectionId('general'), class: 'section' }),
+      generalTitle: el('h2'),
+      languageCaption: el('span'),
+      language: el(
+        'select',
+        { class: 'input', on: { change: (e) => void this.#i18n?.setLocale(value(e) as Locale) } },
+        SUPPORTED_LOCALES.map((l) => el('option', { value: l, lang: l }, LOCALE_NAMES[l])),
+      ),
+      themeLegend: el('legend'),
+      themes,
+      autosaveGroup: el('fieldset', { class: 'group' }),
+      autosaveLegend: el('legend'),
+      autosaves,
+      delayLabel: el('label', { class: 'field' }, delayCaption, delay),
+      delayCaption,
+      delay,
+      widthLegend: el('legend'),
+      widths,
+      widthHint: el('p', { class: 'hint' }),
+      saveAll: el('button', { type: 'button', class: 'secondary', on: { click: () => emit(this, 'hmd-settings-save-all', null) } }),
+      ai: { profiles: el('section'), presets: el('section'), sync: el('section'), titles },
+      profiles: el('hmd-settings-profiles'),
+      presets: el('hmd-settings-presets'),
+      sync: el('hmd-settings-sync'),
+    };
+    parts.ai = {
+      profiles: sectionBox('ai-profiles', titles[0], parts.profiles),
+      presets: sectionBox('ai-presets', titles[1], parts.presets),
+      sync: sectionBox('ai-sync', titles[2], parts.sync),
+      titles,
+    };
+    parts.autosaveGroup.append(parts.autosaveLegend, ...[...autosaves.values()].map(option));
+    parts.general.append(
+      parts.generalTitle,
+      el('label', { class: 'field' }, parts.languageCaption, parts.language),
+      el('fieldset', { class: 'group' }, parts.themeLegend, ...[...themes.values()].map(option)),
+      parts.autosaveGroup,
+      el('fieldset', { class: 'group' }, parts.widthLegend, ...TEXT_WIDTH_PANES.map((pane) => el('label', { class: 'field' }, widths[pane].caption, widths[pane].input)), parts.widthHint),
+      parts.saveAll,
+    );
+    parts.content.append(parts.general);
+    parts.nav.append(el('div', { class: 'navHeader' }, parts.close, parts.title));
+    parts.view.append(parts.nav, parts.content);
+    return parts;
+  }
+
+  #link(section: SettingsSection): HTMLAnchorElement {
+    return el('a', {
+      class: 'navLink',
+      href: formatRoute({ view: 'settings', section }),
+      on: {
+        click: (event) => {
+          event.preventDefault();
+          emit(this, 'hmd-settings-section', { section });
+          // Se la sezione è già quella della rotta non cambia nulla: si scorre direttamente.
+          this.#scrollTo(section);
+        },
+      },
+    });
+  }
+
+  #render(parts: Parts, theme: ThemeStore, i18n: I18nStore): void {
+    const t = i18n.t;
+    const ai = this.#ai;
+    const sections = settingsSections(!!ai);
+    toggleAttr(parts.view, 'aria-label', true, t('settings.title'));
+    toggleAttr(parts.nav, 'aria-label', true, t('settings.sections'));
+    toggleAttr(parts.close, 'aria-label', true, t('settings.close'));
+    toggleAttr(parts.close, 'data-tooltip', true, t('settings.close'));
+    setText(parts.title, t('settings.title'));
+    // Indice: un link per sezione mostrata, dopo la testata.
+    for (const section of sections) if (!parts.links.has(section)) parts.links.set(section, this.#link(section));
+    for (const [section, link] of parts.links) {
+      setText(link, t(SECTION_LABELS[section]));
+      toggleAttr(link, 'aria-current', this.#visible === section, 'true');
+    }
+    showChildren(parts.nav, [parts.nav.firstElementChild!, ...sections.map((s) => parts.links.get(s)!)], [...parts.links.values()]);
+    // Generale.
+    setText(parts.generalTitle, t('settings.general'));
+    setText(parts.languageCaption, t('settings.language'));
+    if (parts.language.value !== i18n.getState().locale) parts.language.value = i18n.getState().locale;
+    setText(parts.themeLegend, t('settings.theme'));
+    for (const [v, r] of parts.themes) {
+      setText(r.text, t(`theme.option.${v as (typeof THEME_PREFS)[number]}`));
+      r.input.checked = theme.getState() === v;
+    }
+    setText(parts.autosaveLegend, t('settings.autosave'));
+    for (const [mode, r] of parts.autosaves) {
+      setText(r.text, t(`settings.autosave.${mode as (typeof AUTOSAVE_MODES)[number]}`));
+      r.input.checked = this.#autosave.mode === mode;
+    }
+    setText(parts.delayCaption, t('settings.delay'));
+    showChildren(parts.autosaveGroup, [...parts.autosaveGroup.children].filter((c) => c !== parts.delayLabel).concat(this.#autosave.mode === 'afterDelay' ? [parts.delayLabel] : []), [parts.delayLabel]);
+    setText(parts.widthLegend, t('settings.textWidth'));
+    for (const pane of TEXT_WIDTH_PANES) {
+      setText(parts.widths[pane].caption, t(`settings.textWidth.${pane}`));
+      toggleAttr(parts.widths[pane].input, 'placeholder', true, t('settings.textWidth.none'));
+    }
+    setText(parts.widthHint, t('settings.textWidth.hint', { min: MIN_TEXT_WIDTH, max: MAX_TEXT_WIDTH }));
+    setText(parts.saveAll, t('settings.saveAll'));
+    // Sezioni AI: proprietà prima dell'inserimento, solo se cambiano.
+    parts.ai.titles.forEach((h2, i) => setText(h2, t(SECTION_LABELS[(['ai-profiles', 'ai-presets', 'ai-sync'] as const)[i]])));
+    if (ai) {
+      for (const child of [parts.profiles, parts.presets]) {
+        if (child.controller !== ai) child.controller = ai;
+        if (child.i18n !== i18n) child.i18n = i18n;
+      }
+      if (parts.sync.controller !== ai) parts.sync.controller = ai;
+      if (parts.sync.binding !== this.#syncBinding) parts.sync.binding = this.#syncBinding;
+      if (parts.sync.i18n !== i18n) parts.sync.i18n = i18n;
+    }
+    showChildren(parts.content, [parts.general, ...(ai ? [parts.ai.profiles, parts.ai.presets, parts.ai.sync] : [])], [parts.ai.profiles, parts.ai.presets, parts.ai.sync]);
+    this.#observe(parts, sections);
+    // Entrando (o cambiando sezione dalla rotta) si scorre alla sezione; anche quando compaiono le sezioni AI.
+    if (this.#scrolled?.section !== this.#section || this.#scrolled.ai !== ai) {
+      this.#scrolled = { section: this.#section, ai };
+      this.#scrollTo(this.#section);
+    }
+  }
+
+  /** La voce dell'indice segue la sezione visibile mentre si scorre (un observer per insieme di sezioni). */
+  #observe(parts: Parts, sections: SettingsSection[]): void {
+    if (this.#observer && this.#observed.join() === sections.join()) return;
+    this.#observer?.disconnect();
+    this.#observed = sections;
+    if (typeof IntersectionObserver === 'undefined') return;
+    this.#observer = new IntersectionObserver(
+      (entries) => {
+        const top = topSection(entries.map((e) => ({ id: e.target.id, top: e.boundingClientRect.top, intersecting: e.isIntersecting })), this.#observed);
+        if (!top || top === this.#visible) return;
+        this.#visible = top;
+        this.#loop.update();
+      },
+      { root: parts.content, rootMargin: '0px 0px -60% 0px' },
+    );
+    parts.content.querySelectorAll('section[id^="settings-"]').forEach((section) => this.#observer!.observe(section));
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'hmd-settings': HmdSettings;
+  }
+}
+```
+
+`src/elements/settings/settings.css` (valori di `SettingsView.module.css` e dei campi di `Dialog.module.css`; il limite inferiore lascia le sezioni AI a `sections.css`):
+
+```css
+@layer components {
+  /*
+   * Valori copiati da SettingsView.module.css e Dialog.module.css (campi della sezione generale). Il limite
+   * inferiore lascia le tre sezioni AI al loro foglio (sections.css).
+   */
+  @scope (hmd-settings) to (hmd-settings-profiles, hmd-settings-presets, hmd-settings-sync) {
+    :scope {
+      display: contents;
+    }
+
+    /* Impostazioni a pagina, sopra l'area di lavoro. */
+    .view {
+      position: fixed;
+      inset: 0;
+      z-index: 10;
+      display: grid;
+      grid-template-columns: 220px minmax(0, 1fr);
+      background: var(--c-bg);
+      color: var(--c-text);
+    }
+
+    .nav {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding: 12px;
+      border-right: 1px solid var(--c-border);
+      background: var(--c-sidebar);
+      font-family: var(--font-pixel);
+    }
+
+    .navHeader {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+
+    .navHeader h1 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: normal;
+    }
+
+    /* Il titolo riceve il focus solo da script (all'apertura): nessun anello. */
+    .navHeader h1:focus {
+      outline: none;
+    }
+
+    .navLink {
+      padding: 6px 10px;
+      border-radius: 6px;
+      color: var(--c-text);
+      text-decoration: none;
+    }
+
+    .navLink[aria-current='true'] {
+      background: var(--c-accent-soft);
+    }
+
+    .content {
+      overflow: auto;
+      padding: 24px clamp(16px, 4vw, 48px) 40vh;
+    }
+
+    .section {
+      max-width: 52rem;
+      margin: 0 0 40px;
+      scroll-margin-top: 16px;
+    }
+
+    .section h2 {
+      margin: 0 0 16px;
+      font: 18px/1.3 var(--font-pixel);
+    }
+
+    .iconButton {
+      display: inline-grid;
+      place-items: center;
+      width: 30px;
+      height: 30px;
+      border: none;
+      border-radius: 6px;
+      background: none;
+      cursor: pointer;
+    }
+
+    .iconButton:hover {
+      background: var(--c-accent-soft);
+    }
+
+    @media (width < 700px) {
+      .view {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: auto minmax(0, 1fr);
+      }
+
+      .nav {
+        flex-direction: row;
+        overflow-x: auto;
+        border-right: none;
+        border-bottom: 1px solid var(--c-border);
+      }
+
+      .navHeader {
+        margin: 0 8px 0 0;
+      }
+    }
+
+    .hint {
+      margin: 4px 0 0;
+      color: var(--c-muted);
+      font-size: 13px;
+    }
+
+    /* Campi della sezione generale (erano in Dialog.module.css). */
+    .input {
+      width: 100%;
+      font: inherit;
+      padding: 8px 10px;
+      border: 1px solid var(--c-border);
+      border-radius: 8px;
+      background: var(--c-bg);
+      color: var(--c-text);
+    }
+
+    .secondary {
+      border-radius: 8px;
+      padding: 8px 14px;
+      cursor: pointer;
+      font-weight: 600;
+      background: transparent;
+      border: 1px solid var(--c-border);
+    }
+
+    .field {
+      display: grid;
+      gap: 4px;
+      margin: 12px 0 0;
+    }
+
+    .group {
+      border: 1px solid var(--c-border);
+      border-radius: 8px;
+      margin: 16px 0 0;
+      padding: 8px 12px 12px;
+      display: grid;
+      gap: 6px;
+    }
+
+    .group legend {
+      padding: 0 4px;
+      font-weight: 600;
+    }
+
+    .option {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+    }
+  }
+}
+```
+
+`src/elements/define.ts`: import `HmdSettings` e voce `['hmd-settings', HmdSettings]` dopo `hmd-search-panel` (prima di `hmd-settings-presets`).
+
+- [ ] **Step 5: `WorkspaceView.tsx` monta `hmd-settings`**
+
+`src/elements/jsx.d.ts`: import `SettingsSection` (`../lib/route`), `TextWidth` (`../lib/textWidth`), `AutosaveSettings` (`../workspace/autosave`), `HmdSettings, SettingsController` (`./settings/settings.element`), e prima di `'hmd-settings-presets'`:
+
+```ts
+      'hmd-settings': HmdProps<
+        {
+          section: SettingsSection;
+          ai: SettingsController | null;
+          syncBinding: SyncBinding | null;
+          theme: ThemeStore;
+          autosave: AutosaveSettings;
+          textWidth: TextWidth;
+          i18n: I18nStore;
+        },
+        'hmd-settings-autosave' | 'hmd-settings-close' | 'hmd-settings-save-all' | 'hmd-settings-section' | 'hmd-settings-text-width'
+      > & { ref?: Ref<HmdSettings> };
+```
+
+`src/ui/WorkspaceView.tsx`: `import { SettingsView } from './SettingsView';` → `import type { HmdSettings } from '../elements/settings/settings.element';`; `import { getThemeStore, useTheme } from '../theme/useTheme';` → `import { getThemeStore } from '../theme/useTheme';` e via `const [theme, setTheme] = useTheme();`; al posto di `settingsDirty`, `closeRequest`, `onSettingsDirty` e della `useRoute` di prima:
+
+```tsx
+  const settingsRef = useRef<HmdSettings>(null);
+  const { route, navigate } = useRoute({ canLeave: () => !settingsRef.current?.dirty, onBlocked: () => settingsRef.current?.requestClose() });
+```
+
+e al posto di `<SettingsView … />`:
+
+```tsx
+      {settingsOpen && (
+        <hmd-settings
+          ref={settingsRef}
+          section={route.section}
+          ai={ai}
+          syncBinding={syncBinding}
+          theme={getThemeStore()}
+          autosave={state.autosave}
+          textWidth={textWidth}
+          i18n={i18nStore}
+          onhmd-settings-section={(event) => navigate({ view: 'settings', section: event.detail.section })}
+          onhmd-settings-close={() => navigate({ view: 'workspace' })}
+          onhmd-settings-autosave={(event) => {
+            writePref('autosave', event.detail.autosave);
+            workspace.setAutosave(event.detail.autosave);
+          }}
+          onhmd-settings-text-width={(event) => {
+            writePref('textWidth', event.detail.textWidth);
+            setTextWidth(event.detail.textWidth);
+          }}
+          onhmd-settings-save-all={() => void workspace.saveAll()}
+        />
+      )}
+```
+
+(`route.section` esiste perché il ramo è dentro `settingsOpen`; se TypeScript non lo restringe, `route.view === 'settings' ? route.section : 'general'`.) Poi:
+
+```bash
+git rm src/ui/SettingsView.tsx src/ui/SettingsView.module.css src/ui/Dialog.module.css
+grep -rn "SettingsView" src --include=*.tsx; echo "uscita $?"          # atteso: uscita 1
+grep -rn "Dialog.module\|closeRequest\|onDirtyChange" src; echo "uscita $?"   # atteso: uscita 1
+```
+
+- [ ] **Step 6: Verifica**
+
+```bash
+npx tsc --noEmit && npm test            # 1016 verdi
+npm run lint
+E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npx playwright test -c e2e/playwright.config.ts e2e/settings.spec.ts e2e/settings-sections.spec.ts e2e/theme-i18n.spec.ts e2e/ai-model.spec.ts e2e/ai-composer.spec.ts e2e/visual.spec.ts
+E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npx playwright test -c e2e/dev.config.ts e2e/settings.spec.ts e2e/settings-sections.spec.ts e2e/theme-i18n.spec.ts e2e/ai-model.spec.ts e2e/ai-composer.spec.ts
+E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npx playwright test -c e2e/audit.config.ts -g "settings|unsaved-dialog|ai-sync"
+pgrep -af "vite|chrom|playwright"
+```
+
+Nel prototipo: questi e2e verdi (49 in build, salvo i 2 snapshot noti dello start screen in `visual.spec.ts`), audit verde.
+
+- [ ] **Step 7: Commit**
+
+`test:` (Step 1), `feat:` (Step 2–4), `refactor:` (Step 5). Nessun `Co-authored-by`.
