@@ -838,3 +838,260 @@ test('after opening a folder from the start screen the focus goes to the tree ro
 ```
 
 - [ ] **Step 6: gate.** `npm test` (atteso **1050** = 1045 + 4 + 1), `npm run lint`, `e2e/startup.spec.ts` in build e in sviluppo (nel lock), audit con `-g "start"` (stati della schermata iniziale invariati). Commit: `test: risultati tardivi e avvio di hmd-app (RED)`, poi `fix: hmd-app scarta i risultati tardivi e riparte dall'avvio dopo il distacco`, `fix: il focus va all'albero dopo l'apertura della cartella`.
+
+### Task 3: `hmd-workspace` — focus quando la sidebar sparisce, Home/End, timer dei toast (Builder)
+
+**Files:**
+- Modify: `src/elements/workspace/workspace.element.ts` (+ `workspace.dom.test.ts`), `src/elements/workspace/layout.ts` (+ `layout.test.ts`), `src/elements/toasts/toasts.element.ts` (+ `toasts.dom.test.ts`), `e2e/workspace-shell.spec.ts`
+
+A1, A5 e i timer dei toast (decisione 9). Codice del prototipo, test verdi.
+
+- [ ] **Step 1: test che falliscono.** Nota: Ctrl+Maiusc+**E** è la modalità AI (`shortcutFor`), non A.
+
+```diff
+diff --git a/src/elements/toasts/toasts.dom.test.ts b/src/elements/toasts/toasts.dom.test.ts
+index db9d28a..557eaf8 100644
+--- a/src/elements/toasts/toasts.dom.test.ts
++++ b/src/elements/toasts/toasts.dom.test.ts
+@@ -56,17 +56,39 @@ test('nodes are reused by key; the close button sends hmd-toast-dismiss', () =>
+   el.remove();
+ });
+ 
+-test('info toasts close after 6 s, errors stay; a new items array restarts the info timers', () => {
++test('info toasts close 6 s after they appear, errors stay; a new items array keeps the running timers', () => {
+   mock.timers.enable({ apis: ['setTimeout'] });
+   try {
+     const { el, dismissed } = mount();
+     el.items = [info, error];
+     mock.timers.tick(5000);
+-    el.items = [info, error, { key: 'ws-2', kind: 'info', text: 'altro' }];
++    // Un array nuovo (un altro toast, un errore AI, la lingua) non riavvia il timer di ws-1.
++    el.items = [{ ...info }, error, { key: 'ws-2', kind: 'info', text: 'altro' }];
++    mock.timers.tick(1000);
++    assert.deepEqual(dismissed, ['ws-1']);
++    el.items = [error, { key: 'ws-2', kind: 'info', text: 'altro' }];
++    mock.timers.tick(4000);
++    assert.deepEqual(dismissed, ['ws-1']);
++    mock.timers.tick(1000);
++    assert.deepEqual(dismissed, ['ws-1', 'ws-2']);
++    el.remove();
++  } finally {
++    mock.timers.reset();
++  }
++});
++
++test('a toast that goes and comes back with the same key starts a new timer', () => {
++  mock.timers.enable({ apis: ['setTimeout'] });
++  try {
++    const { el, dismissed } = mount();
++    el.items = [info];
++    mock.timers.tick(5000);
++    el.items = [];
++    el.items = [info];
+     mock.timers.tick(5000);
+     assert.deepEqual(dismissed, []);
+     mock.timers.tick(1000);
+-    assert.deepEqual(dismissed.sort(), ['ws-1', 'ws-2']);
++    assert.deepEqual(dismissed, ['ws-1']);
+     el.remove();
+   } finally {
+     mock.timers.reset();
+diff --git a/src/elements/workspace/layout.test.ts b/src/elements/workspace/layout.test.ts
+index dade98f..01ce01c 100644
+--- a/src/elements/workspace/layout.test.ts
++++ b/src/elements/workspace/layout.test.ts
+@@ -34,6 +34,11 @@ test('arrow keys resize by 16px within the limits; other keys do nothing', () =>
+   assert.equal(resizeByKey('sidebar', 475, 'ArrowRight'), 480);
+   assert.equal(resizeByKey('ai', 305, 'ArrowLeft'), 300);
+   assert.equal(resizeByKey('sidebar', 280, 'Enter'), null);
++  // Home e End (APG, window splitter): al minimo e al massimo del pannello.
++  assert.equal(resizeByKey('sidebar', 280, 'Home'), 180);
++  assert.equal(resizeByKey('sidebar', 280, 'End'), 480);
++  assert.equal(resizeByKey('ai', 380, 'Home'), 300);
++  assert.equal(resizeByKey('ai', 380, 'End'), 640);
+ });
+ 
+ test('grid columns: side panel, 5px resizer and the main area; only the main area when closed', () => {
+diff --git a/src/elements/workspace/workspace.dom.test.ts b/src/elements/workspace/workspace.dom.test.ts
+index 863d67a..6b004d8 100644
+--- a/src/elements/workspace/workspace.dom.test.ts
++++ b/src/elements/workspace/workspace.dom.test.ts
+@@ -248,3 +248,41 @@ test('detached: no store or window listener is left', async () => {
+   window.dispatchEvent(unload);
+   assert.equal(unload.defaultPrevented, false);
+ });
++
++test('the focus never falls on the body when the sidebar goes: Hide sidebar and Ctrl+B to the toolbar toggle, AI mode to its button', async () => {
++  const { el, workspace, button } = await mount({ ai: true });
++  await workspace.openFile('a.md');
++  const focusOn = (node: Element | null, what: string) => assert.ok(node !== null && document.activeElement === node, `${what}, not ${document.activeElement?.localName}`);
++  // «Hide sidebar» dentro la sidebar: il pulsante sparisce con lei.
++  const hide = el.querySelector<HTMLButtonElement>(`aside button[aria-label="${EN_MESSAGES['sidebar.hide']}"]`)!;
++  hide.focus();
++  hide.click();
++  assert.equal(el.querySelector('aside'), null);
++  focusOn(button(EN_MESSAGES['sidebar.show']), 'Show sidebar in the toolbar');
++  // Ctrl+B con il focus nella ricerca.
++  toggleSidebar();
++  el.querySelector<HTMLInputElement>('hmd-search-panel input')!.focus();
++  toggleSidebar();
++  focusOn(button(EN_MESSAGES['sidebar.show']), 'Show sidebar after Ctrl+B');
++  // Modalità AI con il focus nell'albero: l'albero lascia il posto alla chat.
++  toggleSidebar();
++  el.querySelector<HTMLElement>('hmd-file-tree [tabindex="0"]')!.focus();
++  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'E', ctrlKey: true, shiftKey: true }));
++  assert.ok(el.querySelector('hmd-ai-sidebar'));
++  focusOn(button(EN_MESSAGES['mode.ai']), 'the AI mode button');
++  // Con il focus fuori dalla sidebar non si sposta niente.
++  button(EN_MESSAGES['mode.split']).focus();
++  button(EN_MESSAGES['mode.split']).click();
++  toggleSidebar();
++  focusOn(button(EN_MESSAGES['mode.split']), 'the button that had it');
++});
++
++test('the separator: Home and End take the panel to its minimum and maximum', async () => {
++  const { el } = await mount();
++  const separator = el.querySelector<HTMLElement>('[role="separator"]')!;
++  separator.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }));
++  assert.equal(separator.getAttribute('aria-valuenow'), '180');
++  separator.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true }));
++  assert.equal(separator.getAttribute('aria-valuenow'), '480');
++  assert.equal(storage.get('housemd:sidebarWidth'), '480');
++});
+```
+
+RED atteso (misurato): `layout.test.ts` «arrow keys resize…» (Home → `null`); `workspace.dom.test.ts` «the focus never falls on the body…» (`Show sidebar in the toolbar, not body`) e «the separator: Home and End…»; `toasts.dom.test.ts` «info toasts close 6 s after they appear…» (a 6 s `ws-1` non è ancora chiuso: il suo timer è ripartito con l'array nuovo).
+
+- [ ] **Step 2: Home ed End** in `layout.ts`:
+
+```diff
+diff --git a/src/elements/workspace/layout.ts b/src/elements/workspace/layout.ts
+index f781fa0..32455fe 100644
+--- a/src/elements/workspace/layout.ts
++++ b/src/elements/workspace/layout.ts
+@@ -36,10 +36,12 @@ export function clampWidth(panel: SidePanel, width: number): number {
+   return Math.min(max, Math.max(min, panel === 'sidebar' ? Math.round(width) : width));
+ }
+ 
+-/** Nuova larghezza dopo una freccia sinistra/destra, oppure null per gli altri tasti. */
++/** Nuova larghezza dopo una freccia sinistra/destra, Home (minimo) o End (massimo); null per gli altri tasti. */
+ export function resizeByKey(panel: SidePanel, width: number, key: string): number | null {
+   if (key === 'ArrowLeft') return clampWidth(panel, width - RESIZE_STEP);
+   if (key === 'ArrowRight') return clampWidth(panel, width + RESIZE_STEP);
++  if (key === 'Home') return WIDTH_LIMITS[panel].min;
++  if (key === 'End') return WIDTH_LIMITS[panel].max;
+   return null;
+ }
+ 
+```
+
+- [ ] **Step 3: recupero del focus nel workspace.** Nel `RenderLoop` di `workspace.element.ts` (il bersaglio è un pulsante fisso della barra: «Mostra sidebar» se la sidebar non c'è più, il pulsante della modalità AI se la chat ha sostituito l'albero):
+
+```ts
+  #loop = new RenderLoop(this, {
+    ready: () => !!this.#parts && !!this.#workspace && !!this.#i18n && !!this.#theme && !!this.#route && this.isConnected,
+    render: () => this.#render(this.#parts!, this.#workspace!, this.#i18n!),
+    // La sidebar (o il suo contenuto) è sparita con il focus dentro: «Nascondi», Ctrl+B nell'albero o nella
+    // ricerca, modalità AI che sostituisce l'albero con la chat. Il focus va su un pulsante fisso della barra.
+    focusScope: () => this.#slots.aside ?? null,
+    refocus: () => {
+      const parts = this.#parts!;
+      (this.#sidebarOpen && this.#shown === 'ai' ? parts.modeButtons.get('ai')! : parts.toggle).focus();
+    },
+  });
+```
+
+`focusScope` si legge prima del render: è l'`aside` di prima, anche quando il render lo toglie. Con il focus fuori dalla sidebar (un pulsante della barra) il recupero non scatta (ultimo blocco del test).
+
+- [ ] **Step 4: timer dei toast per chiave.**
+
+```diff
+diff --git a/src/elements/toasts/toasts.element.ts b/src/elements/toasts/toasts.element.ts
+index 642d3c2..6b2ec47 100644
+--- a/src/elements/toasts/toasts.element.ts
++++ b/src/elements/toasts/toasts.element.ts
+@@ -18,20 +18,22 @@ const INFO_TIMEOUT_MS = 6000;
+ 
+ /**
+  * Toast in basso a destra (era Toasts.tsx): popover `manual` aperto finché ci sono toast. I toast
+- * informativi si chiudono dopo 6 s; come l'effetto React di prima, ogni nuovo array `items` riavvia i timer.
++ * informativi si chiudono 6 s dopo la loro comparsa: un array `items` nuovo (un altro toast, un errore AI, la
++ * lingua) avvia solo i timer dei toast nuovi e ferma quelli dei toast spariti, per chiave.
+  */
+ export class HmdToasts extends HmdElement {
+   #items: readonly ToastItem[] = [];
+   #i18n: I18nStore | null = null;
+   #box: HTMLDivElement | null = null;
+   #open = false;
+-  #timers: ReturnType<typeof setTimeout>[] = [];
++  /** Chiave del toast informativo → il suo timer. */
++  #timers = new Map<string, ReturnType<typeof setTimeout>>();
+ 
+   get items(): readonly ToastItem[] { return this.#items; }
+   set items(value: readonly ToastItem[]) {
+     this.#items = value ?? [];
+     this.#render();
+-    if (this.isConnected) this.#restartTimers();
++    if (this.isConnected) this.#syncTimers();
+   }
+   get i18n(): I18nStore | null { return this.#i18n; }
+   set i18n(value: I18nStore | null) {
+@@ -45,7 +47,7 @@ export class HmdToasts extends HmdElement {
+     this.#box ??= this.appendChild(el('div', { class: 'toasts', popover: 'manual' }));
+     if (this.#i18n) this.watch(this.#i18n, () => this.#render(), signal);
+     else this.#render();
+-    this.#restartTimers();
++    this.#syncTimers();
+     // Il signal si interrompe al distacco e al reconnect: i timer ripartono in entrambi i casi.
+     signal.addEventListener('abort', () => this.#clearTimers(), { once: true });
+   }
+@@ -85,16 +87,22 @@ export class HmdToasts extends HmdElement {
+     }
+   }
+ 
+-  #restartTimers(): void {
+-    this.#clearTimers();
+-    this.#timers = this.#items
+-      .filter((item) => item.kind === 'info')
+-      .map((item) => setTimeout(() => emit(this, 'hmd-toast-dismiss', { key: item.key }), INFO_TIMEOUT_MS));
++  /** Un timer per ogni toast informativo presente: i nuovi partono, quelli già avviati continuano, gli altri si fermano. */
++  #syncTimers(): void {
++    const keys = new Set(this.#items.filter((item) => item.kind === 'info').map((item) => item.key));
++    for (const [key, timer] of this.#timers) {
++      if (keys.has(key)) continue;
++      clearTimeout(timer);
++      this.#timers.delete(key);
++    }
++    for (const key of keys) {
++      if (!this.#timers.has(key)) this.#timers.set(key, setTimeout(() => emit(this, 'hmd-toast-dismiss', { key }), INFO_TIMEOUT_MS));
++    }
+   }
+ 
+   #clearTimers(): void {
+     this.#timers.forEach(clearTimeout);
+-    this.#timers = [];
++    this.#timers.clear();
+   }
+ }
+ 
+```
+
+e in `workspace.element.ts` il commento sopra l'array dei toast:
+
+```diff
+-    // Un array nuovo solo quando cambiano toast, errore AI o lingua (lo useMemo di React): i toast riavviano i timer a ogni array.
++    // Un array nuovo solo quando cambiano toast, errore AI o lingua (lo useMemo di React); i timer sono per chiave in hmd-toasts.
+```
+
+- [ ] **Step 5: e2e rovesciato.** In `e2e/workspace-shell.spec.ts` il test A1 del Task 1 diventa:
+
+```ts
+test('Hide sidebar from inside the sidebar: the focus goes to Show sidebar in the toolbar (A1)', async ({ app, page }) => {
+  await app.openFolder({ 'a.md': '# A' });
+  await page.getByRole('button', { name: app.t('sidebar.hide'), exact: true }).click();
+  await expect(app.tree()).toHaveCount(0);
+  await expect(page.getByRole('button', { name: app.t('sidebar.show'), exact: true })).toBeFocused();
+});
+```
+
+- [ ] **Step 6: gate.** `npm test` (atteso **1053** = 1050 + 2 workspace + 1 toasts), `npm run lint`; `e2e/workspace-shell.spec.ts` ed `e2e/editor.spec.ts` (sidebar e separatore) in build e in sviluppo; audit con `-g "sidebar|resizer|toast|workspace"` invariato. Commit: `test: …(RED)`, `fix: il focus resta nella barra quando la sidebar sparisce`, `feat: Home ed End sul separatore`, `fix: i timer dei toast partono una volta per toast`.
