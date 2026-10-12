@@ -7,7 +7,7 @@ import type { I18nStore } from '../../state/i18nStore';
 import { showConfirmDialog } from '../dialogs/confirmDialog';
 import type { HmdEditor } from '../editor/editor.element';
 import type { HmdAiDiffPane } from './diff-pane.element';
-import { blockCount } from './diffLogic';
+import { blockCount, rejectBlocker } from './diffLogic';
 import type { HmdAiReviewBar } from './review-bar.element';
 import type { ReviewAction } from './reviewBarView';
 import { acceptNeedsConfirm, editedProposal, elapsedSeconds, reviewModel, type ReviewController, type ReviewDoc } from './reviewView';
@@ -103,6 +103,8 @@ export class HmdAiReview extends HmdElement {
             ...docEvents,
             'hmd-ai-proposal-edit': (event) => this.#edit(event.detail.text),
             'hmd-ai-all-rejected': () => this.#discard(),
+            // Un pulsante di un blocco attivato quando non può: la ragione nella nota della barra (il focus resta sul pulsante).
+            'hmd-ai-block-blocked': (event) => this.#parts?.bar.blocked(event.detail.action, event.detail.reason),
           },
         }),
       };
@@ -273,8 +275,9 @@ export class HmdAiReview extends HmdElement {
     bar.blocks = this.#blocksKey.count;
     if (diff.proposal !== m.text) diff.proposal = m.text;
     if (diff.range?.from !== m.range?.from || diff.range?.to !== m.range?.to) diff.range = m.range;
-    const canAcceptBlock = m.proposal ? controller.canAccept(m.proposal) : false;
-    if (diff.canAccept !== canAcceptBlock) diff.canAccept = canAcceptBlock;
+    // Le ragioni dei pulsanti dei blocchi: «accetta» quella del controller per il singolo blocco, «rifiuta» la sola lettura della proposta.
+    diff.acceptBlocker = m.proposal ? controller.acceptBlocker(m.proposal) : 'generating';
+    diff.rejectBlocker = rejectBlocker(m.status);
     if (diff.streaming !== m.streaming) diff.streaming = m.streaming;
     setText(parts.hint, t('ai.emptyProposal'));
     setText(parts.streamSummary, t('ai.streamingPreview'));

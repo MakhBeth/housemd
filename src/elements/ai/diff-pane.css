@@ -36,12 +36,9 @@
       color: var(--c-muted);
     }
 
-    .cm-merge-revert > .revert > button:hover:not(:disabled) {
+    /* Mai disabled: un pulsante bloccato ha lo stesso aspetto, la ragione la dice la nota della barra. */
+    .cm-merge-revert > .revert > button:hover {
       color: var(--c-text);
-    }
-
-    .cm-merge-revert > .revert > button:disabled {
-      opacity: 0.35;
     }
   }
 }
