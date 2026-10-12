@@ -291,6 +291,10 @@
         box-shadow: none;
       }
 
+      .orphan[aria-current='true']:focus-visible {
+        box-shadow: none;
+      }
+
       .resizer {
         forced-color-adjust: none;
         background: Canvas;

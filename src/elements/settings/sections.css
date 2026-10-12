@@ -49,6 +49,11 @@
         background: Highlight;
         color: HighlightText;
       }
+
+      /* Fuori dall'adattamento le ombre dell'anello "oreo" tornerebbero visibili: il focus lo porta il contorno. */
+      .item[aria-current='true']:focus-visible {
+        box-shadow: none;
+      }
     }
 
     .create {
