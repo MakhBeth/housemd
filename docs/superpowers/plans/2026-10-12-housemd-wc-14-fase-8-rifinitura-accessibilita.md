@@ -1592,3 +1592,1484 @@ index 68072dd..af76add 100644
 **Eccezione che resta nell'audit.** `computed-styles.audit.ts:576` (`#settings-ai-presets`) e le posizioni di `:587`, `:673-674` **non** cambiano in questo task: l'audit esegue la stessa preparazione anche sulla build di `dist-baseline/`, che non ha ancora le sezioni con il nome. Si sostituiscono nel primo task che ricostruisce la baseline da un commit con le sezioni con il nome (Task 8), con una riga nel commento.
 
 - [ ] **Step 7: gate.** `npm test` (atteso: quello del Task 4 + 6; il conteggio esatto nel commento), `npm run lint`; in build e in sviluppo `settings.spec.ts`, `settings-sections.spec.ts`, `ai-model.spec.ts`, `ai-chips.spec.ts`, `theme-i18n.spec.ts`; audit con `-g "settings"` invariato (misurato). Commit piccoli: `test: …(RED)`, `fix: Esc nelle impostazioni apre la conferma e non la richiude`, `fix: il focus resta nella sezione dopo Elimina e dopo un salto dall'indice`, `feat: sezioni delle impostazioni con un nome accessibile`, `fix: l'indice delle impostazioni arriva alle ultime sezioni`, `fix: stato della sync e «Connesso» annunciati`, `test: e2e per nome di sezione al posto di id e posizione`.
+
+### Task 4: AI — annunci, nome dell'editor, plurale, Scarta, Continua, doppio clic, bozza conservata, chip (Planner)
+
+**Files:**
+- Create: `src/dom/announce.ts`, `src/dom/announce.test.ts`
+- Modify: `src/i18n/i18n.ts` (+ `i18n.test.ts`), `src/i18n/locales/*.json` (nove), `src/elements/events.ts`
+- Modify: `src/elements/ai/review-bar.element.ts`, `review-bar.css`, `reviewBarView.ts`, `review.element.ts`, `composer.element.ts`, `sidebar.element.ts`, `model-chip.element.ts` (+ i loro test)
+- Modify: `src/editor/docExtensions.ts` (+ `docExtensions.dom.test.ts`), `src/elements/editor/docElement.ts`, `editor.element.ts` (+ `editor.dom.test.ts`), `src/elements/ai/diff-pane.element.ts` (solo il nome del lato destro e la riga in `#refreshControls`), `src/elements/workspace/workspace.element.ts` (solo la bozza) (+ `workspace.dom.test.ts`)
+- Modify (e2e): `ai-review-bar.spec.ts`, `ai-review.spec.ts:222`, `ai-composer.spec.ts`, `computed-styles.audit.ts:280`
+
+P1, P3, P4, LAB-11, Scarta = Ferma + scarta, Continua durante un aggiornamento, doppio clic, LAB-10 (variante B, decisione 13), chip senza cast. Tutto provato nel prototipo, e2e compresi. **Planner** perché: la nota ri-annunciata si svuota e torna al fotogramma dopo (con l'orologio finto di Playwright il fotogramma non arriva da solo: `page.clock.runFor(50)`); il nome del contenuto di CodeMirror **non** si aggiorna con un `dispatch({})` vuoto (passa dalla sessione e rompe «a listener that swaps the document while typing»: misurato), ma scrivendo l'attributo e lasciando `contentAttributes` a riallinearlo al prossimo aggiornamento; Scarta senza proposta già arrivata non fermava niente (trovato dall'e2e); è l'unico task dell'8a che rinnova la baseline.
+
+- [ ] **Step 1: helper `announce` e `pluralKey`, test prima.** `src/dom/announce.test.ts`:
+
+```ts
+import '../testing/domEnv';
+
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+import { announce } from './announce';
+
+const nextTask = () => new Promise((resolve) => setTimeout(resolve, 5));
+
+test('without again it is setText: written only when it changes', () => {
+  const node = document.createElement('p');
+  announce(node, 'a');
+  announce(node, 'a');
+  assert.equal(node.textContent, 'a');
+});
+
+test('again: the same text is cleared now and written back a frame later, as a new mutation', async () => {
+  const node = document.createElement('p');
+  node.textContent = 'busy';
+  announce(node, 'busy', true);
+  assert.equal(node.textContent, '');
+  // Un render nel frattempo con lo stesso testo non lo anticipa.
+  announce(node, 'busy');
+  assert.equal(node.textContent, '');
+  await nextTask();
+  assert.equal(node.textContent, 'busy');
+});
+
+test('again: another text (or empty) before the frame wins and cancels the wait', async () => {
+  const node = document.createElement('p');
+  announce(node, 'busy', true);
+  announce(node, '');
+  await nextTask();
+  assert.equal(node.textContent, '');
+  announce(node, 'busy', true);
+  announce(node, 'other');
+  assert.equal(node.textContent, 'other');
+  await nextTask();
+  assert.equal(node.textContent, 'other');
+});
+```
+
+`src/dom/announce.ts`:
+
+```ts
+/** Testo in attesa del fotogramma successivo, per nodo. */
+const pending = new WeakMap<Node, { text: string; cancel(): void }>();
+
+/**
+ * Testo di una regione live (`role="status"`). Senza `again` è `setText`: scrive solo se cambia. Con `again` il
+ * testo deve arrivare allo screen reader come una mutazione nuova anche se è uguale a quello di prima (la
+ * stessa nota a un secondo clic, WCAG 4.1.3) o se la regione è appena entrata nel DOM: la regione si svuota
+ * subito e il testo torna al fotogramma successivo. Fino ad allora un render che chiede lo stesso testo non lo
+ * anticipa; uno che ne chiede un altro (o il vuoto) vince e annulla l'attesa.
+ */
+export function announce(node: HTMLElement, text: string, again = false): void {
+  const waiting = pending.get(node);
+  if (waiting && waiting.text === text && !again) return;
+  waiting?.cancel();
+  pending.delete(node);
+  if (!again || text === '') {
+    if (node.textContent !== text) node.textContent = text;
+    return;
+  }
+  node.textContent = '';
+  const win = node.ownerDocument.defaultView;
+  const write = () => {
+    pending.delete(node);
+    node.textContent = text;
+  };
+  // Nel browser un fotogramma vero separa le due mutazioni; jsdom senza requestAnimationFrame usa un task.
+  if (win?.requestAnimationFrame) {
+    const frame = win.requestAnimationFrame(write);
+    pending.set(node, { text, cancel: () => win.cancelAnimationFrame(frame) });
+  } else {
+    const timer = setTimeout(write, 0);
+    pending.set(node, { text, cancel: () => clearTimeout(timer) });
+  }
+}
+```
+
+`pluralKey` in `src/i18n/i18n.ts` e il suo test (RED: non compila finché la funzione non c'è):
+
+```diff
+diff --git a/src/i18n/i18n.test.ts b/src/i18n/i18n.test.ts
+index 71841bc..9f8fae9 100644
+--- a/src/i18n/i18n.test.ts
++++ b/src/i18n/i18n.test.ts
+@@ -1,7 +1,7 @@
+ import test from 'node:test';
+ import assert from 'node:assert/strict';
+ 
+-import { detectLocale, formatDate, formatRelative, parseLocale, placeholders, translate } from './i18n';
++import { detectLocale, formatDate, formatRelative, parseLocale, placeholders, pluralKey, translate } from './i18n';
+ import { EN_MESSAGES, loadMessages, loadWithFallback } from './messages';
+ 
+ test('detectLocale matches on the language prefix, case-insensitively', () => {
+@@ -58,3 +58,13 @@ test('loadMessages falls back to English (locale included) if the chunk fails to
+   const failing = () => Promise.reject(new Error('chunk non raggiungibile'));
+   assert.deepEqual(await loadWithFallback('de', failing), { locale: 'en', messages: EN_MESSAGES });
+ });
++
++test('pluralKey: the singular form only where the language has one, the plural everywhere else', () => {
++  assert.equal(pluralKey('en', 'ai.warningsCount', 1), 'ai.warningsCount.one');
++  assert.equal(pluralKey('en', 'ai.warningsCount', 2), 'ai.warningsCount.other');
++  assert.equal(pluralKey('en', 'ai.warningsCount', 0), 'ai.warningsCount.other');
++  assert.equal(pluralKey('it', 'ai.warningsCount', 1), 'ai.warningsCount.one');
++  assert.equal(pluralKey('fr', 'ai.warningsCount', 0), 'ai.warningsCount.one', 'in francese 0 è singolare');
++  assert.equal(pluralKey('ja', 'ai.warningsCount', 1), 'ai.warningsCount.other', 'il giapponese non ha il singolare');
++  assert.equal(pluralKey('pl', 'ai.warningsCount', 5), 'ai.warningsCount.other', 'few/many ricadono su other');
++});
+diff --git a/src/i18n/i18n.ts b/src/i18n/i18n.ts
+index ea25d8c..1a4a95f 100644
+--- a/src/i18n/i18n.ts
++++ b/src/i18n/i18n.ts
+@@ -43,6 +43,15 @@ export function translate(messages: Messages, key: string, params?: Params): str
+   return template.replace(/\{(\w+)\}/g, (match, name: string) => (name in params ? String(params[name]) : match));
+ }
+ 
++/**
++ * Chiave della forma singolare o plurale (`<base>.one` / `<base>.other`) per `count`, con le regole della lingua
++ * (`Intl.PluralRules`): le categorie oltre `one` (few, many, …) usano la forma `other`, che ogni lingua scrive
++ * in modo da valere per tutti i numeri.
++ */
++export function pluralKey<B extends string>(locale: Locale, base: B, count: number): `${B}.one` | `${B}.other` {
++  return new Intl.PluralRules(locale).select(count) === 'one' ? `${base}.one` : `${base}.other`;
++}
++
+ export function placeholders(template: string): string[] {
+   return [...new Set([...template.matchAll(/\{(\w+)\}/g)].map((m) => m[1]))].sort();
+ }
+```
+
+- [ ] **Step 2: chiavi.** Nuove: `ai.warningsCount.one` e `ai.warningsCount.other` (al posto di `ai.warningsCount`), `ai.generatingStarted`, `ai.generatingProgress`, `editor.content`, `ai.diff.current`, `ai.diff.proposal`; cambiata: `ai.composer.noDocument` (LAB-10). Tutte e nove le lingue (testi del prototipo; il Reviewer li legge):
+
+```diff
+diff --git a/src/i18n/locales/de.json b/src/i18n/locales/de.json
+index a8d7d5f..5fd6012 100644
+--- a/src/i18n/locales/de.json
++++ b/src/i18n/locales/de.json
+@@ -71,6 +71,7 @@
+   "search.none": "Keine Ergebnisse",
+   "pane.editor": "Editor",
+   "pane.preview": "Vorschau",
++  "editor.content": "Dokumenttext",
+   "preview.frontmatterInvalid": "Ungültiger Frontmatter: {detail}",
+   "preview.imageMissing": "Bild nicht gefunden: {path}",
+   "settings.title": "Einstellungen",
+@@ -143,13 +144,15 @@
+   "ai.request": "Frage zu diesem Dokument… (Umschalt+Enter für neue Zeile)",
+   "ai.working": "Wird bearbeitet…",
+   "ai.proposalReady": "Vorschlag zur Prüfung bereit.",
++  "ai.diff.current": "Aktuelles Dokument",
++  "ai.diff.proposal": "KI-Vorschlag",
+   "ai.retry": "Erneut versuchen",
+   "ai.newChat": "Neuer Chat",
+   "ai.stop": "Stoppen",
+   "ai.send": "Senden",
+   "ai.composer.needText": "Schreibe eine Nachricht, bevor du sendest",
+   "ai.composer.needProfile": "Wähle ein Profil, bevor du sendest",
+-  "ai.composer.noDocument": "Öffne ein Dokument, bevor du sendest",
++  "ai.composer.noDocument": "Kein Dokument geöffnet: wechsle zum Editor, öffne eines aus der Dateiliste und komm zum Senden zurück",
+   "ai.composer.updating": "Eine Aktualisierung läuft: versuche es gleich noch einmal",
+   "ai.composer.generating": "Generierung läuft: warte, bis sie fertig ist, oder drücke Stoppen",
+   "ai.newChat.alreadyEmpty": "Der Chat ist bereits leer",
+@@ -274,7 +277,10 @@
+   "ai.selectionIgnore": "Ganzes Dokument verwenden",
+   "ai.suggestions": "Vorschläge",
+   "ai.generating": "Wird erzeugt… {seconds} s",
+-  "ai.warningsCount": "{count} Hinweise",
++  "ai.generatingStarted": "Vorschlag wird erzeugt",
++  "ai.generatingProgress": "Vorschlag wird erzeugt, Teil {done} von {total}",
++  "ai.warningsCount.one": "{count} Hinweis",
++  "ai.warningsCount.other": "{count} Hinweise",
+   "settings.sections": "Einstellungsbereiche",
+   "settings.general": "Allgemein",
+   "settings.aiProfiles": "KI · Profile",
+diff --git a/src/i18n/locales/en.json b/src/i18n/locales/en.json
+index d4532e9..de05f15 100644
+--- a/src/i18n/locales/en.json
++++ b/src/i18n/locales/en.json
+@@ -71,6 +71,7 @@
+   "search.none": "No results",
+   "pane.editor": "Editor",
+   "pane.preview": "Preview",
++  "editor.content": "Document text",
+   "preview.frontmatterInvalid": "Invalid frontmatter: {detail}",
+   "preview.imageMissing": "Image not found: {path}",
+   "settings.title": "Settings",
+@@ -143,13 +144,15 @@
+   "ai.request": "Ask about this document… (Shift+Enter for a new line)",
+   "ai.working": "Working…",
+   "ai.proposalReady": "Proposal ready for review.",
++  "ai.diff.current": "Current document",
++  "ai.diff.proposal": "AI proposal",
+   "ai.retry": "Retry",
+   "ai.newChat": "New chat",
+   "ai.stop": "Stop",
+   "ai.send": "Send",
+   "ai.composer.needText": "Write a message before sending",
+   "ai.composer.needProfile": "Choose a profile before sending",
+-  "ai.composer.noDocument": "Open a document before sending",
++  "ai.composer.noDocument": "No document open: switch to Editor, open one from the file tree, then come back to send",
+   "ai.composer.updating": "An update is in progress: try again in a moment",
+   "ai.composer.generating": "Generation in progress: wait for it to finish, or press Stop",
+   "ai.newChat.alreadyEmpty": "The chat is already empty",
+@@ -274,7 +277,10 @@
+   "ai.selectionIgnore": "Use the whole document",
+   "ai.suggestions": "Suggestions",
+   "ai.generating": "Generating… {seconds} s",
+-  "ai.warningsCount": "{count} warnings",
++  "ai.generatingStarted": "Generating a proposal",
++  "ai.generatingProgress": "Generating a proposal, part {done} of {total}",
++  "ai.warningsCount.one": "{count} warning",
++  "ai.warningsCount.other": "{count} warnings",
+   "settings.sections": "Settings sections",
+   "settings.general": "General",
+   "settings.aiProfiles": "AI · Profiles",
+diff --git a/src/i18n/locales/es.json b/src/i18n/locales/es.json
+index d8806af..c939120 100644
+--- a/src/i18n/locales/es.json
++++ b/src/i18n/locales/es.json
+@@ -71,6 +71,7 @@
+   "search.none": "Sin resultados",
+   "pane.editor": "Editor",
+   "pane.preview": "Vista previa",
++  "editor.content": "Texto del documento",
+   "preview.frontmatterInvalid": "Frontmatter no válido: {detail}",
+   "preview.imageMissing": "Imagen no encontrada: {path}",
+   "settings.title": "Ajustes",
+@@ -143,13 +144,15 @@
+   "ai.request": "Pregunta sobre este documento… (Mayús+Intro para nueva línea)",
+   "ai.working": "Trabajando…",
+   "ai.proposalReady": "Propuesta lista para revisar.",
++  "ai.diff.current": "Documento actual",
++  "ai.diff.proposal": "Propuesta de la IA",
+   "ai.retry": "Reintentar",
+   "ai.newChat": "Nueva conversación",
+   "ai.stop": "Detener",
+   "ai.send": "Enviar",
+   "ai.composer.needText": "Escribe un mensaje antes de enviar",
+   "ai.composer.needProfile": "Elige un perfil antes de enviar",
+-  "ai.composer.noDocument": "Abre un documento antes de enviar",
++  "ai.composer.noDocument": "No hay ningún documento abierto: pasa al Editor, abre uno desde el árbol de archivos y vuelve para enviar",
+   "ai.composer.updating": "Hay una actualización en curso: inténtalo de nuevo en un momento",
+   "ai.composer.generating": "Generación en curso: espera a que termine, o pulsa Detener",
+   "ai.newChat.alreadyEmpty": "La conversación ya está vacía",
+@@ -274,7 +277,10 @@
+   "ai.selectionIgnore": "Usar todo el documento",
+   "ai.suggestions": "Sugerencias",
+   "ai.generating": "Generando… {seconds} s",
+-  "ai.warningsCount": "{count} avisos",
++  "ai.generatingStarted": "Generando una propuesta",
++  "ai.generatingProgress": "Generando una propuesta, parte {done} de {total}",
++  "ai.warningsCount.one": "{count} aviso",
++  "ai.warningsCount.other": "{count} avisos",
+   "settings.sections": "Secciones de ajustes",
+   "settings.general": "General",
+   "settings.aiProfiles": "IA · Perfiles",
+diff --git a/src/i18n/locales/fr.json b/src/i18n/locales/fr.json
+index 2093257..05598e2 100644
+--- a/src/i18n/locales/fr.json
++++ b/src/i18n/locales/fr.json
+@@ -71,6 +71,7 @@
+   "search.none": "Aucun résultat",
+   "pane.editor": "Éditeur",
+   "pane.preview": "Aperçu",
++  "editor.content": "Texte du document",
+   "preview.frontmatterInvalid": "Frontmatter non valide : {detail}",
+   "preview.imageMissing": "Image introuvable : {path}",
+   "settings.title": "Paramètres",
+@@ -143,13 +144,15 @@
+   "ai.request": "Posez une question sur ce document… (Maj+Entrée pour aller à la ligne)",
+   "ai.working": "Traitement en cours…",
+   "ai.proposalReady": "Proposition prête à être examinée.",
++  "ai.diff.current": "Document actuel",
++  "ai.diff.proposal": "Proposition de l'IA",
+   "ai.retry": "Réessayer",
+   "ai.newChat": "Nouvelle conversation",
+   "ai.stop": "Arrêter",
+   "ai.send": "Envoyer",
+   "ai.composer.needText": "Écrivez un message avant d’envoyer",
+   "ai.composer.needProfile": "Choisissez un profil avant d’envoyer",
+-  "ai.composer.noDocument": "Ouvrez un document avant d’envoyer",
++  "ai.composer.noDocument": "Aucun document ouvert : passez à l’éditeur, ouvrez-en un depuis l’arborescence, puis revenez envoyer",
+   "ai.composer.updating": "Une mise à jour est en cours : réessayez dans un instant",
+   "ai.composer.generating": "Génération en cours : attendez qu’elle se termine, ou appuyez sur Arrêter",
+   "ai.newChat.alreadyEmpty": "La conversation est déjà vide",
+@@ -274,7 +277,10 @@
+   "ai.selectionIgnore": "Utiliser tout le document",
+   "ai.suggestions": "Suggestions",
+   "ai.generating": "Génération… {seconds} s",
+-  "ai.warningsCount": "{count} avertissements",
++  "ai.generatingStarted": "Génération d'une proposition",
++  "ai.generatingProgress": "Génération d'une proposition, partie {done} sur {total}",
++  "ai.warningsCount.one": "{count} avertissement",
++  "ai.warningsCount.other": "{count} avertissements",
+   "settings.sections": "Sections des réglages",
+   "settings.general": "Général",
+   "settings.aiProfiles": "IA · Profils",
+diff --git a/src/i18n/locales/it.json b/src/i18n/locales/it.json
+index 1128649..b5806f3 100644
+--- a/src/i18n/locales/it.json
++++ b/src/i18n/locales/it.json
+@@ -71,6 +71,7 @@
+   "search.none": "Nessun risultato",
+   "pane.editor": "Editor",
+   "pane.preview": "Anteprima",
++  "editor.content": "Testo del documento",
+   "preview.frontmatterInvalid": "Frontmatter non valido: {detail}",
+   "preview.imageMissing": "Immagine non trovata: {path}",
+   "settings.title": "Impostazioni",
+@@ -143,13 +144,15 @@
+   "ai.request": "Chiedi qualcosa su questo documento… (Shift+Invio per andare a capo)",
+   "ai.working": "Al lavoro…",
+   "ai.proposalReady": "Proposta pronta per la revisione.",
++  "ai.diff.current": "Documento attuale",
++  "ai.diff.proposal": "Proposta dell'AI",
+   "ai.retry": "Riprova",
+   "ai.newChat": "Nuova chat",
+   "ai.stop": "Ferma",
+   "ai.send": "Invia",
+   "ai.composer.needText": "Scrivi un messaggio prima di inviare",
+   "ai.composer.needProfile": "Scegli un profilo prima di inviare",
+-  "ai.composer.noDocument": "Apri un documento prima di inviare",
++  "ai.composer.noDocument": "Nessun documento aperto: passa all’Editor, aprine uno dall’albero dei file e torna qui a inviare",
+   "ai.composer.updating": "Aggiornamento in corso: riprova tra un momento",
+   "ai.composer.generating": "Generazione in corso: aspetta che finisca, oppure premi Ferma",
+   "ai.newChat.alreadyEmpty": "La chat è già vuota",
+@@ -274,7 +277,10 @@
+   "ai.selectionIgnore": "Usa tutto il documento",
+   "ai.suggestions": "Suggerimenti",
+   "ai.generating": "Generazione… {seconds} s",
+-  "ai.warningsCount": "{count} avvisi",
++  "ai.generatingStarted": "Generazione della proposta in corso",
++  "ai.generatingProgress": "Generazione della proposta, parte {done} di {total}",
++  "ai.warningsCount.one": "{count} avviso",
++  "ai.warningsCount.other": "{count} avvisi",
+   "settings.sections": "Sezioni delle impostazioni",
+   "settings.general": "Generale",
+   "settings.aiProfiles": "AI · Profili",
+diff --git a/src/i18n/locales/ja.json b/src/i18n/locales/ja.json
+index 854f03c..f44e51b 100644
+--- a/src/i18n/locales/ja.json
++++ b/src/i18n/locales/ja.json
+@@ -71,6 +71,7 @@
+   "search.none": "結果はありません",
+   "pane.editor": "エディター",
+   "pane.preview": "プレビュー",
++  "editor.content": "ドキュメントの本文",
+   "preview.frontmatterInvalid": "フロントマターが無効です：{detail}",
+   "preview.imageMissing": "画像が見つかりません：{path}",
+   "settings.title": "設定",
+@@ -143,13 +144,15 @@
+   "ai.request": "この文書について質問…（Shift+Enter で改行）",
+   "ai.working": "処理中…",
+   "ai.proposalReady": "提案を確認できます。",
++  "ai.diff.current": "現在のドキュメント",
++  "ai.diff.proposal": "AI の提案",
+   "ai.retry": "再試行",
+   "ai.newChat": "新しいチャット",
+   "ai.stop": "停止",
+   "ai.send": "送信",
+   "ai.composer.needText": "送信する前にメッセージを入力してください",
+   "ai.composer.needProfile": "送信する前にプロファイルを選択してください",
+-  "ai.composer.noDocument": "送信する前にドキュメントを開いてください",
++  "ai.composer.noDocument": "ドキュメントが開かれていません。エディターに切り替えてファイルツリーから開き、戻って送信してください",
+   "ai.composer.updating": "更新中です。しばらくしてからもう一度お試しください",
+   "ai.composer.generating": "生成中です。終わるのを待つか、停止を押してください",
+   "ai.newChat.alreadyEmpty": "チャットはすでに空です",
+@@ -274,7 +277,10 @@
+   "ai.selectionIgnore": "文書全体を使う",
+   "ai.suggestions": "候補",
+   "ai.generating": "生成中… {seconds} 秒",
+-  "ai.warningsCount": "警告 {count} 件",
++  "ai.generatingStarted": "提案を生成中",
++  "ai.generatingProgress": "提案を生成中、{total} 件中 {done} 件目",
++  "ai.warningsCount.one": "警告 {count} 件",
++  "ai.warningsCount.other": "警告 {count} 件",
+   "settings.sections": "設定の項目",
+   "settings.general": "一般",
+   "settings.aiProfiles": "AI · プロファイル",
+diff --git a/src/i18n/locales/nl.json b/src/i18n/locales/nl.json
+index 02503a3..019b15a 100644
+--- a/src/i18n/locales/nl.json
++++ b/src/i18n/locales/nl.json
+@@ -71,6 +71,7 @@
+   "search.none": "Geen resultaten",
+   "pane.editor": "Editor",
+   "pane.preview": "Voorbeeld",
++  "editor.content": "Documenttekst",
+   "preview.frontmatterInvalid": "Ongeldige frontmatter: {detail}",
+   "preview.imageMissing": "Afbeelding niet gevonden: {path}",
+   "settings.title": "Instellingen",
+@@ -143,13 +144,15 @@
+   "ai.request": "Vraag iets over dit document… (Shift+Enter voor een nieuwe regel)",
+   "ai.working": "Bezig…",
+   "ai.proposalReady": "Voorstel klaar om te beoordelen.",
++  "ai.diff.current": "Huidig document",
++  "ai.diff.proposal": "AI-voorstel",
+   "ai.retry": "Opnieuw proberen",
+   "ai.newChat": "Nieuwe chat",
+   "ai.stop": "Stoppen",
+   "ai.send": "Verzenden",
+   "ai.composer.needText": "Schrijf een bericht voordat je verzendt",
+   "ai.composer.needProfile": "Kies een profiel voordat je verzendt",
+-  "ai.composer.noDocument": "Open een document voordat je verzendt",
++  "ai.composer.noDocument": "Geen document geopend: ga naar de editor, open er een uit de bestandenlijst en kom terug om te verzenden",
+   "ai.composer.updating": "Er is een update bezig: probeer het zo opnieuw",
+   "ai.composer.generating": "Generatie bezig: wacht tot die klaar is, of druk op Stoppen",
+   "ai.newChat.alreadyEmpty": "De chat is al leeg",
+@@ -274,7 +277,10 @@
+   "ai.selectionIgnore": "Hele document gebruiken",
+   "ai.suggestions": "Suggesties",
+   "ai.generating": "Bezig… {seconds} s",
+-  "ai.warningsCount": "{count} waarschuwingen",
++  "ai.generatingStarted": "Voorstel wordt gemaakt",
++  "ai.generatingProgress": "Voorstel wordt gemaakt, deel {done} van {total}",
++  "ai.warningsCount.one": "{count} waarschuwing",
++  "ai.warningsCount.other": "{count} waarschuwingen",
+   "settings.sections": "Onderdelen van instellingen",
+   "settings.general": "Algemeen",
+   "settings.aiProfiles": "AI · Profielen",
+diff --git a/src/i18n/locales/pl.json b/src/i18n/locales/pl.json
+index e31c3e5..3d67459 100644
+--- a/src/i18n/locales/pl.json
++++ b/src/i18n/locales/pl.json
+@@ -71,6 +71,7 @@
+   "search.none": "Brak wyników",
+   "pane.editor": "Edytor",
+   "pane.preview": "Podgląd",
++  "editor.content": "Tekst dokumentu",
+   "preview.frontmatterInvalid": "Nieprawidłowy frontmatter: {detail}",
+   "preview.imageMissing": "Nie znaleziono obrazu: {path}",
+   "settings.title": "Ustawienia",
+@@ -143,13 +144,15 @@
+   "ai.request": "Zapytaj o ten dokument… (Shift+Enter – nowy wiersz)",
+   "ai.working": "Przetwarzanie…",
+   "ai.proposalReady": "Propozycja jest gotowa do sprawdzenia.",
++  "ai.diff.current": "Bieżący dokument",
++  "ai.diff.proposal": "Propozycja AI",
+   "ai.retry": "Spróbuj ponownie",
+   "ai.newChat": "Nowy czat",
+   "ai.stop": "Zatrzymaj",
+   "ai.send": "Wyślij",
+   "ai.composer.needText": "Napisz wiadomość przed wysłaniem",
+   "ai.composer.needProfile": "Wybierz profil przed wysłaniem",
+-  "ai.composer.noDocument": "Otwórz dokument przed wysłaniem",
++  "ai.composer.noDocument": "Brak otwartego dokumentu: przejdź do edytora, otwórz dokument z drzewa plików i wróć, aby wysłać",
+   "ai.composer.updating": "Trwa aktualizacja: spróbuj ponownie za chwilę",
+   "ai.composer.generating": "Trwa generowanie: poczekaj, aż się skończy, albo naciśnij Zatrzymaj",
+   "ai.newChat.alreadyEmpty": "Czat jest już pusty",
+@@ -274,7 +277,10 @@
+   "ai.selectionIgnore": "Użyj całego dokumentu",
+   "ai.suggestions": "Sugestie",
+   "ai.generating": "Generowanie… {seconds} s",
+-  "ai.warningsCount": "Ostrzeżenia: {count}",
++  "ai.generatingStarted": "Generowanie propozycji",
++  "ai.generatingProgress": "Generowanie propozycji, część {done} z {total}",
++  "ai.warningsCount.one": "Ostrzeżenia: {count}",
++  "ai.warningsCount.other": "Ostrzeżenia: {count}",
+   "settings.sections": "Sekcje ustawień",
+   "settings.general": "Ogólne",
+   "settings.aiProfiles": "AI · Profile",
+diff --git a/src/i18n/locales/pt.json b/src/i18n/locales/pt.json
+index 37e3f4f..a8b5117 100644
+--- a/src/i18n/locales/pt.json
++++ b/src/i18n/locales/pt.json
+@@ -71,6 +71,7 @@
+   "search.none": "Sem resultados",
+   "pane.editor": "Editor",
+   "pane.preview": "Pré-visualização",
++  "editor.content": "Texto do documento",
+   "preview.frontmatterInvalid": "Frontmatter inválido: {detail}",
+   "preview.imageMissing": "Imagem não encontrada: {path}",
+   "settings.title": "Definições",
+@@ -143,13 +144,15 @@
+   "ai.request": "Pergunte sobre este documento… (Shift+Enter para nova linha)",
+   "ai.working": "A processar…",
+   "ai.proposalReady": "Proposta pronta para revisão.",
++  "ai.diff.current": "Documento atual",
++  "ai.diff.proposal": "Proposta da IA",
+   "ai.retry": "Tentar novamente",
+   "ai.newChat": "Nova conversa",
+   "ai.stop": "Parar",
+   "ai.send": "Enviar",
+   "ai.composer.needText": "Escreva uma mensagem antes de enviar",
+   "ai.composer.needProfile": "Escolha um perfil antes de enviar",
+-  "ai.composer.noDocument": "Abra um documento antes de enviar",
++  "ai.composer.noDocument": "Nenhum documento aberto: mude para o Editor, abra um na árvore de arquivos e volte para enviar",
+   "ai.composer.updating": "Há uma atualização em curso: tente novamente daqui a pouco",
+   "ai.composer.generating": "Geração em curso: espere que termine, ou prima Parar",
+   "ai.newChat.alreadyEmpty": "A conversa já está vazia",
+@@ -274,7 +277,10 @@
+   "ai.selectionIgnore": "Usar o documento inteiro",
+   "ai.suggestions": "Sugestões",
+   "ai.generating": "Gerando… {seconds} s",
+-  "ai.warningsCount": "{count} avisos",
++  "ai.generatingStarted": "Gerando uma proposta",
++  "ai.generatingProgress": "Gerando uma proposta, parte {done} de {total}",
++  "ai.warningsCount.one": "{count} aviso",
++  "ai.warningsCount.other": "{count} avisos",
+   "settings.sections": "Seções das configurações",
+   "settings.general": "Geral",
+   "settings.aiProfiles": "IA · Perfis",
+```
+
+- [ ] **Step 3: test degli elementi, prima del codice.**
+
+```diff
+diff --git a/src/editor/docExtensions.dom.test.ts b/src/editor/docExtensions.dom.test.ts
+index 79944a5..9349131 100644
+--- a/src/editor/docExtensions.dom.test.ts
++++ b/src/editor/docExtensions.dom.test.ts
+@@ -33,6 +33,7 @@ function fakeHost(patch: { key?: string; readOnly?: boolean; session?: DocSessio
+     readOnly: () => state.readOnly,
+     session: () => patch.session ?? null,
+     t: () => (key) => translate(EN_MESSAGES, key),
++    contentLabel: () => EN_MESSAGES['editor.content'],
+     getDocs: () => [],
+     saveImage: patch.saveImage ?? (async () => null),
+     docChanged: (changes, texts) => void calls.push(['change', changes, texts]),
+diff --git a/src/elements/ai/composer.dom.test.ts b/src/elements/ai/composer.dom.test.ts
+index 3bc1b9e..08d7091 100644
+--- a/src/elements/ai/composer.dom.test.ts
++++ b/src/elements/ai/composer.dom.test.ts
+@@ -16,6 +16,7 @@ import { createI18nStore } from '../../state/i18nStore';
+ import { countListeners } from '../../testing/countListeners';
+ import { fakeAi } from '../../testing/fakeAi';
+ import { installPopoverStub } from '../../testing/popoverStub';
++import { waitFor } from '../../testing/waitFor';
+ 
+ installPopoverStub();
+ 
+@@ -324,7 +325,7 @@ test('during an update Send says so; typing clears the note as for the other not
+   assert.equal(note().textContent, '');
+ });
+ 
+-test('a suggestion (or Enter) during a generation says so, the draft stays, the note goes when the generation ends', () => {
++test('a suggestion (or Enter) during a generation says so, the draft stays, the note goes when the generation ends', async () => {
+   const { el, ai, key, note, type, input, running } = mount();
+   running(true);
+   type('draft');
+@@ -333,7 +334,9 @@ test('a suggestion (or Enter) during a generation says so, the draft stays, the
+   assert.equal(note().textContent, EN_MESSAGES['ai.composer.generating']);
+   assert.equal(input().value, 'draft');
+   key('Enter');
+-  assert.equal(note().textContent, EN_MESSAGES['ai.composer.generating']);
++  // La stessa nota di nuovo: svuotata subito e riscritta al fotogramma dopo, così lo screen reader la rilegge.
++  assert.equal(note().textContent, '');
++  await waitFor(() => note().textContent === EN_MESSAGES['ai.composer.generating']);
+   running(false);
+   assert.equal(note().textContent, '');
+ });
+@@ -388,3 +391,37 @@ test('with the real controller: the updating note goes when cancel() ends the up
+   assert.equal(note().textContent, '');
+   assert.equal(input().value, 'draft');
+ });
++
++test('a double click on Send sends once and does not stop: the second click of the pair (detail 2) is ignored on Stop', () => {
++  const { ai, send, type, running } = mount();
++  type('fix');
++  send().dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
++  running(true);
++  send().dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 2 }));
++  assert.deepEqual(ai.calls.map((c) => c[0]), ['send']);
++  // Un clic vero su Stop (detail 1) o dalla tastiera (detail 0) ferma.
++  send().dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
++  send().dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 0 }));
++  assert.deepEqual(ai.calls.map((c) => c[0]), ['send', 'stop', 'stop']);
++});
++
++test('the draft: given before connecting it fills the box; typing and sending tell it out with hmd-ai-draft', () => {
++  const ai = fakeAi({ presets: [PRESET] }, defaultProfile('ollama', 'o'));
++  const el = document.createElement('hmd-ai-composer');
++  el.draft = 'half written';
++  el.controller = ai;
++  el.text = TEXT;
++  el.i18n = createI18nStore({ locale: 'en', messages: EN_MESSAGES, load: async (locale) => ({ locale, messages: EN_MESSAGES }), persist() {} });
++  const drafts: string[] = [];
++  el.addEventListener('hmd-ai-draft', (event) => drafts.push(event.detail.text));
++  document.body.append(el);
++  const input = el.querySelector('textarea')!;
++  assert.equal(input.value, 'half written');
++  input.value = 'half written, done';
++  input.dispatchEvent(new Event('input', { bubbles: true }));
++  input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
++  assert.deepEqual(drafts, ['half written, done', '']);
++  // Dopo la costruzione la bozza non riscrive più la casella.
++  el.draft = 'other';
++  assert.equal(input.value, '');
++});
+diff --git a/src/elements/ai/review-bar.dom.test.ts b/src/elements/ai/review-bar.dom.test.ts
+index e581bfd..f4d0024 100644
+--- a/src/elements/ai/review-bar.dom.test.ts
++++ b/src/elements/ai/review-bar.dom.test.ts
+@@ -11,6 +11,7 @@ import { EN_MESSAGES } from '../../i18n/messages';
+ import { createI18nStore } from '../../state/i18nStore';
+ import { countListeners } from '../../testing/countListeners';
+ import { installPopoverStub } from '../../testing/popoverStub';
++import { waitFor } from '../../testing/waitFor';
+ import type { HmdEvents } from '../events';
+ 
+ installPopoverStub();
+@@ -69,21 +70,26 @@ test('the same DOM as ReviewBar.tsx without status or warnings, then the empty s
+   assert.ok(byLabel(EN_MESSAGES['ai.acceptAll']));
+ });
+ 
+-test('while generating: the counter with progress in a polite live region; every button active, activated it writes the note and keeps the focus', () => {
++test('while generating: the counter with progress, not live; every button active, activated it writes the note and keeps the focus', async () => {
+   const { status, byLabel, buttons, note, events } = mount(GENERATING, [], 'generating');
+   assert.equal(status()!.textContent, `${EN_MESSAGES['ai.generating'].replace('{seconds}', '3')} 1/3`);
+-  assert.equal(status()!.getAttribute('aria-live'), 'polite');
++  assert.equal(status()!.hasAttribute('aria-live'), false, 'i secondi non parlano (LAB-42 P1)');
+   assert.equal(status()!.hasAttribute('role'), false);
+   assert.equal(status()!.previousElementSibling, buttons()[1]);
+   assert.equal(status()!.nextElementSibling!.className, 'spacer');
+-  for (const button of [buttons()[0], buttons()[1], byLabel(EN_MESSAGES['ai.discard']), byLabel(EN_MESSAGES['ai.acceptAll'])]) {
++  for (const button of [buttons()[0], buttons()[1], byLabel(EN_MESSAGES['ai.acceptAll'])]) {
+     assert.equal(button.disabled, false);
+     button.focus();
+     button.click();
+-    assert.equal(note().textContent, EN_MESSAGES['ai.review.generating']);
++    // Dal secondo clic la stessa nota si svuota e torna al fotogramma dopo: lo screen reader la rilegge.
++    await waitFor(() => note().textContent === EN_MESSAGES['ai.review.generating']);
+     focusOn(button, button.getAttribute('aria-label') ?? button.textContent ?? '');
+   }
+   assert.deepEqual(events, []);
++  // Scarta durante la generazione non ha nota: sale, e lo workspace ferma e scarta (controller.discard).
++  byLabel(EN_MESSAGES['ai.discard']).click();
++  assert.deepEqual(events, [['hmd-ai-review-action', { action: 'discard' }]]);
++  assert.equal(note().textContent, '');
+ });
+ 
+ test('the note goes when its cause goes: the generation ends, Accept all is possible again, or an action succeeds', () => {
+@@ -126,7 +132,7 @@ test('Accept all says the reason of the controller, one text per reason, in the
+ 
+ test('detached and attached again the note is forgotten', () => {
+   const { el, byLabel, note } = mount(GENERATING, [], 'generating');
+-  byLabel(EN_MESSAGES['ai.discard']).click();
++  byLabel(EN_MESSAGES['ai.acceptAll']).click();
+   assert.equal(note().textContent, EN_MESSAGES['ai.review.generating']);
+   el.remove();
+   document.body.append(el);
+@@ -161,9 +167,12 @@ test('warnings: a button with the count and a popover with one button per warnin
+   const { el, bar, popover, events } = mount({ kind: 'none' }, warnings);
+   const button = bar().querySelector<HTMLButtonElement>('button[popovertarget]')!;
+   assert.equal(button.className, 'secondary tooltip');
+-  assert.equal(button.getAttribute('aria-label'), EN_MESSAGES['ai.warningsCount'].replace('{count}', '2'));
+-  assert.equal(button.getAttribute('data-tooltip'), EN_MESSAGES['ai.warningsCount'].replace('{count}', '2'));
++  assert.equal(button.getAttribute('aria-label'), EN_MESSAGES['ai.warningsCount.other'].replace('{count}', '2'));
++  assert.equal(button.getAttribute('data-tooltip'), EN_MESSAGES['ai.warningsCount.other'].replace('{count}', '2'));
+   assert.equal(button.textContent, ' 2');
++  el.warnings = [{ code: 'code' }];
++  assert.equal(button.getAttribute('aria-label'), EN_MESSAGES['ai.warningsCount.one'].replace('{count}', '1'), 'one warning: singular');
++  el.warnings = warnings;
+   assert.ok(button.querySelector('span.icon'));
+   assert.equal(button.previousElementSibling!.className, 'spacer');
+   assert.equal(popover()!.id, button.getAttribute('popovertarget'));
+@@ -222,7 +231,7 @@ test('the proposal changes while the same block holds: the note is forgotten and
+ 
+ test('a language change rewrites labels, tooltips, warnings and the note; detached, no listener stays', async () => {
+   const { el, i18n, listeners, buttons, byLabel, popover, note } = mount(GENERATING, [{ code: 'wikilinks' }], 'generating');
+-  byLabel(EN_MESSAGES['ai.discard']).click();
++  buttons()[1].click();
+   await i18n.setLocale('it');
+   assert.equal(note().textContent, 'ASPETTA');
+   assert.equal(buttons()[0].getAttribute('aria-label'), 'PRIMA');
+@@ -234,3 +243,21 @@ test('a language change rewrites labels, tooltips, warnings and the note; detach
+   el.remove();
+   assert.equal(listeners(), 0);
+ });
++
++test('while generating a hidden polite region says the start and each new part, never the seconds; it goes with the generation', async () => {
++  const { el } = mount(GENERATING, [], 'generating');
++  const spoken = () => el.querySelector<HTMLElement>(':scope > .spoken');
++  assert.equal(spoken()!.getAttribute('aria-live'), 'polite');
++  assert.equal(spoken()!.textContent, '', 'entrata vuota: il testo arriva al fotogramma dopo');
++  const part = (done: number) => EN_MESSAGES['ai.generatingProgress'].replace('{done}', String(done)).replace('{total}', '3');
++  await waitFor(() => spoken()!.textContent === part(1));
++  const changes: string[] = [];
++  new MutationObserver(() => changes.push(spoken()!.textContent!)).observe(spoken()!, { childList: true, characterData: true, subtree: true });
++  el.status = { ...GENERATING, seconds: 4 };
++  el.status = { ...GENERATING, seconds: 5 };
++  el.status = { ...GENERATING, seconds: 6, done: 2 };
++  await new Promise((resolve) => setTimeout(resolve, 5));
++  assert.deepEqual(changes, [part(2)]);
++  el.status = { kind: 'partial' };
++  assert.equal(spoken(), null);
++});
+diff --git a/src/elements/ai/review.dom.test.ts b/src/elements/ai/review.dom.test.ts
+index f703314..b4aad0f 100644
+--- a/src/elements/ai/review.dom.test.ts
++++ b/src/elements/ai/review.dom.test.ts
+@@ -206,7 +206,7 @@ test('typing in the plain editor reaches docChanged and selectionChanged; a lang
+   assert.equal(selections.length, 1);
+   await i18n.setLocale('it');
+   assert.equal(section().querySelector('.hint')!.textContent, 'SCRIVI');
+-  assert.equal(listeners(), 1);
++  assert.equal(listeners(), 2, 'la revisione e il nome del contenuto di hmd-editor');
+   assert.equal(changes.length, 0);
+   el.remove();
+   assert.equal(listeners(), 0);
+@@ -278,3 +278,10 @@ test('a confirmation resolved while the view goes away accepts nothing: detached
+   await tick();
+   assert.deepEqual(ai.calls, [['beforeAccept', 'a.md', true]]);
+ });
++
++test('Discard while generating, before any proposal: the request on this document is stopped (Discard = Stop + discard)', async () => {
++  const { ai, button } = mount({ running: { path: 'a.md' } } as Partial<AiState>);
++  await tick();
++  button(EN_MESSAGES['ai.discard']).click();
++  assert.deepEqual(ai.calls, [['discard', 'a.md']]);
++});
+diff --git a/src/elements/ai/reviewBarView.test.ts b/src/elements/ai/reviewBarView.test.ts
+index 8d28ed7..afa894b 100644
+--- a/src/elements/ai/reviewBarView.test.ts
++++ b/src/elements/ai/reviewBarView.test.ts
+@@ -10,12 +10,20 @@ const t = (key: string, params?: Params) => translate(EN_MESSAGES, key, params);
+ const none: ReviewStatus = { kind: 'none' };
+ const generating: ReviewStatus = { kind: 'generating', seconds: 3 };
+ 
+-test('while generating every action but Continue says so; otherwise the arrows and Discard are free', () => {
+-  for (const action of ['previous', 'next', 'discard', 'acceptAll'] as const) assert.equal(actionBlocker(action, generating, 'generating'), 'ai.review.generating', action);
++test('while generating the arrows and Accept all say so; Discard stops and discards; otherwise the arrows and Discard are free', () => {
++  for (const action of ['previous', 'next', 'acceptAll'] as const) assert.equal(actionBlocker(action, generating, 'generating'), 'ai.review.generating', action);
++  assert.equal(actionBlocker('discard', generating, 'generating'), null, 'Scarta = Ferma + scarta');
+   assert.equal(actionBlocker('continue', generating, 'generating'), null);
+   for (const action of ['previous', 'next', 'discard', 'continue'] as const) assert.equal(actionBlocker(action, none, 'truncated'), null, action);
+ });
+ 
++test('Continue during an update says so (it would be ignored in silence); otherwise it goes', () => {
++  const partial: ReviewStatus = { kind: 'partial' };
++  assert.equal(actionBlocker('continue', partial, 'updating'), 'ai.review.updating');
++  assert.equal(actionBlocker('continue', partial, 'notAcceptable'), null);
++  assert.equal(actionBlocker('continue', partial, null), null);
++});
++
+ test('Accept all carries the reason of the controller, one key per reason', () => {
+   assert.equal(actionBlocker('acceptAll', none, null), null);
+   assert.equal(actionBlocker('acceptAll', { kind: 'truncated' }, 'truncated'), 'ai.review.truncated');
+@@ -31,10 +39,13 @@ test('every note key exists in en.json', () => {
+ 
+ test('the status line: nothing, the counter with progress and a live region, partial with Continue, the alert of the lost selection', () => {
+   assert.equal(statusLine(none, t), null);
+-  assert.deepEqual(statusLine({ kind: 'generating', seconds: 3 }, t), { text: t('ai.generating', { seconds: 3 }), live: true, alert: false, withContinue: false });
++  assert.deepEqual(statusLine({ kind: 'generating', seconds: 3 }, t), { text: t('ai.generating', { seconds: 3 }), spoken: t('ai.generatingStarted'), alert: false, withContinue: false });
+   assert.equal(statusLine({ kind: 'generating', seconds: 3, done: 1, total: 3 }, t)!.text, `${t('ai.generating', { seconds: 3 })} 1/3`);
+-  assert.deepEqual(statusLine({ kind: 'partial' }, t), { text: t('ai.status.partial'), live: false, alert: false, withContinue: true });
+-  assert.deepEqual(statusLine({ kind: 'truncated' }, t), { text: t('ai.status.truncated'), live: false, alert: false, withContinue: false });
+-  assert.deepEqual(statusLine({ kind: 'scopeLost' }, t), { text: t('ai.error.scopeLost'), live: false, alert: true, withContinue: false });
+-  assert.deepEqual(statusLine({ kind: 'applied' }, t), { text: t('ai.applied'), live: false, alert: false, withContinue: false });
++  // Quello che si annuncia non contiene i secondi: cambia solo con il progresso.
++  assert.equal(statusLine({ kind: 'generating', seconds: 3, done: 1, total: 3 }, t)!.spoken, t('ai.generatingProgress', { done: 1, total: 3 }));
++  assert.equal(statusLine({ kind: 'generating', seconds: 9, done: 1, total: 3 }, t)!.spoken, statusLine({ kind: 'generating', seconds: 3, done: 1, total: 3 }, t)!.spoken);
++  assert.deepEqual(statusLine({ kind: 'partial' }, t), { text: t('ai.status.partial'), spoken: null, alert: false, withContinue: true });
++  assert.deepEqual(statusLine({ kind: 'truncated' }, t), { text: t('ai.status.truncated'), spoken: null, alert: false, withContinue: false });
++  assert.deepEqual(statusLine({ kind: 'scopeLost' }, t), { text: t('ai.error.scopeLost'), spoken: null, alert: true, withContinue: false });
++  assert.deepEqual(statusLine({ kind: 'applied' }, t), { text: t('ai.applied'), spoken: null, alert: false, withContinue: false });
+ });
+diff --git a/src/elements/editor/editor.dom.test.ts b/src/elements/editor/editor.dom.test.ts
+index 69fa75c..7c185a1 100644
+--- a/src/elements/editor/editor.dom.test.ts
++++ b/src/elements/editor/editor.dom.test.ts
+@@ -36,7 +36,7 @@ function slowSave() {
+   return { saveImage, saved, pending };
+ }
+ 
+-function mount(text: string, key = 'a.md#1') {
++function mount(text: string, key = 'a.md#1', store = i18n) {
+   const session = createDocSession(key, text);
+   const el = document.createElement('hmd-editor');
+   el.text = text;
+@@ -44,7 +44,7 @@ function mount(text: string, key = 'a.md#1') {
+   el.session = session;
+   el.restore = null;
+   el.readOnly = false;
+-  el.i18n = i18n;
++  el.i18n = store;
+   const events: Recorded[] = [];
+   for (const type of ['hmd-doc-change', 'hmd-selection', 'hmd-top-line'] as const) {
+     el.addEventListener(type, (event) => events.push([type, (event as CustomEvent).detail]));
+@@ -255,3 +255,13 @@ test('a listener that assigns another document while a new one is announced: the
+   assert.deepEqual(events.map(([type]) => type), ['hmd-selection', 'hmd-selection', 'hmd-doc-change', 'hmd-selection']);
+   el.remove();
+ });
++
++test('the content is a textbox named after the document text; a language change renames it', async () => {
++  const store = createI18nStore({ locale: 'en', messages: EN_MESSAGES, load: async (locale) => ({ locale, messages: { ...EN_MESSAGES, 'editor.content': 'TESTO' } }), persist() {} });
++  const { el } = mount('# A', 'a.md#1', store);
++  const content = el.querySelector('.cm-content')!;
++  assert.equal(content.getAttribute('role'), 'textbox');
++  assert.equal(content.getAttribute('aria-label'), EN_MESSAGES['editor.content']);
++  await store.setLocale('it');
++  assert.equal(content.getAttribute('aria-label'), 'TESTO');
++});
+```
+
+e in fondo a `workspace.dom.test.ts`:
+
+```ts
+test('AI mode: the draft of the composer survives going to the editor and back (LAB-10)', async () => {
+  const { el, workspace, button } = await mount({ ai: true });
+  await workspace.openFile('a.md');
+  button(EN_MESSAGES['mode.ai']).click();
+  const box = () => el.querySelector<HTMLTextAreaElement>('hmd-ai-composer textarea')!;
+  box().value = 'fix the title';
+  box().dispatchEvent(new Event('input', { bubbles: true }));
+  button(EN_MESSAGES['mode.editor']).click();
+  assert.equal(el.querySelector('hmd-ai-composer'), null);
+  button(EN_MESSAGES['mode.ai']).click();
+  assert.equal(box().value, 'fix the title');
+});
+```
+
+RED atteso: `reviewBarView.test.ts` 2 rossi (Scarta durante la generazione, Continua durante un aggiornamento); `review-bar.dom.test.ts` (la regione nascosta non c'è; il contatore ha ancora `aria-live`; la nota ripetuta non si svuota); `review.dom.test.ts` «Discard while generating, before any proposal» (`ai.calls` vuoto); `composer.dom.test.ts` doppio clic (`['send', 'stop']`), bozza (la casella nasce vuota), nota ripetuta; `editor.dom.test.ts` (nessun `aria-label`); `workspace.dom.test.ts` bozza (casella vuota al ritorno).
+
+- [ ] **Step 4: barra della revisione** — regione nascosta della generazione (P1), plurale (P4), nota ri-annunciata (LAB-11), Scarta e Continua:
+
+```diff
+diff --git a/src/elements/ai/review-bar.css b/src/elements/ai/review-bar.css
+index 06da740..9cc95a1 100644
+--- a/src/elements/ai/review-bar.css
++++ b/src/elements/ai/review-bar.css
+@@ -85,5 +85,15 @@
+     .note:not(:empty) {
+       padding-block: 0 8px;
+     }
++
++    /* Regione live della generazione: letta dallo screen reader, nascosta alla vista (il contatore visibile resta). */
++    .spoken {
++      position: absolute;
++      width: 1px;
++      height: 1px;
++      overflow: hidden;
++      clip-path: inset(50%);
++      white-space: nowrap;
++    }
+   }
+ }
+diff --git a/src/elements/ai/review-bar.element.ts b/src/elements/ai/review-bar.element.ts
+index b46548b..f642d6e 100644
+--- a/src/elements/ai/review-bar.element.ts
++++ b/src/elements/ai/review-bar.element.ts
+@@ -2,10 +2,12 @@ import type { AcceptBlocker } from '../../ai/aiController';
+ import type { ReviewStatus } from '../../ai/reviewStatus';
+ import type { CheckWarning } from '../../ai/types';
+ import { HmdElement } from '../../dom/element';
++import { announce } from '../../dom/announce';
+ import { el, setText, toggleAttr } from '../../dom/el';
+ import { icon } from '../../dom/icon';
+ import { RenderLoop } from '../../dom/renderLoop';
+ import { uid } from '../../dom/uid';
++import { pluralKey } from '../../i18n/i18n';
+ import type { MessageKey } from '../../i18n/messages';
+ import type { I18nStore } from '../../state/i18nStore';
+ import { emit } from '../events';
+@@ -27,6 +29,8 @@ interface Parts {
+   acceptAll: HTMLButtonElement;
+   /** Nota sotto la riga dei pulsanti (`role="status"`): perché il pulsante attivato non ha fatto nulla. Vuota di norma. */
+   note: HTMLParagraphElement;
++  /** Regione live della generazione, nascosta alla vista: dopo la nota, solo durante la generazione. */
++  spoken: HTMLSpanElement;
+ }
+ 
+ /**
+@@ -47,6 +51,8 @@ export class HmdAiReviewBar extends HmdElement {
+   #proposalId = '';
+   /** Nota mostrata: l'azione che l'ha prodotta e la sua chiave, per sapere quando la causa sparisce. */
+   #note: { action: ReviewAction; key: ReviewBlocker } | null = null;
++  /** Il prossimo render riscrive la nota anche se il testo è lo stesso (un altro clic bloccato). */
++  #announceAgain = false;
+ 
+   #parts: Parts | null = null;
+   #loop = new RenderLoop(this, {
+@@ -109,6 +115,7 @@ export class HmdAiReviewBar extends HmdElement {
+         discard: action('discard', 'secondary'),
+         acceptAll: action('acceptAll', 'secondary accept'),
+         note: el('p', { class: 'note', role: 'status' }),
++        spoken: el('span', { class: 'spoken', 'aria-live': 'polite' }),
+       };
+       this.#parts = parts;
+       parts.bar.append(parts.previous, parts.next, parts.spacer, parts.discard, parts.acceptAll);
+@@ -128,6 +135,8 @@ export class HmdAiReviewBar extends HmdElement {
+   /** Un pulsante attivato: se l'azione non è possibile la nota dice perché, altrimenti l'azione sale e la nota se ne va. */
+   #onAction(action: ReviewAction): void {
+     const key = actionBlocker(action, this.#status, this.#acceptBlocker);
++    // La stessa nota di nuovo (Successivo, Scarta, Accetta tutto durante la generazione): si ri-annuncia.
++    this.#announceAgain = key !== null && this.#note?.key === key;
+     this.#note = key ? { action, key } : null;
+     this.#loop.update();
+     if (!key) emit(this, 'hmd-ai-review-action', { action });
+@@ -144,7 +153,6 @@ export class HmdAiReviewBar extends HmdElement {
+     const line = statusLine(this.#status, t);
+     if (line) {
+       setText(parts.status, line.text);
+-      toggleAttr(parts.status, 'aria-live', line.live, 'polite');
+       toggleAttr(parts.status, 'role', line.alert, 'alert');
+       if (parts.status.parentNode !== bar) bar.insertBefore(parts.status, parts.spacer);
+       if (line.withContinue) {
+@@ -157,10 +165,19 @@ export class HmdAiReviewBar extends HmdElement {
+       parts.status.remove();
+       parts.continue.remove();
+     }
++    // La regione della generazione: entrata nel DOM vuota, il testo arriva al fotogramma dopo (così si annuncia).
++    if (line?.spoken) {
++      const entering = parts.spoken.parentNode !== this;
++      if (entering) this.append(parts.spoken);
++      announce(parts.spoken, line.spoken, entering);
++    } else {
++      announce(parts.spoken, '');
++      parts.spoken.remove();
++    }
+     // Avvisi: pulsante e popover solo se ce ne sono; i pulsanti del popover si riusano per posizione (come React senza chiavi).
+     const warnings = this.#warnings;
+     if (warnings.length > 0) {
+-      const label = t('ai.warningsCount', { count: warnings.length });
++      const label = t(pluralKey(i18n.getState().locale, 'ai.warningsCount', warnings.length), { count: warnings.length });
+       toggleAttr(parts.warnings, 'aria-label', true, label);
+       toggleAttr(parts.warnings, 'data-tooltip', true, label);
+       setText(parts.count, ` ${warnings.length}`);
+@@ -181,9 +198,10 @@ export class HmdAiReviewBar extends HmdElement {
+     }
+     setText(parts.discard, t('ai.discard'));
+     setText(parts.acceptAll, t('ai.acceptAll'));
+-    // La nota resta finché vale la causa che l'ha prodotta (per quella azione); la stessa nota due volte di fila non si ri-annuncia: accettato.
++    // La nota resta finché vale la causa che l'ha prodotta (per quella azione); la stessa nota a un altro clic si ri-annuncia.
+     if (this.#note && actionBlocker(this.#note.action, this.#status, this.#acceptBlocker) !== this.#note.key) this.#note = null;
+-    setText(parts.note, this.#note ? t(this.#note.key) : '');
++    announce(parts.note, this.#note ? t(this.#note.key) : '', this.#announceAgain);
++    this.#announceAgain = false;
+   }
+ }
+ 
+diff --git a/src/elements/ai/review.element.ts b/src/elements/ai/review.element.ts
+index eb75b44..880d708 100644
+--- a/src/elements/ai/review.element.ts
++++ b/src/elements/ai/review.element.ts
+@@ -201,8 +201,10 @@ export class HmdAiReview extends HmdElement {
+   }
+ 
+   #discard(): void {
+-    const p = this.#current();
+-    if (p) this.#controller?.discard(p.path);
++    // Durante la generazione la proposta può non esserci ancora: `discard` del documento ferma la richiesta
++    // in corso su quel percorso e toglie l'eventuale proposta (Scarta = Ferma + scarta).
++    const path = this.#current()?.path ?? this.#doc?.path;
++    if (path) this.#controller?.discard(path);
+   }
+ 
+   /**
+diff --git a/src/elements/ai/reviewBarView.ts b/src/elements/ai/reviewBarView.ts
+index 2eeac56..049022f 100644
+--- a/src/elements/ai/reviewBarView.ts
++++ b/src/elements/ai/reviewBarView.ts
+@@ -9,22 +9,27 @@ export type ReviewAction = 'previous' | 'next' | 'acceptAll' | 'discard' | 'cont
+ export type ReviewBlocker = `ai.review.${AcceptBlocker}`;
+ 
+ /**
+- * Perché l'azione non è possibile adesso (chiave della nota), o null. Le frecce e Scarta si fermano solo
+- * durante la generazione (come i `disabled` di ReviewBar.tsx); Accetta tutto ha la ragione del controller
+- * (`acceptBlocker(p, true)`, già nell'ordine della barra); Continua non si ferma mai qui (il controller
+- * ignora in silenzio un Continua durante un aggiornamento: resta com'è, da rivedere in fase 8).
++ * Perché l'azione non è possibile adesso (chiave della nota), o null. Le frecce si fermano solo durante la
++ * generazione; Scarta non si ferma mai (durante la generazione il controller ferma e scarta: `discard()`);
++ * Accetta tutto ha la ragione del controller (`acceptBlocker(p, true)`, già nell'ordine della barra);
++ * Continua si ferma durante un aggiornamento, che il controller altrimenti ignorerebbe in silenzio.
+  */
+ export function actionBlocker(action: ReviewAction, status: ReviewStatus, acceptBlocker: AcceptBlocker | null): ReviewBlocker | null {
+   if (action === 'acceptAll') return acceptBlocker ? `ai.review.${acceptBlocker}` : null;
+-  if (action === 'continue') return null;
++  if (action === 'continue') return acceptBlocker === 'updating' ? 'ai.review.updating' : null;
++  if (action === 'discard') return null;
+   return isBusy(status) ? 'ai.review.generating' : null;
+ }
+ 
+ /** Testo e attributi dello span di stato (StatusText di ReviewBar.tsx), o null quando non c'è niente da dire. */
+ export interface StatusLine {
+   text: string;
+-  /** `aria-live="polite"` solo durante la generazione (il contatore dei secondi). */
+-  live: boolean;
++  /**
++   * Durante la generazione, il testo della regione live a parte (`span.spoken`, nascosto alla vista): fisso
++   * all'avvio e nuovo solo quando cambia il progresso `n/m`. Il contatore dei secondi, visibile, non è più una
++   * regione live (LAB-42 P1, WCAG 2.2.2). Null negli altri stati.
++   */
++  spoken: string | null;
+   /** `role="alert"` solo per la selezione persa. */
+   alert: boolean;
+   /** Il pulsante «Continua» accanto, solo per una proposta a parti interrotta. */
+@@ -36,14 +41,19 @@ export function statusLine(status: ReviewStatus, t: I18nStore['t']): StatusLine
+     case 'none':
+       return null;
+     case 'generating':
+-      return { text: `${t('ai.generating', { seconds: status.seconds })}${status.total ? ` ${status.done}/${status.total}` : ''}`, live: true, alert: false, withContinue: false };
++      return {
++        text: `${t('ai.generating', { seconds: status.seconds })}${status.total ? ` ${status.done}/${status.total}` : ''}`,
++        spoken: status.total ? t('ai.generatingProgress', { done: status.done ?? 0, total: status.total }) : t('ai.generatingStarted'),
++        alert: false,
++        withContinue: false,
++      };
+     case 'partial':
+-      return { text: t('ai.status.partial'), live: false, alert: false, withContinue: true };
++      return { text: t('ai.status.partial'), spoken: null, alert: false, withContinue: true };
+     case 'truncated':
+-      return { text: t('ai.status.truncated'), live: false, alert: false, withContinue: false };
++      return { text: t('ai.status.truncated'), spoken: null, alert: false, withContinue: false };
+     case 'scopeLost':
+-      return { text: t('ai.error.scopeLost'), live: false, alert: true, withContinue: false };
++      return { text: t('ai.error.scopeLost'), spoken: null, alert: true, withContinue: false };
+     case 'applied':
+-      return { text: t('ai.applied'), live: false, alert: false, withContinue: false };
++      return { text: t('ai.applied'), spoken: null, alert: false, withContinue: false };
+   }
+ }
+```
+
+- [ ] **Step 5: composer e sidebar** — doppio clic, nota ri-annunciata, bozza; evento nuovo in `events.ts` (sopra il JSDoc di `hmd-ai-manage`):
+
+```diff
+diff --git a/src/elements/ai/composer.element.ts b/src/elements/ai/composer.element.ts
+index 2a32346..870db13 100644
+--- a/src/elements/ai/composer.element.ts
++++ b/src/elements/ai/composer.element.ts
+@@ -1,12 +1,14 @@
+ import { composerAction } from '../../ai/composerKeys';
+ import type { TextRange } from '../../ai/selectionChip';
+ import type { SelectionScope } from '../../ai/types';
++import { announce } from '../../dom/announce';
+ import { HmdElement } from '../../dom/element';
+ import { el, setText, toggleAttr } from '../../dom/el';
+ import { icon } from '../../dom/icon';
+ import { RenderLoop } from '../../dom/renderLoop';
+ import type { I18nStore } from '../../state/i18nStore';
+ import { ICONS } from '../../ui/icons';
++import { emit } from '../events';
+ import type { HmdAiEffortChip } from './effort-chip.element';
+ import type { HmdAiModelChip } from './model-chip.element';
+ import { CONTROLLER_NOTES, outgoing, selectionChipText, sendBlocker, sendButton, type ComposerController, type SendBlocker } from './composerView';
+@@ -42,6 +44,7 @@ interface Parts {
+ export class HmdAiComposer extends HmdElement {
+   #controller: ComposerController | null = null;
+   #text = '';
++  #draft = '';
+   #selection: TextRange | null = null;
+   #getSelection: () => SelectionScope | undefined = () => undefined;
+   #i18n: I18nStore | null = null;
+@@ -51,6 +54,8 @@ export class HmdAiComposer extends HmdElement {
+   #ignored: TextRange | null = null;
+   /** Nota mostrata e il profilo di quel momento: un cambio di profilo la toglie. */
+   #note: { key: SendBlocker; profileId: string | undefined } | null = null;
++  /** Il prossimo render riscrive la nota anche se il testo è lo stesso (un altro invio bloccato). */
++  #announceAgain = false;
+   #loop = new RenderLoop(this, {
+     ready: () => !!this.#parts && !!this.#controller && !!this.#i18n && this.isConnected,
+     render: () => this.#render(this.#parts!, this.#controller!, this.#i18n!),
+@@ -67,6 +72,12 @@ export class HmdAiComposer extends HmdElement {
+     this.#passDown();
+     this.reconnect();
+   }
++  /**
++   * Bozza con cui la casella nasce (la sidebar AI si ricrea a ogni ritorno nella modalità AI: LAB-10). Letta solo
++   * alla costruzione: la casella non si riscrive mai dopo. Ogni cambio della casella esce con `hmd-ai-draft`.
++   */
++  get draft(): string { return this.#draft; }
++  set draft(value: string) { this.#draft = value ?? ''; }
+   /** Testo del documento aperto, per contare la selezione. */
+   get text(): string { return this.#text; }
+   set text(value: string) {
+@@ -114,10 +125,11 @@ export class HmdAiComposer extends HmdElement {
+         input: el('textarea', { class: 'input', on: { input: () => this.#onInput(), keydown: (event) => this.#onKeyDown(event) } }),
+         modelChip: el('hmd-ai-model-chip'),
+         effortChip: el('hmd-ai-effort-chip'),
+-        send: el('button', { type: 'button', class: 'send tooltip', on: { click: () => this.#onButton() } }, sendIcon),
++        send: el('button', { type: 'button', class: 'send tooltip', on: { click: (event) => this.#onButton(event) } }, sendIcon),
+         sendIcon,
+         note: el('p', { class: 'note', role: 'status' }),
+       };
++      parts.input.value = this.#draft;
+       this.#parts = parts;
+       // Le proprietà dei chip prima dell'inserimento, come fa React con i tag hmd-*.
+       this.#passDown();
+@@ -141,6 +153,7 @@ export class HmdAiComposer extends HmdElement {
+   }
+ 
+   #onInput(): void {
++    emit(this, 'hmd-ai-draft', { text: this.#parts!.input.value });
+     this.#note = null;
+     this.#loop.update();
+   }
+@@ -164,11 +177,14 @@ export class HmdAiComposer extends HmdElement {
+     }
+   }
+ 
+-  #onButton(): void {
++  #onButton(event: MouseEvent): void {
+     const controller = this.#controller;
+     if (!controller) return;
+-    if (controller.getState().running) controller.stop();
+-    else this.#send();
++    // Il secondo clic di un doppio clic (detail 2 e oltre) arriva quando il pulsante è già Stop: non ferma la
++    // richiesta appena partita. Un clic singolo o la tastiera (detail 0) fermano come prima.
++    if (controller.getState().running) {
++      if (event.detail < 2) controller.stop();
++    } else this.#send();
+   }
+ 
+   /**
+@@ -185,6 +201,7 @@ export class HmdAiComposer extends HmdElement {
+     // Prima la guardia di send() (che altrimenti scarterebbe in silenzio e la bozza andrebbe persa), poi profilo e testo.
+     const blocker = sendBlocker(parts.input.value, !!controller.profile(), !!preset, controller.sendBlocker());
+     if (blocker) {
++      this.#announceAgain = this.#note?.key === blocker;
+       this.#note = { key: blocker, profileId: controller.profile()?.id };
+       this.#loop.update();
+       return;
+@@ -208,6 +225,7 @@ export class HmdAiComposer extends HmdElement {
+     }
+     // L'unica scrittura della casella: dopo l'invio di un testo scritto si svuota (spec AI UI §4.2).
+     parts.input.value = '';
++    emit(this, 'hmd-ai-draft', { text: '' });
+     this.#loop.update();
+   }
+ 
+@@ -230,14 +248,15 @@ export class HmdAiComposer extends HmdElement {
+     parts.sendIcon.style.setProperty('mask-image', `url("${ICONS[button.icon]}")`);
+     // La nota se ne va quando la sua causa sparisce: per le ragioni del controller quando la ragione cambia;
+     // per profilo e testo con un cambio di profilo o una generazione partita da qualunque parte (anche «Riprova»
+-    // nel registro). La stessa nota due volte di fila non si ri-annuncia (stesso testo nella regione): accettato.
++    // nel registro). La stessa nota a un altro Invio si ri-annuncia (svuotata e riscritta al fotogramma dopo).
+     if (this.#note) {
+       const reason = controller.sendBlocker();
+       const fromController = (Object.values(CONTROLLER_NOTES) as SendBlocker[]).includes(this.#note.key);
+       const stale = fromController ? (reason ? CONTROLLER_NOTES[reason] : null) !== this.#note.key : this.#note.profileId !== controller.profile()?.id || !!reason;
+       if (stale) this.#note = null;
+     }
+-    setText(parts.note, this.#note ? t(this.#note.key) : '');
++    announce(parts.note, this.#note ? t(this.#note.key) : '', this.#announceAgain);
++    this.#announceAgain = false;
+   }
+ }
+ 
+diff --git a/src/elements/ai/sidebar.element.ts b/src/elements/ai/sidebar.element.ts
+index 7f3026e..0b10cb2 100644
+--- a/src/elements/ai/sidebar.element.ts
++++ b/src/elements/ai/sidebar.element.ts
+@@ -2,6 +2,7 @@ import type { AiController, AiWorkspace } from '../../ai/aiController';
+ import type { TextRange } from '../../ai/selectionChip';
+ import type { SelectionScope } from '../../ai/types';
+ import { HmdElement } from '../../dom/element';
++import { announce } from '../../dom/announce';
+ import { el, setText, toggleAttr } from '../../dom/el';
+ import { icon } from '../../dom/icon';
+ import { RenderLoop } from '../../dom/renderLoop';
+@@ -40,6 +41,7 @@ interface Parts {
+ export class HmdAiSidebar extends HmdElement {
+   #controller: SidebarController | null = null;
+   #text = '';
++  #draft = '';
+   #selection: TextRange | null = null;
+   #getSelection: () => SelectionScope | undefined = () => undefined;
+   #syncNeedsPermission = false;
+@@ -48,6 +50,8 @@ export class HmdAiSidebar extends HmdElement {
+   #parts: Parts | null = null;
+   /** La nota «la chat è già vuota» è visibile. */
+   #note = false;
++  /** Il prossimo render riscrive la nota anche se è già lì (un altro clic su Nuova chat). */
++  #announceAgain = false;
+   // Nessun recupero del focus qui: il registro e il composer hanno il loro (come con React).
+   #loop = new RenderLoop(this, {
+     ready: () => !!this.#parts && !!this.#controller && !!this.#i18n && this.isConnected,
+@@ -67,6 +71,12 @@ export class HmdAiSidebar extends HmdElement {
+     this.#text = value ?? '';
+     this.#passDown();
+   }
++  /** Bozza del composer conservata dal workspace (il composer la legge solo nascendo). */
++  get draft(): string { return this.#draft; }
++  set draft(value: string) {
++    this.#draft = value ?? '';
++    this.#passDown();
++  }
+   get selection(): TextRange | null { return this.#selection; }
+   set selection(value: TextRange | null) {
+     this.#selection = value ?? null;
+@@ -132,6 +142,7 @@ export class HmdAiSidebar extends HmdElement {
+     // I messaggi arrivano al registro prima dell'inserimento, così lo disegna nella stessa passata (il confronto resta nel render).
+     const messages = this.#controller?.getState().chat.messages;
+     if (messages && parts.log.messages !== messages) parts.log.messages = messages;
++    parts.composer.draft = this.#draft;
+     parts.composer.controller = this.#controller;
+     parts.composer.text = this.#text;
+     parts.composer.selection = this.#selection;
+@@ -146,7 +157,9 @@ export class HmdAiSidebar extends HmdElement {
+     if (!controller) return;
+     const state = controller.getState();
+     // Mai disattivato (decisione 4): con la chat vuota e niente in corso, la nota dice perché non succede nulla.
+-    this.#note = state.chat.messages.length === 0 && !state.running;
++    const empty = state.chat.messages.length === 0 && !state.running;
++    this.#announceAgain = empty && this.#note;
++    this.#note = empty;
+     if (!this.#note) controller.newChat();
+     this.#loop.update();
+   }
+@@ -159,7 +172,8 @@ export class HmdAiSidebar extends HmdElement {
+     toggleAttr(parts.newChat, 'data-tooltip', true, t('ai.newChat'));
+     // Qualcosa nella chat (o in corso) toglie la nota.
+     if (state.chat.messages.length > 0 || state.running) this.#note = false;
+-    setText(parts.note, this.#note ? t('ai.newChat.alreadyEmpty') : '');
++    announce(parts.note, this.#note ? t('ai.newChat.alreadyEmpty') : '', this.#announceAgain);
++    this.#announceAgain = false;
+     // Il setter del registro non confronta: assegnare a ogni passata riconcilierebbe tutto il registro a ogni notifica.
+     if (parts.log.messages !== state.chat.messages) parts.log.messages = state.chat.messages;
+     if (this.#syncNeedsPermission) {
+diff --git a/src/elements/events.ts b/src/elements/events.ts
+index 3ed4409..57333cb 100644
+--- a/src/elements/events.ts
++++ b/src/elements/events.ts
+@@ -16,6 +16,8 @@ import type { TreeAction } from './workspace/dialogFor';
+ export interface HmdEvents {
+   /** Diff della revisione AI: rifiutato l'ultimo blocco rimasto (equivale a scartare la proposta). */
+   'hmd-ai-all-rejected': CustomEvent<null>;
++  /** Composer AI: il testo scritto nella casella è cambiato (anche svuotata dopo l'invio), per conservarlo fuori. */
++  'hmd-ai-draft': CustomEvent<{ text: string }>;
+   /** Chip del modello: aprire le impostazioni dei profili («Gestisci profili…», o il chip senza profili). */
+   'hmd-ai-manage': CustomEvent<null>;
+   /** Selettore del modello: modello scelto dall'elenco o scritto in «Altro…», con il suo contesto se noto. */
+```
+
+In `workspace.element.ts`: il campo `#aiDraft = ''` (con il JSDoc «Bozza del composer AI, conservata quando la sidebar AI si ricrea.») sotto `#sidebarOpen`; nella creazione di `hmd-ai-sidebar` l'ascoltatore `'hmd-ai-draft': (event) => void (this.#aiDraft = event.detail.text)` (commento: «La bozza del composer sopravvive alla sidebar AI ricreata (LAB-10: si va all'editor ad aprire un file).»), e `assign(aiSidebar, 'draft', this.#aiDraft);` prima di `assign(aiSidebar, 'controller', ai);`.
+
+- [ ] **Step 6: nome del contenuto di CodeMirror (P3).**
+
+```diff
+diff --git a/src/editor/docExtensions.ts b/src/editor/docExtensions.ts
+index c38d9af..94931e2 100644
+--- a/src/editor/docExtensions.ts
++++ b/src/editor/docExtensions.ts
+@@ -25,6 +25,8 @@ export interface DocHost {
+   /** Sessione in cui salvare testo, selezione e cronologia a ogni aggiornamento (null = nessuna). */
+   session(): DocSession | null;
+   t(): Translate;
++  /** Nome accessibile del contenuto (`aria-label` di `.cm-content`), letto a ogni aggiornamento della vista. */
++  contentLabel(): string;
+   getDocs(): DocTitle[];
+   /** Salva un'immagine incollata o trascinata; restituisce il link relativo, null se non salvata. */
+   saveImage(file: File): Promise<string | null>;
+@@ -113,6 +115,8 @@ export function docExtensions(host: DocHost) {
+       editable.of(readOnlyExtensions(host.readOnly())),
+       autocompletion({ override: [wikiCompletionSource(() => host.getDocs())] }),
+       formatToolbar(() => host.t()),
++      // Il contenuto è un textbox: senza nome lo screen reader dice solo «modifica testo» (LAB-42 P3, WCAG 4.1.2).
++      EditorView.contentAttributes.of(() => ({ 'aria-label': host.contentLabel() })),
+       EditorView.updateListener.of((update) => {
+         // La sessione si salva prima di emettere: un listener sincrono può cambiare documento (anche staccare
+         // e ricollegare l'elemento), e da lì host.session() sarebbe la sessione del documento nuovo.
+diff --git a/src/elements/editor/docElement.ts b/src/elements/editor/docElement.ts
+index bcccbd8..eefb5da 100644
+--- a/src/elements/editor/docElement.ts
++++ b/src/elements/editor/docElement.ts
+@@ -5,6 +5,7 @@ import { docExtensions, type DocHost } from '../../editor/docExtensions';
+ import { docStateConfig, saveDocSession, type DocSession } from '../../editor/docSession';
+ import type { Translate } from '../../editor/formatToolbar';
+ import type { RestoreCommand } from '../../editor/restoreCommand';
++import type { MessageKey } from '../../i18n/messages';
+ import type { DocTitle } from '../../search/searchIndex';
+ import type { I18nStore } from '../../state/i18nStore';
+ import { emit } from '../events';
+@@ -44,6 +45,7 @@ export abstract class HmdDocElement extends HmdElement {
+     readOnly: () => this.#readOnly,
+     session: () => this.#shownSession,
+     t: () => this.translator(),
++    contentLabel: () => this.translator()(this.contentLabelKey),
+     getDocs: () => this.#getDocs(),
+     saveImage: (file) => this.#saveImage?.(file) ?? Promise.resolve(null),
+     docChanged: (changes, texts) => emit(this, 'hmd-doc-change', { changes, before: texts.before, after: texts.after }),
+@@ -89,6 +91,9 @@ export abstract class HmdDocElement extends HmdElement {
+     this.i18nChanged();
+   }
+ 
++  /** Chiave del nome accessibile del contenuto: il documento nell'editor, il documento attuale nel diff. */
++  protected readonly contentLabelKey: MessageKey = 'editor.content';
++
+   /** Traduzione attuale (la barra di formattazione la legge quando compare). Non `translate`: è di HTMLElement. */
+   protected translator(): Translate {
+     return this.#i18n?.t ?? KEY_ONLY;
+diff --git a/src/elements/editor/editor.element.ts b/src/elements/editor/editor.element.ts
+index 8acf203..c41d9c0 100644
+--- a/src/elements/editor/editor.element.ts
++++ b/src/elements/editor/editor.element.ts
+@@ -52,6 +52,9 @@ export class HmdEditor extends HmdDocElement {
+       this.docInputChanged();
+     }
+     this.#view.scrollDOM.addEventListener('scroll', () => this.#onScroll(), { passive: true, signal });
++    // Una lingua nuova: il nome del contenuto subito (contentAttributes lo rilegge solo al prossimo aggiornamento,
++    // e un aggiornamento vuoto qui passerebbe dalla sessione).
++    if (this.i18n) this.watch(this.i18n, () => this.#view?.contentDOM.setAttribute('aria-label', this.docHost.contentLabel()), signal);
+   }
+ 
+   disconnectedCallback(): void {
+```
+
+In `diff-pane.element.ts`: `protected override readonly contentLabelKey = 'ai.diff.current';` come primo campo della classe (con il JSDoc «Il lato sinistro del diff è il documento attuale (il destro, la proposta, ha il suo nome).»); nelle estensioni del lato `b`, dopo `docAppearance()`, `EditorView.contentAttributes.of(() => ({ 'aria-label': this.translator()('ai.diff.proposal') })),`; in testa a `#refreshControls()`, dopo `const t = this.translator();`:
+
+```ts
+    // I nomi dei due contenuti nella lingua di adesso (contentAttributes li rilegge solo al prossimo aggiornamento).
+    this.#merge?.a.contentDOM.setAttribute('aria-label', this.docHost.contentLabel());
+    this.#merge?.b.contentDOM.setAttribute('aria-label', t('ai.diff.proposal'));
+```
+
+In `review.dom.test.ts` il conteggio degli ascoltatori della lingua passa da 1 a 2 (`'la revisione e il nome del contenuto di hmd-editor'`).
+
+- [ ] **Step 7: chip senza cast.**
+
+```diff
+diff --git a/src/elements/ai/model-chip.element.ts b/src/elements/ai/model-chip.element.ts
+index b2d4648..65ddc84 100644
+--- a/src/elements/ai/model-chip.element.ts
++++ b/src/elements/ai/model-chip.element.ts
+@@ -66,6 +66,8 @@ export class HmdAiModelChip extends HmdElement {
+   #id = '';
+   #open = false;
+   #rows = new WeakMap<Element, ProfileRow>();
++  /** Il selettore del modello dell'apertura corrente (uno nuovo a ogni apertura del popover). */
++  #modelSelect: HmdAiModelSelect | null = null;
+   #loop = new RenderLoop(this, {
+     ready: () => !!this.#parts && !!this.#controller && !!this.#i18n && this.isConnected,
+     render: () => this.#render(this.#parts!, this.#controller!, this.#i18n!),
+@@ -184,17 +186,20 @@ export class HmdAiModelChip extends HmdElement {
+       popoverParts(groups, this.#open),
+       (part: PopoverPart) => part,
+       (part) => this.#createPart(parts, part),
+-      (node, part) => {
++      // I nodi fissi si prendono da `parts` (tipati); il selettore del modello, l'unico nodo creato qui, dal
++      // suo campo: niente cast sul nodo generico di reconcileList.
++      (_node, part) => {
+         if (part === 'group:local' || part === 'group:cloud') {
+-          const group = groups.find((g) => g.local === (part === 'group:local'))!;
+-          this.#renderGroup(node as HTMLFieldSetElement, group, profile.id, t);
+-        } else if (part === 'model') {
+-          const select = node as HmdAiModelSelect;
++          const local = part === 'group:local';
++          const group = groups.find((g) => g.local === local)!;
++          this.#renderGroup(local ? parts.groups.local : parts.groups.cloud, group, profile.id, t);
++        } else if (part === 'model' && this.#modelSelect) {
++          const select = this.#modelSelect;
+           select.controller = controller;
+           select.profile = effective;
+           select.i18n = i18n;
+         } else if (part === 'params') {
+-          const params = node as HmdAiParameters;
++          const params = parts.params;
+           params.profile = effective;
+           params.value = { ...profile.params, ...overrides };
+           params.hideEffort = true;
+@@ -226,7 +231,7 @@ export class HmdAiModelChip extends HmdElement {
+         return parts.actions;
+       case 'model':
+         // Un selettore nuovo a ogni apertura, come il componente che React montava: riparte senza «Altro…».
+-        return el('hmd-ai-model-select', { on: { 'hmd-ai-model-change': (event) => this.#override(event.detail.selection) } });
++        return (this.#modelSelect = el('hmd-ai-model-select', { on: { 'hmd-ai-model-change': (event) => this.#override(event.detail.selection) } }));
+     }
+   }
+ 
+```
+
+Controllo: `grep -n " as " src/elements/ai/model-chip.element.ts` → uscita 1 (nessuna occorrenza).
+
+- [ ] **Step 8: e2e.** In `ai-review-bar.spec.ts` il test «while generating nothing is disabled…» si divide in due (il contatore non è più live e la regione nascosta dice l'avvio; Scarta ferma e scarta) e il test LAB-10 vede la bozza al ritorno:
+
+```diff
+diff --git a/e2e/ai-review-bar.spec.ts b/e2e/ai-review-bar.spec.ts
+index 96d9e44..b0e9d22 100644
+--- a/e2e/ai-review-bar.spec.ts
++++ b/e2e/ai-review-bar.spec.ts
+@@ -31,18 +31,23 @@ test.describe('review bar', () => {
+     await enterAi(app);
+   });
+ 
+-  test('while generating nothing is disabled: Previous, Next, Discard and Accept all say why in the note and keep the focus; the counter is a polite live region; the note goes with the proposal', async ({ app, ai, page }) => {
++  test('while generating nothing is disabled: Previous, Next and Accept all say why in the note (again at every click) and keep the focus; the seconds are not live, a hidden region says the start; the note goes with the proposal', async ({ app, ai, page }) => {
+     await page.clock.install();
+     ai.hold();
+     await composer(app).fill('fix');
+     await composer(app).press('Enter');
+     const counter = page.getByText(app.t('ai.generating', { seconds: 0 }).replace(/0 s$/, ''), { exact: false });
+     await expect(counter).toBeVisible();
+-    await expect(counter).toHaveAttribute('aria-live', 'polite');
++    await expect(counter).not.toHaveAttribute('aria-live');
++    // La regione nascosta entra vuota e il testo arriva al fotogramma dopo: con l'orologio finto si fa avanzare.
++    await page.clock.runFor(50);
++    await expect(page.getByText(app.t('ai.generatingStarted'), { exact: true })).toHaveAttribute('aria-live', 'polite');
+     const note = page.getByRole('status').filter({ hasText: app.t('ai.review.generating') });
+-    for (const button of [previous(app), next(app), discard(app), acceptAll(app)]) {
++    for (const button of [previous(app), next(app), acceptAll(app)]) {
+       await expect(button).toBeEnabled();
+       await button.click();
++      // Dal secondo clic la stessa nota si svuota e torna al fotogramma dopo (ri-annuncio, LAB-11).
++      await page.clock.runFor(50);
+       await expect(note).toBeVisible();
+       await expect(button).toBeFocused();
+     }
+@@ -56,6 +61,20 @@ test.describe('review bar', () => {
+     for (const button of [previous(app), next(app), discard(app), acceptAll(app)]) await expect(button).toBeEnabled();
+   });
+ 
++  test('Discard while generating stops the request and discards the proposal (Discard = Stop + discard)', async ({ app, ai, page }) => {
++    ai.hold();
++    await composer(app).fill('fix');
++    await composer(app).press('Enter');
++    await expect(stop(app)).toBeVisible();
++    await discard(app).click();
++    await expect(send(app)).toBeVisible();
++    await expect(discard(app)).toHaveCount(0);
++    await expect(page.getByRole('status').filter({ hasText: app.t('ai.review.generating') })).toHaveCount(0);
++    ai.release();
++    await expect(mergeView(app)).toHaveCount(0);
++    expect(ai.requests).toBe(1);
++  });
++
+   test('the proposal arrives with the focus on Accept all (keyboard): the focus stays on the button, it does not jump into the diff', async ({ app, ai, page }) => {
+     ai.hold();
+     await composer(app).fill('fix');
+@@ -179,7 +198,7 @@ test.describe('review bar', () => {
+ });
+ 
+ test.describe('composer without a document', () => {
+-  test('with no document open, Send says so, keeps the draft and the focus', async ({ app, ai, page }) => {
++  test('with no document open, Send says where to go, keeps the draft and the focus; the draft is still there after opening a document from the editor (LAB-10)', async ({ app, ai, page }) => {
+     await app.openFolder({ 'a.md': 'A' });
+     await enterAi(app);
+     await composer(app).fill('fix');
+@@ -189,11 +208,14 @@ test.describe('composer without a document', () => {
+     await expect(composer(app)).toHaveValue('fix');
+     await expect(send(app)).toBeFocused();
+     expect(ai.requests).toBe(0);
+-    // Aprire un documento passa dalla modalità editor: la sidebar AI si smonta e si rimonta (bozza e nota ripartono da zero, come oggi).
++    // Aprire un documento passa dalla modalità editor: la sidebar AI si ricrea, la nota riparte da zero, la bozza resta.
+     await app.mode('mode.editor').click();
+     await app.openFile('a.md');
+     await app.mode('mode.ai').click();
+     await expect(note).toHaveCount(0);
++    await expect(composer(app)).toHaveValue('fix');
++    await send(app).click();
++    await expect.poll(() => ai.requests).toBe(1);
+   });
+ 
+   test('Enter in the composer during a generation says so and keeps the draft; the note goes when the generation ends', async ({ app, ai, page }) => {
+```
+
+`ai-review.spec.ts:222` e `computed-styles.audit.ts:280`: `app.t('ai.warningsCount', { count: 1 })` → `app.t('ai.warningsCount.one', { count: 1 })` (nell'audit il nome «1 warning» trova anche il «1 warnings» della baseline: il nome si confronta per sottostringa). In `ai-composer.spec.ts` il test del doppio clic del Task 1 si rovescia:
+
+```ts
+  test('a double click on Send sends once and keeps the request going: the second click of the pair is ignored on Stop', async ({ app, ai }) => {
+    ai.hold();
+    await composer(app).fill('fix');
+    await send(app).click();
+    await stop(app).dispatchEvent('click', { detail: 2 });
+    await expect(stop(app)).toBeVisible();
+    await stop(app).click();
+    await expect(send(app)).toBeVisible();
+    expect(ai.requests).toBe(1);
+    ai.release();
+  });
+```
+
+- [ ] **Step 9: gate e baseline.** `npm test` (atteso **1064** = 1053 + 3 `announce` + 1 `i18n` + 1 `reviewBarView` + 1 `review-bar` + 1 `review` + 2 `composer` + 1 `editor` + 1 `workspace`), `npm run lint`; in build e in sviluppo `ai-review-bar.spec.ts`, `ai-review.spec.ts`, `ai-composer.spec.ts`, `ai-diff.spec.ts`, `editor.spec.ts`, `editor-session.spec.ts`. Audit con `-g "ai-|editor"`: cadono **solo** `ai-review-generating`, `ai-review-note`, `ai-composer-running` (`…>hmd-ai-review-bar:0>span:2: nuovo`), `ai-review-truncated`, `ai-review-warnings` (`content: "1 warnings" → "1 warning"`, `width`/`inline-size`/`*-origin` del `::after`), `ai-composer-note-no-document` (testo e misure della nota); righe incollate nel commento. Poi `npm run build && rm -rf dist-baseline && cp -r dist dist-baseline && git rev-parse HEAD > dist-baseline/BASELINE_SHA` e audit completo verde. Commit piccoli, uno per punto.
