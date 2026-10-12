@@ -100,14 +100,16 @@ test('with a proposal: the bar and the diff with the proposal, the warnings of t
   assert.equal(bar().acceptBlocker, null);
   assert.equal(diff().proposal, 'A2\n\nB\n\nC2');
   assert.equal(diff().streaming, false);
-  assert.equal(diff().canAccept, true);
+  assert.equal(diff().acceptBlocker, null);
+  assert.equal(diff().rejectBlocker, null);
   await tick();
   assert.ok(diff().querySelector('.cm-mergeView'));
   // Il controller non accetta: i due flag seguono.
   ai.blocker = 'conflict';
   ai.set({});
   assert.equal(bar().acceptBlocker, 'conflict');
-  assert.equal(diff().canAccept, false);
+  assert.equal(diff().acceptBlocker, 'conflict');
+  assert.equal(diff().rejectBlocker, null);
   // Anteprima della risposta in arrivo tra la barra e il diff.
   ai.set({ streamingPreview: 'in arrivo' });
   assert.deepEqual(children(), ['hmd-ai-review-bar', 'details.stream', 'hmd-ai-diff-pane']);
@@ -115,6 +117,26 @@ test('with a proposal: the bar and the diff with the proposal, the warnings of t
   assert.equal(document.querySelector('.stream summary')!.textContent, EN_MESSAGES['ai.streamingPreview']);
   ai.set({ streamingPreview: null });
   assert.deepEqual(children(), ['hmd-ai-review-bar', 'hmd-ai-diff-pane']);
+});
+
+test('a block button blocked in the diff: the bar note says the reason, the focus stays on the block button; truncated, the block accepts', async () => {
+  const p = proposal({ status: 'streaming' });
+  const { diff, bar, ai } = mount({ proposals: new Map([['a.md', p]]), running: { messageId: 'm', path: 'a.md', startedAt: Date.now() } });
+  await tick();
+  assert.equal(diff().acceptBlocker, 'generating');
+  assert.equal(diff().rejectBlocker, 'generating');
+  const note = () => bar().querySelector<HTMLParagraphElement>(':scope > [role="status"]')!;
+  const reject = diff().querySelector<HTMLButtonElement>('.cm-merge-revert button[data-action="reject"]')!;
+  reject.focus();
+  reject.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+  assert.equal(note().textContent, EN_MESSAGES['ai.review.generating']);
+  focusOn(reject, 'the reject button of the block');
+  // Proposta troncata: «Accetta tutto» resta fermo, ma il singolo blocco si accetta (acceptBlocker(p, false)).
+  ai.set({ running: null, proposals: new Map([['a.md', proposal({ status: 'truncated' })]]) });
+  assert.equal(bar().acceptBlocker, 'truncated');
+  assert.equal(diff().acceptBlocker, null);
+  assert.equal(diff().rejectBlocker, null);
+  assert.equal(note().textContent, '');
 });
 
 test('the proposal applied: plain editor without the bar; the bar arrows, Discard and Continue reach the diff and the controller', async () => {

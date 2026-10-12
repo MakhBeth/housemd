@@ -11,12 +11,15 @@ import { createDocSession } from '../../editor/docSession';
 import { EN_MESSAGES } from '../../i18n/messages';
 import { createI18nStore } from '../../state/i18nStore';
 import { countListeners } from '../../testing/countListeners';
+import type { AcceptBlocker } from '../../ai/aiController';
 import type { HmdEvents } from '../events';
 
 // Una vista di CodeMirror rimasta montata (test fallito a metà) tiene vivo il processo: si smonta sempre.
 test.afterEach(() => document.body.replaceChildren());
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+/** Il focus è su `node`. Mai `assert.equal` tra nodi di jsdom: il messaggio del RED (util.inspect dell'albero) non finisce più. */
+const focusOn = (node: Element | null | undefined, what: string) => assert.ok(!!node && document.activeElement === node, `focus on ${what}, not on ${document.activeElement?.localName}.${document.activeElement?.className}`);
 
 /** Incolla delle immagini nella vista (jsdom non ha ClipboardEvent né DataTransfer). */
 function pasteImages(view: EditorView, ...names: string[]): void {
@@ -48,7 +51,8 @@ function i18nStore() {
 interface Options {
   original?: string;
   proposal?: string;
-  canAccept?: boolean;
+  acceptBlocker?: AcceptBlocker | null;
+  rejectBlocker?: AcceptBlocker | null;
   streaming?: boolean;
   beforeAccept?: () => boolean;
 }
@@ -67,12 +71,13 @@ async function mount(options: Options = {}) {
     i18n: store,
     proposal: options.proposal ?? 'A2\n\nB\n\nC2',
     range: null,
-    canAccept: options.canAccept ?? true,
+    acceptBlocker: options.acceptBlocker ?? null,
+    rejectBlocker: options.rejectBlocker ?? null,
     streaming: options.streaming ?? false,
     beforeAccept: options.beforeAccept ?? (() => true),
   });
   const events: [keyof HmdEvents, unknown][] = [];
-  for (const type of ['hmd-doc-change', 'hmd-selection', 'hmd-ai-proposal-edit', 'hmd-ai-all-rejected'] as const) {
+  for (const type of ['hmd-doc-change', 'hmd-selection', 'hmd-ai-proposal-edit', 'hmd-ai-all-rejected', 'hmd-ai-block-blocked'] as const) {
     el.addEventListener(type, (event) => events.push([type, (event as CustomEvent).detail]));
   }
   document.body.append(el);
@@ -126,21 +131,32 @@ test('accept: beforeAccept first, the block goes into the document, the focus fo
   el.remove();
 });
 
-test('accept refused: nothing happens when it cannot accept or beforeAccept says no', async () => {
+test('accept refused by beforeAccept: nothing happens and nothing is said (the controller checked again)', async () => {
   let asked = 0;
-  const refused = await mount({ beforeAccept: () => (asked++, false) });
-  mousedown(refused.buttons('accept')[0]);
+  const { el, a, buttons, events } = await mount({ beforeAccept: () => (asked++, false) });
+  events.length = 0;
+  mousedown(buttons('accept')[0]);
   await tick();
   assert.equal(asked, 1);
-  assert.equal(refused.a().state.doc.toString(), 'A\n\nB\n\nC');
-  refused.el.remove();
-  const blocked = await mount({ canAccept: false, beforeAccept: () => (asked++, true) });
-  assert.equal(blocked.buttons('accept')[0].disabled, true);
-  mousedown(blocked.buttons('accept')[0]);
+  assert.equal(a().state.doc.toString(), 'A\n\nB\n\nC');
+  assert.deepEqual(events, []);
+  el.remove();
+});
+
+test('accept blocked (a conflict): never disabled, activated it says why with an event and does not ask beforeAccept', async () => {
+  let asked = 0;
+  const { el, a, buttons, events } = await mount({ acceptBlocker: 'conflict', beforeAccept: () => (asked++, true) });
+  for (const button of [...buttons('accept'), ...buttons('reject')]) {
+    assert.equal(button.disabled, false);
+    assert.equal(button.hasAttribute('aria-disabled'), false);
+  }
+  events.length = 0;
+  mousedown(buttons('accept')[1]);
   await tick();
-  assert.equal(asked, 1);
-  assert.equal(blocked.a().state.doc.toString(), 'A\n\nB\n\nC');
-  blocked.el.remove();
+  assert.equal(asked, 0);
+  assert.equal(a().state.doc.toString(), 'A\n\nB\n\nC');
+  assert.deepEqual(events, [['hmd-ai-block-blocked', { action: 'accept', reason: 'conflict' }]]);
+  el.remove();
 });
 
 test('keyboard: Enter on accept accepts, Space on reject rejects', async () => {
@@ -174,18 +190,72 @@ test('reject: the original goes back into the proposal (an edit), focus on it; t
   el.remove();
 });
 
-test('while generating: proposal read-only, reject disabled and ignored; canAccept switches the accept buttons', async () => {
-  const { el, b, buttons } = await mount({ streaming: true, canAccept: false });
+test('while generating: proposal read-only, both buttons active; from the keyboard they say why and keep the focus; then they work', async () => {
+  const { el, b, buttons, events } = await mount({ streaming: true, acceptBlocker: 'generating', rejectBlocker: 'generating' });
   assert.equal(b().state.readOnly, true);
-  assert.deepEqual([buttons('accept')[0].disabled, buttons('reject')[0].disabled], [true, true]);
-  mousedown(buttons('reject')[0]);
+  assert.deepEqual([buttons('accept')[0].disabled, buttons('reject')[0].disabled], [false, false]);
+  events.length = 0;
+  const reject = buttons('reject')[0];
+  reject.focus();
+  key(reject, ' ');
   await tick();
   assert.equal(b().state.doc.toString(), 'A2\n\nB\n\nC2');
+  focusOn(reject, 'the reject button');
+  const accept = buttons('accept')[1];
+  accept.focus();
+  key(accept, 'Enter');
+  await tick();
+  focusOn(accept, 'the accept button');
+  mousedown(buttons('reject')[1]);
+  await tick();
+  assert.deepEqual(events, [
+    ['hmd-ai-block-blocked', { action: 'reject', reason: 'generating' }],
+    ['hmd-ai-block-blocked', { action: 'accept', reason: 'generating' }],
+    ['hmd-ai-block-blocked', { action: 'reject', reason: 'generating' }],
+  ]);
   el.streaming = false;
-  el.canAccept = true;
+  el.acceptBlocker = null;
+  el.rejectBlocker = null;
   await tick();
   assert.equal(b().state.readOnly, false);
-  assert.deepEqual([buttons('accept')[0].disabled, buttons('reject')[0].disabled], [false, false]);
+  events.length = 0;
+  mousedown(buttons('reject')[0]);
+  await tick();
+  assert.equal(b().state.doc.toString(), 'A\n\nB\n\nC2');
+  assert.deepEqual(events.map(([type]) => type), ['hmd-ai-proposal-edit']);
+  el.remove();
+});
+
+test('the focused block button goes away while generating (its block is gone): the focus goes to the same action of the nearest block left', async () => {
+  const { el, buttons } = await mount({ streaming: true, acceptBlocker: 'generating', rejectBlocker: 'generating' });
+  const reject = buttons('reject')[1];
+  reject.focus();
+  // La proposta che arriva cambia i blocchi: ne resta uno, e la MergeView toglie i controlli del secondo.
+  el.proposal = 'A2\n\nB\n\nC';
+  await tick();
+  await tick();
+  assert.equal(buttons('reject').length, 1);
+  assert.equal(reject.isConnected, false);
+  focusOn(buttons('reject')[0], 'the reject button of the block left');
+  // Una proposta che cambia testo ma non il numero dei blocchi: i controlli restano gli stessi, il focus non si muove.
+  const kept = buttons('reject')[0];
+  el.proposal = 'A3\n\nB\n\nC';
+  await tick();
+  await tick();
+  assert.ok(buttons('reject')[0] === kept, 'the same control');
+  focusOn(kept, 'the same reject button');
+  el.remove();
+});
+
+test('a block button removed while the focus is elsewhere: the focus is not taken', async () => {
+  const { el, a, buttons } = await mount({ streaming: true, acceptBlocker: 'generating', rejectBlocker: 'generating' });
+  buttons('reject')[1].focus();
+  a().focus();
+  el.proposal = 'A2\n\nB\n\nC';
+  await tick();
+  await tick();
+  assert.equal(buttons('reject').length, 1);
+  focusOn(a().contentDOM, 'the document side');
   el.remove();
 });
 

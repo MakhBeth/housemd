@@ -33,6 +33,16 @@ test('Accept all carries the reason of the controller, one key per reason', () =
   assert.equal(actionBlocker('acceptAll', none, 'notAcceptable'), 'ai.review.notAcceptable');
 });
 
+test('the block buttons of the diff: accept carries the block reason of the controller (never truncated), reject only while generating or with the selection lost', () => {
+  assert.equal(actionBlocker('acceptBlock', generating, 'generating'), 'ai.review.generating');
+  for (const reason of ['updating', 'notAcceptable', 'conflict', 'scopeLost'] as const) assert.equal(actionBlocker('acceptBlock', none, reason), `ai.review.${reason}`, reason);
+  assert.equal(actionBlocker('acceptBlock', { kind: 'truncated' }, 'truncated'), null, 'a truncated proposal is accepted one block at a time');
+  assert.equal(actionBlocker('acceptBlock', none, null), null);
+  assert.equal(actionBlocker('rejectBlock', generating, 'generating'), 'ai.review.generating');
+  assert.equal(actionBlocker('rejectBlock', { kind: 'scopeLost' }, 'scopeLost'), 'ai.review.scopeLost');
+  assert.equal(actionBlocker('rejectBlock', none, 'conflict'), null, 'reject only touches the proposal');
+});
+
 test('every note key exists in en.json', () => {
   for (const reason of ['generating', 'updating', 'conflict', 'scopeLost', 'truncated', 'notAcceptable']) assert.ok(`ai.review.${reason}` in EN_MESSAGES, reason);
 });

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { Chunk } from '@codemirror/merge';
 import { ChangeSet, EditorState } from '@codemirror/state';
 
-import { blockCount, controlDisabled, insideRange, rejectChange } from './diffLogic';
+import { blockCount, insideRange, rejectBlocker, rejectChange } from './diffLogic';
 
 /** Rifiuta il blocco `index` come farebbe hmd-ai-diff-pane e restituisce la proposta che ne esce. */
 function reject(original: string, proposal: string, index = 0): string {
@@ -31,16 +31,10 @@ test('edits to the proposal: anywhere without a range, only inside it with one',
   assert.equal(insideRange(change(9, 11), { from: 5, to: 10 }), false);
 });
 
-test('block buttons: accept follows canAccept, reject is off only while generating', () => {
-  assert.deepEqual(
-    [
-      controlDisabled('accept', { canAccept: true, streaming: true }),
-      controlDisabled('accept', { canAccept: false, streaming: false }),
-      controlDisabled('reject', { canAccept: false, streaming: false }),
-      controlDisabled('reject', { canAccept: true, streaming: true }),
-    ],
-    [false, true, false, true],
-  );
+test('block buttons never switch off: reject says why only while generating or with the selection lost (proposal read-only)', () => {
+  assert.equal(rejectBlocker({ kind: 'generating', seconds: 2 }), 'generating');
+  assert.equal(rejectBlocker({ kind: 'scopeLost' }), 'scopeLost');
+  for (const kind of ['none', 'partial', 'truncated', 'applied'] as const) assert.equal(rejectBlocker({ kind }), null, kind);
 });
 
 test('blockCount: the blocks the diff shows, as many as Chunk.build finds', () => {
