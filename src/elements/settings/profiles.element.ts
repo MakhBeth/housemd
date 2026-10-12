@@ -2,6 +2,7 @@ import type { AiController } from '../../ai/aiController';
 import { changeProvider } from '../../ai/models';
 import { DEFAULT_URLS, defaultProfile, PROVIDER_KINDS, validateProfile } from '../../ai/profiles';
 import type { ModelProfile, ProviderKind } from '../../ai/types';
+import { announce } from '../../dom/announce';
 import { HmdElement } from '../../dom/element';
 import { el, setText } from '../../dom/el';
 import { RenderLoop } from '../../dom/renderLoop';
@@ -74,6 +75,9 @@ export class HmdSettingsProfiles extends HmdElement {
   #loop = new RenderLoop(this, {
     ready: () => !!this.#list && !!this.#controller && !!this.#i18n && this.isConnected,
     render: () => this.#render(this.#list!, this.#controller!, this.#i18n!),
+    // Il nodo con il focus è sparito (Elimina, con il dettaglio): il focus va sulla prima voce dell'elenco.
+    focusScope: () => this,
+    refocus: () => (this.#list?.firstElementChild as HTMLElement | null)?.focus(),
   });
 
   get controller(): ProfilesController | null { return this.#controller; }
@@ -282,7 +286,10 @@ export class HmdSettingsProfiles extends HmdElement {
     setText(d.duplicate, t('ai.duplicate'));
     setText(d.remove, t('ai.delete'));
     setText(d.save, t('ai.save'));
-    setText(d.connected, t('ai.connected'));
+    // «Connesso» entra nel DOM vuoto e si scrive dopo `ANNOUNCE_DELAY_MS`: una regione inserita già piena spesso
+    // non si annuncia (LAB-42 P8). Il testo cambia solo con la lingua (setText, senza riannunciare).
+    const entering = this.#connected && d.connected.parentNode !== d.root;
+    announce(d.connected, this.#connected ? t('ai.connected') : '', entering);
     syncValue(d.name, draft.name);
     syncValue(d.provider, draft.kind);
     syncValue(d.url, draft.baseUrl);
