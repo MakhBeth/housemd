@@ -227,3 +227,268 @@ La fase è un insieme di rifiniture indipendenti, non una catena: l'app funziona
 | `src/elements/start-screen/*`, `src/elements/notice/*`, `src/elements/workspace/*` | «Mai disabled» di schermata iniziale, avviso, Cronologia e cartella (Task 9). |
 | `src/styles/global.css`, `workspace.css`, `settings.css`, `sections.css` | `forced-colors` (Task 10). |
 | `docs/superpowers/specs/2026-09-27-housemd-web-components-design.md`, `CLAUDE.md`, `README.md`, `docs/superpowers/notes/2026-10-xx-chiusura-migrazione.md` (al posto dell'handover) | Documenti (Task 7 e 11). |
+
+---
+
+### Task 1: Rete di sicurezza, baseline e misura dell'avvio (Builder)
+
+**Files:**
+- Create: `e2e/startup.config.ts`, `e2e/startup.measure.ts`
+- Modify: `.gitignore`, `e2e/computed-styles.audit.ts`, `e2e/workspace-shell.spec.ts`, `e2e/startup.spec.ts`, `e2e/settings.spec.ts`, `e2e/theme-i18n.spec.ts`, `e2e/ai-composer.spec.ts`
+
+Nessuna riga dell'app cambia. I test nuovi affermano **il comportamento di oggi**, difetti compresi (mai `test.fail`): i task che correggono li rovesciano. Già affermati da test esistenti, e quindi non ripetuti qui: il contatore «Generating… N s» come regione `aria-live` (`ai-review-bar.spec.ts:34`, Task 4), Scarta durante la generazione che scrive solo la nota (stesso test, Task 4), l'indice che resta su «Profili» (`settings-sections.spec.ts:59`, Task 5), Cronologia `disabled` senza documento (`workspace-shell.spec.ts:27`, Task 9), Salva chiave `disabled` (`settings-sections.spec.ts:77`, Task 9). R1 e R2 non si vedono in e2e (nessun percorso dell'interfaccia stacca `hmd-app`): i loro RED sono i test jsdom del Task 2.
+
+- [ ] **Step 1: worktree, dipendenze e baseline dell'audit, prima di tutto.** Sul branch `lab/LAB-6-fase-8` (`git log --oneline -1` = l'ultimo commit di questo piano, sopra `0cb7652`):
+
+```bash
+npm ci                                    # mai un link simbolico a node_modules di un altro checkout
+git log --oneline 0cb7652..HEAD -- src    # atteso: vuoto (solo documenti dopo il merge della 7b)
+npm run build && rm -rf dist-baseline && cp -r dist dist-baseline
+git rev-parse HEAD > dist-baseline/BASELINE_SHA && cat dist-baseline/BASELINE_SHA
+gzip -c dist/assets/index-*.js | wc -c    # atteso: 379234
+```
+
+- [ ] **Step 2: conteggi di partenza.** `npm test` (atteso **1045**), `npm run lint` pulito. Le suite complete **non** si lanciano qui (le misure di partenza sono nel paragrafo «Misure»: 202, 187, 136): solo i file toccati, allo Step 7.
+
+- [ ] **Step 3: misura dell'avvio.** Build della fase 3 in un worktree separato, copiata nel checkout (fuori da git):
+
+```bash
+git worktree add --detach ../housemd-phase3 a3ebc6f
+(cd ../housemd-phase3 && npm ci && npm run build)
+cp -r ../housemd-phase3/dist dist-phase3
+gzip -c dist-phase3/assets/index-*.js | wc -c    # atteso: 432419
+```
+
+Aggiungere `dist-phase3` a `.gitignore`, subito sotto `dist-baseline`. Creare `e2e/startup.config.ts`:
+
+```ts
+import { fileURLToPath } from 'node:url';
+import { defineConfig, devices } from '@playwright/test';
+
+/**
+ * Tempo di avvio della build di oggi contro la build della fase 3 (React 19, `a3ebc6f`), spec §7 «Fase 8».
+ * Prima: la build della fase 3 in `dist-phase3/` (worktree detached su a3ebc6f, `npm ci && npm run build`,
+ * poi `cp -r dist <qui>/dist-phase3`). Poi, dentro il lock dei browser:
+ *   E2E_WORKERS=1 flock /home/agent/work/.browser-tests.lock npx playwright test -c e2e/startup.config.ts
+ * Il risultato (mediane e singoli giri) va in `test-results/startup.json` e nell'output.
+ */
+const root = fileURLToPath(new URL('..', import.meta.url));
+export const CURRENT_PORT = 4180;
+export const PHASE3_PORT = 4181;
+
+export default defineConfig({
+  testDir: '.',
+  testMatch: 'startup.measure.ts',
+  outputDir: '../test-results/startup',
+  workers: 1,
+  reporter: [['list']],
+  timeout: 15 * 60_000,
+  use: {
+    ...devices['Desktop Chrome'],
+    viewport: { width: 1280, height: 800 },
+    locale: 'en-US',
+    reducedMotion: 'reduce',
+    serviceWorkers: 'block',
+    actionTimeout: 15_000,
+    navigationTimeout: 30_000,
+  },
+  webServer: [
+    {
+      command: `npm run build && npx vite preview --port ${CURRENT_PORT} --strictPort`,
+      cwd: root,
+      url: `http://localhost:${CURRENT_PORT}`,
+      reuseExistingServer: false,
+      timeout: 180_000,
+    },
+    {
+      command: `npx vite preview --outDir dist-phase3 --port ${PHASE3_PORT} --strictPort`,
+      cwd: root,
+      url: `http://localhost:${PHASE3_PORT}`,
+      reuseExistingServer: false,
+      timeout: 60_000,
+    },
+  ],
+});
+```
+
+e `e2e/startup.measure.ts` (unica eccezione dichiarata alla regola «solo ruoli e nomi»: è una misura, non un test, e deve funzionare identica sulla build React della fase 3, dove il contenuto dell'editor non ha nome; i selettori sono `nav[aria-label="Folder files"]` e `.cm-content`):
+
+```ts
+import { mkdtemp, rm, writeFile, mkdir } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { chromium, expect, test } from '@playwright/test';
+
+import { DEFAULT_FLAGS, FLAGS_KEY, harnessScript, seedFolder } from './support/fsHarness.ts';
+import { CURRENT_PORT, PHASE3_PORT } from './startup.config.ts';
+
+/**
+ * Due misure per giro, prese nella pagina con `performance.now()` (millisecondi dall'inizio della navigazione):
+ * - `start`: profilo nuovo (cache vuota), prima apertura → il pulsante «Open folder» compare nel DOM;
+ * - `reopen`: stessa scheda dopo aver aperto una cartella di 60 file e un documento, ricarica → albero
+ *   e testo del documento nel DOM (ripresa all'avvio, cache HTTP calda).
+ * I giri alternano le due build per non favorirne una con il carico della macchina. Il DOM delle due build è
+ * lo stesso (stessi tag, stessi nomi accessibili): gli osservatori valgono per entrambe.
+ */
+const ROUNDS = Number(process.env.STARTUP_ROUNDS ?? 21);
+const BUILDS = [
+  { name: 'phase3', url: `http://localhost:${PHASE3_PORT}` },
+  { name: 'current', url: `http://localhost:${CURRENT_PORT}` },
+] as const;
+const FILES = Object.fromEntries(
+  Array.from({ length: 60 }, (_, i) => [`dir${i % 6}/note-${i}.md`, `# Note ${i}\n\n${'Lorem ipsum dolor sit amet. '.repeat(40)}\n`]),
+);
+
+function marks(): void {
+  const w = window as unknown as Record<string, number | undefined>;
+  const check = () => {
+    if (w.__hmdStart === undefined && [...document.querySelectorAll('button')].some((b) => b.textContent?.includes('Open folder'))) {
+      w.__hmdStart = performance.now();
+    }
+    if (w.__hmdReopen === undefined && document.querySelector('nav[aria-label="Folder files"]') && document.querySelector('.cm-content')?.textContent?.includes('Note 7')) {
+      w.__hmdReopen = performance.now();
+    }
+  };
+  new MutationObserver(check).observe(document, { subtree: true, childList: true, characterData: true });
+}
+
+const median = (xs: number[]) => {
+  const s = [...xs].sort((a, b) => a - b);
+  return s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2;
+};
+
+test('startup: current build against phase 3', async ({}, testInfo) => {
+  const results: Record<string, { start: number[]; reopen: number[] }> = { phase3: { start: [], reopen: [] }, current: { start: [], reopen: [] } };
+  for (let round = 0; round < ROUNDS; round++) {
+    for (const build of round % 2 ? [...BUILDS].reverse() : BUILDS) {
+      const dir = await mkdtemp(join(tmpdir(), 'hmd-startup-'));
+      const context = await chromium.launchPersistentContext(dir, { ...testInfo.project.use, baseURL: build.url, deviceScaleFactor: 1 });
+      try {
+        const page = context.pages()[0] ?? (await context.newPage());
+        await page.addInitScript(harnessScript, { defaults: DEFAULT_FLAGS, key: FLAGS_KEY });
+        await page.addInitScript(() => localStorage.setItem('housemd:locale', JSON.stringify('en')));
+        await page.addInitScript(marks);
+        await page.goto('/');
+        await page.waitForFunction(() => (window as unknown as { __hmdStart?: number }).__hmdStart !== undefined, null, { timeout: 15_000 });
+        results[build.name].start.push(await page.evaluate(() => (window as unknown as { __hmdStart: number }).__hmdStart));
+        await seedFolder(page, DEFAULT_FLAGS.folder, FILES);
+        await page.getByRole('button', { name: 'Open folder' }).click();
+        await page.getByRole('navigation', { name: 'Folder files' }).getByText('dir1', { exact: true }).click();
+        await page.getByRole('button', { name: 'note-7.md', exact: true }).click();
+        await expect(page.locator('.cm-content')).toContainText('Note 7');
+        await page.reload();
+        await page.waitForFunction(() => (window as unknown as { __hmdReopen?: number }).__hmdReopen !== undefined, null, { timeout: 15_000 });
+        results[build.name].reopen.push(await page.evaluate(() => (window as unknown as { __hmdReopen: number }).__hmdReopen));
+      } finally {
+        await context.close();
+        await rm(dir, { recursive: true, force: true });
+      }
+    }
+  }
+  const summary = Object.fromEntries(
+    Object.entries(results).map(([name, r]) => [name, { startMedian: Math.round(median(r.start)), reopenMedian: Math.round(median(r.reopen)), ...r }]),
+  );
+  console.log(JSON.stringify(summary, null, 1));
+  await mkdir('test-results', { recursive: true });
+  await writeFile('test-results/startup.json', JSON.stringify(summary, null, 1));
+});
+```
+
+Lanciare **dentro il lock, da solo**: `E2E_WORKERS=1 flock /home/agent/work/.browser-tests.lock npx playwright test -c e2e/startup.config.ts` (circa 1 minuto e mezzo con 21 giri). Atteso (misurato scrivendo il piano): `phase3` `start` ≈ 206 ms, `reopen` ≈ 228 ms; `current` `start` ≈ 139 ms, `reopen` ≈ 220 ms. Incollare nel commento finale le due mediane per build e gli intervalli p25–p75 (da `test-results/startup.json`). A fine misura `pgrep -af "vite|chrom|playwright"`: le due `vite preview` le chiude Playwright; chiudere solo i propri PID rimasti. Il worktree `../housemd-phase3` si rimuove (`git worktree remove ../housemd-phase3`); `dist-phase3/` resta nel checkout per il Task 11.
+
+- [ ] **Step 4: tre stati di audit in `forced-colors`.** In `e2e/computed-styles.audit.ts`, subito dopo la chiusura dell'array `STATES`:
+
+```ts
+// Rete della fase 8 (Task 1): tre stati già noti, ripresi in forced-colors (icone, voce corrente, modalità,
+// separatore). Oggi registrano il difetto (sfondi portati a Canvas); il Task 10 li cambia di proposito.
+for (const [name, from] of [
+  ['forced-colors-workspace', 'workspace-light'],
+  ['forced-colors-settings', 'settings-profile'],
+  ['forced-colors-review', 'ai-review'],
+] as const) {
+  STATES.push({ ...STATES.find((s) => s.name === from)!, name, scheme: 'light', forcedColors: true });
+}
+```
+
+- [ ] **Step 5: e2e dei difetti di oggi.** In fondo a `e2e/workspace-shell.spec.ts`:
+
+```ts
+test('Hide sidebar from inside the sidebar: today the focus falls on the body (A1, the Task 3 of phase 8 moves it to Show sidebar)', async ({ app, page }) => {
+  await app.openFolder({ 'a.md': '# A' });
+  await page.getByRole('button', { name: app.t('sidebar.hide'), exact: true }).click();
+  await expect(app.tree()).toHaveCount(0);
+  await expect(page.locator('body')).toBeFocused();
+});
+```
+
+In fondo a `e2e/startup.spec.ts`:
+
+```ts
+test('after opening a folder from the start screen: today the focus is on the body (A2, the Task 2 of phase 8 moves it to the tree)', async ({ app, page }) => {
+  await app.openFolder({ 'a.md': '# A' });
+  await expect(page.locator('body')).toBeFocused();
+});
+```
+
+In fondo a `e2e/settings.spec.ts`:
+
+```ts
+test('Escape with unsaved changes: today nothing happens, no confirmation and the settings stay open (P5, the Task 5 of phase 8 fixes it)', async ({ app, page }) => {
+  await app.openFolder({ 'a.md': '# A' });
+  await page.getByRole('button', { name: app.t('toolbar.settings') }).click();
+  const settings = page.getByRole('region', { name: app.t('settings.title') });
+  await settings.getByRole('link', { name: app.t('settings.aiPresets') }).click();
+  // Eccezione della fase 7 (sezioni senza nome): la sezione dei preset per id, fino al Task 5.
+  const presets = page.locator('#settings-ai-presets');
+  await presets.getByRole('button').first().click();
+  await presets.getByRole('textbox').first().fill('Changed');
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(settings).toBeVisible();
+});
+```
+
+In fondo a `e2e/theme-i18n.spec.ts` (resta verde per sempre: decisione 12):
+
+```ts
+test('changing the language from the keyboard keeps the focus on the select (A4: not reproduced without a screen reader)', async ({ app, page }) => {
+  await app.openFolder({ 'note.md': '# Note' });
+  await page.getByRole('button', { name: app.t('toolbar.settings') }).click();
+  const select = page.getByLabel(app.t('settings.language'));
+  await select.focus();
+  await page.keyboard.press('ArrowDown');
+  await expect(page.locator('html')).not.toHaveAttribute('lang', 'en');
+  await expect(select).toBeFocused();
+});
+```
+
+In `e2e/ai-composer.spec.ts`, nel `describe('composer')`, subito prima di «the Stop button stops the generation»:
+
+```ts
+  test('a double click on Send: today the second click stops the request just sent (the Task 4 of phase 8 keeps it going)', async ({ app, ai }) => {
+    ai.hold();
+    await composer(app).fill('fix');
+    await send(app).dblclick();
+    await expect(send(app)).toBeVisible();
+    expect(ai.requests).toBe(1);
+    ai.release();
+  });
+```
+
+- [ ] **Step 6: lint.** `npx tsc --noEmit -p e2e` e `npm run lint` puliti.
+
+- [ ] **Step 7: i file toccati, in build e in sviluppo, e gli stati nuovi dell'audit** (uno alla volta, nel lock):
+
+```bash
+E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npx playwright test -c e2e/playwright.config.ts e2e/workspace-shell.spec.ts e2e/startup.spec.ts e2e/settings.spec.ts e2e/theme-i18n.spec.ts e2e/ai-composer.spec.ts
+E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npx playwright test -c e2e/dev.config.ts e2e/workspace-shell.spec.ts e2e/startup.spec.ts e2e/settings.spec.ts e2e/theme-i18n.spec.ts e2e/ai-composer.spec.ts
+cat dist-baseline/BASELINE_SHA
+E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npx playwright test -c e2e/audit.config.ts -g "forced-colors"
+```
+
+Attesi tutti verdi sull'app di oggi (i quattro stati con `forced-colors` nel nome: i tre nuovi e `focus-search-keyboard-forced-colors`; il progetto `baseline` gira comunque tutto). Un rosso qui vuol dire che il test non descrive l'app di oggi: si corregge il test, non l'app. A fine suite `pgrep -af "vite|chrom|playwright"`.
+
+- [ ] **Step 8: commit** (piccoli, uno per gruppo: `test: misura ripetibile dell'avvio contro la fase 3`, `test: stati di audit in forced-colors`, `test: difetti di focus, Esc e doppio clic affermati come sono oggi`), `git -c core.hooksPath=/dev/null commit`, `git log --format=%B -n 3` senza `Co-authored-by`, push. Commento finale: `BASELINE_SHA`, conteggi (`npm test` 1045 invariato; e2e toccati, dev, audit con `-g`), misura dell'avvio, gzip.
+
+**Esecuzione (prototipo, 12/10).** I test dello Step 5 e gli stati dello Step 4 girati sulla build di `0cb7652`: risultati nel paragrafo «Suite del prototipo».
