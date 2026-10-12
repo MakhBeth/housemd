@@ -587,6 +587,14 @@ Divisa in tre piani: 6a (piano 10: albero, ricerca, cronologia), 6b (selettore e
 5. Aggiornare `CLAUDE.md` ("elementi sottili", "light DOM + `@scope`", "niente DOM da stringhe") e
    `README.md` (stack).
 
+7a **fatta** (PR #10): `hmd-settings` (cornice e sezione generale, `settingsView.ts`), `hmd-settings-profiles`,
+`hmd-settings-presets`, `hmd-settings-sync` (con `SyncBinding` in `ai/syncBinding.ts` al posto di `useAiSync`), campi e elenco
+condivisi (`fields.ts`, `itemList.ts`), un solo foglio `sections.css` con `@scope` a più radici. Unico cambio voluto: la chiave API
+non finisce più nell'attributo `value` del campo password, quindi non è nel DOM serializzato. Eccezioni di `architecture.test.ts`:
+`@scope` con più radici nella stessa cartella e `controller.setSecret(` ammesso solo in `profiles.element.ts`. Dieci stati di
+audit nuovi (116 → 136), `npm test` 980 → 1017, e2e 187 → 202 (200 + i 2 noti dello start screen), dev 172 → 187, snapshot
+invariati. In `src/ui/` restano `WorkspaceView`, `App` e gli hook (7b). Bundle gzip 441 143 → 444 254 B (React c'è ancora).
+
 ### Fase 8: rifinitura e richiesta di merge
 
 - Bundle e tempo di avvio rispetto al baseline della fase 0 (atteso: −40 KB gzip circa per
@@ -829,6 +837,7 @@ wikilink:
    `docs/superpowers/plans/2026-10-09-housemd-wc-09-fase-5b-editor-e-diff.md` (fase 5b);
    `docs/superpowers/plans/2026-10-10-housemd-wc-10-fase-6a-pannelli-del-workspace.md` (fase 6a);
    `docs/superpowers/plans/2026-10-11-housemd-wc-11-fase-6b-composer-e-sidebar-ai.md` (fase 6b);
-   `docs/superpowers/plans/2026-10-11-housemd-wc-12-fase-6c-revisione.md` (fase 6c).
+   `docs/superpowers/plans/2026-10-11-housemd-wc-12-fase-6c-revisione.md` (fase 6c);
+   `docs/superpowers/plans/2026-10-12-housemd-wc-13-fase-7-impostazioni-workspace-app.md` (fase 7, 7a e 7b).
 3. Fasi 4–6 (elementi in convivenza).
 4. Fasi 7–8 (impostazioni, workspace, via React, rifinitura, richiesta di merge).

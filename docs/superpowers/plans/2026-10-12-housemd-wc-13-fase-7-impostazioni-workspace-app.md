@@ -51,6 +51,8 @@ Baseline su `5fa9abf` (= `epic/LAB-3-web-components`), nel prototipo: `npm test`
 - **Il primo audit del prototipo è caduto all'avvio del server** («Process from config.webServer was not able to start»): `npm run build` comincia con `tsc`, e codice che non compila blocca tutto. Prima di una suite: `npx tsc --noEmit`.
 - **`hmd-app` con gli stati di `App.tsx`**: lo `hmd-start-screen` resta lo stesso elemento tra le sue modalità (React lo riusava: stesso tag nella stessa posizione) e le proprietà che un ramo non passa tornano al default (React 19 le azzerava).
 
+**Esecuzione 7a (12/10).** Misure sul commit finale della 7a: `npx tsc --noEmit` e `npm run lint` puliti; `npm test` **1017** (1016 del piano + 1 test in più del Task 3); `test:e2e` **202** (200 verdi + i 2 dello start screen, chiaro e scuro; snapshot invariati; 2,8 min); `test:e2e:dev` **187** (5,8 min); audit **136** verdi contro `dist-baseline/` (`BASELINE_SHA` `7aab561`, copiata dal checkout del Task 3, mai ricostruita; 4,0 min); bundle principale gzip **444 254 B** (+3 111 rispetto ai 441 143 B della baseline: gli elementi nuovi convivono con React). Tutte e tre le suite con 2 worker, nessuna caduta per memoria, nessun processo appeso a fine suite. Nessuna deviazione dal piano.
+
 ### Inventario
 
 **`src/ui/ai/settings/ItemList.tsx`** (50 righe; CSS: `.list`, `.item` (+`[aria-current]`), `.create` (`composes: item`) di `Settings.module.css`)
