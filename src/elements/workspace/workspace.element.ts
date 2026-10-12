@@ -132,6 +132,8 @@ export class HmdWorkspace extends HmdElement {
   #historyPath = '';
   #queuedRestore: { id: number; path: string } | null = null;
   #aiSelection: TextRange | null = null;
+  /** Bozza del composer AI: la sidebar si ricrea a ogni ritorno alla modalità AI, il testo scritto resta (LAB-10). */
+  #aiDraft = '';
   #orphans: string[] = [];
   #orphanNodes = new Map<string, HTMLButtonElement>();
   #orphanKey: unknown[] = [];
@@ -260,6 +262,7 @@ export class HmdWorkspace extends HmdElement {
     this.#aiSession?.close();
     this.#aiSession = null;
     this.#ai = null;
+    this.#aiDraft = '';
     // Tornando alla schermata iniziale il titolo è quello dell'app.
     document.title = APP_TITLE;
   }
@@ -664,8 +667,14 @@ export class HmdWorkspace extends HmdElement {
     const aiMode = this.#shown === 'ai' && !!ai;
     const aiSidebar = this.#slot('aiSidebar', aiMode, () => {
       const sidebar = el('hmd-ai-sidebar', {
-        on: { 'hmd-ai-manage': () => this.#openSettings('ai-profiles'), 'hmd-ai-sync-reactivate': () => this.#openSettings('ai-sync') },
+        on: {
+          'hmd-ai-manage': () => this.#openSettings('ai-profiles'),
+          'hmd-ai-sync-reactivate': () => this.#openSettings('ai-sync'),
+          'hmd-ai-draft': (event) => void (this.#aiDraft = event.detail.text),
+        },
       });
+      // Prima dell'inserimento: il composer legge la bozza solo nascendo.
+      sidebar.draft = this.#aiDraft;
       sidebar.getSelection = () => {
         const selected = this.#session.selection?.main;
         return selected && !selected.empty ? { from: selected.from, to: selected.to, originalText: this.#session.textLf.slice(selected.from, selected.to), status: 'valid' } : undefined;
