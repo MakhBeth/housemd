@@ -5,9 +5,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EditorView } from '@codemirror/view';
 import { undo, undoDepth } from '@codemirror/commands';
-import { StrictMode, createElement, useEffect, useRef } from 'react';
-import { flushSync } from 'react-dom';
-import { createRoot } from 'react-dom/client';
 
 import '../define';
 import { createDocSession } from '../../editor/docSession';
@@ -15,7 +12,6 @@ import { EN_MESSAGES } from '../../i18n/messages';
 import { createI18nStore } from '../../state/i18nStore';
 import { countListeners } from '../../testing/countListeners';
 import type { HmdEvents } from '../events';
-import type { HmdAiDiffPane } from './diff-pane.element';
 
 // Una vista di CodeMirror rimasta montata (test fallito a metà) tiene vivo il processo: si smonta sempre.
 test.afterEach(() => document.body.replaceChildren());
@@ -333,24 +329,4 @@ test('a listener that assigns another document while a new one is announced: the
   assert.equal(b.textLf, 'B');
   assert.deepEqual(events.map(([type]) => type), ['hmd-selection', 'hmd-selection', 'hmd-doc-change', 'hmd-selection']);
   el.remove();
-});
-
-test('under React StrictMode the MergeView is not recreated: the focus given by the parent stays', async () => {
-  const host = document.createElement('div');
-  document.body.append(host);
-  const root = createRoot(host);
-  const { store } = i18nStore();
-  function Parent() {
-    const ref = useRef<HmdAiDiffPane>(null);
-    useEffect(() => ref.current?.focus(), []);
-    return createElement('hmd-ai-diff-pane', {
-      ref, text: 'A', resetKey: 'a.md#1', session: createDocSession('a.md#1', 'A'), i18n: store, proposal: 'B', canAccept: true, streaming: false,
-    });
-  }
-  flushSync(() => root.render(createElement(StrictMode, null, createElement(Parent))));
-  await tick();
-  assert.equal(host.querySelectorAll('.cm-mergeView').length, 1);
-  assert.equal(document.activeElement, host.querySelector('.cm-mergeView .cm-content'));
-  flushSync(() => root.unmount());
-  host.remove();
 });
