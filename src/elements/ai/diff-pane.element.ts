@@ -2,6 +2,7 @@ import { MergeView, goToNextChunk, goToPreviousChunk } from '@codemirror/merge';
 import { Compartment, EditorState, Transaction } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { basicSetup } from 'codemirror';
+import { StyleModule } from 'style-mod';
 
 import type { TextRange } from '../../ai/selectionChip';
 import { el } from '../../dom/el';
@@ -15,6 +16,21 @@ import { controlDisabled, insideRange, rejectChange, type ControlAction } from '
 import './diff-pane.css';
 
 const LABEL: Record<ControlAction, 'ai.acceptBlock' | 'ai.rejectBlock'> = { accept: 'ai.acceptBlock', reject: 'ai.rejectBlock' };
+
+/**
+ * Le tre proprietà dei pulsanti per blocco che `@codemirror/merge` dichiara nel suo `StyleModule`, fuori da ogni
+ * layer (`.cm-merge-revert button`: `position: absolute`, `background: none`, `cursor: pointer`). Uno stile fuori
+ * dai layer vince su ogni regola normale di un layer (`diff-pane.css`): qui stanno nella stessa origine, con una
+ * specificità più alta (0,2,1 contro 0,1,1), e vincono senza forzare la priorità (analisi del layer `vendor`, piano 6c).
+ * Il resto dell'aspetto dei pulsanti resta nel foglio.
+ */
+const revertButtonStyles = EditorView.styleModule.of(
+  new StyleModule({
+    '.cm-merge-revert > .revert > button': { position: 'static' },
+    '.cm-merge-revert > .revert > button:hover:not(:disabled)': { background: 'var(--c-accent-soft)' },
+    '.cm-merge-revert > .revert > button:disabled': { cursor: 'default' },
+  }),
+);
 
 /**
  * Diff della revisione AI (era DiffPane.tsx): MergeView con il documento a sinistra (a, dalla sessione:
@@ -136,6 +152,7 @@ export class HmdAiDiffPane extends HmdDocElement {
           EditorState.transactionFilter.of((tr) => (this.#remote || !tr.docChanged || insideRange(tr.changes, this.#range) ? tr : [])),
           docAppearance(),
           EditorView.contentAttributes.of(() => ({ 'aria-label': this.translator()('ai.diff.proposal') })),
+          revertButtonStyles,
           this.#rightEditable.of(readOnlyExtensions(this.#streaming)),
           EditorView.updateListener.of((update) => {
             if (!update.docChanged || this.#remote) return;

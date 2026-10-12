@@ -46,6 +46,8 @@ const theme = EditorView.theme({
   '.cm-gutters': { backgroundColor: 'var(--c-surface)', color: 'var(--c-muted)', border: 'none' },
   '.cm-activeLine, .cm-activeLineGutter': { backgroundColor: 'color-mix(in srgb, var(--c-accent-soft) 35%, transparent)' },
   '.cm-cursor': { borderLeftColor: 'var(--c-text)' },
+  // !important: il tema base di @codemirror/view (`&light.cm-focused > .cm-scroller > .cm-selectionLayer
+  // .cm-selectionBackground`) ha una specificità più alta; toglierlo vorrebbe dire copiare quel selettore interno.
   '&.cm-focused .cm-selectionBackground, .cm-selectionBackground': {
     backgroundColor: 'color-mix(in srgb, var(--c-accent) 25%, transparent) !important',
   },
