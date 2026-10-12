@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { translate } from '../../i18n/i18n';
 import { EN_MESSAGES } from '../../i18n/messages';
 import type { WorkspaceState } from '../../workspace/workspace';
-import { docKey, reopenPlan, shownMode, toastItems, toastTarget, unloadNeedsConfirm } from './workspaceView';
+import { docKey, folderBlocker, historyBlocker, reopenPlan, shownMode, toastItems, toastTarget, unloadNeedsConfirm } from './workspaceView';
 
 const t = (key: string, params?: Record<string, string | number>) => translate(EN_MESSAGES, key, params);
 
@@ -44,4 +44,14 @@ test('reopening the last file: open it if it is still there, otherwise only thro
   assert.deepEqual(reopenPlan(null, ['a.md']), { kind: 'none' });
   assert.deepEqual(reopenPlan('a.md', ['a.md']), { kind: 'open', path: 'a.md' });
   assert.deepEqual(reopenPlan('gone.md', ['a.md']), { kind: 'draft', path: 'gone.md' });
+});
+
+test('History is blocked only with no document open', () => {
+  assert.equal(historyBlocker(null), 'toolbar.history.noDocument');
+  assert.equal(historyBlocker({} as never), null);
+});
+
+test('the folder button is blocked only while a folder is opening', () => {
+  assert.equal(folderBlocker(true), 'folder.opening');
+  assert.equal(folderBlocker(false), null);
 });
