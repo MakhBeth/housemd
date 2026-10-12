@@ -588,7 +588,7 @@ const STATES: State[] = [
       await settings.getByRole('link', { name: app.t('settings.aiProfiles') }).click();
       await settings.getByRole('button', { name: `+ ${app.t('ai.create')}` }).first().click();
       await settings.getByRole('combobox', { name: app.t('ai.provider'), exact: true }).selectOption('anthropic');
-      await expect(settings.getByRole('button', { name: app.t('ai.saveSecret') })).toBeDisabled();
+      await expect(settings.getByRole('button', { name: app.t('ai.saveSecret') })).toBeVisible();
     },
   },
   {

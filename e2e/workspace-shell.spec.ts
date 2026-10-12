@@ -24,7 +24,12 @@ test('dragging the separator resizes the sidebar and is remembered; the AI panel
 test('with no file open: the hint and New file, which creates the file and opens it', async ({ app, page }) => {
   await app.openFolder({ 'a.md': '# A' });
   await expect(page.getByText(app.t('empty.hint'))).toBeVisible();
-  await expect(page.getByRole('button', { name: app.t('toolbar.history') })).toBeDisabled();
+  const history = page.getByRole('button', { name: app.t('toolbar.history') });
+  await expect(history).toBeEnabled();
+  await history.focus();
+  await history.click();
+  await expect(page.getByRole('status').filter({ hasText: app.t('toolbar.history.noDocument') })).toBeVisible();
+  await expect(history).toBeFocused();
   await page.getByRole('main').getByRole('button', { name: app.t('file.new'), exact: true }).click();
   const dialog = page.getByRole('dialog');
   await dialog.getByRole('textbox').fill('new');
