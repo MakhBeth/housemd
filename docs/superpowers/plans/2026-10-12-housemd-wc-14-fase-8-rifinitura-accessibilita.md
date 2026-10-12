@@ -503,7 +503,9 @@ Attesi tutti verdi sull'app di oggi (i quattro stati con `forced-colors` nel nom
 **Files:**
 - Modify: `src/app/switchFolder.ts` (+ `switchFolder.test.ts`), `src/elements/app/app.element.ts` (+ `app.dom.test.ts`), `src/elements/file-tree/file-tree.element.ts`, `src/elements/workspace/workspace.element.ts` (solo `focusStart()`), `e2e/startup.spec.ts`
 
-R1, R2 (review della 7b) e A2. Il codice qui sotto è quello del prototipo, con i test verdi (decisione 3).
+R1, R2 (review della 7b) e A2. Il codice qui sotto è quello del prototipo, con i test verdi in jsdom e l'e2e verde nel browser (decisione 3).
+
+**A2, misurato nel browser.** Il recupero con `focusScope`/`refocus` del `RenderLoop` (la prima versione del prototipo, verde in jsdom) nel browser non scatta: durante il cambio la schermata iniziale è `busy` e mette i suoi pulsanti `disabled`, e Chrome toglie subito il focus a un pulsante che diventa `disabled`; quando la schermata sparisce il focus è già sul `body`. Per questo `hmd-app` guarda il focus **all'inizio** dell'operazione (in `#exclusive`, prima di `busy`) e lo porta nello workspace quando l'apertura riesce. Il test jsdom simula Chrome con un `blur()` esplicito, con il commento. (Una scelta annullata lascia comunque il focus sul `body`, per lo stesso `disabled`: lo corregge la regola «mai disabled» sulla schermata iniziale, Task 9.)
 
 - [ ] **Step 1: test che falliscono** (RED da annotare). Le tre riproduzioni dell'allegato di LAB-54 diventano test di `app.dom.test.ts` (stesso `deps()` e `mount()` del file), più il focus (A2) e il `signal` di `switchFolder`:
 
@@ -541,10 +543,10 @@ index 0bb0558..11e6908 100644
 +  }
 +});
 diff --git a/src/elements/app/app.dom.test.ts b/src/elements/app/app.dom.test.ts
-index c751db3..e2c05ee 100644
+index c751db3..521144e 100644
 --- a/src/elements/app/app.dom.test.ts
 +++ b/src/elements/app/app.dom.test.ts
-@@ -144,3 +144,60 @@ test('detached while the folder is opening: the folder opened afterwards is disp
+@@ -144,3 +144,63 @@ test('detached while the folder is opening: the folder opened afterwards is disp
    await waitFor(() => disposed.length === 1);
    assert.equal(el.screen, 'boot');
  });
@@ -599,6 +601,9 @@ index c751db3..e2c05ee 100644
 +    const button = [...el.querySelectorAll<HTMLButtonElement>('hmd-start-screen button')].find((b) => b.textContent === label)!;
 +    button.focus();
 +    button.click();
++    // Chrome toglie il focus a un pulsante che diventa `disabled` (la schermata iniziale è `busy` durante il
++    // cambio); jsdom no: lo si fa a mano.
++    button.blur();
 +    await waitFor(() => el.screen === 'open');
 +    const row = el.querySelector('hmd-file-tree [tabindex="0"]');
 +    assert.ok(row !== null && document.activeElement === row, `${mode}: the tree row with the tab stop, not ${document.activeElement?.localName}`);
@@ -609,7 +614,7 @@ index c751db3..e2c05ee 100644
 
 RED atteso (misurato): `switchFolder.test.ts` 1 rosso («a switch whose caller goes away…»); `app.dom.test.ts` 4 rossi: i due «detached while … opens» (la cartella tardiva non viene eliminata, `log` contiene `update open` e, nella scelta, `save picked`), «detached and reattached while booting» (`waitFor` scade: la schermata resta `boot`), «the focus follows the folder» (`pick: … not body`).
 
-- [ ] **Step 2: `switchFolder` con `signal`, `hmd-app` con la vita nel documento.**
+- [ ] **Step 2: `switchFolder` con `signal`, `hmd-app` con la vita nel documento e il focus catturato all'inizio.**
 
 ```diff
 diff --git a/src/app/switchFolder.ts b/src/app/switchFolder.ts
@@ -668,10 +673,10 @@ index c48a2b6..4aa487d 100644
    deps.persist?.(value);
    return { kind: 'opened', value };
 diff --git a/src/elements/app/app.element.ts b/src/elements/app/app.element.ts
-index 102ff4c..d0552b5 100644
+index 102ff4c..090ff33 100644
 --- a/src/elements/app/app.element.ts
 +++ b/src/elements/app/app.element.ts
-@@ -38,8 +38,12 @@ export class HmdApp extends HmdElement {
+@@ -38,8 +38,14 @@ export class HmdApp extends HmdElement {
    #guard = switchGuard();
    #switching = false;
    #dbBlocked = false;
@@ -683,20 +688,12 @@ index 102ff4c..d0552b5 100644
 +   * arrivato dopo il distacco si butta senza effetti (né schermata, né `setUpdateWorkspace`, né salvataggio).
 +   */
 +  #alive = new AbortController();
++  /** Scelta o ripresa partita con il focus nella schermata iniziale. */
++  #focusOnOpen = false;
    #start: HmdStartScreen | null = null;
    #workspace: HmdWorkspace | null = null;
    #updateNotice: HmdUpdateNotice | null = null;
-@@ -47,6 +51,9 @@ export class HmdApp extends HmdElement {
-   #loop = new RenderLoop(this, {
-     ready: () => !!this.#updates && !!this.#i18n && !!this.#theme && !!this.#route && this.isConnected,
-     render: () => this.#render(this.#i18n!),
-+    // Scelta o ripresa riuscita: il pulsante della schermata iniziale sparisce con il focus dentro.
-+    focusScope: () => this.#start,
-+    refocus: () => this.#workspace?.focusStart(),
-   });
- 
-   get updates(): UpdateFlow | null { return this.#updates; }
-@@ -67,35 +74,37 @@ export class HmdApp extends HmdElement {
+@@ -67,35 +73,37 @@ export class HmdApp extends HmdElement {
    /** Schermata corrente (per i test). */
    get screen(): Screen['kind'] { return this.#screen.kind; }
  
@@ -747,7 +744,29 @@ index 102ff4c..d0552b5 100644
        this.#show({ kind: 'open', stored, workspace });
      })();
    }
-@@ -127,12 +136,14 @@ export class HmdApp extends HmdElement {
+@@ -112,27 +120,36 @@ export class HmdApp extends HmdElement {
+     this.#screen = screen;
+     this.#deps.setUpdateWorkspace(screen.kind === 'open' ? screen.workspace : null);
+     this.#loop.update();
++    // Il pulsante della schermata iniziale, che aveva il focus, non c'è più: il focus va all'albero.
++    if (screen.kind === 'open' && this.#focusOnOpen) this.#workspace?.focusStart();
++    this.#focusOnOpen = false;
+   }
+ 
+   // Un cambio cartella (o ripresa dell'accesso) alla volta: ognuno cattura lo workspace aperto all'inizio.
+   async #exclusive(task: () => Promise<void>): Promise<void> {
+     if (this.#guard.active) return;
++    // Il focus sta nella schermata iniziale adesso, prima che `busy` spenga i suoi pulsanti (Chrome toglie il
++    // focus a un pulsante che diventa `disabled`): a cartella aperta va nello workspace nuovo (A2).
++    this.#focusOnOpen = !!this.#start?.contains(document.activeElement);
+     this.#set({ switching: true });
+     try {
+       await this.#guard.run(task);
+     } finally {
++      this.#focusOnOpen = false;
+       this.#set({ switching: false });
+     }
+   }
  
    #choose(): void {
      const deps = this.#deps;
@@ -762,7 +781,7 @@ index 102ff4c..d0552b5 100644
          open: async (handle: FileSystemDirectoryHandle) => {
            // Una cartella già aperta in passato tiene il suo workspaceId (bozze e ultimo file restano suoi).
            const workspaceId = (await deps.knownWorkspaceId(handle).catch(() => null)) ?? crypto.randomUUID();
-@@ -144,6 +155,7 @@ export class HmdApp extends HmdElement {
+@@ -144,6 +161,7 @@ export class HmdApp extends HmdElement {
          // La cartella vecchia non si è potuta lasciare: quella nuova, già caricata, si butta.
          discard: ({ workspace }) => workspace.dispose(),
        });
@@ -770,7 +789,7 @@ index 102ff4c..d0552b5 100644
        match(afterSwitch(result, current !== null))
          .with({ kind: 'show' }, ({ screen: next }) => this.#show(next))
          .with({ kind: 'reportError' }, ({ detail }) => current?.reportFolderError(detail))
-@@ -154,11 +166,14 @@ export class HmdApp extends HmdElement {
+@@ -154,11 +172,14 @@ export class HmdApp extends HmdElement {
  
    #resume(): void {
      const deps = this.#deps;
@@ -833,7 +852,7 @@ In `src/elements/workspace/workspace.element.ts`, subito sopra `get workspace()`
 
 - [ ] **Step 4: verde.** `npx tsx --import ./src/testing/assetHooks.ts --test --test-timeout=20000 src/app/switchFolder.test.ts src/elements/app/app.dom.test.ts src/elements/file-tree/*.test.ts` (atteso: tutto verde; `app.dom.test.ts` 10 test). Le tre riproduzioni dell'allegato, lanciate così come sono dalla radice del checkout (`npx tsx --import ./src/testing/assetHooks.ts --test review-app-lifecycle.test.ts`, file **non** committato), devono passare tutte e tre; poi il file si cancella.
 
-- [ ] **Step 5: e2e rovesciato.** In `e2e/startup.spec.ts` il test del Task 1 diventa:
+- [ ] **Step 5: e2e rovesciato.** In `e2e/startup.spec.ts` il test A2 del Task 1 diventa (verde nel prototipo):
 
 ```ts
 test('after opening a folder from the start screen the focus goes to the tree row with the tab stop (A2)', async ({ app }) => {
