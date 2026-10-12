@@ -66,6 +66,8 @@ export class HmdAiModelChip extends HmdElement {
   #id = '';
   #open = false;
   #rows = new WeakMap<Element, ProfileRow>();
+  /** Il selettore del modello dell'apertura corrente (uno nuovo a ogni apertura del popover). */
+  #modelSelect: HmdAiModelSelect | null = null;
   #loop = new RenderLoop(this, {
     ready: () => !!this.#parts && !!this.#controller && !!this.#i18n && this.isConnected,
     render: () => this.#render(this.#parts!, this.#controller!, this.#i18n!),
@@ -184,17 +186,20 @@ export class HmdAiModelChip extends HmdElement {
       popoverParts(groups, this.#open),
       (part: PopoverPart) => part,
       (part) => this.#createPart(parts, part),
-      (node, part) => {
+      // I nodi fissi si prendono da `parts` (tipati); il selettore del modello, l'unico nodo creato qui, dal
+      // suo campo: niente cast sul nodo generico di reconcileList.
+      (_node, part) => {
         if (part === 'group:local' || part === 'group:cloud') {
-          const group = groups.find((g) => g.local === (part === 'group:local'))!;
-          this.#renderGroup(node as HTMLFieldSetElement, group, profile.id, t);
-        } else if (part === 'model') {
-          const select = node as HmdAiModelSelect;
+          const local = part === 'group:local';
+          const group = groups.find((g) => g.local === local)!;
+          this.#renderGroup(local ? parts.groups.local : parts.groups.cloud, group, profile.id, t);
+        } else if (part === 'model' && this.#modelSelect) {
+          const select = this.#modelSelect;
           select.controller = controller;
           select.profile = effective;
           select.i18n = i18n;
         } else if (part === 'params') {
-          const params = node as HmdAiParameters;
+          const params = parts.params;
           params.profile = effective;
           params.value = { ...profile.params, ...overrides };
           params.hideEffort = true;
@@ -226,7 +231,7 @@ export class HmdAiModelChip extends HmdElement {
         return parts.actions;
       case 'model':
         // Un selettore nuovo a ogni apertura, come il componente che React montava: riparte senza «Altro…».
-        return el('hmd-ai-model-select', { on: { 'hmd-ai-model-change': (event) => this.#override(event.detail.selection) } });
+        return (this.#modelSelect = el('hmd-ai-model-select', { on: { 'hmd-ai-model-change': (event) => this.#override(event.detail.selection) } }));
     }
   }
 

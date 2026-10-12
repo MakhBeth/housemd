@@ -5,6 +5,7 @@ import { docExtensions, type DocHost } from '../../editor/docExtensions';
 import { docStateConfig, saveDocSession, type DocSession } from '../../editor/docSession';
 import type { Translate } from '../../editor/formatToolbar';
 import type { RestoreCommand } from '../../editor/restoreCommand';
+import type { MessageKey } from '../../i18n/messages';
 import type { DocTitle } from '../../search/searchIndex';
 import type { I18nStore } from '../../state/i18nStore';
 import { emit } from '../events';
@@ -44,6 +45,7 @@ export abstract class HmdDocElement extends HmdElement {
     readOnly: () => this.#readOnly,
     session: () => this.#shownSession,
     t: () => this.translator(),
+    contentLabel: () => this.translator()(this.contentLabelKey),
     getDocs: () => this.#getDocs(),
     saveImage: (file) => this.#saveImage?.(file) ?? Promise.resolve(null),
     docChanged: (changes, texts) => emit(this, 'hmd-doc-change', { changes, before: texts.before, after: texts.after }),
@@ -88,6 +90,9 @@ export abstract class HmdDocElement extends HmdElement {
     this.#i18n = value;
     this.i18nChanged();
   }
+
+  /** Chiave del nome accessibile del contenuto: il documento nell'editor, il documento attuale nel diff. */
+  protected readonly contentLabelKey: MessageKey = 'editor.content';
 
   /** Traduzione attuale (la barra di formattazione la legge quando compare). Non `translate`: è di HTMLElement. */
   protected translator(): Translate {

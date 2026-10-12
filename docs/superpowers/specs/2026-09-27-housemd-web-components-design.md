@@ -3,7 +3,7 @@
 Data: 2026-09-27 · **Revisione: 2026-10-05**
 Base: `main` (HEAD `822f52d`: v1.1, strumenti AI, impostazioni a pagina, barra di formattazione,
 larghezza del testo, tooltip disegnati, albero con un solo tab stop).
-Stato: fasi 0–3 implementate (fase 0 PR #6, fase 1 PR #7, fase 2 in `main` (merge locale, commit 1b23305), fase 3 in `main` (merge locale)); fasi 4a–4c in `main` (merge del 05/10 per 4a+4b e dell'08/10 per la 4c, dal branch `feat/web-components`); fasi 5a e 5b in `main` (merge del 09/10, dal branch `feat/web-components`); fase 6a in `main` (merge dell'11/10); fase 6b sul branch `feat/web-components`, in `main` al merge della sotto-fase; fasi 6c–8 ancora piano.
+Stato: fasi 0–3 implementate (fase 0 PR #6, fase 1 PR #7, fase 2 in `main` (merge locale, commit 1b23305), fase 3 in `main` (merge locale)); fasi 4a–4c in `main` (merge del 05/10 per 4a+4b e dell'08/10 per la 4c, dal branch `feat/web-components`); fasi 5a e 5b in `main` (merge del 09/10, dal branch `feat/web-components`); fase 6a in `main` (merge dell'11/10); fase 6b in `main`; fase 6c sul branch `epic/LAB-3-web-components`, in `main` al merge dell'epica; fasi 7–8 ancora piano.
 
 Decisioni (27/09, riviste il 01/10; risposte alle domande aperte, §12):
 
@@ -141,7 +141,7 @@ Nuovi:
    entrano con `textContent`. Lo fa rispettare un test statico (§8.3).
 3. **Light DOM + `@scope`** per tutti gli elementi dell'app (§4). Lo Shadow DOM non si usa, salvo
    una revisione esplicita di questo documento.
-4. **Pulsanti mai disattivati** (regola di Davide, 11/10). Un pulsante d'azione non diventa `disabled` (né `aria-disabled`) quando l'azione non è possibile: resta attivo e, attivato, dice perché in una nota `role="status"` accanto (vuota di norma, svuotata quando la causa sparisce), mai in un toast né in un tooltip. Applicata nella 6b a Invia e Nuova chat; da estendere alla 6c (barra della revisione) e alla fase 8 (passata di accessibilità).
+4. **Pulsanti mai disattivati** (regola di Davide, 11/10). Un pulsante d'azione non diventa `disabled` (né `aria-disabled`) quando l'azione non è possibile: resta attivo e, attivato, dice perché in una nota `role="status"` accanto (vuota di norma, svuotata quando la causa sparisce), mai in un toast né in un tooltip. Applicata nella 6b a Invia e Nuova chat e nella 6c alla barra della revisione (con le ragioni del controller nel composer); da estendere alla fase 8 (passata di accessibilità: pulsanti dei blocchi nel diff, impostazioni, dialog).
 
 ---
 
@@ -333,12 +333,12 @@ export abstract class HmdElement extends HTMLElement {
   callback-proprietà non comincia mai con `on`: React 19 tratta ogni prop funzione `on…` di un
   custom element come un listener dell'evento omonimo, anche se la proprietà esiste (misurato
   nella fase 5b).
-- **Convivenza con React 19 (fasi 4–7).** React 19 assegna come proprietà ogni prop il cui nome
+- **Convivenza con React 19 (fasi 4–7, finita nella 7b).** React 19 assegnava come proprietà ogni prop il cui nome
   esiste sull'istanza dell'elemento e registra come listener le prop `on<nome-evento>`. Quindi:
   `define.ts` va importato **prima** del primo render (altrimenti React vede un elemento non
-  aggiornato e imposta attributi); i nomi degli eventi sono minuscoli con trattino (`hmd-open` →
-  prop `onhmd-open`); i tipi JSX dei tag `hmd-*` si dichiarano in un solo file temporaneo
-  `src/elements/jsx.d.ts`, cancellato nella fase 7.
+  aggiornato e imposta attributi); i nomi degli eventi erano minuscoli con trattino (`hmd-open` →
+  prop `onhmd-open`); i tipi JSX dei tag `hmd-*` stavano in un solo file temporaneo
+  `src/elements/jsx.d.ts`, cancellato nella 7b insieme a React.
 
 Host con `display: contents` quando l'elemento sostituisce un componente dentro un layout React: l'albero interno resta quello di React e l'audit degli stili (`e2e/support/styleAudit.ts`) salta il wrapper.
 
@@ -571,6 +571,7 @@ Divisa in tre piani: 6a (piano 10: albero, ricerca, cronologia), 6b (selettore e
   (`reviewStatus`), `hmd-ai-review`, `hmd-ai-sidebar`.
 - 6a **fatta**: `hmd-file-tree` (eventi `hmd-open`, `hmd-tree-action`; `<details>` nativo, tutte le righe nel DOM anche nelle cartelle chiuse, un solo tab stop e menu da tastiera con `ui/treeNav.ts` com'era, menu ⋯ `popover="auto"` ancorato al pulsante con `anchor-name`; logica in `file-tree/treeView.ts`), `hmd-search-panel` (`focusInput()`, evento `hmd-search-open` con i termini; campo creato una volta e mai riscritto, pausa di 120 ms, `segments()` → `<mark>`; `search-panel/searchView.ts`), `hmd-history-panel` (eventi `hmd-history-restore`, `hmd-history-close`; ingresso `workspace` come `HistorySource`; risposte di `listHistory` superate o tardive scartate; `history-panel/historyView.ts`). I setter disegnano subito, con un render alla volta (`#update()` e `#rendering`); la pausa della ricerca interrotta dal distacco riparte al ricollegamento; il diff della cronologia è memorizzato come con `useMemo`. Cambiato di proposito (decisione 3 del piano 10): quando il nodo con il focus sparisce il focus va sulla riga col tab stop, nel campo di ricerca o sulla versione scelta, non più sul `body`. Audit esteso a righe con bozza/asset/cartella vuota, passaggio e focus da tastiera sulle righe, risultati, nessun risultato, cronologia vuota e identica. Bundle principale gzip: 435 509 → 436 972 B.
 - 6b **fatta**: `hmd-ai-model-select` (evento `hmd-ai-model-change`; elenco dei modelli chiesto con `controller.provider(profile).listModels(signal)` solo al collegamento e quando cambiano tipo, indirizzo o chiave salvata, o con «Aggiorna», risposte tardive o superate scartate; montato anche nel dettaglio dei profili delle impostazioni; `ai/modelSelectView.ts`), `hmd-ai-model-chip` (evento `hmd-ai-manage`; popover `auto` con `popovertarget` e id da `uid`, selettore del modello creato a ogni apertura e tolto alla chiusura, nota privacy; `ai/modelChipView.ts`), `hmd-ai-composer` (`sendPreset()`; casella mai riscritta tranne lo svuotamento dopo l'invio, un solo pulsante Invia/Stop; `ai/composerView.ts`), `hmd-ai-sidebar` (evento `hmd-ai-sync-reactivate`; crea registro, composer e suggerimenti). Gli elementi creano i figli `hmd-*` e passano le proprietà prima dell'inserimento; fogli con limite inferiore sui figli (`@scope (…) to (hmd-…)`). Schema di render comune in `dom/renderLoop.ts` (`RenderLoop`, applicato anche ai tre pannelli della 6a). Test statico: gli elementi non importano `ai/providers` e non toccano le chiavi. Cambiato di proposito (decisione 3 del piano 11): la ✕ del chip della selezione che sparisce lascia il focus nella casella, non sul `body`. Cambiato di proposito (decisione 4, regola di Davide): Invia e Nuova chat non si disattivano mai; quando l'azione non è possibile una nota `role="status"` (sotto il composer, sotto la testata della sidebar) dice perché (chiavi `ai.composer.needText`, `ai.composer.needProfile`, `ai.newChat.alreadyEmpty`), e il focus resta sul pulsante; snapshot «AI review» rigenerati e `dist-baseline/` ricostruita per questo cambio. Audit esteso a chip della selezione, testo scritto, generazione in corso, passaggio sul chip, gruppi di profili, «Altro…», server non raggiungibile, riattivazione della sync, le due note. Bundle principale gzip: 437 013 → 439 695 B.
+- 6c **fatta**: `hmd-ai-review-bar` (eventi `hmd-ai-review-action { action }` e `hmd-ai-review-warning { warning }`; stato in `ai/reviewBarView.ts`: `statusLine`, `actionBlocker`), `hmd-ai-review` (crea barra, `hmd-editor` e `hmd-ai-diff-pane` una volta e li inserisce secondo il ramo; `ai/reviewView.ts`: `ReviewDoc`, `ReviewController`, `reviewModel`, `editedProposal`, `acceptNeedsConfirm`; contatore dei secondi e dialog di conferma legati all'elemento). `AiController` espone `sendBlocker()` e `acceptBlocker(p, all)` (`canAccept` ne deriva): il composer legge la ragione prima di svuotare la casella (chiavi `ai.composer.noDocument`, `ai.composer.updating`, `ai.composer.generating`), la bozza resta. Cambiato di proposito (decisione 3, regola di Davide, §2 vincolo 4): Precedente, Successivo, Scarta e Accetta tutto non si disattivano mai; una nota `role="status"` sotto la riga dei pulsanti dice perché (`ai.review.generating|updating|conflict|scopeLost|truncated|notAcceptable`), il focus resta sul pulsante; `dist-baseline/` ricostruita due volte (stato del composer senza documento; nota della barra), snapshot invariati. Cambiato di proposito (decisione 4): quando il nodo con il focus sparisce passando tra diff ed editor semplice il focus va nell'editor mostrato, non sul `body`; quando arriva la proposta con il focus nella barra il focus resta sul pulsante e non segue il diff (decisione presa in LAB-12, approvata da A11y). Audit esteso a generazione in corso, proposta troncata, popover degli avvisi, editor dopo Accetta tutto, le due note. In `src/ui/` restano `WorkspaceView`, `SettingsView` e le sezioni AI delle impostazioni (fase 7). Bundle principale gzip: 439 717 → 441 143 B.
 
 ### Fase 7: impostazioni, `hmd-workspace`, `hmd-app`, via React (branch)
 
@@ -586,12 +587,53 @@ Divisa in tre piani: 6a (piano 10: albero, ricerca, cronologia), 6b (selettore e
 5. Aggiornare `CLAUDE.md` ("elementi sottili", "light DOM + `@scope`", "niente DOM da stringhe") e
    `README.md` (stack).
 
+7a **fatta** (PR #10): `hmd-settings` (cornice e sezione generale, `settingsView.ts`), `hmd-settings-profiles`,
+`hmd-settings-presets`, `hmd-settings-sync` (con `SyncBinding` in `ai/syncBinding.ts` al posto di `useAiSync`), campi e elenco
+condivisi (`fields.ts`, `itemList.ts`), un solo foglio `sections.css` con `@scope` a più radici. Unico cambio voluto: la chiave API
+non finisce più nell'attributo `value` del campo password, quindi non è nel DOM serializzato. Eccezioni di `architecture.test.ts`:
+`@scope` con più radici nella stessa cartella e `controller.setSecret(` ammesso solo in `profiles.element.ts`. Dieci stati di
+audit nuovi (116 → 136), `npm test` 980 → 1017, e2e 187 → 202 (200 + i 2 noti dello start screen), dev 172 → 187, snapshot
+invariati. In `src/ui/` restano `WorkspaceView`, `App` e gli hook (7b). Bundle gzip 441 143 → 444 254 B (React c'è ancora).
+
+7b **fatta** (PR #11): `hmd-workspace` (`workspace.element.ts`) e `hmd-app` (`app.element.ts`) al posto di `WorkspaceView.tsx` e
+`App.tsx`; moduli puri `aiSession.ts`, `workspaceView.ts`, `appDeps.ts` (dipendenze del browser iniettabili) e
+`theme/browserTheme.ts` (il tema senza `flushSync`); store unici (lingua, tema, rotta, aggiornamenti) creati da `main.ts`.
+Figli condizionali ricreati come faceva React, `doc` nuovo a ogni render per `hmd-ai-review`, test di React tolti
+(`reactInterop.dom.test.ts` e i due «under React StrictMode…»). In `src/` nessun `.tsx` né `*.module.css`; `package.json` senza
+`react`, `react-dom`, `@types/react*` e `@vitejs/plugin-react`; `"jsx"` fuori da `tsconfig.json`. Una correzione della review: chiavi di
+cache separate per l'albero e per la lista dei file (con la sidebar nascosta l'albero restava vecchio). Suite sul commit finale:
+`npm test` 1045, e2e 202 (200 + i 2 noti dello start screen), dev 187, audit 136, snapshot e `dist-baseline/` invariati.
+Bundle principale gzip 441 143 → 379 234 B (−61 909 B).
+
 ### Fase 8: rifinitura e richiesta di merge
 
-- Bundle e tempo di avvio rispetto al baseline della fase 0 (atteso: −40 KB gzip circa per
-  React/ReactDOM, + zod/mini + ts-pattern). Il baseline per misurare la rimozione di React è il bundle della fase 3, 432 419 B gzip con React 19; rispetto alla fase 0 (410 158 B, React 18) il guadagno netto atteso è di circa 22 KB in meno.
+- Bundle e tempo di avvio rispetto al baseline della fase 0 (la rimozione di React è già fatta nella 7b: il
+  riferimento del bundle è la sua misura, 379 234 B gzip, contro i −40 KB attesi ne ha dati −62 KB). Il baseline per misurare la rimozione di React è il bundle della fase 3, 432 419 B gzip con React 19; rispetto alla fase 0 (410 158 B, React 18) il guadagno netto atteso è di circa 22 KB in meno.
 - Passata di accessibilità con l'albero di accessibilità di Chrome sulle schermate principali.
 - Richiesta di approvazione del merge a Davide.
+
+8a **fatta** (PR #12): focus, annunci, nomi accessibili e plurali, senza cambi d'aspetto voluti oltre ai 14 stati di audit elencati nel
+piano (il «⋯» della riga col focus, la regione nascosta, l'indice delle impostazioni). Decisioni che cambiano il contratto:
+`announce` (`src/dom/announce.ts`) è l'unico modo di scrivere in una regione live che deve ri-annunciarsi (svuota, poi riscrive dopo
+`ANNOUNCE_DELAY_MS`); `pluralKey` (`src/i18n/i18n.ts`) sceglie `<chiave>.one|other` con `Intl.PluralRules`, e ogni testo con un numero
+ha le due forme in tutte e nove le lingue; `currentSection` (`settingsView.ts`) calcola la voce corrente dell'indice delle
+impostazioni, fino alle ultime sezioni; `StyleModule` di `style-mod` (ora in `package.json`, già dipendenza di CodeMirror) porta gli
+stili dei pulsanti dei blocchi del diff, così i tre `!important` spariscono. Correzioni della review: `hmd-editor` sposta le
+iscrizioni e riscrive il nome quando cambia lo store i18n; l'esito «pronta» della regione nascosta della barra dice i blocchi da
+rivedere (`ai.proposalBlocks.one|other`, contati da `blockCount` in `diffLogic.ts`) invece di ripetere il registro; `focusStart()`
+usa il nodo di «Nuovo file». Suite sul commit finale: `npm test` 1077, e2e 210 (208 + i 2 noti dello start screen), dev 195, audit 152
+contro la baseline del Task 5. Bundle principale gzip 379 234 → 380 897 B (+1 663 B).
+
+8b **fatta** (PR #13): la regola «mai disabled» su tutta l'app (pulsanti dei blocchi del diff, Salva chiave, Cronologia, Sincronizza ora,
+cambio di cartella, schermata iniziale, Aggiorna; l'indirizzo di Anthropic è di sola lettura) e il contrasto elevato (`forced-colors`:
+icone in `CanvasText`/`ButtonText`/`LinkText`, voce corrente, modalità, bozza orfana e separatore in `Highlight`). Il pulsante resta attivo
+e, attivato, dice perché in una nota `role="status"` accanto (`announce`), con il focus che resta sul pulsante. Correzioni della review,
+come primi commit: il focus uscito di proposito dal diff non viene più riportato sui pulsanti dei blocchi (`focusout`); niente ombra
+dell'anello sulla voce corrente in `forced-colors`; `ai.review.scopeLost` riscritta in modo neutro per «accetta» e «rifiuta» (nove lingue).
+Suite sul commit finale: `npm test` 1098, e2e 213 (211 + i 2 noti dello start screen), dev 198, audit 156 contro la baseline
+`6cc52b5`, nessuno snapshot cambiato. Bundle principale gzip 380 897 → 382 032 B (+1 135 B nell'8b, **+2 798 B** da 379 234: sopra il
++2 KB atteso di circa 750 B). Tempo di avvio (21 giri, mediane, `e2e/startup.config.ts`): `start` **132 ms** (p25–p75 130–138; fase 3: 194),
+`reopen` **208 ms** (202–212; fase 3: 222), entro ±10 % da 139 e 220 ms. Ancora da provare a mano (Davide): checklist §9, nella nota di chiusura.
 
 ---
 
@@ -658,9 +700,8 @@ Limiti di jsdom 30.1.1, verificati nella fase 2: mancano `moveBefore`, `showModa
 
 - nessun `innerHTML`, `outerHTML`, `insertAdjacentHTML`, `document.write` in `src/` fuori da
   `preview/sanitize.ts` (e dai test);
-- nessun import di `react`/`react-dom` e nessun `.tsx` in `src/` **a partire dalla fase 7** (prima
-  saltato con `{ skip }` legato all'esistenza di `src/elements/jsx.d.ts` o di `src/main.tsx`: quando
-  spariscono, il test si attiva da solo);
+- nessun import di `react`/`react-dom` e nessun `.tsx` in `src/` **attivo dalla 7b** (era saltato
+  con `{ skip }` legato a `src/elements/jsx.d.ts` e `src/main.tsx`: spariti quelli, è un test normale);
 - ogni CSS in `src/elements/<cartella>/` contiene solo blocchi `@scope` con le radici di §4.2, dentro
   `@layer components`;
 - `customElements.define` solo in `elements/define.ts`;
@@ -794,16 +835,17 @@ wikilink:
 ## 11. Criteri di completamento
 
 - `package.json` senza `react`, `react-dom`, `@types/react*`, `@vitejs/plugin-react`; con
-  `ts-pattern` e `zod`; senza `tests/browser/` né `test:browser`.
-- Nessun `.tsx` né `*.module.css` in `src/`; `architecture.test.ts` completamente attivo.
+  `ts-pattern` e `zod`; senza `tests/browser/` né `test:browser` (**fatto**, 7b).
+- Nessun `.tsx` né `*.module.css` in `src/`; `architecture.test.ts` completamente attivo (**fatto**, 7b).
 - `npm test`: tutti i test del baseline (488 al 01/10, più quelli aggiunti in `main` nel frattempo)
-  ci sono ancora (stesso nome o rinominati in modo tracciato) e passano, più i nuovi di §8.2–8.3.
-- `npm run lint` e `npm run build` puliti; PWA installabile e funzionante offline.
+  ci sono ancora (stesso nome o rinominati in modo tracciato) e passano, più i nuovi di §8.2–8.3 (**fatto**: 1098 al commit finale dell'8b).
+- `npm run lint` e `npm run build` puliti (**fatto**); PWA installabile e funzionante offline (**resta: Davide**, checklist §9).
 - `npm run test:e2e` verde con gli **stessi snapshot** della fase 0 (ogni rigenerazione elencata e
-  motivata).
-- Merge del branch in `main` solo dopo l'approvazione esplicita di Davide.
-- Checklist §9 completata in Chrome ed Edge.
-- `CLAUDE.md` e `README.md` aggiornati.
+  motivata) (**fatto**: nessuno snapshot rigenerato; restano rossi i 2 dello start screen su ape, per il font pixel).
+- Bundle e tempo di avvio misurati (**fatto**, 8b): gzip 382 032 B (+2 798 B da 379 234, oltre il +2 KB atteso), `start` 132 ms e `reopen` 208 ms.
+- Merge del branch in `main` solo dopo l'approvazione esplicita di Davide (**resta: Davide**).
+- Checklist §9 completata in Chrome ed Edge (**resta: Davide**; elenco completo in `docs/superpowers/notes/2026-10-12-chiusura-migrazione.md`).
+- `CLAUDE.md` e `README.md` aggiornati (**fatto**: 7b e 8b).
 
 ## 12. Domande aperte → decisioni
 
@@ -827,6 +869,10 @@ wikilink:
    `docs/superpowers/plans/2026-10-09-housemd-wc-08-fase-5a-anteprima-e-chat.md` (fase 5a);
    `docs/superpowers/plans/2026-10-09-housemd-wc-09-fase-5b-editor-e-diff.md` (fase 5b);
    `docs/superpowers/plans/2026-10-10-housemd-wc-10-fase-6a-pannelli-del-workspace.md` (fase 6a);
-   `docs/superpowers/plans/2026-10-11-housemd-wc-11-fase-6b-composer-e-sidebar-ai.md` (fase 6b).
+   `docs/superpowers/plans/2026-10-11-housemd-wc-11-fase-6b-composer-e-sidebar-ai.md` (fase 6b);
+   `docs/superpowers/plans/2026-10-11-housemd-wc-12-fase-6c-revisione.md` (fase 6c);
+   `docs/superpowers/plans/2026-10-12-housemd-wc-13-fase-7-impostazioni-workspace-app.md` (fase 7, 7a e 7b);
+   `docs/superpowers/plans/2026-10-12-housemd-wc-14-fase-8-rifinitura-accessibilita.md` (fase 8, 8a e 8b; 8a: PR #12, 8b: PR #13).
+   Nota di chiusura: `docs/superpowers/notes/2026-10-12-chiusura-migrazione.md`.
 3. Fasi 4–6 (elementi in convivenza).
 4. Fasi 7–8 (impostazioni, workspace, via React, rifinitura, richiesta di merge).

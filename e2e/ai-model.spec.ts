@@ -173,7 +173,7 @@ test('in the profile settings the model list loads, and a model typed in Otherâ€
   await field.fill('typed:1b');
   await expect(field).toHaveValue('typed:1b');
   await expect(field).toBeFocused();
-  await settings(app).getByRole('button', { name: app.t('ai.save'), exact: true }).first().click();
+  await settings(app).getByRole('region', { name: app.t('settings.aiProfiles') }).getByRole('button', { name: app.t('ai.save'), exact: true }).click();
   await settings(app).getByRole('button', { name: app.t('settings.close') }).click();
   await app.mode('mode.ai').click();
   await expect(chip(app)).toHaveAccessibleName(`${app.t('ai.profile')}: ollama Â· typed:1b`);

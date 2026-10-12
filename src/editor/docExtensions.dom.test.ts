@@ -33,6 +33,7 @@ function fakeHost(patch: { key?: string; readOnly?: boolean; session?: DocSessio
     readOnly: () => state.readOnly,
     session: () => patch.session ?? null,
     t: () => (key) => translate(EN_MESSAGES, key),
+    contentLabel: () => EN_MESSAGES['editor.content'],
     getDocs: () => [],
     saveImage: patch.saveImage ?? (async () => null),
     docChanged: (changes, texts) => void calls.push(['change', changes, texts]),

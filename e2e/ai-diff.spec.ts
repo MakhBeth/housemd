@@ -6,6 +6,8 @@ const composer = (app: App) => app.page.getByRole('textbox', { name: app.t('ai.r
 const acceptAll = (app: App) => app.page.getByRole('button', { name: app.t('ai.acceptAll'), exact: true });
 // .cm-mergeView, .cm-content e i pulsanti .cm-merge-revert: eccezioni ammesse dalla spec (§8.4).
 const mergeView = (app: App) => app.page.locator('.cm-mergeView');
+/** La proposta è arrivata: il diff è visibile. Non «Accetta tutto attivo»: con i pulsanti mai disattivati (6c) passerebbe subito. */
+const proposalShown = (app: App) => expect(mergeView(app)).toBeVisible();
 const blockButtons = (app: App, action: 'accept' | 'reject'): Locator =>
   app.page.locator(`.cm-merge-revert button[data-action=${action}]`);
 /** Il documento (primo editor della MergeView) e la proposta (l'ultimo). */
@@ -28,7 +30,7 @@ async function review(app: App, original: string): Promise<void> {
   await app.mode('mode.ai').click();
   await composer(app).fill('fix');
   await composer(app).press('Enter');
-  await expect(acceptAll(app)).toBeEnabled();
+  await proposalShown(app);
 }
 
 test.describe('blocks', () => {
@@ -59,6 +61,55 @@ test.describe('blocks', () => {
     await expect.poll(() => docText(app)).toBe('A2\n\nB\n\nC');
   });
 
+  test('during a new generation the block buttons are active: from the keyboard they say why in the review note and keep the focus', async ({ app, ai, page }) => {
+    ai.hold();
+    await composer(app).fill('again');
+    await composer(app).press('Enter');
+    await expect(page.getByRole('button', { name: app.t('ai.stop'), exact: true })).toBeVisible();
+    const note = page.getByRole('status').filter({ hasText: app.t('ai.review.generating') });
+    const reject = blockButtons(app, 'reject').first();
+    await expect(reject).toBeEnabled();
+    await reject.focus();
+    await page.keyboard.press('Space');
+    await expect(note).toBeVisible();
+    await expect(reject).toBeFocused();
+    // Un altro pulsante con la stessa ragione: la nota si svuota e torna (ri-annuncio), il focus resta sul pulsante.
+    const accept = blockButtons(app, 'accept').last();
+    await expect(accept).toBeEnabled();
+    await accept.focus();
+    await page.keyboard.press('Enter');
+    await expect(note).toBeVisible();
+    await expect(accept).toBeFocused();
+    await expect.poll(() => lines(proposal(app))).toBe('A2\n\nB\n\nC2');
+    await expect.poll(() => lines(documentSide(app))).toBe('A\n\nB\n\nC');
+    ai.release();
+    await expect(page.getByRole('button', { name: app.t('ai.send'), exact: true })).toBeVisible();
+    await expect(note).toHaveCount(0);
+  });
+
+  test('during a conflict «accept» of a block says why and keeps the focus; «reject» still works', async ({ app, page }) => {
+    // Modifica locale non salvata nel documento e modifica esterna: conflitto (l'orologio fermo tiene lontano il salvataggio automatico).
+    await page.clock.install();
+    await page.clock.pauseAt(new Date(Date.now() + 10_000));
+    await documentSide(app).click();
+    await page.keyboard.press('ControlOrMeta+End');
+    await page.keyboard.type('!');
+    await page.clock.runFor(100);
+    await app.writeExternal('a.md', 'theirs');
+    await app.windowFocus();
+    await expect(page.getByRole('alert').filter({ hasText: app.t('conflict.message') })).toBeVisible();
+    const accept = blockButtons(app, 'accept').first();
+    await expect(accept).toBeEnabled();
+    await accept.focus();
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('status').filter({ hasText: app.t('ai.review.conflict') })).toBeVisible();
+    await expect(accept).toBeFocused();
+    await expect.poll(() => lines(documentSide(app))).toBe('A\n\nB\n\nC!');
+    await blockButtons(app, 'reject').first().focus();
+    await page.keyboard.press('Space');
+    await expect.poll(() => lines(proposal(app))).toBe('A\n\nB\n\nC2');
+  });
+
   test('Ctrl+Z that brings the diff back leaves the focus in the document: the next shortcut reaches it', async ({ app, page }) => {
     await acceptAll(app).click();
     await expect(mergeView(app)).toHaveCount(0);
@@ -82,7 +133,7 @@ test('a proposal on a selection: edits outside the selection are dropped', async
   await app.mode('mode.ai').click();
   await composer(app).fill('fix');
   await composer(app).press('Enter');
-  await expect(acceptAll(app)).toBeEnabled();
+  await proposalShown(app);
   const before = await lines(proposal(app));
   expect(before).toBe('prefisso GOOD\none\nGOOD suffisso');
   await proposal(app).click();

@@ -25,6 +25,8 @@ interface State {
   forcedColors?: boolean;
   /** Il mouse resta dove l'ha lasciato lo stato (tooltip al passaggio). */
   keepMouse?: boolean;
+  /** Larghezza della finestra (default 1280): per i layout stretti (`@media (width < 700px)`). */
+  width?: number;
   setup(app: App, page: Page, ai: FakeModel): Promise<void>;
 }
 
@@ -160,7 +162,7 @@ const STATES: State[] = [
       const composer = page.getByRole('textbox', { name: app.t('ai.request') });
       await composer.fill('fix');
       await composer.press('Enter');
-      await expect(page.getByRole('button', { name: app.t('ai.acceptAll'), exact: true })).toBeEnabled();
+      await expect(page.locator('.cm-mergeView')).toBeVisible(); // la proposta è arrivata (non «Accetta tutto attivo»: dalla 6c passerebbe subito)
     },
   },
   {
@@ -213,9 +215,9 @@ const STATES: State[] = [
       const composer = page.getByRole('textbox', { name: app.t('ai.request') });
       await composer.fill('fix');
       await composer.press('Enter');
-      await expect(page.getByRole('button', { name: app.t('ai.acceptAll'), exact: true })).toBeEnabled();
-      // Modifica locale non salvata nel documento (lato sinistro del diff) e modifica esterna: conflitto,
-      // e i pulsanti «accetta» dei blocchi si disattivano (stile :disabled).
+      await expect(page.locator('.cm-mergeView')).toBeVisible(); // la proposta è arrivata (non «Accetta tutto attivo»: dalla 6c passerebbe subito)
+      // Modifica locale non salvata nel documento (lato sinistro del diff) e modifica esterna: conflitto. I pulsanti
+      // «accetta» dei blocchi restano attivi con lo stesso aspetto (dall'8b; la baseline 8a li disattivava): attivati, la nota dice perché.
       await page.clock.pauseAt(new Date(Date.now() + 10_000));
       await page.locator('.cm-mergeView .cm-content').first().click();
       await page.keyboard.press('ControlOrMeta+End');
@@ -224,7 +226,97 @@ const STATES: State[] = [
       await app.writeExternal('a.md', 'theirs');
       await app.windowFocus();
       await expect(page.getByRole('alert').filter({ hasText: app.t('conflict.message') })).toBeVisible();
-      await expect(page.locator('.cm-merge-revert button[data-action=accept]').first()).toBeDisabled();
+      await expect(page.locator('.cm-merge-revert button[data-action=accept]').first()).toBeVisible();
+    },
+  },
+  {
+    name: 'ai-review-generating',
+    async setup(app, page, ai) {
+      // Generazione senza ancora una proposta: la barra con il contatore al posto del suggerimento, tutti i pulsanti attivi (dalla 6c).
+      await page.clock.install({ time: NOW });
+      ai.hold();
+      await app.openFolder({ 'a.md': 'A\n\nB\n\nC' });
+      await app.openFile('a.md');
+      await expect(app.mode('mode.ai')).toBeVisible();
+      await app.mode('mode.ai').click();
+      const composer = page.getByRole('textbox', { name: app.t('ai.request') });
+      await composer.fill('fix');
+      await composer.press('Enter');
+      await expect(page.getByRole('button', { name: app.t('ai.stop'), exact: true })).toBeVisible();
+      // Il contatore parte dal Date.now() della richiesta, non da NOW: si avanza di 2,1 s da lì e si ferma l'orologio sul valore raggiunto.
+      await page.clock.runFor(2100);
+      await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 50);
+      await expect(page.getByText(app.t('ai.generating', { seconds: 2 }))).toBeVisible();
+    },
+  },
+  {
+    name: 'ai-review-truncated',
+    async setup(app, page, ai) {
+      // Proposta troncata dal limite del modello: stato «Troncata», Accetta tutto attivo (dalla 6c: la nota al clic).
+      ai.reply = 'A2\n\nB\n\nC2';
+      ai.finishReason = 'length';
+      await app.openFolder({ 'a.md': 'A\n\nB\n\nC' });
+      await app.openFile('a.md');
+      await expect(app.mode('mode.ai')).toBeVisible();
+      await app.mode('mode.ai').click();
+      const composer = page.getByRole('textbox', { name: app.t('ai.request') });
+      await composer.fill('fix');
+      await composer.press('Enter');
+      await expect(page.getByText(app.t('ai.status.truncated')).first()).toBeVisible();
+    },
+  },
+  {
+    name: 'ai-review-warnings',
+    async setup(app, page, ai) {
+      // Il popover degli avvisi aperto sotto il suo pulsante.
+      ai.reply = 'See [[Other]]';
+      await app.openFolder({ 'a.md': 'See [[Target]]' });
+      await app.openFile('a.md');
+      await expect(app.mode('mode.ai')).toBeVisible();
+      await app.mode('mode.ai').click();
+      const composer = page.getByRole('textbox', { name: app.t('ai.request') });
+      await composer.fill('fix');
+      await composer.press('Enter');
+      await page.getByRole('button', { name: app.t('ai.warningsCount.one', { count: 1 }) }).click();
+      await expect(page.getByRole('button', { name: app.t('ai.warning.wikilinks') })).toBeVisible();
+    },
+  },
+  {
+    name: 'ai-review-applied',
+    async setup(app, page, ai) {
+      // Dopo «Accetta tutto»: editor semplice senza barra né suggerimento, con il focus nel testo.
+      ai.reply = 'A2\n\nB\n\nC2';
+      await app.openFolder({ 'a.md': 'A\n\nB\n\nC' });
+      await app.openFile('a.md');
+      await expect(app.mode('mode.ai')).toBeVisible();
+      await app.mode('mode.ai').click();
+      const composer = page.getByRole('textbox', { name: app.t('ai.request') });
+      await composer.fill('fix');
+      await composer.press('Enter');
+      await expect(page.locator('.cm-mergeView')).toBeVisible();
+      await page.getByRole('button', { name: app.t('ai.acceptAll'), exact: true }).click();
+      await expect(page.locator('.cm-mergeView')).toHaveCount(0);
+      await expect(page.locator('.cm-content')).toBeFocused();
+    },
+  },
+  {
+    name: 'ai-review-note',
+    async setup(app, page, ai) {
+      // Generazione tenuta, clic su Accetta tutto: il pulsante resta attivo e la nota sotto la riga dice perché (spec §2 vincolo 4).
+      await page.clock.install({ time: NOW });
+      ai.hold();
+      await app.openFolder({ 'a.md': 'A\n\nB\n\nC' });
+      await app.openFile('a.md');
+      await expect(app.mode('mode.ai')).toBeVisible();
+      await app.mode('mode.ai').click();
+      const composer = page.getByRole('textbox', { name: app.t('ai.request') });
+      await composer.fill('fix');
+      await composer.press('Enter');
+      await expect(page.getByRole('button', { name: app.t('ai.stop'), exact: true })).toBeVisible();
+      await page.clock.runFor(2100);
+      await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 50);
+      await page.getByRole('button', { name: app.t('ai.acceptAll'), exact: true }).click();
+      await expect(page.getByRole('status').filter({ hasText: app.t('ai.review.generating') })).toBeVisible();
     },
   },
   {
@@ -252,7 +344,7 @@ const STATES: State[] = [
       await expect(app.mode('mode.ai')).toBeVisible();
       await app.mode('mode.ai').click();
       await page.getByRole('group', { name: app.t('ai.suggestions') }).getByRole('button').first().click();
-      await expect(page.getByRole('button', { name: app.t('ai.acceptAll'), exact: true })).toBeEnabled();
+      await expect(page.locator('.cm-mergeView')).toBeVisible(); // la proposta è arrivata (non «Accetta tutto attivo»: dalla 6c passerebbe subito)
       // Il riepilogo di un preset: «parti · parole → parole words».
       await expect(page.getByRole('log').getByText(new RegExp(`${app.t('ai.words')}$`))).toBeVisible();
     },
@@ -298,7 +390,9 @@ const STATES: State[] = [
       await composer.fill('fix');
       await composer.press('Enter');
       await expect(page.getByRole('button', { name: app.t('ai.stop'), exact: true })).toBeVisible();
-      await page.clock.pauseAt(NOW.getTime() + 2000);
+      // Il contatore parte dal Date.now() della richiesta, non da NOW: si avanza di 2,1 s da lì e si ferma l'orologio sul valore raggiunto.
+      await page.clock.runFor(2100);
+      await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 50);
     },
   },
   {
@@ -311,6 +405,20 @@ const STATES: State[] = [
       // Invia a casella vuota: il pulsante resta attivo e la nota sotto il composer dice perché (decisione 4).
       await page.getByRole('button', { name: app.t('ai.send'), exact: true }).click();
       await expect(page.getByRole('status').filter({ hasText: app.t('ai.composer.needText') })).toBeVisible();
+    },
+  },
+  {
+    name: 'ai-composer-note-no-document',
+    async setup(app, page) {
+      // Modalità AI senza un documento aperto: Invia resta attivo e la nota dice di aprire un documento.
+      await app.openFolder({ 'a.md': 'Alpha' });
+      await expect(app.mode('mode.ai')).toBeVisible();
+      await app.mode('mode.ai').click();
+      await page.getByRole('textbox', { name: app.t('ai.request') }).fill('fix');
+      await page.getByRole('button', { name: app.t('ai.send'), exact: true }).click();
+      // La nota per testo non basta: l'audit prepara lo stato anche sulla baseline, che può avere il testo di prima
+      // (LAB-10 lo cambia). Basta una nota non vuota.
+      await expect(page.getByRole('status').filter({ hasText: /\S/ }).first()).toBeVisible();
     },
   },
   {
@@ -403,6 +511,123 @@ const STATES: State[] = [
       await expect(app.mode('mode.ai')).toBeVisible();
       await app.mode('mode.ai').click();
       await expect(page.getByRole('button', { name: `⚠ ${app.t('ai.syncReactivate')}` })).toBeVisible();
+    },
+  },
+  // Rete della fase 7 (Task 1): stati delle impostazioni e del guscio del workspace che nessuno fotografa.
+  {
+    name: 'workspace-empty',
+    async setup(app, page) {
+      await app.openFolder({ 'note.md': '# Note' });
+      await expect(page.getByText(app.t('empty.hint'))).toBeVisible();
+    },
+  },
+  {
+    name: 'sidebar-hidden',
+    async setup(app, page) {
+      await workspace(app);
+      await page.getByRole('button', { name: app.t('sidebar.hide'), pressed: true }).click();
+      await expect(app.tree()).toHaveCount(0);
+    },
+  },
+  {
+    name: 'resizer-focus-keyboard',
+    async setup(app, page) {
+      await workspace(app);
+      // Come focus-button-keyboard: l'ultima interazione è la tastiera, così il separatore ha l'anello.
+      await page.getByRole('button', { name: app.t('folder.new') }).first().click();
+      await page.keyboard.press('Escape');
+      const separator = page.getByRole('separator', { name: app.t('sidebar.resize') });
+      await separator.focus();
+      await page.keyboard.press('ArrowRight');
+      await expect(separator).toHaveAttribute('aria-valuenow', '296');
+    },
+  },
+  {
+    name: 'orphans',
+    async setup(app, page) {
+      await app.openFolder({ 'note.md': '# Note' });
+      await app.openFile('note.md');
+      await app.setFlags({ denyWrites: true, request: 'denied' });
+      await app.typeAtEnd('orphan text');
+      await expect(page.getByRole('dialog', { name: app.t('access.title') })).toBeVisible();
+      await app.setFlags({ denyWrites: false, request: 'granted' });
+      await app.removeExternal('note.md');
+      await page.reload();
+      await expect(page.getByRole('region', { name: app.t('orphans.title') }).getByRole('button', { name: 'note.md', exact: true })).toBeVisible();
+      // I toast del ripristino scadono: si chiudono, così le due build non dipendono dal tempo.
+      for (const close of await page.getByRole('button', { name: app.t('toast.close') }).all()) await close.click();
+    },
+  },
+  {
+    name: 'settings-autosave-off',
+    async setup(app, page) {
+      await app.openFolder({ 'note.md': '# Note' });
+      await page.getByRole('button', { name: app.t('toolbar.settings') }).click();
+      const settings = page.getByRole('region', { name: app.t('settings.title') });
+      await settings.getByRole('radio', { name: app.t('settings.autosave.off') }).check();
+      await expect(settings.getByRole('spinbutton', { name: app.t('settings.delay') })).toHaveCount(0);
+    },
+  },
+  {
+    name: 'settings-preset',
+    async setup(app, page) {
+      await app.openFolder({ 'note.md': '# Note' });
+      await page.getByRole('button', { name: app.t('toolbar.settings') }).click();
+      const settings = page.getByRole('region', { name: app.t('settings.title') });
+      await settings.getByRole('link', { name: app.t('settings.aiPresets') }).click();
+      await settings.getByRole('region', { name: app.t('settings.aiPresets') }).getByRole('button').first().click();
+      await expect(settings.getByRole('button', { name: app.t('ai.restoreOriginal') })).toBeVisible();
+    },
+  },
+  {
+    name: 'settings-cloud-profile',
+    async setup(app, page) {
+      await app.openFolder({ 'note.md': '# Note' });
+      await page.getByRole('button', { name: app.t('toolbar.settings') }).click();
+      const settings = page.getByRole('region', { name: app.t('settings.title') });
+      await settings.getByRole('link', { name: app.t('settings.aiProfiles') }).click();
+      await settings.getByRole('button', { name: `+ ${app.t('ai.create')}` }).first().click();
+      await settings.getByRole('combobox', { name: app.t('ai.provider'), exact: true }).selectOption('anthropic');
+      await expect(settings.getByRole('button', { name: app.t('ai.saveSecret') })).toBeVisible();
+    },
+  },
+  {
+    name: 'settings-connected',
+    async setup(app, page) {
+      await app.openFolder({ 'note.md': '# Note' });
+      await page.getByRole('button', { name: app.t('toolbar.settings') }).click();
+      const settings = page.getByRole('region', { name: app.t('settings.title') });
+      await settings.getByRole('link', { name: app.t('settings.aiProfiles') }).click();
+      await settings.getByRole('button', { name: 'ollama', exact: true }).click();
+      await settings.getByRole('button', { name: app.t('ai.connection') }).click();
+      await expect(settings.getByRole('status').filter({ hasText: app.t('ai.connected') })).toBeVisible();
+    },
+  },
+  {
+    name: 'settings-sync-folder',
+    async setup(app, page) {
+      await app.openFolder({ 'note.md': '# Note' });
+      await page.getByRole('button', { name: app.t('toolbar.settings') }).click();
+      const settings = page.getByRole('region', { name: app.t('settings.title') });
+      await settings.getByRole('link', { name: app.t('settings.aiSync') }).click();
+      await app.setFlags({ folder: 'sync' });
+      await settings.getByRole('button', { name: app.t('ai.syncChoose') }).click();
+      await expect(settings.getByRole('button', { name: app.t('ai.syncNow') })).toBeEnabled();
+      // La riga di stato porta l'ora dell'ultima sincronizzazione: si aspetta che sia scritta.
+      await expect(settings.getByText(app.t('ai.backups'))).toBeVisible();
+      await settings.getByText(app.t('ai.backups')).click();
+    },
+  },
+  {
+    name: 'settings-narrow',
+    width: 600,
+    async setup(app, page) {
+      await app.openFolder({ 'note.md': '# Note' });
+      await page.getByRole('button', { name: app.t('toolbar.settings') }).click();
+      const settings = page.getByRole('region', { name: app.t('settings.title') });
+      await settings.getByRole('link', { name: app.t('settings.aiProfiles') }).click();
+      await settings.getByRole('button', { name: 'ollama', exact: true }).click();
+      await expect(settings.getByRole('spinbutton', { name: app.t('ai.param.temperature') })).toBeVisible();
     },
   },
   {
@@ -648,6 +873,47 @@ const STATES: State[] = [
   { name: 'focus-search-keyboard-forced-colors', forcedColors: true, setup: searchFromKeyboard },
 ];
 
+// Rete della fase 8 (Task 1): stati già noti ripresi in forced-colors, in schema chiaro e scuro (icone, voce
+// corrente, modalità, bozza orfana corrente, separatore). Oggi registrano il difetto (sfondi portati a Canvas);
+// il Task 10 li cambia di proposito.
+const orphanCurrent: State = {
+  name: 'orphans-current',
+  async setup(app, page, ai) {
+    await STATES.find((s) => s.name === 'orphans')!.setup(app, page, ai);
+    // Dopo il ricaricamento la bozza orfana è riaperta (ultimo file con bozza): la sua voce è quella corrente.
+    const orphan = page.getByRole('region', { name: app.t('orphans.title') }).getByRole('button', { name: 'note.md', exact: true });
+    await expect(orphan).toHaveAttribute('aria-current', 'true');
+  },
+};
+// Task 10: focus da tastiera su una modalità (la premuta) in forced-colors, dove l'anello sta dentro il pulsante.
+const focusModeKeyboard: State = {
+  name: 'focus-mode-keyboard',
+  async setup(app, page) {
+    await workspace(app);
+    // Come focus-ring.spec.ts: dopo il dialog l'ultima interazione è la tastiera.
+    await page.getByRole('button', { name: app.t('folder.new') }).first().click();
+    await page.keyboard.press('Escape');
+    // Il focus arriva dalla tastiera sulla modalità premuta: l'anello dentro il pulsante è HighlightText.
+    const mode = app.modes().getByRole('button', { pressed: true });
+    await mode.focus();
+    await page.keyboard.press('Shift+Tab');
+    await page.keyboard.press('Tab');
+    await expect(mode).toBeFocused();
+  },
+};
+for (const scheme of ['light', 'dark'] as const) {
+  STATES.push({ ...focusModeKeyboard, name: `focus-mode-keyboard-forced-colors-${scheme}`, scheme, forcedColors: true });
+}
+
+for (const [name, from] of [
+  ['forced-colors-workspace', STATES.find((s) => s.name === 'workspace-light')!],
+  ['forced-colors-settings', STATES.find((s) => s.name === 'settings-profile')!],
+  ['forced-colors-review', STATES.find((s) => s.name === 'ai-review')!],
+  ['forced-colors-orphans', orphanCurrent],
+] as const) {
+  for (const scheme of ['light', 'dark'] as const) STATES.push({ ...from, name: `${name}-${scheme}`, scheme, forcedColors: true });
+}
+
 for (const state of STATES) {
   test.describe(state.name, () => {
     test.use({ colorScheme: state.scheme ?? 'light', forcedColors: state.forcedColors ? 'active' : 'none' });
@@ -679,8 +945,8 @@ for (const state of STATES) {
       });
       // Il gutter di CodeMirror prende l'altezza da una misura che a volte resta di 1 px più bassa: un
       // ridimensionamento della finestra (e ritorno) la rifà sempre.
-      await page.setViewportSize({ width: 1280, height: 799 });
-      await page.setViewportSize({ width: 1280, height: 800 });
+      await page.setViewportSize({ width: state.width ?? 1280, height: 799 });
+      await page.setViewportSize({ width: state.width ?? 1280, height: 800 });
       await page.waitForTimeout(100);
       // CodeMirror misura le altezze in modo asincrono (a volte di 1 px): si legge finché due letture
       // consecutive coincidono, fino a un massimo di dieci tentativi. Se non si stabilizza lo stato

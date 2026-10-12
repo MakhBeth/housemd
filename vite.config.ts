@@ -1,5 +1,4 @@
 import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig({
@@ -10,7 +9,6 @@ export default defineConfig({
     cssTarget: 'chrome123',
   },
   plugins: [
-    react(),
     VitePWA({
       // Aggiornamento solo su richiesta, con il flusso protetto di src/pwa (registerUpdates):
       // niente registrazione automatica e niente reload automatico del plugin.

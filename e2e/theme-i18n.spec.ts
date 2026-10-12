@@ -68,14 +68,14 @@ test.describe('unknown saved language', () => {
 });
 
 // Con le animazioni attive il cambio passa dalla view transition (src/theme/pixelTransition.ts), dove
-// React deve aggiornare il pulsante in modo sincrono (flushSync): il resto della suite usa reducedMotion.
+// gli elementi devono aggiornare il pulsante in modo sincrono, dentro la notifica dello store: il resto della suite usa reducedMotion.
 test.describe('with animations on', () => {
   test.use({ reducedMotion: 'no-preference' });
 
   test('the theme cycle runs through the view transition and updates the button each time', async ({ app, page }) => {
     // Conta le chiamate a startViewTransition (senza, il test passerebbe anche con il ripiego sincrono) e,
     // appena la callback è tornata (senza attendere microtask), registra l'etichetta del pulsante del tema: deve già essere quella nuova,
-    // cioè React ha aggiornato il DOM in modo sincrono dentro la transizione (flushSync).
+    // cioè gli elementi hanno ridisegnato dentro la notifica dello store, quindi dentro la transizione.
     const labels = [app.t('theme.light'), app.t('theme.dark'), app.t('theme.auto')];
     await page.addInitScript((themeLabels) => {
       const w = window as unknown as { __viewTransitions: number; __labelsInTransition: (string | null | undefined)[] };
@@ -112,4 +112,15 @@ test.describe('with animations on', () => {
       await page.evaluate(() => (window as unknown as { __labelsInTransition: unknown[] }).__labelsInTransition),
     ).toEqual(labels);
   });
+});
+
+test('changing the language from the keyboard keeps the focus on the select (A4: not reproduced without a screen reader)', async ({ app, page }) => {
+  await app.openFolder({ 'note.md': '# Note' });
+  await page.getByRole('button', { name: app.t('toolbar.settings') }).click();
+  const select = page.getByLabel(app.t('settings.language'));
+  await select.focus();
+  await page.keyboard.press('ArrowDown');
+  await expect(page.locator('html')).not.toHaveAttribute('lang', 'en');
+  // L'etichetta adesso è in un'altra lingua: il focus si guarda sul nodo, non per nome.
+  await expect.poll(() => page.evaluate(() => document.activeElement?.localName)).toBe('select');
 });

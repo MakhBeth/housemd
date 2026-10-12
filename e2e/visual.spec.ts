@@ -44,7 +44,7 @@ for (const scheme of ['light', 'dark'] as const) {
       const composer = page.getByRole('textbox', { name: app.t('ai.request') });
       await composer.fill('fix');
       await composer.press('Enter');
-      await expect(page.getByRole('button', { name: app.t('ai.acceptAll'), exact: true })).toBeEnabled();
+      await expect(page.locator('.cm-mergeView')).toBeVisible(); // la proposta è arrivata (non «Accetta tutto attivo»: dalla 6c passerebbe subito)
       await shot(app, `ai-review-${scheme}.png`);
     });
   });
