@@ -149,3 +149,32 @@ test('Disable with the confirmation open: the dialog closes and nothing is resto
   assert.deepEqual(services[0].calls, []);
   assert.equal(reloads(), 0);
 });
+
+test('B can restore while the cancelled count of A is still pending; the late answer of A changes nothing', async () => {
+  const answers: ((counts: { profiles: number; presets: number }) => void)[] = [];
+  let calls = 0;
+  const { el, services, button, binding } = await mount({ name: 'sync' } as FileSystemDirectoryHandle, true, () => {
+    calls++;
+    return new Promise((resolve) => answers.push(resolve));
+  });
+  services[0].answer(0);
+  await waitFor(() => el.querySelectorAll('details > p').length === 2);
+  el.querySelector<HTMLButtonElement>('details > p button')!.click();
+  assert.equal(calls, 1);
+  button(EN_MESSAGES['ai.syncDisable'])!.click();
+  await waitFor(() => binding.getState().sync === null);
+  button(EN_MESSAGES['ai.syncChoose'])!.click();
+  await waitFor(() => services.length === 2);
+  services[1].answer(0);
+  await waitFor(() => el.querySelectorAll('details > p').length === 2);
+  el.querySelector<HTMLButtonElement>('details > p button')!.click();
+  assert.equal(calls, 2);
+  // La risposta tardiva di A non apre niente e non sblocca B.
+  answers[0]({ profiles: 1, presets: 1 });
+  await flush();
+  assert.equal(document.querySelector('dialog'), null);
+  answers[1]({ profiles: 2, presets: 3 });
+  await waitFor(() => document.querySelector('dialog') !== null);
+  assert.equal(document.querySelectorAll('dialog').length, 1);
+  assert.deepEqual(services[0].calls, []);
+});

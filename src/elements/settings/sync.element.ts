@@ -50,8 +50,7 @@ export class HmdSettingsSync extends HmdElement {
   /** Chiave (servizio + ultima sync) dell'ultimo elenco chiesto, e contatore delle richieste. */
   #backupsKey: unknown = null;
   #request = 0;
-  #restoring = false;
-  /** Conteggio e conferma del ripristino in corso: legati al servizio, si annullano se cambia o si spegne. */
+  /** Il ripristino in corso (conteggio e conferma): il controller è il suo token, uno alla volta. Legato al servizio: se cambia o si spegne si annulla e libera subito il posto. */
   #restoreAbort: AbortController | null = null;
   #dialogs: AbortController | null = null;
   #loop = new RenderLoop(this, {
@@ -124,6 +123,7 @@ export class HmdSettingsSync extends HmdElement {
     if (service !== (this.#sync?.service ?? null)) {
       this.#sync?.off();
       this.#restoreAbort?.abort();
+      this.#restoreAbort = null;
       this.#sync = service ? { service, off: service.subscribe(() => this.#onSyncState()) } : null;
       this.#backups = [];
       this.#backupsKey = null;
@@ -158,8 +158,7 @@ export class HmdSettingsSync extends HmdElement {
     const dialogs = this.#dialogs?.signal;
     const controller = this.#controller;
     // Una sola conferma di ripristino alla volta, anche durante backupCounts.
-    if (!sync || !t || !dialogs || !controller || this.#restoring) return;
-    this.#restoring = true;
+    if (!sync || !t || !dialogs || !controller || this.#restoreAbort) return;
     const abort = (this.#restoreAbort = new AbortController());
     const signal = AbortSignal.any([dialogs, abort.signal]);
     void sync
@@ -176,7 +175,6 @@ export class HmdSettingsSync extends HmdElement {
       .then((ok) => (ok && !signal.aborted ? sync.restore(path).then(() => controller.reload()) : undefined))
       .catch((error) => controller.report(error))
       .finally(() => {
-        this.#restoring = false;
         if (this.#restoreAbort === abort) this.#restoreAbort = null;
       });
   }
