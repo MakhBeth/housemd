@@ -58,6 +58,20 @@
       background: var(--c-accent-soft);
     }
 
+    /* In forced-colors la voce corrente si vede solo dallo sfondo, che diventa Canvas (LAB-42 P7). */
+    @media (forced-colors: active) {
+      .navLink[aria-current='true'] {
+        forced-color-adjust: none;
+        background: Highlight;
+        color: HighlightText;
+      }
+
+      /* Fuori dall'adattamento le ombre dell'anello "oreo" tornerebbero visibili: il focus lo porta il contorno. */
+      .navLink[aria-current='true']:focus-visible {
+        box-shadow: none;
+      }
+    }
+
     .content {
       overflow: auto;
       padding: 24px clamp(16px, 4vw, 48px) 40vh;

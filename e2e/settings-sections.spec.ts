@@ -71,16 +71,24 @@ test('the index follows the scroll: the section brought into view is the current
   }
 });
 
-test('a cloud profile asks for the key: the address is fixed, Save key is off until something is typed', async ({ app }) => {
+test('a cloud profile asks for the key: the address is fixed and read-only, Save key is never disabled and says why', async ({ app }) => {
   await openSettings(app);
   await settings(app).getByRole('link', { name: app.t('settings.aiProfiles') }).click();
   await settings(app).getByRole('region', { name: app.t('settings.aiProfiles') }).getByRole('button', { name: `+ ${app.t('ai.create')}` }).click();
   await settings(app).getByRole('combobox', { name: app.t('ai.provider'), exact: true }).selectOption('anthropic');
-  await expect(settings(app).getByRole('textbox', { name: app.t('ai.url') })).toBeDisabled();
-  await expect(settings(app).getByRole('textbox', { name: app.t('ai.url') })).toHaveValue('https://api.anthropic.com');
+  const url = settings(app).getByRole('textbox', { name: app.t('ai.url') });
+  await expect(url).toBeEnabled();
+  await expect(url).toHaveAttribute('readonly', '');
+  await expect(url).toHaveAccessibleDescription(new RegExp(app.t('ai.help.anthropic').slice(-20)));
+  await expect(url).toHaveValue('https://api.anthropic.com');
   const save = settings(app).getByRole('button', { name: app.t('ai.saveSecret') });
-  await expect(save).toBeDisabled();
+  await expect(save).toBeEnabled();
+  await save.focus();
+  await save.click();
+  await expect(settings(app).getByRole('status').filter({ hasText: app.t('ai.saveSecret.needKey') })).toBeVisible();
+  await expect(save).toBeFocused();
   await settings(app).getByLabel(app.t('ai.secret')).fill('sk-test');
+  await expect(settings(app).getByRole('status').filter({ hasText: app.t('ai.saveSecret.needKey') })).toHaveCount(0);
   await expect(save).toBeEnabled();
   await settings(app).getByRole('combobox', { name: app.t('ai.provider'), exact: true }).selectOption('ollama');
   await expect(settings(app).getByLabel(app.t('ai.secret'))).toHaveCount(0);

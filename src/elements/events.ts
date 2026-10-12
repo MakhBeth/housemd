@@ -1,11 +1,13 @@
 import type { ChangeDesc } from '@codemirror/state';
 
+import type { AcceptBlocker } from '../ai/aiController';
 import type { TextRange } from '../ai/selectionChip';
 import type { CheckWarning, GenParams, ModelProfile } from '../ai/types';
 import type { SettingsSection } from '../lib/route';
 import type { TextWidth } from '../lib/textWidth';
 import type { TreeNode } from '../ui/tree';
 import type { AutosaveSettings } from '../workspace/autosave';
+import type { ControlAction } from './ai/diffLogic';
 import type { ReviewAction } from './ai/reviewBarView';
 import type { TreeAction } from './workspace/dialogFor';
 
@@ -16,6 +18,8 @@ import type { TreeAction } from './workspace/dialogFor';
 export interface HmdEvents {
   /** Diff della revisione AI: rifiutato l'ultimo blocco rimasto (equivale a scartare la proposta). */
   'hmd-ai-all-rejected': CustomEvent<null>;
+  /** Diff della revisione AI: «← accetta» o «→ rifiuta» di un blocco attivato quando non può, con la ragione (per la nota della barra). */
+  'hmd-ai-block-blocked': CustomEvent<{ action: ControlAction; reason: AcceptBlocker }>;
   /** Composer AI: il testo scritto nella casella è cambiato (anche svuotata dopo l'invio), per conservarlo fuori. */
   'hmd-ai-draft': CustomEvent<{ text: string }>;
   /** Chip del modello: aprire le impostazioni dei profili («Gestisci profili…», o il chip senza profili). */

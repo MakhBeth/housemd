@@ -1,6 +1,8 @@
 import { Chunk } from '@codemirror/merge';
 import { Text, type ChangeDesc, type EditorState } from '@codemirror/state';
 
+import type { AcceptBlocker } from '../../ai/aiController';
+import type { ReviewStatus } from '../../ai/reviewStatus';
 import type { TextRange } from '../../ai/selectionChip';
 
 /** Un blocco della MergeView (`Chunk` di @codemirror/merge): tratti nel documento (a) e nella proposta (b). */
@@ -33,9 +35,14 @@ export function insideRange(changes: ChangeDesc, range: TextRange | null): boole
 
 export type ControlAction = 'accept' | 'reject';
 
-/** Pulsanti dei blocchi: «accetta» solo quando si può accettare, «rifiuta» mai durante la generazione. */
-export function controlDisabled(action: ControlAction, state: { canAccept: boolean; streaming: boolean }): boolean {
-  return action === 'reject' ? state.streaming : !state.canAccept;
+/**
+ * Perché «→ rifiuta» di un blocco non può adesso, o null: la proposta è in sola lettura durante la generazione e con
+ * la selezione persa. Il pulsante resta attivo (regola «mai disabled»): la ragione va nella nota della barra.
+ * «← accetta» ha la ragione del controller per il singolo blocco (`acceptBlocker(p, false)`).
+ */
+export function rejectBlocker(status: ReviewStatus): AcceptBlocker | null {
+  if (status.kind === 'generating') return 'generating';
+  return status.kind === 'scopeLost' ? 'scopeLost' : null;
 }
 
 /** Quanti blocchi mostra il diff tra il documento e la proposta (gli stessi di `MergeView`, con la sua configurazione di default). */

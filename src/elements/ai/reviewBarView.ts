@@ -1,10 +1,14 @@
 import type { AcceptBlocker } from '../../ai/aiController';
 import { isBusy, type ReviewStatus } from '../../ai/reviewStatus';
+import { rejectBlocker } from './diffLogic';
 import { pluralKey, type Locale } from '../../i18n/i18n';
 import type { I18nStore } from '../../state/i18nStore';
 
 /** Azioni della barra di revisione, mandate con `hmd-ai-review-action`. */
 export type ReviewAction = 'previous' | 'next' | 'acceptAll' | 'discard' | 'continue';
+
+/** Chi scrive la nota della barra: le sue azioni e i due pulsanti dei blocchi del diff (`hmd-ai-block-blocked`). */
+export type NoteAction = ReviewAction | 'acceptBlock' | 'rejectBlock';
 
 /** Chiavi delle note della barra: una per ragione del controller (`ai.review.<ragione>`). */
 export type ReviewBlocker = `ai.review.${AcceptBlocker}`;
@@ -13,10 +17,17 @@ export type ReviewBlocker = `ai.review.${AcceptBlocker}`;
  * Perché l'azione non è possibile adesso (chiave della nota), o null. Le frecce si fermano solo durante la
  * generazione; Scarta non si ferma mai (durante la generazione il controller ferma e scarta: `discard()`);
  * Accetta tutto ha la ragione del controller (`acceptBlocker(p, true)`, già nell'ordine della barra);
- * Continua si ferma durante un aggiornamento, che il controller altrimenti ignorerebbe in silenzio.
+ * Continua si ferma durante un aggiornamento, che il controller altrimenti ignorerebbe in silenzio. «← accetta» di
+ * un blocco ha la stessa ragione di Accetta tutto tranne `truncated` (`acceptBlocker(p, false)`: una proposta
+ * troncata si accetta un blocco alla volta), «→ rifiuta» quella di `rejectBlocker`.
  */
-export function actionBlocker(action: ReviewAction, status: ReviewStatus, acceptBlocker: AcceptBlocker | null): ReviewBlocker | null {
+export function actionBlocker(action: NoteAction, status: ReviewStatus, acceptBlocker: AcceptBlocker | null): ReviewBlocker | null {
   if (action === 'acceptAll') return acceptBlocker ? `ai.review.${acceptBlocker}` : null;
+  if (action === 'acceptBlock') return acceptBlocker && acceptBlocker !== 'truncated' ? `ai.review.${acceptBlocker}` : null;
+  if (action === 'rejectBlock') {
+    const reason = rejectBlocker(status);
+    return reason ? `ai.review.${reason}` : null;
+  }
   if (action === 'continue') return acceptBlocker === 'updating' ? 'ai.review.updating' : null;
   if (action === 'discard') return null;
   return isBusy(status) ? 'ai.review.generating' : null;

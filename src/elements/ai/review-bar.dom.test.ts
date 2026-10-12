@@ -130,6 +130,31 @@ test('Accept all says the reason of the controller, one text per reason, in the 
   assert.equal(note().textContent, EN_MESSAGES['ai.review.notAcceptable']);
 });
 
+test('a block button of the diff blocked: its reason in the same note (again at every activation), gone when the block of that action goes', async () => {
+  const { el, byLabel, note, events } = mount(GENERATING, [], 'generating');
+  el.blocked('reject', 'generating');
+  assert.equal(note().textContent, EN_MESSAGES['ai.review.generating']);
+  // La stessa ragione da un altro pulsante (Accetta tutto, o un altro blocco): la nota si ri-annuncia.
+  el.blocked('accept', 'generating');
+  assert.equal(note().textContent, '');
+  await waitFor(() => note().textContent === EN_MESSAGES['ai.review.generating']);
+  byLabel(EN_MESSAGES['ai.acceptAll']).click();
+  assert.equal(note().textContent, '');
+  await waitFor(() => note().textContent === EN_MESSAGES['ai.review.generating']);
+  assert.deepEqual(events, []);
+  // Fine della generazione con un conflitto: la nota di «rifiuta» non vale più; quella di «accetta» dice il conflitto.
+  el.blocked('reject', 'generating');
+  el.status = { kind: 'none' };
+  el.acceptBlocker = 'conflict';
+  assert.equal(note().textContent, '');
+  el.blocked('accept', 'conflict');
+  assert.equal(note().textContent, EN_MESSAGES['ai.review.conflict']);
+  // Una proposta troncata senza conflitto: Accetta tutto resta fermo, il singolo blocco no; la nota del blocco se ne va.
+  el.status = { kind: 'truncated' };
+  el.acceptBlocker = 'truncated';
+  assert.equal(note().textContent, '');
+});
+
 test('detached and attached again the note is forgotten', () => {
   const { el, byLabel, note } = mount(GENERATING, [], 'generating');
   byLabel(EN_MESSAGES['ai.acceptAll']).click();
@@ -284,4 +309,8 @@ test('when the generation ends the hidden region says the outcome (ready, partia
   const { el } = mount(GENERATING, [], 'generating');
   el.status = { kind: 'none' };
   assert.equal(el.querySelector(':scope > .spoken'), null);
+});
+
+test('the lost-selection note is neutral: right for «accept» and «reject» alike', () => {
+  assert.equal(EN_MESSAGES['ai.review.scopeLost'], 'The selection was lost: discard the proposal, or select the text again and retry.');
 });

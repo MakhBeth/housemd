@@ -46,3 +46,13 @@ export function reopenPlan(last: string | null, files: readonly string[]): { kin
   if (!last) return { kind: 'none' };
   return files.includes(last) ? { kind: 'open', path: last } : { kind: 'draft', path: last };
 }
+
+/** Perché Cronologia non può aprirsi: nessun documento (regola «mai disabled»; vale in ogni modalità). */
+export function historyBlocker(doc: WorkspaceState['doc'] | null): MessageKey | null {
+  return doc ? null : 'toolbar.history.noDocument';
+}
+
+/** Perché la cartella non si può cambiare ora: un'altra è in apertura. */
+export function folderBlocker(switchingFolder: boolean): MessageKey | null {
+  return switchingFolder ? 'folder.opening' : null;
+}

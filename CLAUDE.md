@@ -42,6 +42,19 @@ File System Access API) si usano **senza polyfill e senza fallback**. Unica ecce
   si scarta; i campi con il focus non si riscrivono; le proprietà dei figli si assegnano prima dell'inserimento e
   solo se cambiano; una chiave di memo per ogni vista derivata.
 - Nei test jsdom mai `assert.equal` tra due nodi (il messaggio non finisce più): `assert.ok(a === b, 'cosa')`.
+- **Mai `disabled` né `aria-disabled`** sui pulsanti. Se l'azione non è possibile il pulsante resta attivo e,
+  attivato, scrive perché in una nota `role="status"` accanto (mai in un toast né in un tooltip); il focus resta sul
+  pulsante. La nota entra vuota e si scrive con `announce` (`src/dom/announce.ts`: svuota, poi riscrive dopo
+  `ANNOUNCE_DELAY_MS`, così un secondo clic la rilegge); una regione live che deve ri-annunciarsi non si scrive mai a mano.
+- Un testo con un numero ha due forme, `<chiave>.one` e `<chiave>.other`, scelte da `pluralKey` (`src/i18n/i18n.ts`,
+  `Intl.PluralRules`), in tutte e nove le lingue.
+- **`forced-colors`**: gli sfondi diventano Canvas, quindi uno stato segnato solo dal colore sparisce. Le icone (maschere
+  colorate dallo sfondo) prendono `CanvasText` (`ButtonText` nei pulsanti, `LinkText` nei link, `HighlightText` su uno
+  sfondo `Highlight`); la voce corrente, la modalità premuta e la bozza orfana corrente usano `forced-color-adjust: none`
+  con `Highlight`/`HighlightText`. Fuori dall'adattamento l'anello «oreo» (`box-shadow`) tornerebbe visibile: sulla voce
+  con il focus si mette `box-shadow: none` dentro `@media (forced-colors: active)`.
+- **`style-mod`** (`StyleModule`) per gli stili che devono stare nell'origine di CodeMirror (pulsanti dei blocchi del
+  diff): niente `!important` per vincere sul tema base della libreria.
 
 ## AI
 

@@ -42,6 +42,20 @@
       background: var(--c-accent-soft);
     }
 
+    /* In forced-colors la voce corrente si vede solo dallo sfondo, che diventa Canvas (LAB-42 P7). */
+    @media (forced-colors: active) {
+      .item[aria-current='true'] {
+        forced-color-adjust: none;
+        background: Highlight;
+        color: HighlightText;
+      }
+
+      /* Fuori dall'adattamento le ombre dell'anello "oreo" tornerebbero visibili: il focus lo porta il contorno. */
+      .item[aria-current='true']:focus-visible {
+        box-shadow: none;
+      }
+    }
+
     .create {
       color: var(--c-accent);
     }
@@ -78,6 +92,25 @@
       margin: 0;
       color: var(--c-muted);
       font-size: 13px;
+    }
+
+    /* Nota «mai disabled»: entra solo con una ragione (regione status vuota di norma). */
+    .note {
+      margin: 0;
+      color: var(--c-muted);
+      font-size: 12px;
+    }
+
+    .syncNote {
+      text-align: end;
+    }
+
+    /* Indirizzo fisso (Anthropic): di sola lettura, ma leggibile e copiabile. `input[readonly]`, non `:read-only`. */
+    :scope .detail input[readonly] {
+      background: var(--c-code-bg);
+      border: 1px solid var(--c-border);
+      border-radius: 2px;
+      color: var(--c-text);
     }
 
     .actions {

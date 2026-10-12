@@ -39,7 +39,8 @@ import { allowedInSettings } from './keymap';
 import { clampWidth, gridColumns, MODES, nextPaneMode, PANE_MODES, panesMode, resizeByKey, sidePanel, WIDTH_LIMITS, type Mode, type PaneMode } from './layout';
 import { saveIndicator } from './saveIndicator';
 import { runTreeDialog } from './treeDialogs';
-import { docKey, reopenPlan, shownMode, toastItems, toastTarget, unloadNeedsConfirm } from './workspaceView';
+import { docKey, folderBlocker, historyBlocker, reopenPlan, shownMode, toastItems, toastTarget, unloadNeedsConfirm } from './workspaceView';
+import { announce } from '../../dom/announce';
 import './workspace.css';
 
 /** Apre la sessione AI di una cartella (iniettabile nei test: IndexedDB in jsdom non c'è). */
@@ -57,6 +58,8 @@ interface Parts {
   saveState: HTMLSpanElement;
   saveText: Text;
   history: HTMLButtonElement;
+  /** Nota di Cronologia senza documento: nel DOM solo con una ragione (vuota, il testo arriva dopo `ANNOUNCE_DELAY_MS`). */
+  historyNote: HTMLParagraphElement;
   saveAll: HTMLButtonElement;
   settings: HTMLButtonElement;
   toolbar: HTMLElement;
@@ -69,6 +72,8 @@ interface Slots {
   resizer: HTMLDivElement;
   aiSidebar: HmdAiSidebar;
   treeHeader: HTMLDivElement;
+  /** Nota del cambio di cartella, subito dopo la testata. */
+  folderNote: HTMLParagraphElement;
   /** «Nuovo file» della testata: dove entra il focus con l'albero vuoto. */
   newFile: HTMLButtonElement;
   search: HmdSearchPanel;
@@ -131,6 +136,10 @@ export class HmdWorkspace extends HmdElement {
   #textWidth: TextWidth = { editor: null, preview: null };
   #highlight: string[] = NO_TERMS;
   #historyOpen = false;
+  /** Cronologia attivata senza documento / cartella attivata durante un cambio: la nota resta finché la causa c'è. */
+  #historyNote = false;
+  #folderNote = false;
+  #announceAgain = { history: false, folder: false };
   #historyPath = '';
   #queuedRestore: { id: number; path: string } | null = null;
   #aiSelection: TextRange | null = null;
@@ -455,6 +464,12 @@ export class HmdWorkspace extends HmdElement {
           class: 'iconButton tooltip',
           on: {
             click: () => {
+              if (historyBlocker(this.#workspace?.getState().doc ?? null)) {
+                this.#announceAgain.history = this.#historyNote;
+                this.#historyNote = true;
+                this.#loop.update();
+                return;
+              }
               const ai = this.#shown === 'ai';
               if (ai) this.#changeMode(this.#lastPane);
               this.#historyOpen = ai ? true : !this.#historyOpen;
@@ -464,6 +479,7 @@ export class HmdWorkspace extends HmdElement {
         },
         icon('history'),
       ),
+      historyNote: el('p', { class: 'note toolbarNote', role: 'status' }),
       saveAll: el('button', { class: 'iconButton tooltip', on: { click: () => void this.#workspace?.saveAll() } }, icon('save')),
       settings: el('button', { class: 'iconButton tooltip', on: { click: () => this.#openSettings() } }, icon('settings')),
       toolbar: el('header', { class: 'toolbar' }),
@@ -564,7 +580,7 @@ export class HmdWorkspace extends HmdElement {
       }),
     );
     if (aside) this.#renderSidebar(aside, workspace, state, i18n);
-    else for (const name of ['aiSidebar', 'treeHeader', 'newFile', 'search', 'orphans', 'tree'] as const) delete this.#slots[name];
+    else for (const name of ['aiSidebar', 'treeHeader', 'folderNote', 'newFile', 'search', 'orphans', 'tree'] as const) delete this.#slots[name];
     if (resizer) {
       toggleAttr(resizer, 'aria-label', true, t('sidebar.resize'));
       toggleAttr(resizer, 'aria-valuenow', true, String(width));
@@ -602,7 +618,9 @@ export class HmdWorkspace extends HmdElement {
     for (const child of [...parts.saveState.children]) if (child !== draftIcon) child.remove();
     setText(parts.saveText, indicator.label ? t(indicator.label) : '');
     toggleAttr(parts.history, 'aria-pressed', true, String(shown !== 'ai' && this.#historyOpen));
-    parts.history.disabled = !doc;
+    if (!historyBlocker(doc)) this.#historyNote = false;
+    announce(parts.historyNote, this.#historyNote ? t('toolbar.history.noDocument') : '', this.#historyNote && (this.#announceAgain.history || !parts.historyNote.isConnected));
+    this.#announceAgain.history = false;
     toggleAttr(parts.history, 'aria-label', true, t('toolbar.history'));
     toggleAttr(parts.history, 'data-tooltip', true, t('toolbar.history'));
     toggleAttr(parts.saveAll, 'aria-label', true, t('toolbar.saveAll'));
@@ -630,7 +648,7 @@ export class HmdWorkspace extends HmdElement {
       setText(empty.firstElementChild!, t('empty.hint'));
       setText(empty.lastElementChild!, t('file.new'));
     }
-    place(parts.main, [parts.toolbar, ...(conflict ? [conflict] : []), (review ?? panes ?? empty)!]);
+    place(parts.main, [parts.toolbar, ...(this.#historyNote ? [parts.historyNote] : []), ...(conflict ? [conflict] : []), (review ?? panes ?? empty)!]);
 
     // Impostazioni sopra l'area di lavoro, e i toast.
     const settings = this.#slot('settings', settingsOpen, () => this.#createSettings());
@@ -689,7 +707,7 @@ export class HmdWorkspace extends HmdElement {
       assign(aiSidebar, 'syncNeedsPermission', !!this.#sync?.needsPermission);
       assign(aiSidebar, 'i18n', i18n);
       place(aside, [aiSidebar]);
-      for (const name of ['treeHeader', 'newFile', 'search', 'orphans', 'tree'] as const) delete this.#slots[name];
+      for (const name of ['treeHeader', 'folderNote', 'newFile', 'search', 'orphans', 'tree'] as const) delete this.#slots[name];
       return;
     }
     const header = this.#slot('treeHeader', true, () =>
@@ -697,7 +715,19 @@ export class HmdWorkspace extends HmdElement {
         'div',
         { class: 'sidebarHeader' },
         el('button', { class: 'iconButton tooltip', on: { click: () => this.#setSidebar(false) } }, icon('sidebarClose')),
-        el('button', { class: 'folder tooltip', on: { click: () => emit(this, 'hmd-workspace-change-folder', null) } }),
+        el('button', {
+          class: 'folder tooltip',
+          on: {
+            click: () => {
+              // Durante un cambio non se ne chiede un altro: solo la nota, e il focus resta sul pulsante.
+              if (folderBlocker(this.#switchingFolder)) {
+                this.#announceAgain.folder = this.#folderNote;
+                this.#folderNote = true;
+                this.#loop.update();
+              } else emit(this, 'hmd-workspace-change-folder', null);
+            },
+          },
+        }),
         el('button', { class: 'iconButton tooltip', on: { click: () => this.#onTreeAction('new-file', null) } }, icon('newFile')),
         el('button', { class: 'iconButton tooltip', on: { click: () => this.#onTreeAction('new-folder', null) } }, icon('newFolder')),
       ),
@@ -709,7 +739,11 @@ export class HmdWorkspace extends HmdElement {
       toggleAttr(button, 'data-tooltip', true, label);
     }
     setText(folder, state.name);
-    folder.disabled = this.#switchingFolder;
+    toggleAttr(folder, 'data-busy', !!folderBlocker(this.#switchingFolder), '');
+    if (!folderBlocker(this.#switchingFolder)) this.#folderNote = false;
+    const folderNote = this.#slot('folderNote', this.#folderNote, () => el('p', { class: 'note sidebarNote', role: 'status' }));
+    if (folderNote) announce(folderNote, t('folder.opening'), this.#announceAgain.folder || !folderNote.isConnected);
+    this.#announceAgain.folder = false;
     toggleAttr(folder, 'data-tooltip', true, t('sidebar.changeFolder'));
     const search = this.#slot('search', true, () => el('hmd-search-panel', { on: { 'hmd-search-open': (event) => void this.#openFile(event.detail.path, event.detail.terms) } }))!;
     assign(search, 'index', workspace.search);
@@ -738,7 +772,7 @@ export class HmdWorkspace extends HmdElement {
     assign(tree, 'openPath', doc?.path ?? null);
     assign(tree, 'drafts', memo.draftSet!);
     assign(tree, 'i18n', i18n);
-    place(aside, [header, search, ...(orphans ? [orphans] : []), tree]);
+    place(aside, [header, ...(folderNote ? [folderNote] : []), search, ...(orphans ? [orphans] : []), tree]);
     delete this.#slots.aiSidebar;
   }
 

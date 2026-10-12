@@ -89,12 +89,12 @@ test('a folder without permission: its name, Disable and Reactivate; reactivated
   assert.equal(button(EN_MESSAGES['ai.syncReactivate']), undefined);
 });
 
-test('with the service: status, Sync now off while syncing, and the backups asked again after every sync; a stale list is dropped', async () => {
+test('with the service: status, Sync now never disabled, and the backups asked again after every sync; a stale list is dropped', async () => {
   const { el, services, button } = await mount({ name: 'sync' } as FileSystemDirectoryHandle);
   const s = services[0];
   assert.deepEqual([...el.firstElementChild!.children].map((c) => c.localName), ['p', 'div', 'p', 'div', 'details']);
   s.set({ status: 'syncing' });
-  assert.equal(button(EN_MESSAGES['ai.syncNow'])!.disabled, true);
+  assert.equal(button(EN_MESSAGES['ai.syncNow'])!.disabled, false);
   s.set({ status: 'written', lastSync: 1000 });
   assert.equal(button(EN_MESSAGES['ai.syncNow'])!.disabled, false);
   assert.equal(s.requests(), 2);
@@ -195,4 +195,30 @@ test('the sync status is a polite live region and its error an alert; each Resto
     assert.equal(restore.getAttribute('aria-describedby'), path.id, path.textContent!);
     assert.ok(path.id, 'the path has an id');
   }
+});
+
+test('Sync now during a sync says why in a status after the actions, queues no second sync, keeps the focus and empties when the sync ends', async () => {
+  const { el, services, button } = await mount({ name: 'sync' } as FileSystemDirectoryHandle);
+  const s = services[0];
+  const now = button(EN_MESSAGES['ai.syncNow'])!;
+  const note = () => el.querySelector<HTMLElement>('.detail > p.note.syncNote[role="status"]');
+  assert.equal(note(), null, 'la nota entra su richiesta');
+  now.focus();
+  s.set({ status: 'syncing' });
+  assert.equal(note(), null, 'la sync che parte non scrive nulla da sola');
+  now.click();
+  assert.equal(now.closest('.actions')!.nextElementSibling, note());
+  await waitFor(() => note()!.textContent === EN_MESSAGES['ai.syncNow.running']);
+  assert.deepEqual(s.calls, []);
+  assert.equal(document.activeElement, now);
+  // Un altro clic: la nota si svuota e torna, ancora nessuna sync.
+  now.click();
+  assert.equal(note()!.textContent, '');
+  await waitFor(() => note()!.textContent === EN_MESSAGES['ai.syncNow.running']);
+  assert.deepEqual(s.calls, []);
+  s.set({ status: 'written', lastSync: 1000 });
+  assert.equal(note(), null);
+  assert.equal(document.activeElement, now);
+  now.click();
+  assert.deepEqual(s.calls, ['syncNow']);
 });

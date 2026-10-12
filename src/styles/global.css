@@ -108,6 +108,28 @@
     vertical-align: middle;
   }
 
+  /*
+   * In forced-colors il browser sostituisce `background-color` con Canvas e l'icona (una maschera colorata
+   * dallo sfondo) sparisce (LAB-42 P2). Fuori dall'adattamento prende un colore di sistema: `currentColor`
+   * non basta, perché sotto `forced-color-adjust: none` vale il colore d'autore, illeggibile con un tema
+   * scuro. Dentro i pulsanti è ButtonText, nei link LinkText; dove lo sfondo è Highlight (voce premuta) il
+   * foglio dell'elemento usa HighlightText.
+   */
+  @media (forced-colors: active) {
+    .icon {
+      forced-color-adjust: none;
+      background-color: CanvasText;
+    }
+
+    :is(button, [role='button']) .icon {
+      background-color: ButtonText;
+    }
+
+    a .icon {
+      background-color: LinkText;
+    }
+  }
+
   /* Cambio tema: nessuna dissolvenza incrociata; il vecchio tema sta sopra e viene "mangiato" a blocchi
      dalla maschera animata in src/theme/pixelTransition.ts. */
   ::view-transition-old(root),

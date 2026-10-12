@@ -11,7 +11,8 @@ import { pluralKey } from '../../i18n/i18n';
 import type { MessageKey } from '../../i18n/messages';
 import type { I18nStore } from '../../state/i18nStore';
 import { emit } from '../events';
-import { actionBlocker, generationOutcome, statusLine, type ReviewAction, type ReviewBlocker } from './reviewBarView';
+import type { ControlAction } from './diffLogic';
+import { actionBlocker, generationOutcome, statusLine, type NoteAction, type ReviewAction, type ReviewBlocker } from './reviewBarView';
 import './review-bar.css';
 
 interface Parts {
@@ -41,7 +42,8 @@ interface Parts {
  * l'azione non è possibile (generazione in corso; per Accetta tutto la ragione del controller,
  * `acceptBlocker`) il pulsante resta attivo e, attivato, la nota sotto la riga dice perché; il focus resta
  * sul pulsante. La nota ricorda la sua causa e si svuota quando quella non vale più, quando un'azione
- * della barra riesce, quando cambia la proposta (`proposalId`) o quando la barra sparisce.
+ * della barra riesce, quando cambia la proposta (`proposalId`) o quando la barra sparisce. La stessa nota dice
+ * perché un pulsante di un blocco del diff non ha fatto nulla (`blocked`, dalla revisione).
  */
 export class HmdAiReviewBar extends HmdElement {
   #status: ReviewStatus = { kind: 'none' };
@@ -55,7 +57,7 @@ export class HmdAiReviewBar extends HmdElement {
   #blocks = 0;
   #told: { outcome: ReviewStatus; blocks: number } | null = null;
   /** Nota mostrata: l'azione che l'ha prodotta e la sua chiave, per sapere quando la causa sparisce. */
-  #note: { action: ReviewAction; key: ReviewBlocker } | null = null;
+  #note: { action: NoteAction; key: ReviewBlocker } | null = null;
   /** Il prossimo render riscrive la nota anche se il testo è lo stesso (un altro clic bloccato). */
   #announceAgain = false;
 
@@ -150,16 +152,28 @@ export class HmdAiReviewBar extends HmdElement {
     this.#outcome = null;
   }
 
+  /**
+   * «← accetta» o «→ rifiuta» di un blocco del diff attivato quando non può (`hmd-ai-block-blocked`): la ragione va
+   * nella nota, come per i pulsanti della barra, e se ne va quando il blocco di quell'azione non vale più.
+   */
+  blocked(action: ControlAction, reason: AcceptBlocker): void {
+    this.#showNote(action === 'accept' ? 'acceptBlock' : 'rejectBlock', `ai.review.${reason}`);
+  }
+
   /** Un pulsante attivato: se l'azione non è possibile la nota dice perché, altrimenti l'azione sale e la nota se ne va. */
   #onAction(action: ReviewAction): void {
     const key = actionBlocker(action, this.#status, this.#acceptBlocker);
-    // La stessa nota di nuovo (Successivo, Scarta, Accetta tutto durante la generazione): si ri-annuncia.
+    this.#showNote(action, key);
+    if (!key) emit(this, 'hmd-ai-review-action', { action });
+  }
+
+  #showNote(action: NoteAction, key: ReviewBlocker | null): void {
+    // La stessa nota di nuovo (Successivo, Scarta, Accetta tutto o un blocco durante la generazione): si ri-annuncia.
     this.#announceAgain = key !== null && this.#note?.key === key;
     this.#note = key ? { action, key } : null;
     // L'esito della generazione si è detto: alla prossima azione la regione si svuota.
     this.#outcome = null;
     this.#loop.update();
-    if (!key) emit(this, 'hmd-ai-review-action', { action });
   }
 
   #render(parts: Parts, i18n: I18nStore): void {

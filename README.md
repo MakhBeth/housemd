@@ -29,6 +29,15 @@ npm run lint     # typecheck
 npm run build    # build di produzione in dist/
 ```
 
+Stato: la migrazione a custom element (senza React) è finita e la fase 8 (accessibilità, pulsanti mai `disabled`,
+contrasto elevato) è chiusa nell'epica `epic/LAB-3-web-components`, in attesa della verifica a mano e del merge in
+`main`. Il tempo di avvio si misura con la build della fase 3 in `dist-phase3/` (worktree su `a3ebc6f`, `npm ci && npm run build`,
+poi `cp -r dist dist-phase3`) e, con un solo worker:
+
+```bash
+E2E_WORKERS=1 npx playwright test -c e2e/startup.config.ts   # 21 giri alternati; risultato in test-results/startup.json
+```
+
 Com'è fatto: TypeScript e custom element senza framework (light DOM, CSS con `@layer` e `@scope`), CodeMirror 6
 per l'editor e il diff, markdown-it con DOMPurify (o la Sanitizer API) per l'anteprima, MiniSearch per la ricerca,
 zod ai confini (file system, storage, risposte dei provider), ts-pattern per i `match` esaustivi; Vite e

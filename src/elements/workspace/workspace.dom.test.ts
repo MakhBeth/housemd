@@ -111,7 +111,7 @@ test('the same DOM as WorkspaceView.tsx with no file open: layout with sidebar, 
   const toolbar = main.firstElementChild!;
   assert.deepEqual([...toolbar.children].map((c) => c.className), ['lead', 'modes', 'actions']);
   assert.deepEqual([...toolbar.querySelectorAll('.modes button')].map((b) => b.getAttribute('aria-label')), [EN_MESSAGES['mode.editor'], EN_MESSAGES['mode.split'], EN_MESSAGES['mode.preview']]);
-  assert.equal(toolbar.querySelector<HTMLButtonElement>(`button[aria-label="${EN_MESSAGES['toolbar.history']}"]`)!.disabled, true);
+  assert.equal(toolbar.querySelector<HTMLButtonElement>(`button[aria-label="${EN_MESSAGES['toolbar.history']}"]`)!.disabled, false);
   assert.equal(document.title, 'HouseMD');
 });
 
@@ -309,4 +309,59 @@ test('AI mode: the draft of the composer survives going to the editor and back (
   assert.equal(el.querySelector('hmd-ai-composer'), null);
   button(EN_MESSAGES['mode.ai']).click();
   assert.equal(box().value, 'fix the title');
+});
+
+test('History with no document open: never disabled, says why in a status right after the toolbar, keeps the focus, goes away when a file opens', async () => {
+  const { el, workspace, button } = await mount();
+  const history = button(EN_MESSAGES['toolbar.history']);
+  const note = () => el.querySelector<HTMLElement>('main > p.note.toolbarNote[role="status"]');
+  assert.equal(history.hasAttribute('aria-disabled'), false);
+  assert.equal(note(), null, 'la nota entra su richiesta');
+  history.focus();
+  history.click();
+  assert.equal(el.querySelector('header.toolbar')!.nextElementSibling, note());
+  await waitFor(() => note()!.textContent === EN_MESSAGES['toolbar.history.noDocument']);
+  assert.equal(document.activeElement, history);
+  assert.equal(el.querySelector('.panes'), null);
+  history.click();
+  assert.equal(note()!.textContent, '');
+  await waitFor(() => note()!.textContent === EN_MESSAGES['toolbar.history.noDocument']);
+  await workspace.openFile('a.md');
+  assert.equal(note(), null);
+  assert.equal(history.getAttribute('aria-pressed'), 'false');
+});
+
+test('History with no document in AI mode: the mode does not change, only the note', async () => {
+  const { el, button } = await mount({ ai: true });
+  button(EN_MESSAGES['mode.ai']).click();
+  assert.equal(button(EN_MESSAGES['mode.ai']).getAttribute('aria-pressed'), 'true');
+  button(EN_MESSAGES['toolbar.history']).click();
+  await waitFor(() => el.querySelector('.toolbarNote')?.textContent === EN_MESSAGES['toolbar.history.noDocument']);
+  assert.equal(button(EN_MESSAGES['mode.ai']).getAttribute('aria-pressed'), 'true');
+});
+
+test('the folder during a switch: never disabled, data-busy, the note after the sidebar header, no second change; it goes away at the end', async () => {
+  const { el } = await mount();
+  let changes = 0;
+  el.addEventListener('hmd-workspace-change-folder', () => changes++);
+  const folder = el.querySelector<HTMLButtonElement>('.folder')!;
+  const note = () => el.querySelector<HTMLElement>('aside > p.note.sidebarNote[role="status"]');
+  assert.equal(folder.disabled, false);
+  assert.equal(note(), null);
+  folder.focus();
+  folder.click();
+  assert.equal(changes, 1);
+  el.switchingFolder = true;
+  assert.equal(folder.disabled, false);
+  assert.equal(folder.hasAttribute('data-busy'), true);
+  assert.equal(note(), null, 'la nota non parte da sola');
+  folder.click();
+  assert.equal(changes, 1);
+  assert.equal(el.querySelector('.sidebarHeader')!.nextElementSibling, note());
+  await waitFor(() => note()!.textContent === EN_MESSAGES['folder.opening']);
+  assert.equal(document.activeElement, folder);
+  el.switchingFolder = false;
+  assert.equal(note(), null);
+  assert.equal(folder.hasAttribute('data-busy'), false);
+  assert.equal(document.activeElement, folder);
 });

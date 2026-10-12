@@ -4,6 +4,7 @@ import { EditorView } from '@codemirror/view';
 import { basicSetup } from 'codemirror';
 import { StyleModule } from 'style-mod';
 
+import type { AcceptBlocker } from '../../ai/aiController';
 import type { TextRange } from '../../ai/selectionChip';
 import { el } from '../../dom/el';
 import { docAppearance, editable, mainSelectionRange, readOnlyExtensions } from '../../editor/docExtensions';
@@ -12,7 +13,7 @@ import { applyDocRestore } from '../../editor/useDocBinding';
 import { HmdDocElement } from '../editor/docElement';
 import { lineNumberFor } from '../editor/editorLogic';
 import { emit } from '../events';
-import { controlDisabled, insideRange, rejectChange, type ControlAction } from './diffLogic';
+import { insideRange, rejectChange, type ControlAction } from './diffLogic';
 import './diff-pane.css';
 
 const LABEL: Record<ControlAction, 'ai.acceptBlock' | 'ai.rejectBlock'> = { accept: 'ai.acceptBlock', reject: 'ai.rejectBlock' };
@@ -22,13 +23,13 @@ const LABEL: Record<ControlAction, 'ai.acceptBlock' | 'ai.rejectBlock'> = { acce
  * layer (`.cm-merge-revert button`: `position: absolute`, `background: none`, `cursor: pointer`). Uno stile fuori
  * dai layer vince su ogni regola normale di un layer (`diff-pane.css`): qui stanno nella stessa origine, con una
  * specificità più alta (0,2,1 contro 0,1,1), e vincono senza forzare la priorità (analisi del layer `vendor`, piano 6c).
- * Il resto dell'aspetto dei pulsanti resta nel foglio.
+ * Il resto dell'aspetto dei pulsanti resta nel foglio. I pulsanti non si disattivano mai (regola «mai disabled»): un
+ * pulsante bloccato ha lo stesso aspetto, cursore `pointer` della libreria compreso.
  */
 const revertButtonStyles = EditorView.styleModule.of(
   new StyleModule({
     '.cm-merge-revert > .revert > button': { position: 'static' },
-    '.cm-merge-revert > .revert > button:hover:not(:disabled)': { background: 'var(--c-accent-soft)' },
-    '.cm-merge-revert > .revert > button:disabled': { cursor: 'default' },
+    '.cm-merge-revert > .revert > button:hover': { background: 'var(--c-accent-soft)' },
   }),
 );
 
@@ -38,20 +39,27 @@ const revertButtonStyles = EditorView.styleModule.of(
  * sull'editor posseduto da MergeView; i ripristini passano da una transazione su `a`. Un documento nuovo
  * (`resetKey`) ricrea la MergeView e, se il focus era dentro, lo ridà alla vista nuova.
  * Per blocco: ← accetta (lo applica la libreria, `revertControls: 'b-to-a'`; il focus va su `a` perché
- * Ctrl+Z lo annulli), → rifiuta (l'originale torna in `b`, focus su `b`; l'ultimo rifiutato chiude).
+ * Ctrl+Z lo annulli), → rifiuta (l'originale torna in `b`, focus su `b`; l'ultimo rifiutato chiude). I due pulsanti
+ * non si disattivano mai: attivati quando non possono (`acceptBlocker`, `rejectBlocker`) mandano
+ * `hmd-ai-block-blocked` con la ragione, che la barra della revisione scrive nella sua nota, e il focus resta sul
+ * pulsante. La MergeView toglie i controlli di un blocco che sparisce: se avevano il focus, va sullo stesso pulsante
+ * del blocco più vicino che resta.
  */
 export class HmdAiDiffPane extends HmdDocElement {
   /** Il lato sinistro del diff è il documento attuale (il destro, la proposta, ha il suo nome). */
   protected override readonly contentLabelKey = 'ai.diff.current';
   #proposal = '';
   #range: TextRange | null = null;
-  #canAccept = false;
+  #acceptBlocker: AcceptBlocker | null = 'generating';
+  #rejectBlocker: AcceptBlocker | null = 'generating';
   #streaming = true;
   #beforeAccept: () => boolean = () => false;
 
   #box: HTMLDivElement | null = null;
   #merge: MergeView | null = null;
   #rightEditable = new Compartment();
+  /** Il pulsante di un blocco che ha avuto il focus per ultimo (null quando il focus va altrove nel diff). */
+  #focusedControl: HTMLButtonElement | null = null;
   /** La proposta arriva da fuori: la sua transazione su `b` non è una modifica dell'utente. */
   #remote = false;
   /**
@@ -61,7 +69,7 @@ export class HmdAiDiffPane extends HmdDocElement {
    */
   #echoes: string[] = [];
   /** Ciò che la MergeView mostra già (gli effetti di DiffPane.tsx scattavano al cambio di questi valori). */
-  #applied = { resetKey: '', restore: 0, readOnly: false, proposal: '', canAccept: false, streaming: true };
+  #applied = { resetKey: '', restore: 0, readOnly: false, proposal: '', streaming: true };
   #announce = false;
   #scheduled = false;
 
@@ -74,11 +82,12 @@ export class HmdAiDiffPane extends HmdDocElement {
   /** Tratto della selezione nella proposta: le modifiche a mano fuori da qui si scartano. */
   get range(): TextRange | null { return this.#range; }
   set range(value: TextRange | null) { this.#range = value ?? null; }
-  get canAccept(): boolean { return this.#canAccept; }
-  set canAccept(value: boolean) {
-    this.#canAccept = value ?? false;
-    this.docInputChanged();
-  }
+  /** Perché «← accetta» non può adesso (`acceptBlocker(p, false)` del controller), o null. Letta all'attivazione. */
+  get acceptBlocker(): AcceptBlocker | null { return this.#acceptBlocker; }
+  set acceptBlocker(value: AcceptBlocker | null) { this.#acceptBlocker = value ?? null; }
+  /** Perché «→ rifiuta» non può adesso (`rejectBlocker` di diffLogic), o null. Letta all'attivazione. */
+  get rejectBlocker(): AcceptBlocker | null { return this.#rejectBlocker; }
+  set rejectBlocker(value: AcceptBlocker | null) { this.#rejectBlocker = value ?? null; }
   /** Generazione in corso (o selezione persa): proposta in sola lettura, niente rifiuti. */
   get streaming(): boolean { return this.#streaming; }
   set streaming(value: boolean) {
@@ -114,7 +123,19 @@ export class HmdAiDiffPane extends HmdDocElement {
   }
 
   protected connect(signal: AbortSignal): void {
-    this.#box ??= this.appendChild(el('div', { class: 'diff' }));
+    if (!this.#box) {
+      this.#box = this.appendChild(el('div', { class: 'diff' }));
+      this.#box.addEventListener('focusin', (event) => {
+        const target = event.target as HTMLElement;
+        this.#focusedControl = target.matches('.cm-merge-revert > .revert > button') ? (target as HTMLButtonElement) : null;
+      });
+      // Un'uscita voluta (il pulsante è ancora nel DOM) non si recupera; se il nodo è stato rimosso, sì.
+      this.#box.addEventListener('focusout', (event) => {
+        if (event.target === this.#focusedControl && this.#focusedControl?.isConnected) this.#focusedControl = null;
+      });
+      // La MergeView ridisegna i controlli nel suo fotogramma di misura: dopo, il focus perso su un pulsante si recupera.
+      new MutationObserver(() => this.#keepControlFocus()).observe(this.#box, { childList: true, subtree: true });
+    }
     if (!this.#merge) {
       this.#create();
       this.#applied.restore = initialRestoreSeq(this.restore);
@@ -167,7 +188,7 @@ export class HmdAiDiffPane extends HmdDocElement {
     });
     this.#echoes = [];
     Object.assign(this.#applied, {
-      resetKey: this.resetKey, readOnly: this.readOnly, proposal: this.#proposal, canAccept: this.#canAccept, streaming: this.#streaming,
+      resetKey: this.resetKey, readOnly: this.readOnly, proposal: this.#proposal, streaming: this.#streaming,
     });
     // Lo stato creato dalla sessione non passa dall'updateListener: la selezione si annuncia nel microtask.
     this.#announce = true;
@@ -218,11 +239,10 @@ export class HmdAiDiffPane extends HmdDocElement {
       }
     }
     const applied = this.#applied;
-    if (applied.readOnly !== this.readOnly || applied.streaming !== this.#streaming || applied.canAccept !== this.#canAccept) {
-      Object.assign(applied, { readOnly: this.readOnly, streaming: this.#streaming, canAccept: this.#canAccept });
+    if (applied.readOnly !== this.readOnly || applied.streaming !== this.#streaming) {
+      Object.assign(applied, { readOnly: this.readOnly, streaming: this.#streaming });
       merge.a.dispatch({ effects: editable.reconfigure(readOnlyExtensions(this.readOnly)) });
       merge.b.dispatch({ effects: this.#rightEditable.reconfigure(readOnlyExtensions(this.#streaming)) });
-      this.#refreshControls();
     }
     applied.restore = applyDocRestore(merge.a, applied.restore, this.restore);
   }
@@ -233,7 +253,9 @@ export class HmdAiDiffPane extends HmdDocElement {
     const reject = this.#button('→', 'reject');
     const box = el('div', { class: 'revert' }, accept, reject);
     accept.addEventListener('mousedown', (event) => {
-      if (!this.#canAccept || !this.#beforeAccept()) {
+      const reason = this.#acceptBlocker;
+      if (reason) return this.#blocked(event, 'accept', reason);
+      if (!this.#beforeAccept()) {
         event.preventDefault();
         event.stopPropagation();
         return;
@@ -242,51 +264,71 @@ export class HmdAiDiffPane extends HmdDocElement {
       queueMicrotask(() => this.#merge?.a.focus());
     });
     accept.addEventListener('keydown', (event) => {
-      if ((event.key === 'Enter' || event.key === ' ') && this.#canAccept) {
+      if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
         accept.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
       }
     });
     const onReject = (event: Event) => {
+      const reason = this.#rejectBlocker;
+      if (reason) return this.#blocked(event, 'reject', reason);
       event.preventDefault();
       event.stopPropagation();
       this.#reject(Number(box.dataset.chunk));
     };
     reject.addEventListener('mousedown', onReject);
     reject.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter' || event.key === ' ') onReject(event);
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        onReject(event);
+      }
     });
     return box;
   }
 
-  #button(glyph: string, action: ControlAction): HTMLButtonElement {
-    const label = this.translator()(LABEL[action]);
-    return el(
-      'button',
-      {
-        type: 'button',
-        class: 'tooltip',
-        dataset: { tooltip: label, action },
-        'aria-label': label,
-        disabled: controlDisabled(action, { canAccept: this.#canAccept, streaming: this.#streaming }),
-      },
-      glyph,
-    );
+  /**
+   * Un pulsante attivato quando non può: la MergeView (che ascolta il `mousedown` sul contenitore) non lo vede, la
+   * ragione sale per la nota della barra. Il clic lascia il focus sul pulsante, come i pulsanti della barra.
+   */
+  #blocked(event: Event, action: ControlAction, reason: AcceptBlocker): void {
+    event.stopPropagation();
+    emit(this, 'hmd-ai-block-blocked', { action, reason });
   }
 
-  /** Stato ed etichette dei pulsanti già disegnati (la MergeView li ricrea solo quando cambiano i blocchi). */
+  #button(glyph: string, action: ControlAction): HTMLButtonElement {
+    const label = this.translator()(LABEL[action]);
+    return el('button', { type: 'button', class: 'tooltip', dataset: { tooltip: label, action }, 'aria-label': label }, glyph);
+  }
+
+  /** Etichette dei pulsanti già disegnati (la MergeView li ricrea solo quando cambiano i blocchi). */
   #refreshControls(): void {
     const t = this.translator();
     // I nomi dei due contenuti nella lingua di adesso (contentAttributes li rilegge solo al prossimo aggiornamento).
     this.#merge?.a.contentDOM.setAttribute('aria-label', this.docHost.contentLabel());
     this.#merge?.b.contentDOM.setAttribute('aria-label', t('ai.diff.proposal'));
     for (const button of this.#box?.querySelectorAll<HTMLButtonElement>('.cm-merge-revert button') ?? []) {
-      const action = button.dataset.action as ControlAction;
-      button.disabled = controlDisabled(action, { canAccept: this.#canAccept, streaming: this.#streaming });
-      const label = t(LABEL[action]);
+      const label = t(LABEL[button.dataset.action as ControlAction]);
       button.dataset.tooltip = label;
       button.setAttribute('aria-label', label);
     }
+  }
+
+  /**
+   * Il pulsante di un blocco con il focus è sparito (la MergeView toglie i controlli di un blocco che non c'è più,
+   * o li ridisegna) e il focus è finito sul body: va sullo stesso pulsante dello stesso blocco o del blocco più
+   * vicino prima, altrimenti del primo; senza blocchi, nel documento. Un focus già altrove non si tocca.
+   */
+  #keepControlFocus(): void {
+    const last = this.#focusedControl;
+    if (!last || last.isConnected) return;
+    this.#focusedControl = null;
+    const doc = this.ownerDocument;
+    if (!this.isConnected || (doc.activeElement && doc.activeElement !== doc.body)) return;
+    const chunk = (button: HTMLElement) => Number(button.parentElement?.dataset.chunk);
+    const same = [...(this.#box?.querySelectorAll<HTMLButtonElement>(`.cm-merge-revert > .revert > button[data-action="${last.dataset.action}"]`) ?? [])];
+    const target = same.filter((button) => chunk(button) <= chunk(last)).at(-1) ?? same[0];
+    if (target) target.focus({ preventScroll: true });
+    else this.focus();
   }
 
   /** Rifiuto di un blocco: il testo originale torna nella proposta (verso opposto a quello della libreria). */
