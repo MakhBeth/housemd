@@ -25,6 +25,8 @@ export interface DocHost {
   /** Sessione in cui salvare testo, selezione e cronologia a ogni aggiornamento (null = nessuna). */
   session(): DocSession | null;
   t(): Translate;
+  /** Nome accessibile del contenuto (`aria-label` di `.cm-content`), letto a ogni aggiornamento della vista. */
+  contentLabel(): string;
   getDocs(): DocTitle[];
   /** Salva un'immagine incollata o trascinata; restituisce il link relativo, null se non salvata. */
   saveImage(file: File): Promise<string | null>;
@@ -113,6 +115,8 @@ export function docExtensions(host: DocHost) {
       editable.of(readOnlyExtensions(host.readOnly())),
       autocompletion({ override: [wikiCompletionSource(() => host.getDocs())] }),
       formatToolbar(() => host.t()),
+      // Il contenuto è un textbox: senza nome lo screen reader dice solo «modifica testo» (LAB-42 P3, WCAG 4.1.2).
+      EditorView.contentAttributes.of(() => ({ 'aria-label': host.contentLabel() })),
       EditorView.updateListener.of((update) => {
         // La sessione si salva prima di emettere: un listener sincrono può cambiare documento (anche staccare
         // e ricollegare l'elemento), e da lì host.session() sarebbe la sessione del documento nuovo.

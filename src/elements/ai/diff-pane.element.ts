@@ -25,6 +25,8 @@ const LABEL: Record<ControlAction, 'ai.acceptBlock' | 'ai.rejectBlock'> = { acce
  * Ctrl+Z lo annulli), → rifiuta (l'originale torna in `b`, focus su `b`; l'ultimo rifiutato chiude).
  */
 export class HmdAiDiffPane extends HmdDocElement {
+  /** Il lato sinistro del diff è il documento attuale (il destro, la proposta, ha il suo nome). */
+  protected override readonly contentLabelKey = 'ai.diff.current';
   #proposal = '';
   #range: TextRange | null = null;
   #canAccept = false;
@@ -133,6 +135,7 @@ export class HmdAiDiffPane extends HmdDocElement {
           basicSetup,
           EditorState.transactionFilter.of((tr) => (this.#remote || !tr.docChanged || insideRange(tr.changes, this.#range) ? tr : [])),
           docAppearance(),
+          EditorView.contentAttributes.of(() => ({ 'aria-label': this.translator()('ai.diff.proposal') })),
           this.#rightEditable.of(readOnlyExtensions(this.#streaming)),
           EditorView.updateListener.of((update) => {
             if (!update.docChanged || this.#remote) return;
@@ -257,6 +260,9 @@ export class HmdAiDiffPane extends HmdDocElement {
   /** Stato ed etichette dei pulsanti già disegnati (la MergeView li ricrea solo quando cambiano i blocchi). */
   #refreshControls(): void {
     const t = this.translator();
+    // I nomi dei due contenuti nella lingua di adesso (contentAttributes li rilegge solo al prossimo aggiornamento).
+    this.#merge?.a.contentDOM.setAttribute('aria-label', this.docHost.contentLabel());
+    this.#merge?.b.contentDOM.setAttribute('aria-label', t('ai.diff.proposal'));
     for (const button of this.#box?.querySelectorAll<HTMLButtonElement>('.cm-merge-revert button') ?? []) {
       const action = button.dataset.action as ControlAction;
       button.disabled = controlDisabled(action, { canAccept: this.#canAccept, streaming: this.#streaming });

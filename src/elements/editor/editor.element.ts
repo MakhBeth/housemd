@@ -52,6 +52,9 @@ export class HmdEditor extends HmdDocElement {
       this.docInputChanged();
     }
     this.#view.scrollDOM.addEventListener('scroll', () => this.#onScroll(), { passive: true, signal });
+    // Una lingua nuova: il nome del contenuto subito (contentAttributes lo rilegge solo al prossimo aggiornamento,
+    // e un aggiornamento vuoto qui passerebbe dalla sessione).
+    if (this.i18n) this.watch(this.i18n, () => this.#view?.contentDOM.setAttribute('aria-label', this.docHost.contentLabel()), signal);
   }
 
   disconnectedCallback(): void {
