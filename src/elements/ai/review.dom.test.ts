@@ -206,7 +206,7 @@ test('typing in the plain editor reaches docChanged and selectionChanged; a lang
   assert.equal(selections.length, 1);
   await i18n.setLocale('it');
   assert.equal(section().querySelector('.hint')!.textContent, 'SCRIVI');
-  assert.equal(listeners(), 1);
+  assert.equal(listeners(), 2, 'la revisione e il nome del contenuto di hmd-editor');
   assert.equal(changes.length, 0);
   el.remove();
   assert.equal(listeners(), 0);
@@ -277,4 +277,11 @@ test('a confirmation resolved while the view goes away accepts nothing: detached
   confirm(() => {});
   await tick();
   assert.deepEqual(ai.calls, [['beforeAccept', 'a.md', true]]);
+});
+
+test('Discard while generating, before any proposal: the request on this document is stopped (Discard = Stop + discard)', async () => {
+  const { ai, button } = mount({ running: { path: 'a.md' } } as Partial<AiState>);
+  await tick();
+  button(EN_MESSAGES['ai.discard']).click();
+  assert.deepEqual(ai.calls, [['discard', 'a.md']]);
 });

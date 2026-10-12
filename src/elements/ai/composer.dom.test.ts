@@ -16,6 +16,7 @@ import { createI18nStore } from '../../state/i18nStore';
 import { countListeners } from '../../testing/countListeners';
 import { fakeAi } from '../../testing/fakeAi';
 import { installPopoverStub } from '../../testing/popoverStub';
+import { waitFor } from '../../testing/waitFor';
 
 installPopoverStub();
 
@@ -324,7 +325,7 @@ test('during an update Send says so; typing clears the note as for the other not
   assert.equal(note().textContent, '');
 });
 
-test('a suggestion (or Enter) during a generation says so, the draft stays, the note goes when the generation ends', () => {
+test('a suggestion (or Enter) during a generation says so, the draft stays, the note goes when the generation ends', async () => {
   const { el, ai, key, note, type, input, running } = mount();
   running(true);
   type('draft');
@@ -333,7 +334,9 @@ test('a suggestion (or Enter) during a generation says so, the draft stays, the 
   assert.equal(note().textContent, EN_MESSAGES['ai.composer.generating']);
   assert.equal(input().value, 'draft');
   key('Enter');
-  assert.equal(note().textContent, EN_MESSAGES['ai.composer.generating']);
+  // La stessa nota di nuovo: svuotata subito e riscritta dopo `ANNOUNCE_DELAY_MS`, così lo screen reader la rilegge.
+  assert.equal(note().textContent, '');
+  await waitFor(() => note().textContent === EN_MESSAGES['ai.composer.generating']);
   running(false);
   assert.equal(note().textContent, '');
 });
@@ -387,4 +390,46 @@ test('with the real controller: the updating note goes when cancel() ends the up
   controller.documentChanged('b.md', ChangeSet.empty(1), true);
   assert.equal(note().textContent, '');
   assert.equal(input().value, 'draft');
+});
+
+test('a double click on Send sends once and does not stop: only the click right after the sending one (detail + 1) is ignored on Stop', () => {
+  const { ai, send, type, running, key } = mount();
+  const click = (detail: number) => send().dispatchEvent(new MouseEvent('click', { bubbles: true, detail }));
+  const calls = () => ai.calls.map((c) => c[0]);
+  type('fix');
+  click(1);
+  running(true);
+  click(2);
+  assert.deepEqual(calls(), ['send'], 'la seconda metà del doppio clic');
+  // Una serie rapida su Stop (detail 3) ferma: chi ha un tremore clicca così.
+  click(3);
+  assert.deepEqual(calls(), ['send', 'stop']);
+  // Invio dalla tastiera, poi un clic singolo su Stop: ferma.
+  running(false);
+  type('again');
+  key('Enter');
+  running(true);
+  click(1);
+  assert.deepEqual(calls(), ['send', 'stop', 'send', 'stop']);
+});
+
+test('the draft: given before connecting it fills the box; typing and sending tell it out with hmd-ai-draft', () => {
+  const ai = fakeAi({ presets: [PRESET] }, defaultProfile('ollama', 'o'));
+  const el = document.createElement('hmd-ai-composer');
+  el.draft = 'half written';
+  el.controller = ai;
+  el.text = TEXT;
+  el.i18n = createI18nStore({ locale: 'en', messages: EN_MESSAGES, load: async (locale) => ({ locale, messages: EN_MESSAGES }), persist() {} });
+  const drafts: string[] = [];
+  el.addEventListener('hmd-ai-draft', (event) => drafts.push(event.detail.text));
+  document.body.append(el);
+  const input = el.querySelector('textarea')!;
+  assert.equal(input.value, 'half written');
+  input.value = 'half written, done';
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+  assert.deepEqual(drafts, ['half written, done', '']);
+  // Dopo la costruzione la bozza non riscrive più la casella.
+  el.draft = 'other';
+  assert.equal(input.value, '');
 });

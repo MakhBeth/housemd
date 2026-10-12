@@ -36,7 +36,7 @@ function slowSave() {
   return { saveImage, saved, pending };
 }
 
-function mount(text: string, key = 'a.md#1') {
+function mount(text: string, key = 'a.md#1', store = i18n) {
   const session = createDocSession(key, text);
   const el = document.createElement('hmd-editor');
   el.text = text;
@@ -44,7 +44,7 @@ function mount(text: string, key = 'a.md#1') {
   el.session = session;
   el.restore = null;
   el.readOnly = false;
-  el.i18n = i18n;
+  el.i18n = store;
   const events: Recorded[] = [];
   for (const type of ['hmd-doc-change', 'hmd-selection', 'hmd-top-line'] as const) {
     el.addEventListener(type, (event) => events.push([type, (event as CustomEvent).detail]));
@@ -254,4 +254,14 @@ test('a listener that assigns another document while a new one is announced: the
   assert.equal(b.textLf, 'B');
   assert.deepEqual(events.map(([type]) => type), ['hmd-selection', 'hmd-selection', 'hmd-doc-change', 'hmd-selection']);
   el.remove();
+});
+
+test('the content is a textbox named after the document text; a language change renames it', async () => {
+  const store = createI18nStore({ locale: 'en', messages: EN_MESSAGES, load: async (locale) => ({ locale, messages: { ...EN_MESSAGES, 'editor.content': 'TESTO' } }), persist() {} });
+  const { el } = mount('# A', 'a.md#1', store);
+  const content = el.querySelector('.cm-content')!;
+  assert.equal(content.getAttribute('role'), 'textbox');
+  assert.equal(content.getAttribute('aria-label'), EN_MESSAGES['editor.content']);
+  await store.setLocale('it');
+  assert.equal(content.getAttribute('aria-label'), 'TESTO');
 });

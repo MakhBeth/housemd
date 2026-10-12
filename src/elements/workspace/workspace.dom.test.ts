@@ -297,3 +297,16 @@ test('leaving AI mode with the focus in the chat (Ctrl+Shift+E): the focus goes 
   const row = el.querySelector('hmd-file-tree [tabindex="0"]');
   assert.ok(row !== null && document.activeElement === row, `the tree row with the tab stop, not ${document.activeElement?.getAttribute('aria-label') ?? document.activeElement?.localName}`);
 });
+
+test('AI mode: the draft of the composer survives going to the editor and back (LAB-10)', async () => {
+  const { el, workspace, button } = await mount({ ai: true });
+  await workspace.openFile('a.md');
+  button(EN_MESSAGES['mode.ai']).click();
+  const box = () => el.querySelector<HTMLTextAreaElement>('hmd-ai-composer textarea')!;
+  box().value = 'fix the title';
+  box().dispatchEvent(new Event('input', { bubbles: true }));
+  button(EN_MESSAGES['mode.editor']).click();
+  assert.equal(el.querySelector('hmd-ai-composer'), null);
+  button(EN_MESSAGES['mode.ai']).click();
+  assert.equal(box().value, 'fix the title');
+});
