@@ -256,5 +256,52 @@
     .orphan[aria-current='true'] {
       background: var(--c-accent-soft);
     }
+
+    /*
+     * In forced-colors gli sfondi diventano Canvas: la modalità attiva e la bozza orfana corrente prendono i
+     * colori di sistema della selezione (A3, WCAG 1.4.11). Il separatore è una linea di 1px in CanvasText, che
+     * al passaggio e al focus si riempie in Highlight. L'anello delle modalità sta dentro il pulsante perché
+     * `.modes` ha `overflow: hidden` e lo taglierebbe.
+     */
+    @media (forced-colors: active) {
+      .mode[aria-pressed='true'],
+      .orphan[aria-current='true'] {
+        forced-color-adjust: none;
+        background: Highlight;
+        color: HighlightText;
+      }
+
+      .mode[aria-pressed='true'] .icon {
+        background-color: HighlightText;
+      }
+
+      /* `forced-color-adjust: none` si eredita: i tooltip di questi pulsanti restano nei colori di sistema. */
+      .mode[aria-pressed='true']::after,
+      .orphan[aria-current='true']::after {
+        forced-color-adjust: auto;
+      }
+
+      .mode:focus-visible {
+        outline-offset: -4px;
+      }
+
+      /* Fuori dall'adattamento le ombre dell'anello "oreo" tornerebbero visibili: il focus lo porta il contorno. */
+      .mode[aria-pressed='true']:focus-visible {
+        outline-color: HighlightText;
+        box-shadow: none;
+      }
+
+      .resizer {
+        forced-color-adjust: none;
+        background: Canvas;
+        border-inline-start: 1px solid CanvasText;
+      }
+
+      .resizer:hover,
+      .resizer:focus-visible {
+        background: Highlight;
+        border-color: Highlight;
+      }
+    }
   }
 }

@@ -42,6 +42,15 @@
       background: var(--c-accent-soft);
     }
 
+    /* In forced-colors la voce corrente si vede solo dallo sfondo, che diventa Canvas (LAB-42 P7). */
+    @media (forced-colors: active) {
+      .item[aria-current='true'] {
+        forced-color-adjust: none;
+        background: Highlight;
+        color: HighlightText;
+      }
+    }
+
     .create {
       color: var(--c-accent);
     }
