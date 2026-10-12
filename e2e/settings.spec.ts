@@ -190,3 +190,16 @@ test('with the settings open the workspace behind is inert: no focus, out of the
   expect(await takesFocus()).toBe(false);
   expect(await treeInAccessibilityTree()).toBe(false);
 });
+
+test('Escape with unsaved changes: today nothing happens, no confirmation and the settings stay open (P5, the Task 5 of phase 8 fixes it)', async ({ app, page }) => {
+  await page.getByRole('button', { name: app.t('toolbar.settings') }).click();
+  const settings = page.getByRole('region', { name: app.t('settings.title') });
+  await settings.getByRole('link', { name: app.t('settings.aiPresets') }).click();
+  // Eccezione della fase 7 (sezioni senza nome): la sezione dei preset per id, fino al Task 5.
+  const presets = page.locator('#settings-ai-presets');
+  await presets.getByRole('button').first().click();
+  await presets.getByRole('textbox').first().fill('Changed');
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(settings).toBeVisible();
+});

@@ -88,6 +88,18 @@ test.describe('composer', () => {
     ai.release();
   });
 
+  test('a double click on Send: today the second click of the pair stops the request just sent (the Task 4 of phase 8 keeps it going)', async ({ app, ai }) => {
+    ai.hold();
+    await composer(app).fill('fix');
+    await send(app).click();
+    // Il secondo clic di un doppio clic umano arriva quando il pulsante è già Stop, con detail 2
+    // (`click({ clickCount: 2 })` e `dblclick()` sono troppo veloci e non riproducono il difetto).
+    await stop(app).dispatchEvent('click', { detail: 2 });
+    await expect(send(app)).toBeVisible();
+    expect(ai.requests).toBe(1);
+    ai.release();
+  });
+
   test('the Stop button stops the generation', async ({ app, ai }) => {
     ai.hold();
     await composer(app).fill('fix');

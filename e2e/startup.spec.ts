@@ -77,3 +77,8 @@ test('an invalid .housemd.json shows a toast and the app still opens', async ({ 
   await expect(app.toast(prefix)).toBeVisible();
   await expect(app.treeFile('a.md')).toBeVisible();
 });
+
+test('after opening a folder from the start screen: today the focus is on the body (A2, the Task 2 of phase 8 moves it to the tree)', async ({ app, page }) => {
+  await app.openFolder({ 'a.md': '# A' });
+  await expect(page.locator('body')).toBeFocused();
+});

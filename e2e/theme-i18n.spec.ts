@@ -113,3 +113,14 @@ test.describe('with animations on', () => {
     ).toEqual(labels);
   });
 });
+
+test('changing the language from the keyboard keeps the focus on the select (A4: not reproduced without a screen reader)', async ({ app, page }) => {
+  await app.openFolder({ 'note.md': '# Note' });
+  await page.getByRole('button', { name: app.t('toolbar.settings') }).click();
+  const select = page.getByLabel(app.t('settings.language'));
+  await select.focus();
+  await page.keyboard.press('ArrowDown');
+  await expect(page.locator('html')).not.toHaveAttribute('lang', 'en');
+  // L'etichetta adesso è in un'altra lingua: il focus si guarda sul nodo, non per nome.
+  await expect.poll(() => page.evaluate(() => document.activeElement?.localName)).toBe('select');
+});
