@@ -196,3 +196,34 @@ La fase è un insieme di rifiniture indipendenti, non una catena: l'app funziona
 15. **Voce premuta o corrente in `forced-colors`: sfondo `Highlight`, testo `HighlightText`** (sì, da confermare con Designer): il modo di sistema per una selezione, nessuno spostamento del layout. **Scartati**: `outline` interno (si scontra con l'anello del focus, che usa `outline` e sta in un layer più debole: un pulsante premuto e con il focus perderebbe l'anello); un bordo (sposta il layout di 2 px solo in `forced-colors`).
 16. **Doppio clic su Invia: il secondo clic del doppio clic (`detail ≥ 2`) non ferma** (sì, provata). Un clic singolo o la tastiera (`detail` 0) fermano come prima; il nodo resta uno (decisione della 6b). **Scartate**: una finestra di 500 ms dopo l'invio (arbitraria, timer nei test); due nodi Invia e Stop (il focus salterebbe).
 17. **Sincronizza ora durante una sync: la nota «sync già in corso» e nessuna sync accodata** (sì, da confermare con Designer per il testo). Oggi il pulsante è spento; attivo, un clic accoderebbe un'altra sync (`AiSync.syncNow` mette `pending`), che non è quello che chi clicca si aspetta.
+
+## Review Focus
+
+1. **Nessun risultato tardivo con effetti** (8a, Task 2): ogni `await` di avvio, scelta e ripresa in `hmd-app` è seguito dal controllo del `signal` della vita dell'app; `switchFolder` non apre, non elimina il vecchio e non salva dopo un'interruzione; l'avvio riparte riattaccando, una sola volta. Test: i quattro nuovi di `app.dom.test.ts`, «a switch whose caller goes away…» di `switchFolder.test.ts`.
+2. **Il focus non cade mai sul `body`** (Task 2, 3, 5): bersagli stabili per la sidebar che sparisce, la schermata iniziale che sparisce, l'elenco dopo Elimina, il titolo dopo un salto dall'indice; il focus resta sulla select della lingua e sul pulsante attivato quando l'azione non è possibile. Test: `workspace.dom.test.ts`, `app.dom.test.ts`, `profiles`/`presets.dom.test.ts`, `settings.dom.test.ts`, e2e `workspace-shell.spec.ts`, `startup.spec.ts`, `settings.spec.ts`, `theme-i18n.spec.ts`.
+3. **Annunci** (Task 4, 5): il contatore non parla ogni secondo, la regione nascosta parla all'avvio e a ogni parte; la stessa nota a un altro clic si ri-annuncia; «Connesso» e la regione della generazione entrano vuote e si riempiono al fotogramma dopo; stato ed errore della sync sono regioni. `announce` non anticipa né perde un testo (test dei tre casi). Gli e2e con l'orologio finto fanno avanzare l'orologio dopo un clic ripetuto.
+4. **Scarta, Continua, doppio clic** (Task 4): Scarta durante la generazione ferma e scarta anche senza una proposta già arrivata; Continua durante un aggiornamento dice perché; il secondo clic di un doppio clic non ferma. Test: `reviewBarView.test.ts`, `review.dom.test.ts`, `composer.dom.test.ts`, e2e `ai-review-bar.spec.ts`, `ai-composer.spec.ts`.
+5. **Aspetto** (8a): audit verde contro `dist-baseline/` di `0cb7652` in ogni task salvo i 6 stati del Task 4, con le differenze elencate e nessun'altra; `StyleModule` al posto dei tre `!important` senza differenze; nessuno snapshot rigenerato. (8b): ogni rinnovo della baseline giustificato riga per riga, snapshot rigenerati solo se elencati.
+6. **Regola «mai disabled» completa** (8b): `grep -rn "disabled" src --include=*.ts` mostra solo test che affermano `disabled === false` e nessun `aria-disabled`; ogni pulsante bloccato dice perché in una nota `role="status"` accanto, il focus resta, la nota si svuota quando la causa sparisce. Test per ogni pulsante (Task 8, 9).
+7. **`forced-colors`** (8b, Task 10): icone, voce corrente, modalità premuta, bozza orfana, separatore distinguibili in schema chiaro e scuro (`forcedColors: 'active'`), stati di audit `forced-colors-*` rinnovati con il motivo.
+8. **Testi** (Task 4, 5, 9): ogni chiave nuova in tutte e nove le lingue, `pluralKey` con `Intl.PluralRules`, traduzioni plausibili (il Reviewer le legge).
+
+---
+
+## Mappa dei file
+
+| File | Responsabilità |
+|---|---|
+| `e2e/startup.config.ts`, `e2e/startup.measure.ts`, `.gitignore` (`dist-phase3`) | Misura ripetibile del tempo di avvio contro la fase 3 (Task 1, rilanciata nel Task 11). |
+| `e2e/computed-styles.audit.ts` (stati `forced-colors-workspace`, `forced-colors-settings`, `forced-colors-review`), `e2e/forced-colors.spec.ts`, e2e toccati nei Task 1–5 | Rete di sicurezza e test dei comportamenti nuovi. |
+| `src/app/switchFolder.ts` (+ test), `src/elements/app/app.element.ts` (+ `.dom.test.ts`) | Vita dell'app, avvio, scelta e ripresa (Task 2). |
+| `src/elements/file-tree/file-tree.element.ts` (`focusTabStop()`), `src/elements/workspace/workspace.element.ts` (`focusStart()`, `focusScope`/`refocus`), `layout.ts` (+ test), `src/elements/toasts/toasts.element.ts` (+ test) | Focus e separatore del workspace, timer dei toast (Task 2, 3). |
+| `src/dom/announce.ts` (+ test) | Testo di una regione live che si ri-annuncia (Task 4). |
+| `src/i18n/i18n.ts` (`pluralKey`, + test), `src/i18n/locales/*.json` | Forme singolare e plurale, chiavi nuove (Task 4, 5, 9). |
+| `src/elements/ai/review-bar.element.ts`, `review-bar.css`, `reviewBarView.ts`, `review.element.ts`, `composer.element.ts`, `sidebar.element.ts`, `model-chip.element.ts` (+ test) | Annunci, Scarta, Continua, doppio clic, chip (Task 4); pulsanti dei blocchi (Task 8). |
+| `src/editor/docExtensions.ts`, `src/elements/editor/docElement.ts`, `editor.element.ts`, `src/elements/ai/diff-pane.element.ts` (+ test) | Nome del contenuto di CodeMirror (Task 4); `StyleModule` dei pulsanti dei blocchi (Task 6). |
+| `src/elements/ai/diff-pane.css`, `package.json`, `package-lock.json` (`style-mod`) | Via i tre `!important` (Task 6). |
+| `src/elements/settings/settings.element.ts`, `settingsView.ts`, `profiles.element.ts`, `presets.element.ts`, `sync.element.ts` (+ test) | Impostazioni (Task 5); «mai disabled» di Salva chiave, indirizzo e Sincronizza ora (Task 9). |
+| `src/elements/start-screen/*`, `src/elements/notice/*`, `src/elements/workspace/*` | «Mai disabled» di schermata iniziale, avviso, Cronologia e cartella (Task 9). |
+| `src/styles/global.css`, `workspace.css`, `settings.css`, `sections.css` | `forced-colors` (Task 10). |
+| `docs/superpowers/specs/2026-09-27-housemd-web-components-design.md`, `CLAUDE.md`, `README.md`, `docs/superpowers/notes/2026-10-xx-chiusura-migrazione.md` (al posto dell'handover) | Documenti (Task 7 e 11). |
