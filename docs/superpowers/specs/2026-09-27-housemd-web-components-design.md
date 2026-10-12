@@ -624,6 +624,17 @@ rivedere (`ai.proposalBlocks.one|other`, contati da `blockCount` in `diffLogic.t
 usa il nodo di «Nuovo file». Suite sul commit finale: `npm test` 1077, e2e 210 (208 + i 2 noti dello start screen), dev 195, audit 152
 contro la baseline del Task 5. Bundle principale gzip 379 234 → 380 897 B (+1 663 B).
 
+8b **fatta** (PR #13): la regola «mai disabled» su tutta l'app (pulsanti dei blocchi del diff, Salva chiave, Cronologia, Sincronizza ora,
+cambio di cartella, schermata iniziale, Aggiorna; l'indirizzo di Anthropic è di sola lettura) e il contrasto elevato (`forced-colors`:
+icone in `CanvasText`/`ButtonText`/`LinkText`, voce corrente, modalità, bozza orfana e separatore in `Highlight`). Il pulsante resta attivo
+e, attivato, dice perché in una nota `role="status"` accanto (`announce`), con il focus che resta sul pulsante. Correzioni della review,
+come primi commit: il focus uscito di proposito dal diff non viene più riportato sui pulsanti dei blocchi (`focusout`); niente ombra
+dell'anello sulla voce corrente in `forced-colors`; `ai.review.scopeLost` riscritta in modo neutro per «accetta» e «rifiuta» (nove lingue).
+Suite sul commit finale: `npm test` 1098, e2e 213 (211 + i 2 noti dello start screen), dev 198, audit 156 contro la baseline
+`6cc52b5`, nessuno snapshot cambiato. Bundle principale gzip 380 897 → 382 032 B (+1 135 B nell'8b, **+2 798 B** da 379 234: sopra il
++2 KB atteso di circa 750 B). Tempo di avvio (21 giri, mediane, `e2e/startup.config.ts`): `start` **132 ms** (p25–p75 130–138; fase 3: 194),
+`reopen` **208 ms** (202–212; fase 3: 222), entro ±10 % da 139 e 220 ms. Ancora da provare a mano (Davide): checklist §9, nella nota di chiusura.
+
 ---
 
 ## 8. Cosa succede ai test
@@ -824,16 +835,17 @@ wikilink:
 ## 11. Criteri di completamento
 
 - `package.json` senza `react`, `react-dom`, `@types/react*`, `@vitejs/plugin-react`; con
-  `ts-pattern` e `zod`; senza `tests/browser/` né `test:browser` (fatto, 7b).
-- Nessun `.tsx` né `*.module.css` in `src/`; `architecture.test.ts` completamente attivo (fatto, 7b).
+  `ts-pattern` e `zod`; senza `tests/browser/` né `test:browser` (**fatto**, 7b).
+- Nessun `.tsx` né `*.module.css` in `src/`; `architecture.test.ts` completamente attivo (**fatto**, 7b).
 - `npm test`: tutti i test del baseline (488 al 01/10, più quelli aggiunti in `main` nel frattempo)
-  ci sono ancora (stesso nome o rinominati in modo tracciato) e passano, più i nuovi di §8.2–8.3.
-- `npm run lint` e `npm run build` puliti; PWA installabile e funzionante offline.
+  ci sono ancora (stesso nome o rinominati in modo tracciato) e passano, più i nuovi di §8.2–8.3 (**fatto**: 1098 al commit finale dell'8b).
+- `npm run lint` e `npm run build` puliti (**fatto**); PWA installabile e funzionante offline (**resta: Davide**, checklist §9).
 - `npm run test:e2e` verde con gli **stessi snapshot** della fase 0 (ogni rigenerazione elencata e
-  motivata).
-- Merge del branch in `main` solo dopo l'approvazione esplicita di Davide.
-- Checklist §9 completata in Chrome ed Edge (resta: Davide).
-- `CLAUDE.md` e `README.md` aggiornati (fatto nella 7b).
+  motivata) (**fatto**: nessuno snapshot rigenerato; restano rossi i 2 dello start screen su ape, per il font pixel).
+- Bundle e tempo di avvio misurati (**fatto**, 8b): gzip 382 032 B (+2 798 B da 379 234, oltre il +2 KB atteso), `start` 132 ms e `reopen` 208 ms.
+- Merge del branch in `main` solo dopo l'approvazione esplicita di Davide (**resta: Davide**).
+- Checklist §9 completata in Chrome ed Edge (**resta: Davide**; elenco completo in `docs/superpowers/notes/2026-10-12-chiusura-migrazione.md`).
+- `CLAUDE.md` e `README.md` aggiornati (**fatto**: 7b e 8b).
 
 ## 12. Domande aperte → decisioni
 
@@ -860,6 +872,7 @@ wikilink:
    `docs/superpowers/plans/2026-10-11-housemd-wc-11-fase-6b-composer-e-sidebar-ai.md` (fase 6b);
    `docs/superpowers/plans/2026-10-11-housemd-wc-12-fase-6c-revisione.md` (fase 6c);
    `docs/superpowers/plans/2026-10-12-housemd-wc-13-fase-7-impostazioni-workspace-app.md` (fase 7, 7a e 7b);
-   `docs/superpowers/plans/2026-10-12-housemd-wc-14-fase-8-rifinitura-accessibilita.md` (fase 8, 8a e 8b; 8a: PR #12).
+   `docs/superpowers/plans/2026-10-12-housemd-wc-14-fase-8-rifinitura-accessibilita.md` (fase 8, 8a e 8b; 8a: PR #12, 8b: PR #13).
+   Nota di chiusura: `docs/superpowers/notes/2026-10-12-chiusura-migrazione.md`.
 3. Fasi 4–6 (elementi in convivenza).
 4. Fasi 7–8 (impostazioni, workspace, via React, rifinitura, richiesta di merge).
