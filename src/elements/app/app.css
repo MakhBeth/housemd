@@ -1,0 +1,8 @@
+@layer components {
+  /* La radice non ha un box: l'albero sotto #root resta quello di App.tsx. */
+  @scope (hmd-app) {
+    :scope {
+      display: contents;
+    }
+  }
+}
