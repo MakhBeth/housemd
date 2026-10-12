@@ -52,9 +52,10 @@ test.describe('review bar', () => {
       await expect(button).toBeFocused();
     }
     expect(ai.requests).toBe(1);
-    // Tre pause di 200 ms già passate: 1,5 s in più portano il contatore a 2 s.
+    // Tre pause di 200 ms già passate: 1,5 s in più portano il contatore ad almeno 2 s. Almeno: dopo `install()`
+    // l'orologio finto scorre anche da solo, e in sviluppo le pause reali tra un clic e l'altro lo portano oltre.
     await page.clock.runFor(1500);
-    await expect(page.getByText(app.t('ai.generating', { seconds: 2 }))).toBeVisible();
+    await expect.poll(async () => Number((await counter.textContent())?.match(/(\d+) s/)?.[1] ?? 0)).toBeGreaterThanOrEqual(2);
     ai.release();
     await proposalShown(app);
     await expect(counter).toHaveCount(0);
