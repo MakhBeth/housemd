@@ -1121,478 +1121,6 @@ test('Hide sidebar from inside the sidebar: the focus goes to Show sidebar in th
 
 - [ ] **Step 6: gate.** `npm test` (atteso **1053** = 1050 + 2 workspace + 1 toasts), `npm run lint`; `e2e/workspace-shell.spec.ts` ed `e2e/editor.spec.ts` (sidebar e separatore) in build e in sviluppo; audit con `-g "sidebar|resizer|toast|workspace"` invariato. Commit: `test: …(RED)`, `fix: il focus resta nella barra quando la sidebar sparisce`, `feat: Home ed End sul separatore`, `fix: i timer dei toast partono una volta per toast`.
 
-### Task 5: Impostazioni — Esc, focus, annunci, nomi delle sezioni, indice (Builder)
-
-> Si esegue **dopo** il Task 4 (usa `src/dom/announce.ts`, creato lì). L'ordine della tabella «Divisione» mette il Task 4 prima per questo.
-
-**Files:**
-- Modify: `src/elements/settings/settings.element.ts` (+ `settings.dom.test.ts`), `settingsView.ts` (+ `settingsView.test.ts`), `profiles.element.ts` (+ `profiles.dom.test.ts`), `presets.element.ts` (+ `presets.dom.test.ts`), `sync.element.ts` (+ `sync.dom.test.ts`)
-- Modify (e2e): `settings.spec.ts`, `settings-sections.spec.ts`, `support/app.ts` (`createProfile`), `ai-model.spec.ts:176`, `ai-chips.spec.ts:57`
-
-P5, P6, P8, P9, P10, P11, P12, le sezioni con un nome e la regola dell'indice (decisione 6). Codice del prototipo, test verdi; P5, P11 e l'indice provati anche nel browser.
-
-- [ ] **Step 1: test che falliscono.**
-
-```diff
-diff --git a/src/elements/settings/presets.dom.test.ts b/src/elements/settings/presets.dom.test.ts
-index 6ec0a07..29d127d 100644
---- a/src/elements/settings/presets.dom.test.ts
-+++ b/src/elements/settings/presets.dom.test.ts
-@@ -101,16 +101,20 @@ test('switching with unsaved changes asks first: Cancel keeps the draft, Discard
-   assert.ok(button(EN_MESSAGES['ai.restoreOriginal']));
- });
- 
--test('Delete asks first and removes the preset; the detail goes away', async () => {
-+test('Delete asks first and removes the preset; the detail goes away and the focus goes to the first item', async () => {
-   const { el, items, button, deleted } = mount();
-   items()[1].click();
--  button(EN_MESSAGES['ai.delete']).click();
-+  const remove = button(EN_MESSAGES['ai.delete']);
-+  remove.click();
-   const dialog = document.querySelector('dialog')!;
-   assert.ok(dialog.textContent!.includes(EN_MESSAGES['ai.deleteMessage']));
-   [...dialog.querySelectorAll('button')].find((b) => b.textContent === EN_MESSAGES['ai.delete'])!.click();
-+  // Chiuso il dialog, il browser ridà il focus a chi l'aveva aperto (lo stub di jsdom no).
-+  remove.focus();
-   await waitFor(() => deleted.length === 1);
-   assert.deepEqual(deleted, ['mine']);
-   await waitFor(() => el.querySelector('.detail') === null);
-+  assert.ok(document.activeElement === items()[0], `the first item, not ${document.activeElement?.localName}`);
- });
- 
- test('detached: the confirmation closes, the store and language listeners are gone', async () => {
-diff --git a/src/elements/settings/profiles.dom.test.ts b/src/elements/settings/profiles.dom.test.ts
-index fb322be..607d7fe 100644
---- a/src/elements/settings/profiles.dom.test.ts
-+++ b/src/elements/settings/profiles.dom.test.ts
-@@ -115,3 +115,16 @@ test('Save validates the profile and makes the draft clean', async () => {
-   await waitFor(() => saved.length === 1 && !el.dirty);
-   assert.equal(saved[0].name, 'Local');
- });
-+
-+test('Delete asks first; once the profile is gone the focus goes to the first item, not the body', async () => {
-+  const { el, button } = mount();
-+  const items = () => [...el.querySelectorAll<HTMLButtonElement>('.list > button')];
-+  items()[1].click();
-+  const remove = button(EN_MESSAGES['ai.delete'])!;
-+  remove.click();
-+  [...document.querySelector('dialog')!.querySelectorAll('button')].find((b) => b.textContent === EN_MESSAGES['ai.delete'])!.click();
-+  // Chiuso il dialog, il browser ridà il focus a chi l'aveva aperto (lo stub di jsdom no).
-+  remove.focus();
-+  await waitFor(() => el.querySelector('.detail') === null);
-+  assert.ok(document.activeElement === items()[0], `the first item, not ${document.activeElement?.localName}`);
-+});
-diff --git a/src/elements/settings/settings.dom.test.ts b/src/elements/settings/settings.dom.test.ts
-index 5a6e29f..4dd5e1e 100644
---- a/src/elements/settings/settings.dom.test.ts
-+++ b/src/elements/settings/settings.dom.test.ts
-@@ -156,3 +156,38 @@ test('detached: no keydown listener left (Esc does nothing), the dialog closes,
-   assert.deepEqual(events, []);
-   assert.equal(listeners(), 0);
- });
-+
-+test('Esc that opens the confirmation is consumed: the same key press does not close the new dialog', () => {
-+  const { el } = mount({ ai: true });
-+  const presets = el.querySelector('hmd-settings-presets')!;
-+  presets.querySelector<HTMLButtonElement>('.list button')!.click();
-+  const name = presets.querySelector<HTMLInputElement>('.detail input')!;
-+  name.value = 'Changed';
-+  name.dispatchEvent(new Event('input', { bubbles: true }));
-+  const esc = new KeyboardEvent('keydown', { key: 'Escape', cancelable: true });
-+  window.dispatchEvent(esc);
-+  assert.equal(esc.defaultPrevented, true, 'Chrome would use the same Esc to close the dialog just opened');
-+  assert.equal(document.querySelectorAll('dialog[open]').length, 1);
-+  // Senza modifiche Esc chiude e basta: anche lì il tasto è consumato.
-+});
-+
-+test('every section is a region named by its h2; the width hint describes both width fields', () => {
-+  const { el, field } = mount({ ai: true });
-+  for (const section of el.querySelectorAll<HTMLElement>('.content > section')) {
-+    const h2 = section.querySelector('h2')!;
-+    assert.ok(h2.id, `${section.id}: the h2 has an id`);
-+    assert.equal(section.getAttribute('aria-labelledby'), h2.id, section.id);
-+  }
-+  const hint = el.querySelector<HTMLElement>('.hint')!;
-+  for (const key of ['settings.textWidth.editor', 'settings.textWidth.preview'] as const) assert.equal(field(EN_MESSAGES[key]).getAttribute('aria-describedby'), hint.id, key);
-+});
-+
-+test('a link activated from the keyboard scrolls to its section and moves the focus to the section title', () => {
-+  const { el } = mount({ ai: true });
-+  const link = el.querySelectorAll<HTMLAnchorElement>('nav a')[3];
-+  link.focus();
-+  link.click();
-+  const h2 = el.querySelector('#settings-ai-sync h2')!;
-+  assert.equal(h2.getAttribute('tabindex'), '-1');
-+  assert.ok(document.activeElement === h2, `the Sync title, not ${document.activeElement?.localName}`);
-+});
-diff --git a/src/elements/settings/settingsView.test.ts b/src/elements/settings/settingsView.test.ts
-index 1fada72..f077249 100644
---- a/src/elements/settings/settingsView.test.ts
-+++ b/src/elements/settings/settingsView.test.ts
-@@ -1,7 +1,7 @@
- import test from 'node:test';
- import assert from 'node:assert/strict';
- 
--import { commitDelay, commitWidths, sectionId, sectionOf, settingsSections, topSection, widthText } from './settingsView';
-+import { commitDelay, commitWidths, currentSection, sectionId, sectionOf, settingsSections, widthText } from './settingsView';
- 
- test('without the AI controller only the general section is shown, with it all four in order', () => {
-   assert.deepEqual(settingsSections(false), ['general']);
-@@ -15,15 +15,21 @@ test('section ids go both ways; an unknown or hidden section is null', () => {
-   assert.equal(sectionOf('settings-nope', settingsSections(true)), null);
- });
- 
--test('the index follows the topmost intersecting section; none intersecting leaves it alone', () => {
--  const sections = settingsSections(true);
--  const entries = [
--    { id: 'settings-ai-presets', top: 300, intersecting: true },
--    { id: 'settings-general', top: -900, intersecting: false },
--    { id: 'settings-ai-profiles', top: 20, intersecting: true },
-+test('the current section: the last one whose top is in the upper 40 %, the last one at the end of the scroll', () => {
-+  // Misure prese nel browser (1280×800) con tutte e quattro le sezioni: in fondo, Sync non arriva in cima.
-+  const tops = (general: number, profiles: number, presets: number, sync: number) => [
-+    { section: 'general' as const, top: general },
-+    { section: 'ai-profiles' as const, top: profiles },
-+    { section: 'ai-presets' as const, top: presets },
-+    { section: 'ai-sync' as const, top: sync },
-   ];
--  assert.equal(topSection(entries, sections), 'ai-profiles');
--  assert.equal(topSection([{ id: 'settings-general', top: 0, intersecting: false }], sections), null);
-+  const view = (scrollTop: number) => ({ scrollTop, clientHeight: 800, scrollHeight: 1619 });
-+  assert.equal(currentSection(tops(24, 747, 905, 1128), view(0)), 'general');
-+  assert.equal(currentSection(tops(-723, 16, 174, 397), view(747)), 'ai-presets', 'presets entra nella fascia alta');
-+  assert.equal(currentSection(tops(-795, -56, 102, 325), view(819)), 'ai-sync', 'in fondo: l\'ultima');
-+  assert.equal(currentSection(tops(-795, -56, 102, 325), view(818.5)), 'ai-sync', 'mezzo pixel di arrotondamento');
-+  assert.equal(currentSection(tops(-300, 400, 560, 780), view(300)), 'general', 'nessun titolo nella fascia: quella sopra');
-+  assert.equal(currentSection([], view(0)), null);
- });
- 
- test('text widths: an empty field is no limit, values are clamped, unchanged widths give no update', () => {
-diff --git a/src/elements/settings/sync.dom.test.ts b/src/elements/settings/sync.dom.test.ts
-index 08feb54..66c5889 100644
---- a/src/elements/settings/sync.dom.test.ts
-+++ b/src/elements/settings/sync.dom.test.ts
-@@ -178,3 +178,21 @@ test('B can restore while the cancelled count of A is still pending; the late an
-   assert.equal(document.querySelectorAll('dialog').length, 1);
-   assert.deepEqual(services[0].calls, []);
- });
-+
-+test('the sync status is a polite live region and its error an alert; each Restore is described by its own backup path', async () => {
-+  const { el, services } = await mount({ name: 'sync' } as FileSystemDirectoryHandle);
-+  const s = services[0];
-+  const [status] = [...el.firstElementChild!.children].filter((c) => c.localName === 'p').slice(1);
-+  assert.equal(status.getAttribute('role'), 'status');
-+  s.set({ status: 'error', error: 'server' } as never);
-+  const error = [...el.querySelectorAll('p')].find((p) => p.textContent === EN_MESSAGES['ai.error.server']);
-+  assert.equal(error?.getAttribute('role'), 'alert');
-+  s.answer(0);
-+  await waitFor(() => el.querySelectorAll('details > p').length === 2);
-+  for (const p of el.querySelectorAll('details > p')) {
-+    const path = p.firstElementChild!;
-+    const restore = p.querySelector('button')!;
-+    assert.equal(restore.getAttribute('aria-describedby'), path.id, path.textContent!);
-+    assert.ok(path.id, 'the path has an id');
-+  }
-+});
-```
-
-jsdom non restituisce il focus all'apertore quando un `<dialog>` si chiude (lo fa Chrome): i due test di Elimina lo fanno a mano (`remove.focus()`), con il commento. RED atteso (misurato): `settings.dom.test.ts` 3 rossi (Esc non consumato, sezioni senza `aria-labelledby`, focus che resta sul link); `settingsView.test.ts` non compila finché `currentSection` non esiste; `profiles`/`presets.dom.test.ts` «… the focus goes to the first item» (`not body`); `sync.dom.test.ts` 1 rosso (nessun `role`).
-
-- [ ] **Step 2: `currentSection` al posto di `topSection`** in `settingsView.ts` (`sectionOf` resta: lo usa il suo test):
-
-```diff
-diff --git a/src/elements/settings/settingsView.ts b/src/elements/settings/settingsView.ts
-index 2345bd0..c22d394 100644
---- a/src/elements/settings/settingsView.ts
-+++ b/src/elements/settings/settingsView.ts
-@@ -26,12 +26,18 @@ export function sectionOf(id: string, sections: readonly SettingsSection[]): Set
- }
- 
- /**
-- * Sezione da segnare nell'indice: la più in alto tra quelle che si intersecano (come il callback
-- * dell'IntersectionObserver di SettingsView.tsx). Null = nessuna, l'indice resta com'è.
-+ * Sezione da segnare nell'indice mentre si scorre: in fondo allo scorrimento l'ultima (le ultime sezioni sono
-+ * corte e non arrivano mai in cima), altrimenti l'ultima il cui inizio sta nel 40 % alto del contenitore, o la
-+ * prima. `top` è misurato dal bordo alto del contenitore che scorre. Null senza sezioni.
-  */
--export function topSection(entries: readonly { id: string; top: number; intersecting: boolean }[], sections: readonly SettingsSection[]): SettingsSection | null {
--  const top = entries.filter((e) => e.intersecting).sort((a, b) => a.top - b.top)[0];
--  return top ? sectionOf(top.id, sections) : null;
-+export function currentSection(
-+  tops: readonly { section: SettingsSection; top: number }[],
-+  view: { scrollTop: number; clientHeight: number; scrollHeight: number },
-+): SettingsSection | null {
-+  if (tops.length === 0) return null;
-+  if (view.scrollTop + view.clientHeight >= view.scrollHeight - 1) return tops[tops.length - 1].section;
-+  const band = view.clientHeight * 0.4;
-+  return tops.filter((t) => t.top <= band).at(-1)?.section ?? tops[0].section;
- }
- 
- /** Testo del campo di una larghezza: vuoto = nessun limite. */
-```
-
-- [ ] **Step 3: `hmd-settings`** — Esc consumato, sezioni con nome, titoli con `tabindex="-1"`, nota delle larghezze collegata, focus sul titolo dopo un salto, indice che segue lo scorrimento con il salto fissato (via l'`IntersectionObserver`):
-
-```diff
-diff --git a/src/elements/settings/settings.element.ts b/src/elements/settings/settings.element.ts
-index 00cc3fb..51c1502 100644
---- a/src/elements/settings/settings.element.ts
-+++ b/src/elements/settings/settings.element.ts
-@@ -15,7 +15,7 @@ import { emit } from '../events';
- import { showChildren } from './fields';
- import type { HmdSettingsPresets, PresetsController } from './presets.element';
- import type { HmdSettingsProfiles, ProfilesController } from './profiles.element';
--import { SECTION_LABELS, commitDelay, commitWidths, sectionId, settingsSections, topSection, widthText } from './settingsView';
-+import { SECTION_LABELS, commitDelay, commitWidths, currentSection, sectionId, settingsSections, widthText } from './settingsView';
- import type { HmdSettingsSync, SyncController } from './sync.element';
- import './settings.css';
- 
-@@ -75,9 +75,12 @@ export class HmdSettings extends HmdElement {
-   #dirty = new Set<SettingsSection>();
-   #visible: SettingsSection = 'general';
-   #confirming = false;
--  #observer: IntersectionObserver | null = null;
--  /** Sezioni osservate (cambiano solo con il controller AI). */
--  #observed: SettingsSection[] = [];
-+  /**
-+   * La sezione appena raggiunta dall'indice o dalla rotta, con lo scorrimento che le ha dato: resta la corrente
-+   * finché chi usa la pagina non scorre altrove (le ultime sezioni non arrivano in cima, la regola dello
-+   * scorrimento non le sceglierebbe mai da sola).
-+   */
-+  #pinned: { section: SettingsSection; scrollTop: number } | null = null;
-   /** Sezione e controller dell'ultimo scorrimento: si scorre solo quando cambiano (l'effetto `[section, ai]`). */
-   #scrolled: { section: SettingsSection; ai: SettingsController | null } | null = null;
-   #dialogs: AbortController | null = null;
-@@ -152,10 +155,14 @@ export class HmdSettings extends HmdElement {
-     this.#dialogs ??= new AbortController();
-     const parts = this.#parts!;
-     parts.content.addEventListener('hmd-settings-dirty', (event) => this.#onDirty(event), { signal });
-+    parts.content.addEventListener('scroll', () => this.#onScroll(), { passive: true, signal });
-     window.addEventListener(
-       'keydown',
-       (event) => {
--        if (event.key === 'Escape' && !document.querySelector('dialog[open]')) this.#close();
-+        if (event.key !== 'Escape' || document.querySelector('dialog[open]')) return;
-+        // Consumato: altrimenti Chrome usa lo stesso Esc per chiudere il dialog di conferma appena aperto.
-+        event.preventDefault();
-+        this.#close();
-       },
-       { signal },
-     );
-@@ -169,9 +176,7 @@ export class HmdSettings extends HmdElement {
- 
-   disconnectedCallback(): void {
-     super.disconnectedCallback();
--    this.#observer?.disconnect();
--    this.#observer = null;
--    this.#observed = [];
-+    this.#pinned = null;
-     this.#scrolled = null;
-     this.#dialogs?.abort();
-     this.#dialogs = null;
-@@ -220,7 +225,31 @@ export class HmdSettings extends HmdElement {
-   }
- 
-   #scrollTo(section: SettingsSection): void {
--    this.#parts?.content.querySelector(`#${sectionId(section)}`)?.scrollIntoView({ block: 'start' });
-+    const content = this.#parts?.content;
-+    if (!content) return;
-+    content.querySelector(`#${sectionId(section)}`)?.scrollIntoView({ block: 'start' });
-+    // La sezione chiesta è la corrente anche se non arriva in cima; il suo evento scroll non la cambia.
-+    this.#pinned = { section, scrollTop: content.scrollTop };
-+    if (this.#visible !== section) {
-+      this.#visible = section;
-+      this.#loop.update();
-+    }
-+  }
-+
-+  /** L'indice segue lo scorrimento (`currentSection`), salvo l'evento scroll del salto appena fatto. */
-+  #onScroll(): void {
-+    const content = this.#parts!.content;
-+    if (this.#pinned && Math.abs(content.scrollTop - this.#pinned.scrollTop) < 1) return;
-+    this.#pinned = null;
-+    const box = content.getBoundingClientRect().top;
-+    const tops = settingsSections(!!this.#ai).flatMap((section) => {
-+      const node = content.querySelector(`#${sectionId(section)}`);
-+      return node ? [{ section, top: node.getBoundingClientRect().top - box }] : [];
-+    });
-+    const current = currentSection(tops, content);
-+    if (!current || current === this.#visible) return;
-+    this.#visible = current;
-+    this.#loop.update();
-   }
- 
-   #build(): Parts {
-@@ -255,6 +284,7 @@ export class HmdSettings extends HmdElement {
-             min: String(MIN_TEXT_WIDTH),
-             max: String(MAX_TEXT_WIDTH),
-             step: '1',
-+            'aria-describedby': 'settings-width-hint',
-             on: { input: (e) => (this.#widthTexts = { ...this.#widthTexts, [pane]: value(e) }), blur: () => this.#commitWidths(), keydown: onEnter(() => this.#commitWidths()) },
-           }),
-         },
-@@ -262,8 +292,10 @@ export class HmdSettings extends HmdElement {
-     ) as Parts['widths'];
-     delay.value = this.#delayText;
-     for (const pane of TEXT_WIDTH_PANES) widths[pane].input.value = this.#widthTexts[pane];
--    const sectionBox = (id: SettingsSection, ...children: Node[]) => el('section', { id: sectionId(id), class: 'section' }, ...children);
--    const titles = [el('h2'), el('h2'), el('h2')];
-+    // Ogni sezione è una regione con il nome del suo titolo; il titolo prende il focus dopo un salto dall'indice.
-+    const title = (id: SettingsSection) => el('h2', { id: `${sectionId(id)}-title`, tabIndex: -1 });
-+    const sectionBox = (id: SettingsSection, ...children: Node[]) => el('section', { id: sectionId(id), class: 'section', 'aria-labelledby': `${sectionId(id)}-title` }, ...children);
-+    const titles = [title('ai-profiles'), title('ai-presets'), title('ai-sync')];
-     const parts: Parts = {
-       view: el('div', { class: 'view', role: 'region' }),
-       nav: el('nav', { class: 'nav' }),
-@@ -271,8 +303,8 @@ export class HmdSettings extends HmdElement {
-       title: el('h1', { tabIndex: -1 }),
-       links: new Map(),
-       content: el('div', { class: 'content' }),
--      general: el('section', { id: sectionId('general'), class: 'section' }),
--      generalTitle: el('h2'),
-+      general: el('section', { id: sectionId('general'), class: 'section', 'aria-labelledby': `${sectionId('general')}-title` }),
-+      generalTitle: title('general'),
-       languageCaption: el('span'),
-       language: el(
-         'select',
-@@ -289,7 +321,7 @@ export class HmdSettings extends HmdElement {
-       delay,
-       widthLegend: el('legend'),
-       widths,
--      widthHint: el('p', { class: 'hint' }),
-+      widthHint: el('p', { class: 'hint', id: 'settings-width-hint' }),
-       saveAll: el('button', { type: 'button', class: 'secondary', on: { click: () => emit(this, 'hmd-settings-save-all', null) } }),
-       ai: { profiles: el('section'), presets: el('section'), sync: el('section'), titles },
-       profiles: el('hmd-settings-profiles'),
-@@ -327,6 +359,8 @@ export class HmdSettings extends HmdElement {
-           emit(this, 'hmd-settings-section', { section });
-           // Se la sezione è già quella della rotta non cambia nulla: si scorre direttamente.
-           this.#scrollTo(section);
-+          // Il focus segue il salto (WCAG 2.4.3): sul titolo della sezione, senza un secondo scorrimento.
-+          this.#parts?.content.querySelector<HTMLElement>(`#${sectionId(section)}-title`)?.focus({ preventScroll: true });
-         },
-       },
-     });
-@@ -383,7 +417,6 @@ export class HmdSettings extends HmdElement {
-       if (parts.sync.i18n !== i18n) parts.sync.i18n = i18n;
-     }
-     showChildren(parts.content, [parts.general, ...(ai ? [parts.ai.profiles, parts.ai.presets, parts.ai.sync] : [])], [parts.ai.profiles, parts.ai.presets, parts.ai.sync]);
--    this.#observe(parts, sections);
-     // Entrando (o cambiando sezione dalla rotta) si scorre alla sezione; anche quando compaiono le sezioni AI.
-     if (this.#scrolled?.section !== this.#section || this.#scrolled.ai !== ai) {
-       this.#scrolled = { section: this.#section, ai };
-@@ -391,23 +424,6 @@ export class HmdSettings extends HmdElement {
-     }
-   }
- 
--  /** La voce dell'indice segue la sezione visibile mentre si scorre (un observer per insieme di sezioni). */
--  #observe(parts: Parts, sections: SettingsSection[]): void {
--    if (this.#observer && this.#observed.join() === sections.join()) return;
--    this.#observer?.disconnect();
--    this.#observed = sections;
--    if (typeof IntersectionObserver === 'undefined') return;
--    this.#observer = new IntersectionObserver(
--      (entries) => {
--        const top = topSection(entries.map((e) => ({ id: e.target.id, top: e.boundingClientRect.top, intersecting: e.isIntersecting })), this.#observed);
--        if (!top || top === this.#visible) return;
--        this.#visible = top;
--        this.#loop.update();
--      },
--      { root: parts.content, rootMargin: '0px 0px -60% 0px' },
--    );
--    parts.content.querySelectorAll('section[id^="settings-"]').forEach((section) => this.#observer!.observe(section));
--  }
- }
- 
- declare global {
-```
-
-- [ ] **Step 4: profili, preset, sync.**
-
-```diff
-diff --git a/src/elements/settings/presets.element.ts b/src/elements/settings/presets.element.ts
-index 12654c6..564786f 100644
---- a/src/elements/settings/presets.element.ts
-+++ b/src/elements/settings/presets.element.ts
-@@ -56,6 +56,9 @@ export class HmdSettingsPresets extends HmdElement {
-   #loop = new RenderLoop(this, {
-     ready: () => !!this.#list && !!this.#controller && !!this.#i18n && this.isConnected,
-     render: () => this.#render(this.#list!, this.#controller!, this.#i18n!),
-+    // Il nodo con il focus è sparito (Elimina, con il dettaglio): il focus va sulla prima voce dell'elenco.
-+    focusScope: () => this,
-+    refocus: () => (this.#list?.firstElementChild as HTMLElement | null)?.focus(),
-   });
- 
-   get controller(): PresetsController | null { return this.#controller; }
-diff --git a/src/elements/settings/profiles.element.ts b/src/elements/settings/profiles.element.ts
-index 6c6e794..5f19ee4 100644
---- a/src/elements/settings/profiles.element.ts
-+++ b/src/elements/settings/profiles.element.ts
-@@ -74,6 +74,9 @@ export class HmdSettingsProfiles extends HmdElement {
-   #loop = new RenderLoop(this, {
-     ready: () => !!this.#list && !!this.#controller && !!this.#i18n && this.isConnected,
-     render: () => this.#render(this.#list!, this.#controller!, this.#i18n!),
-+    // Il nodo con il focus è sparito (Elimina, con il dettaglio): il focus va sulla prima voce dell'elenco.
-+    focusScope: () => this,
-+    refocus: () => (this.#list?.firstElementChild as HTMLElement | null)?.focus(),
-   });
- 
-   get controller(): ProfilesController | null { return this.#controller; }
-diff --git a/src/elements/settings/sync.element.ts b/src/elements/settings/sync.element.ts
-index 68072dd..af76add 100644
---- a/src/elements/settings/sync.element.ts
-+++ b/src/elements/settings/sync.element.ts
-@@ -3,6 +3,7 @@ import type { SyncBinding, SyncService } from '../../ai/syncBinding';
- import { HmdElement } from '../../dom/element';
- import { el, setText } from '../../dom/el';
- import { RenderLoop } from '../../dom/renderLoop';
-+import { uid } from '../../dom/uid';
- import type { MessageKey } from '../../i18n/messages';
- import type { I18nStore } from '../../state/i18nStore';
- import { showConfirmDialog } from '../dialogs/confirmDialog';
-@@ -91,8 +92,9 @@ export class HmdSettingsSync extends HmdElement {
-         folder: el('span'),
-         disable: el('button', { type: 'button', on: { click: () => void this.#binding?.disable().catch(report) } }),
-         reactivate: el('button', { type: 'button', on: { click: () => void this.#binding?.reactivate().catch(report) } }),
--        status: el('p', { class: 'help' }),
--        error: el('p', { class: 'help' }),
-+        // Lo stato cambia dopo ogni sync (LAB-42 P9): regione live; l'errore entra già scritto, come avviso.
-+        status: el('p', { class: 'help', role: 'status' }),
-+        error: el('p', { class: 'help', role: 'alert' }),
-         conflicts: el('p', { class: 'help' }),
-         syncActions: el('div', { class: 'actions' }),
-         syncNow: el('button', { type: 'button', on: { click: () => void (this.#sync?.service as SyncDetailsService | undefined)?.syncNow() } }),
-@@ -208,13 +210,19 @@ export class HmdSettingsSync extends HmdElement {
-   #renderBackups(parts: Parts, t: I18nStore['t']): void {
-     const nodes = new Map<string, HTMLParagraphElement>();
-     for (const path of this.#backups) {
--      const node = this.#backupNodes.get(path) ?? el('p', { class: 'help' }, path, el('button', { type: 'button', on: { click: () => this.#restore(path) } }));
-+      // Il percorso descrive il suo «Ripristina»: i pulsanti hanno lo stesso nome (LAB-42 P10, WCAG 2.4.6).
-+      const node = this.#backupNodes.get(path) ?? this.#backupNode(path);
-       setText(node.lastElementChild!, t('ai.restoreBackup'));
-       nodes.set(path, node);
-     }
-     showChildren(parts.backups, [parts.backupsSummary, ...nodes.values()], [...this.#backupNodes.values()]);
-     this.#backupNodes = nodes;
-   }
-+
-+  #backupNode(path: string): HTMLParagraphElement {
-+    const id = uid('hmd-settings-backup');
-+    return el('p', { class: 'help' }, el('span', { id }, path), el('button', { type: 'button', 'aria-describedby': id, on: { click: () => this.#restore(path) } }));
-+  }
- }
- 
- declare global {
-```
-
-- [ ] **Step 5: P8, «Connesso» annunciato.** Vedi il paragrafo «P8» qui sotto (codice provato nel prototipo dopo le suite, test incluso).
-
-- [ ] **Step 6: e2e.** (a) In `settings.spec.ts` il test P5 del Task 1 si rovescia: dopo Esc il dialog di conferma è aperto e il focus è su «Annulla» (`page.getByRole('dialog').getByRole('button', { name: app.t('dialog.cancel') })` — chiave da controllare in `en.json`), «Annulla» lascia le impostazioni aperte con la bozza; (b) `settings-sections.spec.ts` «the index follows the scroll»: dopo Profili, un salto a «AI · Sync» rende corrente Sync (era il limite di oggi: il commento si toglie), un salto a «AI · Preset» rende corrente Preset, e il focus è sul titolo `h2` della sezione (`getByRole('heading', { name, level: 2 })`); (c) **le sezioni per nome**: `#settings-ai-presets` di `settings-sections.spec.ts:109` diventa `settings(app).getByRole('region', { name: app.t('settings.aiPresets') })`; i localizzatori per posizione (`.first()`/`.nth(1)` su «+ Crea», nome, provider, Salva) in `settings.spec.ts:16-17, 84, 86, 103`, `settings-sections.spec.ts:72, 88`, `support/app.ts:80-83`, `ai-chips.spec.ts:57`, `ai-model.spec.ts:176` diventano `getByRole('region', { name: app.t('settings.aiProfiles' | 'settings.aiPresets') })` più il ruolo, senza posizione; (d) P6 in `settings.spec.ts` «deleting a preset asks first…»: dopo la conferma il focus è sulla prima voce dell'elenco dei preset.
-
-**Eccezione che resta nell'audit.** `computed-styles.audit.ts:576` (`#settings-ai-presets`) e le posizioni di `:587`, `:673-674` **non** cambiano in questo task: l'audit esegue la stessa preparazione anche sulla build di `dist-baseline/`, che non ha ancora le sezioni con il nome. Si sostituiscono nel primo task che ricostruisce la baseline da un commit con le sezioni con il nome (Task 8), con una riga nel commento.
-
-- [ ] **Step 7: gate.** `npm test` (atteso: quello del Task 4 + 6; il conteggio esatto nel commento), `npm run lint`; in build e in sviluppo `settings.spec.ts`, `settings-sections.spec.ts`, `ai-model.spec.ts`, `ai-chips.spec.ts`, `theme-i18n.spec.ts`; audit con `-g "settings"` invariato (misurato). Commit piccoli: `test: …(RED)`, `fix: Esc nelle impostazioni apre la conferma e non la richiude`, `fix: il focus resta nella sezione dopo Elimina e dopo un salto dall'indice`, `feat: sezioni delle impostazioni con un nome accessibile`, `fix: l'indice delle impostazioni arriva alle ultime sezioni`, `fix: stato della sync e «Connesso» annunciati`, `test: e2e per nome di sezione al posto di id e posizione`.
-
 ### Task 4: AI — annunci, nome dell'editor, plurale, Scarta, Continua, doppio clic, bozza conservata, chip (Planner)
 
 **Files:**
@@ -3073,3 +2601,800 @@ index 96d9e44..b0e9d22 100644
 ```
 
 - [ ] **Step 9: gate e baseline.** `npm test` (atteso **1064** = 1053 + 3 `announce` + 1 `i18n` + 1 `reviewBarView` + 1 `review-bar` + 1 `review` + 2 `composer` + 1 `editor` + 1 `workspace`), `npm run lint`; in build e in sviluppo `ai-review-bar.spec.ts`, `ai-review.spec.ts`, `ai-composer.spec.ts`, `ai-diff.spec.ts`, `editor.spec.ts`, `editor-session.spec.ts`. Audit con `-g "ai-|editor"`: cadono **solo** `ai-review-generating`, `ai-review-note`, `ai-composer-running` (`…>hmd-ai-review-bar:0>span:2: nuovo`), `ai-review-truncated`, `ai-review-warnings` (`content: "1 warnings" → "1 warning"`, `width`/`inline-size`/`*-origin` del `::after`), `ai-composer-note-no-document` (testo e misure della nota); righe incollate nel commento. Poi `npm run build && rm -rf dist-baseline && cp -r dist dist-baseline && git rev-parse HEAD > dist-baseline/BASELINE_SHA` e audit completo verde. Commit piccoli, uno per punto.
+
+### Task 5: Impostazioni — Esc, focus, annunci, nomi delle sezioni, indice (Builder)
+
+> Si esegue **dopo** il Task 4 (usa `src/dom/announce.ts`, creato lì).
+
+**Files:**
+- Modify: `src/elements/settings/settings.element.ts` (+ `settings.dom.test.ts`), `settingsView.ts` (+ `settingsView.test.ts`), `profiles.element.ts` (+ `profiles.dom.test.ts`), `presets.element.ts` (+ `presets.dom.test.ts`), `sync.element.ts` (+ `sync.dom.test.ts`)
+- Modify (e2e): `settings.spec.ts`, `settings-sections.spec.ts`, `support/app.ts` (`createProfile`), `ai-model.spec.ts:176`, `ai-chips.spec.ts:57`
+
+P5, P6, P8, P9, P10, P11, P12, le sezioni con un nome e la regola dell'indice (decisione 6). Codice del prototipo, test verdi; P5, P11 e l'indice provati anche nel browser.
+
+- [ ] **Step 1: test che falliscono.**
+
+```diff
+diff --git a/src/elements/settings/presets.dom.test.ts b/src/elements/settings/presets.dom.test.ts
+index 6ec0a07..29d127d 100644
+--- a/src/elements/settings/presets.dom.test.ts
++++ b/src/elements/settings/presets.dom.test.ts
+@@ -101,16 +101,20 @@ test('switching with unsaved changes asks first: Cancel keeps the draft, Discard
+   assert.ok(button(EN_MESSAGES['ai.restoreOriginal']));
+ });
+ 
+-test('Delete asks first and removes the preset; the detail goes away', async () => {
++test('Delete asks first and removes the preset; the detail goes away and the focus goes to the first item', async () => {
+   const { el, items, button, deleted } = mount();
+   items()[1].click();
+-  button(EN_MESSAGES['ai.delete']).click();
++  const remove = button(EN_MESSAGES['ai.delete']);
++  remove.click();
+   const dialog = document.querySelector('dialog')!;
+   assert.ok(dialog.textContent!.includes(EN_MESSAGES['ai.deleteMessage']));
+   [...dialog.querySelectorAll('button')].find((b) => b.textContent === EN_MESSAGES['ai.delete'])!.click();
++  // Chiuso il dialog, il browser ridà il focus a chi l'aveva aperto (lo stub di jsdom no).
++  remove.focus();
+   await waitFor(() => deleted.length === 1);
+   assert.deepEqual(deleted, ['mine']);
+   await waitFor(() => el.querySelector('.detail') === null);
++  assert.ok(document.activeElement === items()[0], `the first item, not ${document.activeElement?.localName}`);
+ });
+ 
+ test('detached: the confirmation closes, the store and language listeners are gone', async () => {
+diff --git a/src/elements/settings/profiles.dom.test.ts b/src/elements/settings/profiles.dom.test.ts
+index fb322be..eefc51c 100644
+--- a/src/elements/settings/profiles.dom.test.ts
++++ b/src/elements/settings/profiles.dom.test.ts
+@@ -93,12 +93,19 @@ test('changing provider sets its default url and forgets the typed key', () => {
+   assert.equal(field(EN_MESSAGES['ai.secret'])!.value, '');
+ });
+ 
+-test('Connection: «Connected» as a status only after a good answer; an unreachable server is reported', async () => {
++test('Connection: «Connected» as a status only after a good answer, entering empty and written a frame later; an unreachable server is reported', async () => {
+   const { el, ai, button, down } = mount();
+   button('ollama')!.click();
++  // Il testo della regione a ogni mutazione: entra vuota e il testo arriva dopo, come una mutazione che lo
++  // screen reader legge (LAB-42 P8).
++  const seen: string[] = [];
++  new MutationObserver(() => {
++    const status = el.querySelector('[role="status"]');
++    if (status && seen.at(-1) !== status.textContent) seen.push(status.textContent!);
++  }).observe(el, { subtree: true, childList: true, characterData: true });
+   button(EN_MESSAGES['ai.connection'])!.click();
+-  await waitFor(() => el.querySelector('[role="status"]') !== null);
+-  assert.equal(el.querySelector('[role="status"]')!.textContent, EN_MESSAGES['ai.connected']);
++  await waitFor(() => el.querySelector('[role="status"]')?.textContent === EN_MESSAGES['ai.connected']);
++  assert.deepEqual(seen, ['', EN_MESSAGES['ai.connected']]);
+   down();
+   button(EN_MESSAGES['ai.connection'])!.click();
+   assert.equal(el.querySelector('[role="status"]'), null);
+@@ -115,3 +122,16 @@ test('Save validates the profile and makes the draft clean', async () => {
+   await waitFor(() => saved.length === 1 && !el.dirty);
+   assert.equal(saved[0].name, 'Local');
+ });
++
++test('Delete asks first; once the profile is gone the focus goes to the first item, not the body', async () => {
++  const { el, button } = mount();
++  const items = () => [...el.querySelectorAll<HTMLButtonElement>('.list > button')];
++  items()[1].click();
++  const remove = button(EN_MESSAGES['ai.delete'])!;
++  remove.click();
++  [...document.querySelector('dialog')!.querySelectorAll('button')].find((b) => b.textContent === EN_MESSAGES['ai.delete'])!.click();
++  // Chiuso il dialog, il browser ridà il focus a chi l'aveva aperto (lo stub di jsdom no).
++  remove.focus();
++  await waitFor(() => el.querySelector('.detail') === null);
++  assert.ok(document.activeElement === items()[0], `the first item, not ${document.activeElement?.localName}`);
++});
+diff --git a/src/elements/settings/settings.dom.test.ts b/src/elements/settings/settings.dom.test.ts
+index 5a6e29f..4dd5e1e 100644
+--- a/src/elements/settings/settings.dom.test.ts
++++ b/src/elements/settings/settings.dom.test.ts
+@@ -156,3 +156,38 @@ test('detached: no keydown listener left (Esc does nothing), the dialog closes,
+   assert.deepEqual(events, []);
+   assert.equal(listeners(), 0);
+ });
++
++test('Esc that opens the confirmation is consumed: the same key press does not close the new dialog', () => {
++  const { el } = mount({ ai: true });
++  const presets = el.querySelector('hmd-settings-presets')!;
++  presets.querySelector<HTMLButtonElement>('.list button')!.click();
++  const name = presets.querySelector<HTMLInputElement>('.detail input')!;
++  name.value = 'Changed';
++  name.dispatchEvent(new Event('input', { bubbles: true }));
++  const esc = new KeyboardEvent('keydown', { key: 'Escape', cancelable: true });
++  window.dispatchEvent(esc);
++  assert.equal(esc.defaultPrevented, true, 'Chrome would use the same Esc to close the dialog just opened');
++  assert.equal(document.querySelectorAll('dialog[open]').length, 1);
++  // Senza modifiche Esc chiude e basta: anche lì il tasto è consumato.
++});
++
++test('every section is a region named by its h2; the width hint describes both width fields', () => {
++  const { el, field } = mount({ ai: true });
++  for (const section of el.querySelectorAll<HTMLElement>('.content > section')) {
++    const h2 = section.querySelector('h2')!;
++    assert.ok(h2.id, `${section.id}: the h2 has an id`);
++    assert.equal(section.getAttribute('aria-labelledby'), h2.id, section.id);
++  }
++  const hint = el.querySelector<HTMLElement>('.hint')!;
++  for (const key of ['settings.textWidth.editor', 'settings.textWidth.preview'] as const) assert.equal(field(EN_MESSAGES[key]).getAttribute('aria-describedby'), hint.id, key);
++});
++
++test('a link activated from the keyboard scrolls to its section and moves the focus to the section title', () => {
++  const { el } = mount({ ai: true });
++  const link = el.querySelectorAll<HTMLAnchorElement>('nav a')[3];
++  link.focus();
++  link.click();
++  const h2 = el.querySelector('#settings-ai-sync h2')!;
++  assert.equal(h2.getAttribute('tabindex'), '-1');
++  assert.ok(document.activeElement === h2, `the Sync title, not ${document.activeElement?.localName}`);
++});
+diff --git a/src/elements/settings/settingsView.test.ts b/src/elements/settings/settingsView.test.ts
+index 1fada72..f077249 100644
+--- a/src/elements/settings/settingsView.test.ts
++++ b/src/elements/settings/settingsView.test.ts
+@@ -1,7 +1,7 @@
+ import test from 'node:test';
+ import assert from 'node:assert/strict';
+ 
+-import { commitDelay, commitWidths, sectionId, sectionOf, settingsSections, topSection, widthText } from './settingsView';
++import { commitDelay, commitWidths, currentSection, sectionId, sectionOf, settingsSections, widthText } from './settingsView';
+ 
+ test('without the AI controller only the general section is shown, with it all four in order', () => {
+   assert.deepEqual(settingsSections(false), ['general']);
+@@ -15,15 +15,21 @@ test('section ids go both ways; an unknown or hidden section is null', () => {
+   assert.equal(sectionOf('settings-nope', settingsSections(true)), null);
+ });
+ 
+-test('the index follows the topmost intersecting section; none intersecting leaves it alone', () => {
+-  const sections = settingsSections(true);
+-  const entries = [
+-    { id: 'settings-ai-presets', top: 300, intersecting: true },
+-    { id: 'settings-general', top: -900, intersecting: false },
+-    { id: 'settings-ai-profiles', top: 20, intersecting: true },
++test('the current section: the last one whose top is in the upper 40 %, the last one at the end of the scroll', () => {
++  // Misure prese nel browser (1280×800) con tutte e quattro le sezioni: in fondo, Sync non arriva in cima.
++  const tops = (general: number, profiles: number, presets: number, sync: number) => [
++    { section: 'general' as const, top: general },
++    { section: 'ai-profiles' as const, top: profiles },
++    { section: 'ai-presets' as const, top: presets },
++    { section: 'ai-sync' as const, top: sync },
+   ];
+-  assert.equal(topSection(entries, sections), 'ai-profiles');
+-  assert.equal(topSection([{ id: 'settings-general', top: 0, intersecting: false }], sections), null);
++  const view = (scrollTop: number) => ({ scrollTop, clientHeight: 800, scrollHeight: 1619 });
++  assert.equal(currentSection(tops(24, 747, 905, 1128), view(0)), 'general');
++  assert.equal(currentSection(tops(-723, 16, 174, 397), view(747)), 'ai-presets', 'presets entra nella fascia alta');
++  assert.equal(currentSection(tops(-795, -56, 102, 325), view(819)), 'ai-sync', 'in fondo: l\'ultima');
++  assert.equal(currentSection(tops(-795, -56, 102, 325), view(818.5)), 'ai-sync', 'mezzo pixel di arrotondamento');
++  assert.equal(currentSection(tops(-300, 400, 560, 780), view(300)), 'general', 'nessun titolo nella fascia: quella sopra');
++  assert.equal(currentSection([], view(0)), null);
+ });
+ 
+ test('text widths: an empty field is no limit, values are clamped, unchanged widths give no update', () => {
+diff --git a/src/elements/settings/sync.dom.test.ts b/src/elements/settings/sync.dom.test.ts
+index 08feb54..66c5889 100644
+--- a/src/elements/settings/sync.dom.test.ts
++++ b/src/elements/settings/sync.dom.test.ts
+@@ -178,3 +178,21 @@ test('B can restore while the cancelled count of A is still pending; the late an
+   assert.equal(document.querySelectorAll('dialog').length, 1);
+   assert.deepEqual(services[0].calls, []);
+ });
++
++test('the sync status is a polite live region and its error an alert; each Restore is described by its own backup path', async () => {
++  const { el, services } = await mount({ name: 'sync' } as FileSystemDirectoryHandle);
++  const s = services[0];
++  const [status] = [...el.firstElementChild!.children].filter((c) => c.localName === 'p').slice(1);
++  assert.equal(status.getAttribute('role'), 'status');
++  s.set({ status: 'error', error: 'server' } as never);
++  const error = [...el.querySelectorAll('p')].find((p) => p.textContent === EN_MESSAGES['ai.error.server']);
++  assert.equal(error?.getAttribute('role'), 'alert');
++  s.answer(0);
++  await waitFor(() => el.querySelectorAll('details > p').length === 2);
++  for (const p of el.querySelectorAll('details > p')) {
++    const path = p.firstElementChild!;
++    const restore = p.querySelector('button')!;
++    assert.equal(restore.getAttribute('aria-describedby'), path.id, path.textContent!);
++    assert.ok(path.id, 'the path has an id');
++  }
++});
+```
+
+jsdom non restituisce il focus all'apertore quando un `<dialog>` si chiude (lo fa Chrome): i due test di Elimina lo fanno a mano (`remove.focus()`), con il commento. Il test di «Connesso» registra il testo della regione a ogni mutazione (con il ripiego a `setTimeout` di `announce` in jsdom, un `waitFor` arriverebbe dopo il testo). RED atteso (misurato): `settings.dom.test.ts` 3 rossi (Esc non consumato, sezioni senza `aria-labelledby`, focus che resta sul link); `settingsView.test.ts` non compila finché `currentSection` non esiste; `profiles`/`presets.dom.test.ts` «… the focus goes to the first item» (`not body`) e «Connection…» (`[ 'Connection successful' ]` invece di `[ '', 'Connection successful' ]`); `sync.dom.test.ts` 1 rosso (nessun `role`).
+
+- [ ] **Step 2: `currentSection` al posto di `topSection`** in `settingsView.ts` (`sectionOf` resta: lo usa il suo test):
+
+```diff
+diff --git a/src/elements/settings/settingsView.ts b/src/elements/settings/settingsView.ts
+index 2345bd0..c22d394 100644
+--- a/src/elements/settings/settingsView.ts
++++ b/src/elements/settings/settingsView.ts
+@@ -26,12 +26,18 @@ export function sectionOf(id: string, sections: readonly SettingsSection[]): Set
+ }
+ 
+ /**
+- * Sezione da segnare nell'indice: la più in alto tra quelle che si intersecano (come il callback
+- * dell'IntersectionObserver di SettingsView.tsx). Null = nessuna, l'indice resta com'è.
++ * Sezione da segnare nell'indice mentre si scorre: in fondo allo scorrimento l'ultima (le ultime sezioni sono
++ * corte e non arrivano mai in cima), altrimenti l'ultima il cui inizio sta nel 40 % alto del contenitore, o la
++ * prima. `top` è misurato dal bordo alto del contenitore che scorre. Null senza sezioni.
+  */
+-export function topSection(entries: readonly { id: string; top: number; intersecting: boolean }[], sections: readonly SettingsSection[]): SettingsSection | null {
+-  const top = entries.filter((e) => e.intersecting).sort((a, b) => a.top - b.top)[0];
+-  return top ? sectionOf(top.id, sections) : null;
++export function currentSection(
++  tops: readonly { section: SettingsSection; top: number }[],
++  view: { scrollTop: number; clientHeight: number; scrollHeight: number },
++): SettingsSection | null {
++  if (tops.length === 0) return null;
++  if (view.scrollTop + view.clientHeight >= view.scrollHeight - 1) return tops[tops.length - 1].section;
++  const band = view.clientHeight * 0.4;
++  return tops.filter((t) => t.top <= band).at(-1)?.section ?? tops[0].section;
+ }
+ 
+ /** Testo del campo di una larghezza: vuoto = nessun limite. */
+```
+
+- [ ] **Step 3: `hmd-settings`** — Esc consumato, sezioni con nome, titoli con `tabindex="-1"`, nota delle larghezze collegata, focus sul titolo dopo un salto, indice che segue lo scorrimento con il salto fissato (via l'`IntersectionObserver`):
+
+```diff
+diff --git a/src/elements/settings/settings.element.ts b/src/elements/settings/settings.element.ts
+index 00cc3fb..51c1502 100644
+--- a/src/elements/settings/settings.element.ts
++++ b/src/elements/settings/settings.element.ts
+@@ -15,7 +15,7 @@ import { emit } from '../events';
+ import { showChildren } from './fields';
+ import type { HmdSettingsPresets, PresetsController } from './presets.element';
+ import type { HmdSettingsProfiles, ProfilesController } from './profiles.element';
+-import { SECTION_LABELS, commitDelay, commitWidths, sectionId, settingsSections, topSection, widthText } from './settingsView';
++import { SECTION_LABELS, commitDelay, commitWidths, currentSection, sectionId, settingsSections, widthText } from './settingsView';
+ import type { HmdSettingsSync, SyncController } from './sync.element';
+ import './settings.css';
+ 
+@@ -75,9 +75,12 @@ export class HmdSettings extends HmdElement {
+   #dirty = new Set<SettingsSection>();
+   #visible: SettingsSection = 'general';
+   #confirming = false;
+-  #observer: IntersectionObserver | null = null;
+-  /** Sezioni osservate (cambiano solo con il controller AI). */
+-  #observed: SettingsSection[] = [];
++  /**
++   * La sezione appena raggiunta dall'indice o dalla rotta, con lo scorrimento che le ha dato: resta la corrente
++   * finché chi usa la pagina non scorre altrove (le ultime sezioni non arrivano in cima, la regola dello
++   * scorrimento non le sceglierebbe mai da sola).
++   */
++  #pinned: { section: SettingsSection; scrollTop: number } | null = null;
+   /** Sezione e controller dell'ultimo scorrimento: si scorre solo quando cambiano (l'effetto `[section, ai]`). */
+   #scrolled: { section: SettingsSection; ai: SettingsController | null } | null = null;
+   #dialogs: AbortController | null = null;
+@@ -152,10 +155,14 @@ export class HmdSettings extends HmdElement {
+     this.#dialogs ??= new AbortController();
+     const parts = this.#parts!;
+     parts.content.addEventListener('hmd-settings-dirty', (event) => this.#onDirty(event), { signal });
++    parts.content.addEventListener('scroll', () => this.#onScroll(), { passive: true, signal });
+     window.addEventListener(
+       'keydown',
+       (event) => {
+-        if (event.key === 'Escape' && !document.querySelector('dialog[open]')) this.#close();
++        if (event.key !== 'Escape' || document.querySelector('dialog[open]')) return;
++        // Consumato: altrimenti Chrome usa lo stesso Esc per chiudere il dialog di conferma appena aperto.
++        event.preventDefault();
++        this.#close();
+       },
+       { signal },
+     );
+@@ -169,9 +176,7 @@ export class HmdSettings extends HmdElement {
+ 
+   disconnectedCallback(): void {
+     super.disconnectedCallback();
+-    this.#observer?.disconnect();
+-    this.#observer = null;
+-    this.#observed = [];
++    this.#pinned = null;
+     this.#scrolled = null;
+     this.#dialogs?.abort();
+     this.#dialogs = null;
+@@ -220,7 +225,31 @@ export class HmdSettings extends HmdElement {
+   }
+ 
+   #scrollTo(section: SettingsSection): void {
+-    this.#parts?.content.querySelector(`#${sectionId(section)}`)?.scrollIntoView({ block: 'start' });
++    const content = this.#parts?.content;
++    if (!content) return;
++    content.querySelector(`#${sectionId(section)}`)?.scrollIntoView({ block: 'start' });
++    // La sezione chiesta è la corrente anche se non arriva in cima; il suo evento scroll non la cambia.
++    this.#pinned = { section, scrollTop: content.scrollTop };
++    if (this.#visible !== section) {
++      this.#visible = section;
++      this.#loop.update();
++    }
++  }
++
++  /** L'indice segue lo scorrimento (`currentSection`), salvo l'evento scroll del salto appena fatto. */
++  #onScroll(): void {
++    const content = this.#parts!.content;
++    if (this.#pinned && Math.abs(content.scrollTop - this.#pinned.scrollTop) < 1) return;
++    this.#pinned = null;
++    const box = content.getBoundingClientRect().top;
++    const tops = settingsSections(!!this.#ai).flatMap((section) => {
++      const node = content.querySelector(`#${sectionId(section)}`);
++      return node ? [{ section, top: node.getBoundingClientRect().top - box }] : [];
++    });
++    const current = currentSection(tops, content);
++    if (!current || current === this.#visible) return;
++    this.#visible = current;
++    this.#loop.update();
+   }
+ 
+   #build(): Parts {
+@@ -255,6 +284,7 @@ export class HmdSettings extends HmdElement {
+             min: String(MIN_TEXT_WIDTH),
+             max: String(MAX_TEXT_WIDTH),
+             step: '1',
++            'aria-describedby': 'settings-width-hint',
+             on: { input: (e) => (this.#widthTexts = { ...this.#widthTexts, [pane]: value(e) }), blur: () => this.#commitWidths(), keydown: onEnter(() => this.#commitWidths()) },
+           }),
+         },
+@@ -262,8 +292,10 @@ export class HmdSettings extends HmdElement {
+     ) as Parts['widths'];
+     delay.value = this.#delayText;
+     for (const pane of TEXT_WIDTH_PANES) widths[pane].input.value = this.#widthTexts[pane];
+-    const sectionBox = (id: SettingsSection, ...children: Node[]) => el('section', { id: sectionId(id), class: 'section' }, ...children);
+-    const titles = [el('h2'), el('h2'), el('h2')];
++    // Ogni sezione è una regione con il nome del suo titolo; il titolo prende il focus dopo un salto dall'indice.
++    const title = (id: SettingsSection) => el('h2', { id: `${sectionId(id)}-title`, tabIndex: -1 });
++    const sectionBox = (id: SettingsSection, ...children: Node[]) => el('section', { id: sectionId(id), class: 'section', 'aria-labelledby': `${sectionId(id)}-title` }, ...children);
++    const titles = [title('ai-profiles'), title('ai-presets'), title('ai-sync')];
+     const parts: Parts = {
+       view: el('div', { class: 'view', role: 'region' }),
+       nav: el('nav', { class: 'nav' }),
+@@ -271,8 +303,8 @@ export class HmdSettings extends HmdElement {
+       title: el('h1', { tabIndex: -1 }),
+       links: new Map(),
+       content: el('div', { class: 'content' }),
+-      general: el('section', { id: sectionId('general'), class: 'section' }),
+-      generalTitle: el('h2'),
++      general: el('section', { id: sectionId('general'), class: 'section', 'aria-labelledby': `${sectionId('general')}-title` }),
++      generalTitle: title('general'),
+       languageCaption: el('span'),
+       language: el(
+         'select',
+@@ -289,7 +321,7 @@ export class HmdSettings extends HmdElement {
+       delay,
+       widthLegend: el('legend'),
+       widths,
+-      widthHint: el('p', { class: 'hint' }),
++      widthHint: el('p', { class: 'hint', id: 'settings-width-hint' }),
+       saveAll: el('button', { type: 'button', class: 'secondary', on: { click: () => emit(this, 'hmd-settings-save-all', null) } }),
+       ai: { profiles: el('section'), presets: el('section'), sync: el('section'), titles },
+       profiles: el('hmd-settings-profiles'),
+@@ -327,6 +359,8 @@ export class HmdSettings extends HmdElement {
+           emit(this, 'hmd-settings-section', { section });
+           // Se la sezione è già quella della rotta non cambia nulla: si scorre direttamente.
+           this.#scrollTo(section);
++          // Il focus segue il salto (WCAG 2.4.3): sul titolo della sezione, senza un secondo scorrimento.
++          this.#parts?.content.querySelector<HTMLElement>(`#${sectionId(section)}-title`)?.focus({ preventScroll: true });
+         },
+       },
+     });
+@@ -383,7 +417,6 @@ export class HmdSettings extends HmdElement {
+       if (parts.sync.i18n !== i18n) parts.sync.i18n = i18n;
+     }
+     showChildren(parts.content, [parts.general, ...(ai ? [parts.ai.profiles, parts.ai.presets, parts.ai.sync] : [])], [parts.ai.profiles, parts.ai.presets, parts.ai.sync]);
+-    this.#observe(parts, sections);
+     // Entrando (o cambiando sezione dalla rotta) si scorre alla sezione; anche quando compaiono le sezioni AI.
+     if (this.#scrolled?.section !== this.#section || this.#scrolled.ai !== ai) {
+       this.#scrolled = { section: this.#section, ai };
+@@ -391,23 +424,6 @@ export class HmdSettings extends HmdElement {
+     }
+   }
+ 
+-  /** La voce dell'indice segue la sezione visibile mentre si scorre (un observer per insieme di sezioni). */
+-  #observe(parts: Parts, sections: SettingsSection[]): void {
+-    if (this.#observer && this.#observed.join() === sections.join()) return;
+-    this.#observer?.disconnect();
+-    this.#observed = sections;
+-    if (typeof IntersectionObserver === 'undefined') return;
+-    this.#observer = new IntersectionObserver(
+-      (entries) => {
+-        const top = topSection(entries.map((e) => ({ id: e.target.id, top: e.boundingClientRect.top, intersecting: e.isIntersecting })), this.#observed);
+-        if (!top || top === this.#visible) return;
+-        this.#visible = top;
+-        this.#loop.update();
+-      },
+-      { root: parts.content, rootMargin: '0px 0px -60% 0px' },
+-    );
+-    parts.content.querySelectorAll('section[id^="settings-"]').forEach((section) => this.#observer!.observe(section));
+-  }
+ }
+ 
+ declare global {
+```
+
+- [ ] **Step 4: profili, preset, sync** (P6, P8 con `announce`, P9, P10):
+
+```diff
+diff --git a/src/elements/settings/presets.element.ts b/src/elements/settings/presets.element.ts
+index 12654c6..564786f 100644
+--- a/src/elements/settings/presets.element.ts
++++ b/src/elements/settings/presets.element.ts
+@@ -56,6 +56,9 @@ export class HmdSettingsPresets extends HmdElement {
+   #loop = new RenderLoop(this, {
+     ready: () => !!this.#list && !!this.#controller && !!this.#i18n && this.isConnected,
+     render: () => this.#render(this.#list!, this.#controller!, this.#i18n!),
++    // Il nodo con il focus è sparito (Elimina, con il dettaglio): il focus va sulla prima voce dell'elenco.
++    focusScope: () => this,
++    refocus: () => (this.#list?.firstElementChild as HTMLElement | null)?.focus(),
+   });
+ 
+   get controller(): PresetsController | null { return this.#controller; }
+diff --git a/src/elements/settings/profiles.element.ts b/src/elements/settings/profiles.element.ts
+index 6c6e794..20cbac6 100644
+--- a/src/elements/settings/profiles.element.ts
++++ b/src/elements/settings/profiles.element.ts
+@@ -2,6 +2,7 @@ import type { AiController } from '../../ai/aiController';
+ import { changeProvider } from '../../ai/models';
+ import { DEFAULT_URLS, defaultProfile, PROVIDER_KINDS, validateProfile } from '../../ai/profiles';
+ import type { ModelProfile, ProviderKind } from '../../ai/types';
++import { announce } from '../../dom/announce';
+ import { HmdElement } from '../../dom/element';
+ import { el, setText } from '../../dom/el';
+ import { RenderLoop } from '../../dom/renderLoop';
+@@ -74,6 +75,9 @@ export class HmdSettingsProfiles extends HmdElement {
+   #loop = new RenderLoop(this, {
+     ready: () => !!this.#list && !!this.#controller && !!this.#i18n && this.isConnected,
+     render: () => this.#render(this.#list!, this.#controller!, this.#i18n!),
++    // Il nodo con il focus è sparito (Elimina, con il dettaglio): il focus va sulla prima voce dell'elenco.
++    focusScope: () => this,
++    refocus: () => (this.#list?.firstElementChild as HTMLElement | null)?.focus(),
+   });
+ 
+   get controller(): ProfilesController | null { return this.#controller; }
+@@ -282,7 +286,10 @@ export class HmdSettingsProfiles extends HmdElement {
+     setText(d.duplicate, t('ai.duplicate'));
+     setText(d.remove, t('ai.delete'));
+     setText(d.save, t('ai.save'));
+-    setText(d.connected, t('ai.connected'));
++    // «Connesso» entra nel DOM vuoto e si scrive al fotogramma dopo: una regione inserita già piena spesso
++    // non si annuncia (LAB-42 P8). Il testo cambia solo con la lingua (setText, senza riannunciare).
++    const entering = this.#connected && d.connected.parentNode !== d.root;
++    announce(d.connected, this.#connected ? t('ai.connected') : '', entering);
+     syncValue(d.name, draft.name);
+     syncValue(d.provider, draft.kind);
+     syncValue(d.url, draft.baseUrl);
+diff --git a/src/elements/settings/sync.element.ts b/src/elements/settings/sync.element.ts
+index 68072dd..af76add 100644
+--- a/src/elements/settings/sync.element.ts
++++ b/src/elements/settings/sync.element.ts
+@@ -3,6 +3,7 @@ import type { SyncBinding, SyncService } from '../../ai/syncBinding';
+ import { HmdElement } from '../../dom/element';
+ import { el, setText } from '../../dom/el';
+ import { RenderLoop } from '../../dom/renderLoop';
++import { uid } from '../../dom/uid';
+ import type { MessageKey } from '../../i18n/messages';
+ import type { I18nStore } from '../../state/i18nStore';
+ import { showConfirmDialog } from '../dialogs/confirmDialog';
+@@ -91,8 +92,9 @@ export class HmdSettingsSync extends HmdElement {
+         folder: el('span'),
+         disable: el('button', { type: 'button', on: { click: () => void this.#binding?.disable().catch(report) } }),
+         reactivate: el('button', { type: 'button', on: { click: () => void this.#binding?.reactivate().catch(report) } }),
+-        status: el('p', { class: 'help' }),
+-        error: el('p', { class: 'help' }),
++        // Lo stato cambia dopo ogni sync (LAB-42 P9): regione live; l'errore entra già scritto, come avviso.
++        status: el('p', { class: 'help', role: 'status' }),
++        error: el('p', { class: 'help', role: 'alert' }),
+         conflicts: el('p', { class: 'help' }),
+         syncActions: el('div', { class: 'actions' }),
+         syncNow: el('button', { type: 'button', on: { click: () => void (this.#sync?.service as SyncDetailsService | undefined)?.syncNow() } }),
+@@ -208,13 +210,19 @@ export class HmdSettingsSync extends HmdElement {
+   #renderBackups(parts: Parts, t: I18nStore['t']): void {
+     const nodes = new Map<string, HTMLParagraphElement>();
+     for (const path of this.#backups) {
+-      const node = this.#backupNodes.get(path) ?? el('p', { class: 'help' }, path, el('button', { type: 'button', on: { click: () => this.#restore(path) } }));
++      // Il percorso descrive il suo «Ripristina»: i pulsanti hanno lo stesso nome (LAB-42 P10, WCAG 2.4.6).
++      const node = this.#backupNodes.get(path) ?? this.#backupNode(path);
+       setText(node.lastElementChild!, t('ai.restoreBackup'));
+       nodes.set(path, node);
+     }
+     showChildren(parts.backups, [parts.backupsSummary, ...nodes.values()], [...this.#backupNodes.values()]);
+     this.#backupNodes = nodes;
+   }
++
++  #backupNode(path: string): HTMLParagraphElement {
++    const id = uid('hmd-settings-backup');
++    return el('p', { class: 'help' }, el('span', { id }, path), el('button', { type: 'button', 'aria-describedby': id, on: { click: () => this.#restore(path) } }));
++  }
+ }
+ 
+ declare global {
+```
+
+- [ ] **Step 5: e2e** (verdi nel prototipo). (a) In `settings.spec.ts` il test P5 del Task 1 si rovescia:
+
+```ts
+test('Escape with unsaved changes opens the confirmation once, with the focus on Cancel; Cancel keeps the settings and the draft (P5)', async ({ app, page }) => {
+  await page.getByRole('button', { name: app.t('toolbar.settings') }).click();
+  const settings = page.getByRole('region', { name: app.t('settings.title') });
+  await settings.getByRole('link', { name: app.t('settings.aiPresets') }).click();
+  const presets = settings.getByRole('region', { name: app.t('settings.aiPresets') });
+  await presets.getByRole('button').first().click();
+  await presets.getByRole('textbox').first().fill('Changed');
+  await page.keyboard.press('Escape');
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('button', { name: app.t('dialog.cancel') })).toBeFocused();
+  await dialog.getByRole('button', { name: app.t('dialog.cancel') }).click();
+  await expect(settings).toBeVisible();
+  await expect(presets.getByRole('textbox').first()).toHaveValue('Changed');
+});
+```
+
+(b) In `settings-sections.spec.ts` «the index follows the scroll» il limite di oggi si rovescia, e `#settings-ai-presets` (riga 109) diventa la regione con il nome:
+
+```diff
+diff --git a/e2e/settings-sections.spec.ts b/e2e/settings-sections.spec.ts
+index 663351c..0001138 100644
+--- a/e2e/settings-sections.spec.ts
++++ b/e2e/settings-sections.spec.ts
+@@ -60,10 +60,15 @@ test('the index follows the scroll: the section brought into view is the current
+   await openSettings(app);
+   const index = settings(app).getByRole('navigation', { name: app.t('settings.sections') });
+   await expect(index.getByRole('link', { name: app.t('settings.general') })).toHaveAttribute('aria-current', 'true');
+-  // Profili, non Sync: le ultime sezioni non arrivano in cima (padding di 40vh) e l'indice resta su Profili (limite di oggi, fase 8).
+   await index.getByRole('link', { name: app.t('settings.aiProfiles') }).click();
+   await expect(index.getByRole('link', { name: app.t('settings.aiProfiles') })).toHaveAttribute('aria-current', 'true');
+   await expect(index.getByRole('link', { name: app.t('settings.general') })).not.toHaveAttribute('aria-current', 'true');
++  // Le ultime sezioni, corte, non arrivano in cima: il salto le rende correnti lo stesso, e il focus va sul titolo.
++  for (const key of ['settings.aiSync', 'settings.aiPresets'] as const) {
++    await index.getByRole('link', { name: app.t(key) }).click();
++    await expect(index.getByRole('link', { name: app.t(key) })).toHaveAttribute('aria-current', 'true');
++    await expect(settings(app).getByRole('heading', { name: app.t(key), level: 2 })).toBeFocused();
++  }
+ });
+ 
+ test('a cloud profile asks for the key: the address is fixed, Save key is off until something is typed', async ({ app }) => {
+@@ -106,7 +111,7 @@ test('a built-in preset offers Restore original instead of Delete, and restoring
+   await settings(app).getByRole('link', { name: app.t('settings.aiPresets') }).click();
+   // La seconda sezione AI è quella dei preset: il primo pulsante dell'elenco è un preset predefinito.
+   // Eccezione accettata al «solo ruolo e nome»: le sezioni non hanno ancora un nome accessibile (da risolvere in fase 8, vedi handover).
+-  const presets = settings(app).locator('#settings-ai-presets');
++  const presets = settings(app).getByRole('region', { name: app.t('settings.aiPresets') });
+   await presets.getByRole('button').first().click();
+   const instructions = presets.getByRole('textbox', { name: app.t('ai.instructions') });
+   const original = await instructions.inputValue();
+```
+
+(c) Le sezioni per nome al posto della posizione: in `settings.spec.ts:16-17, 84, 86, 103`, `settings-sections.spec.ts:72, 88`, `support/app.ts:80-83`, `ai-chips.spec.ts:57`, `ai-model.spec.ts:176` i `.first()`/`.nth(1)` su «+ Crea», nome, provider e Salva diventano `settings.getByRole('region', { name: app.t('settings.aiProfiles') })` (o `settings.aiPresets`) seguito dal ruolo, senza posizione (non provato nel prototipo: è una sostituzione meccanica, gli e2e del gate la verificano). (d) In `settings.spec.ts` «deleting a preset asks first…»: dopo la conferma, `await expect(presets.getByRole('button').first()).toBeFocused()`.
+
+**Eccezione che resta nell'audit.** `computed-styles.audit.ts:576` (`#settings-ai-presets`) e le posizioni di `:587`, `:673-674` **non** cambiano qui: l'audit esegue la stessa preparazione anche sulla build di `dist-baseline/`, che non ha le sezioni con il nome. Si sostituiscono nel Task 8, il primo che parte da una baseline ricostruita dopo questo task.
+
+- [ ] **Step 6: gate e baseline.** `npm test` (atteso **1069** = 1064 + 3 `settings` + 1 `profiles` + 1 `sync`), `npm run lint`; in build e in sviluppo `settings.spec.ts`, `settings-sections.spec.ts`, `ai-model.spec.ts`, `ai-chips.spec.ts`, `theme-i18n.spec.ts`. Audit con `-g "settings"`: cadono **solo** `settings-preset` (`nav:0>a:2 { background-color: rgb(204, 251, 241) → rgba(0, 0, 0, 0) }`, `nav:0>a:3 { … → rgb(204, 251, 241) }`: la voce corrente è Preset, non Profili) e `settings-sync-folder` (lo stesso con `a:4`, Sync), misurato; righe incollate nel commento, poi baseline ricostruita dal commit del task e audit completo verde. Commit piccoli: `test: …(RED)`, `fix: Esc nelle impostazioni apre la conferma e non la richiude`, `fix: il focus resta nella sezione dopo Elimina e dopo un salto dall'indice`, `feat: sezioni delle impostazioni con un nome accessibile`, `fix: l'indice delle impostazioni arriva alle ultime sezioni`, `fix: stato della sync e «Connesso» annunciati`, `test: e2e per nome di sezione al posto di id e posizione`.
+
+### Task 6: I tre `!important` del diff come `StyleModule` (Builder)
+
+**Files:**
+- Modify: `src/elements/ai/diff-pane.element.ts`, `src/elements/ai/diff-pane.css`, `package.json`, `package-lock.json`, `src/editor/docExtensions.ts` (solo il commento del quarto)
+
+Decisione 8, provata: audit degli stati `ai-review*` identico alla baseline. Nessun test unitario nuovo (l'aspetto lo prova l'audit, che è la rete giusta per un cambio alla cascata: `CLAUDE.md`).
+
+- [ ] **Step 1: prima del cambio**, audit con `-g "ai-review"` verde contro la baseline del Task 5 (`cat dist-baseline/BASELINE_SHA`).
+- [ ] **Step 2: dipendenza dichiarata.** `npm install --save-exact style-mod@4.1.4` (è già nel bundle come dipendenza di `@codemirror/view`; `npm ls style-mod` deve mostrare una sola copia, `deduped`).
+- [ ] **Step 3: il `StyleModule`** in `diff-pane.element.ts`, sopra la classe, e registrato nelle estensioni del lato `b`, dopo il `contentAttributes` del Task 4:
+
+```ts
+import { StyleModule } from 'style-mod';   // dopo `import { basicSetup } from 'codemirror';`
+
+/**
+ * Le tre proprietà dei pulsanti per blocco che `@codemirror/merge` dichiara nel suo `StyleModule`, fuori da ogni
+ * layer (`.cm-merge-revert button`: `position: absolute`, `background: none`, `cursor: pointer`). Uno stile fuori
+ * dai layer vince su ogni regola normale di un layer (`diff-pane.css`): qui stanno nella stessa origine, con una
+ * specificità più alta (0,2,1 contro 0,1,1), e vincono senza `!important` (analisi del layer `vendor`, piano 6c).
+ * Il resto dell'aspetto dei pulsanti resta nel foglio.
+ */
+const revertButtonStyles = EditorView.styleModule.of(
+  new StyleModule({
+    '.cm-merge-revert > .revert > button': { position: 'static' },
+    '.cm-merge-revert > .revert > button:hover:not(:disabled)': { background: 'var(--c-accent-soft)' },
+    '.cm-merge-revert > .revert > button:disabled': { cursor: 'default' },
+  }),
+);
+```
+
+e nelle estensioni del lato `b`: `revertButtonStyles,`. Nel foglio:
+
+```diff
+diff --git a/src/elements/ai/diff-pane.css b/src/elements/ai/diff-pane.css
+index 1dde4ac..b4b3743 100644
+--- a/src/elements/ai/diff-pane.css
++++ b/src/elements/ai/diff-pane.css
+@@ -27,26 +27,21 @@
+     }
+ 
+     /*
+-     * @codemirror/merge inietta `.cm-merge-revert button { position: absolute; background: none;
+-     * cursor: pointer; … }` fuori da ogni layer, e uno stile fuori dai layer vince su ogni regola
+-     * normale di un layer. Le proprietà in comune si dichiarano !important: dentro un layer,
+-     * !important vince sugli stili normali fuori dai layer (prima vinceva la specificità del CSS Module).
++     * `position`, `background` al passaggio e `cursor` dei pulsanti li dichiara `revertButtonStyles`
++     * (diff-pane.element.ts), nella stessa origine fuori dai layer degli stili di @codemirror/merge.
+      */
+     .cm-merge-revert > .revert > button {
+-      position: static !important;
+       padding: 2px 0;
+       border-radius: 4px;
+       color: var(--c-muted);
+     }
+ 
+     .cm-merge-revert > .revert > button:hover:not(:disabled) {
+-      background: var(--c-accent-soft) !important;
+       color: var(--c-text);
+     }
+ 
+     .cm-merge-revert > .revert > button:disabled {
+       opacity: 0.35;
+-      cursor: default !important;
+     }
+   }
+ }
+```
+
+Il quarto `!important` (`.cm-selectionBackground` in `docExtensions.ts:48`) resta: il commento sopra la regola dice perché (il selettore del tema base di `@codemirror/view`, `&light.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground`, ha specificità più alta; toglierlo vorrebbe dire copiare quel selettore interno).
+
+- [ ] **Step 4: verifiche.** `grep -n "important" src/elements/ai/diff-pane.css` → uscita 1; `grep -rn "important" src --include=*.css --include=*.ts` → solo `docExtensions.ts:48` e il suo commento; gzip del bundle (atteso uguale ±50 B a quello del Task 5); `npm test`, `npm run lint`; e2e `ai-diff.spec.ts`, `ai-review.spec.ts`, `ai-review-bar.spec.ts` in build e in sviluppo; audit con `-g "ai-review"` **verde, nessuna differenza** (misurato). Commit: `refactor: i pulsanti dei blocchi del diff senza !important (StyleModule)`.
+
+Con l'8b (Task 8) le regole `:disabled` del `StyleModule` e del foglio cambiano con la regola «mai disabled»: il Task 8 le riscrive insieme.
+
+### Task 7: Chiusura dell'8a — suite complete, spec, PR (Builder)
+
+**Files:**
+- Modify: `docs/superpowers/specs/2026-09-27-housemd-web-components-design.md` (§7 «Fase 8», §13), questo piano (paragrafo «Esecuzione 8a»)
+
+- [ ] **Step 1: correzioni della review** (Reviewer e A11y sul diff dell'8a), se ce ne sono, come primo commit.
+- [ ] **Step 2: suite complete, una volta, nel lock**: `npx tsc --noEmit`, `npm run lint`, `npm test` (atteso 1069 più i test delle correzioni), `npm run test:e2e` (atteso **210** = 202 + 8: i 5 del Task 1 + Scarta (Task 4) + 1 e 1 dei due e2e rovesciati che diventano due casi; il conteggio vero nel commento), `npm run test:e2e:dev`, `npm run test:e2e:audit` (atteso **142** = 136 + 6, i tre stati `forced-colors-*` per i due progetti) contro la baseline del Task 5 (`BASELINE_SHA`). Gzip del bundle. Instabilità note ripetute da sole e annotate.
+- [ ] **Step 3: spec.** §7 «Fase 8»: paragrafo «8a **fatta** (PR #12)» nello stile della 7a/7b (cosa, misure, decisioni che cambiano il contratto: `announce`, `pluralKey`, `currentSection`, `StyleModule`, `style-mod` in `package.json`); §13: questo piano nell'elenco.
+- [ ] **Step 4: PR pronta.** Paragrafo «Esecuzione 8a» in questo piano (misure, deviazioni), `gh pr ready 12`, corpo aggiornato. La PR la mergia il PM nell'epica; da lì nasce il branch dell'8b.
+
+### Task 8: «Mai disabled» per i pulsanti dei blocchi del diff (Planner)
+
+**Prerequisiti:** 8a mergiata nell'epica; branch `lab/LAB-6-fase-8b` da `epic/LAB-3-web-components`, PR in bozza nuova; `dist-baseline/` copiata dal checkout della chiusura dell'8a (`BASELINE_SHA` = il commit del Task 5) o ricostruita da quello SHA in un worktree separato; proposta di Designer accettata dal PM (punto 7 di «Cambi d'aspetto»).
+
+**Files:**
+- Modify: `src/elements/ai/diff-pane.element.ts`, `diffLogic.ts` (+ test), `diff-pane.css`, `review.element.ts`, `review-bar.element.ts` (la nota della barra riceve anche le ragioni dei blocchi), i loro test, `e2e/ai-review-bar.spec.ts`, `e2e/ai-diff.spec.ts`, `e2e/computed-styles.audit.ts` (`:229`, e le eccezioni `#settings-ai-presets` del Task 5 che qui diventano regioni con il nome)
+
+Oggi: `controlDisabled()` (`diffLogic.ts:36`) spegne «← accetta» senza `canAccept` e «→ rifiuta» durante la generazione; i controlli li crea `@codemirror/merge` (`renderRevertControl`) e li **ricrea** a ogni cambio dei blocchi, quindi la nota non può stare dentro di loro e il focus su un pulsante ricreato va riportato sul nodo nuovo dello stesso blocco. Schema (da confermare nel task, è il punto delicato): i pulsanti restano attivi; il gestore del `mousedown`/`keydown` già esistente (`diff-pane.element.ts:215-228`), invece di non fare nulla, emette un evento nuovo `hmd-ai-block-blocked` con la ragione (`acceptBlocker` del controller per «accetta», `generating` per «rifiuta»); `hmd-ai-review` lo passa alla barra, che scrive la nota con `announce` (stesse chiavi `ai.review.*`, nessun testo nuovo); il focus resta sul pulsante (se il diff ricrea i controlli nel frattempo, sul pulsante dello stesso blocco e della stessa azione: `data-action` più l'indice del blocco). Test jsdom per accetta e rifiuta bloccati, e2e da tastiera durante la generazione e durante un conflitto. Il `StyleModule` e il foglio perdono `:disabled` (`opacity .35`, `cursor: default`) e prendono l'aspetto di Designer. Audit: cambiano `ai-review-conflict`, `ai-review-generating`, `ai-review-note` (rito della baseline); snapshot `ai-review` solo se cambia l'aspetto a riposo.
+
+### Task 9: «Mai disabled» per impostazioni, barra, sidebar, schermata iniziale e avviso (Builder)
+
+**Prerequisiti:** Task 8; proposta di Designer accettata (punti 5 e 6 di «Cambi d'aspetto»).
+
+**Files:**
+- Modify: `src/elements/settings/profiles.element.ts`, `sync.element.ts`, `src/elements/workspace/workspace.element.ts`, `workspace.css`, `src/elements/start-screen/*`, `src/elements/notice/*`, `src/elements/update-notice/*`, i moduli puri che calcolano le ragioni (nuovi o esistenti: `settings/fields.ts`, `workspace/workspaceView.ts`, `start-screen/startScreen.ts` se c'è, altrimenti funzioni nuove testate), `src/i18n/locales/*.json`, i test, gli e2e `settings-sections.spec.ts:74-79`, `workspace-shell.spec.ts:27`, `start-screen`/`notice` in jsdom
+
+Schema della 6b (nota `p.note[role="status"]` vuota di norma, ragione da una funzione pura, `announce` per il ri-annuncio, focus che resta, nota svuotata quando la causa sparisce), un punto alla volta con il suo RED: Salva chiave senza chiave (`ai.saveSecret.needKey`: la chiave va scritta prima); l'indirizzo per Anthropic `readOnly` con `aria-describedby` verso l'aiuto del provider (decisione 10); Sincronizza ora durante una sync (nota, **nessuna sync accodata**: decisione 17); Cronologia senza documento (nota dove Designer la mette); la cartella durante un cambio (nota nella testata della sidebar); i pulsanti della schermata iniziale durante un cambio (nota «apertura in corso» al posto di `cursor: progress`/opacità, e il focus resta sul pulsante: chiude anche il caso «scelta annullata» del Task 2); «Aggiorna» durante un aggiornamento. Testi nuovi in tutte e nove le lingue. Alla fine `grep -rn "\.disabled\s*=\|'disabled'\|aria-disabled" src --include=*.ts` mostra solo test che affermano `false`. Audit: `settings-cloud-profile`, `settings-sync-folder`, `settings-connected`, `workspace-empty` più gli stati che la proposta di Designer tocca (rito della baseline); snapshot `settings` solo se una nota è visibile senza interazione.
+
+### Task 10: `forced-colors` — icone, voce corrente, modalità, bozza orfana, separatore (Builder)
+
+**Prerequisiti:** Task 9; proposta di Designer accettata (punto 8).
+
+**Files:**
+- Modify: `src/styles/global.css`, `src/elements/workspace/workspace.css`, `src/elements/settings/settings.css`, `sections.css`, `e2e/computed-styles.audit.ts` (nessuno stato nuovo: quelli del Task 1)
+
+Regole provate nel prototipo (schema chiaro e scuro, `forcedColors: 'active'`), da adattare alla proposta di Designer:
+
+```diff
+diff --git a/src/elements/settings/sections.css b/src/elements/settings/sections.css
+index b1ddbea..74cb960 100644
+--- a/src/elements/settings/sections.css
++++ b/src/elements/settings/sections.css
+@@ -96,5 +96,14 @@
+         grid-template-columns: minmax(0, 1fr);
+       }
+     }
++
++    /* In forced-colors la voce corrente si vede solo dallo sfondo, che diventa Canvas (LAB-42 P7). */
++    @media (forced-colors: active) {
++      .item[aria-current='true'] {
++        forced-color-adjust: none;
++        background: Highlight;
++        color: HighlightText;
++      }
++    }
+   }
+ }
+diff --git a/src/elements/settings/settings.css b/src/elements/settings/settings.css
+index c029568..8b825e5 100644
+--- a/src/elements/settings/settings.css
++++ b/src/elements/settings/settings.css
+@@ -159,5 +159,14 @@
+       gap: 8px;
+       cursor: pointer;
+     }
++
++    /* In forced-colors la voce corrente si vede solo dallo sfondo, che diventa Canvas (LAB-42 P7). */
++    @media (forced-colors: active) {
++      .navLink[aria-current='true'] {
++        forced-color-adjust: none;
++        background: Highlight;
++        color: HighlightText;
++      }
++    }
+   }
+ }
+diff --git a/src/elements/workspace/workspace.css b/src/elements/workspace/workspace.css
+index b8c101c..114e04f 100644
+--- a/src/elements/workspace/workspace.css
++++ b/src/elements/workspace/workspace.css
+@@ -232,5 +232,32 @@
+     .orphan[aria-current='true'] {
+       background: var(--c-accent-soft);
+     }
++
++    /*
++     * In forced-colors gli sfondi diventano Canvas: la modalità attiva e la bozza corrente prendono i colori di
++     * sistema della selezione, il separatore un colore di testo (A3, WCAG 1.4.11).
++     */
++    @media (forced-colors: active) {
++      .mode[aria-pressed='true'],
++      .orphan[aria-current='true'] {
++        forced-color-adjust: none;
++        background: Highlight;
++        color: HighlightText;
++      }
++
++      .mode[aria-pressed='true'] .icon {
++        background-color: HighlightText;
++      }
++
++      .resizer {
++        forced-color-adjust: none;
++        background: CanvasText;
++      }
++
++      .resizer:hover,
++      .resizer:focus-visible {
++        background: Highlight;
++      }
++    }
+   }
+ }
+diff --git a/src/styles/global.css b/src/styles/global.css
+index 97bd567..60f48c7 100644
+--- a/src/styles/global.css
++++ b/src/styles/global.css
+@@ -108,6 +108,20 @@
+     vertical-align: middle;
+   }
+ 
++  /*
++   * In forced-colors il browser sostituisce `background-color` con Canvas e l'icona (una maschera colorata
++   * dallo sfondo) sparisce (LAB-42 P2). Fuori dall'adattamento prende un colore di sistema: `currentColor`
++   * non basta, perché sotto `forced-color-adjust: none` vale il colore d'autore (misurato: rgb(31, 29, 26)),
++   * illeggibile con un tema scuro. Dove lo sfondo è Highlight (voce premuta) il foglio dell'elemento usa
++   * HighlightText.
++   */
++  @media (forced-colors: active) {
++    .icon {
++      forced-color-adjust: none;
++      background-color: CanvasText;
++    }
++  }
++
+   /* Cambio tema: nessuna dissolvenza incrociata; il vecchio tema sta sopra e viene "mangiato" a blocchi
+      dalla maschera animata in src/theme/pixelTransition.ts. */
+   ::view-transition-old(root),
+```
+
+Misurato nel prototipo: icona della barra `rgb(0, 0, 0)` su Canvas bianco e `rgb(255, 255, 255)` su Canvas nero (oggi uguale al Canvas: invisibile), modalità premuta su `Highlight` con l'icona in `HighlightText`, separatore `CanvasText`, voce corrente dell'indice su `Highlight`. Gate: audit, cadono **solo** `focus-search-keyboard-forced-colors` (icona della ricerca) e i tre `forced-colors-*` del Task 1 (rito della baseline); un e2e in `forced-colors` per stato non serve (l'audit confronta gli stili calcolati di ogni nodo, icone comprese). Nessuno snapshot (nessuno è in `forced-colors`). Prova a mano con il contrasto elevato vero di Windows nella sub-issue di Davide.
+
+### Task 11: Documenti, misure, chiusura della migrazione (Builder)
+
+**Files:**
+- Modify: `docs/superpowers/specs/2026-09-27-housemd-web-components-design.md` (§7 «Fase 8», §11, §13), `CLAUDE.md`, `README.md`, questo piano («Esecuzione 8b»)
+- Create: `docs/superpowers/notes/2026-10-xx-chiusura-migrazione.md` (al posto dell'handover)
+
+- [ ] **Step 1: correzioni della review dell'8b** (Reviewer e A11y), come primo commit.
+- [ ] **Step 2: suite complete, una volta, nel lock**, sul commit finale: `npx tsc --noEmit`, `npm run lint`, `npm test`, `npm run test:e2e`, `npm run test:e2e:dev`, `npm run test:e2e:audit` (contro la baseline dell'ultimo task che l'ha rinnovata); gzip del bundle (riferimento 379 234 B; atteso entro +2 KB: testi nuovi e note); **tempo di avvio** con `e2e/startup.config.ts` (21 giri, `dist-phase3/` dal Task 1 o ricostruita da `a3ebc6f`): attesi `start` e `reopen` entro ±10 % da 139 e 220 ms.
+- [ ] **Step 3: spec.** §7 «Fase 8»: «8b **fatta**» con misure (bundle e avvio contro la fase 3, nella tabella del paragrafo «Misure» di questo piano); §11: ogni criterio con lo stato (fatto o «resta: Davide»); §13: piano e PR.
+- [ ] **Step 4: `CLAUDE.md` e `README.md`.** In `CLAUDE.md`, «Interfaccia»: la regola «mai disabled» (con la nota `role="status"` e `announce`), le regioni live che entrano vuote, `pluralKey` per i testi con un numero, `forced-colors` (icone in `CanvasText`, voce corrente in `Highlight`), `style-mod` per gli stili che devono stare nell'origine di CodeMirror. Nel `README.md` lo stato della migrazione (finita, in attesa del merge) e il comando della misura dell'avvio.
+- [ ] **Step 5: nota di chiusura** (al posto dell'handover): stato finale (branch, PR, misure delle suite, del bundle e dell'avvio), `dist-baseline/` con la sua provenienza, cosa resta fuori (la rimozione dei toast, A4 se A11y non l'ha riprodotta, le prove a mano), le lezioni della fase 8 (dal paragrafo «Misure» e dall'esecuzione: il focus catturato prima di `busy`; un `dispatch({})` vuoto in CodeMirror passa dalla sessione; l'orologio finto ferma `requestAnimationFrame`; l'audit esegue la preparazione anche sulla baseline), le trappole dell'ambiente.
+- [ ] **Step 6: richiesta di merge a Davide.** Dopo il merge dell'8b nell'epica (lo fa il PM): `gh pr create --base main --head epic/LAB-3-web-components --title "LAB-3: migrazione a Web Components" --body-file <riepilogo>` (fasi 4–8, misure, link ai piani; **mai** merge); sub-issue «[Davide] Checklist §9 in Chrome ed Edge e merge della migrazione in main» assegnata a davidemak, con: il link alla PR, la checklist §9 manuale completa (selettore e permessi veri, popover vicino ai bordi, transizione a pixel e `prefers-reduced-motion`, NVDA o Orca e `aria-live`, contrasto elevato vero di Windows, Edge, PWA installata e offline, AI con un provider vero), le prove ancora aperte (LAB-52, i punti della 7b dell'handover, A4 con lo screen reader), cosa sblocca (il merge in `main`, che fa solo lui).
