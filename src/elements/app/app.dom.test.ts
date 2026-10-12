@@ -144,3 +144,104 @@ test('detached while the folder is opening: the folder opened afterwards is disp
   await waitFor(() => disposed.length === 1);
   assert.equal(el.screen, 'boot');
 });
+
+for (const mode of ['pick', 'resume'] as const) {
+  test(`detached while ${mode === 'pick' ? 'a picked folder' : 'the resumed folder'} opens: the late folder is disposed, nothing is shown, saved or published`, async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const disposed: string[] = [];
+    const { deps: d, log } = deps(
+      mode === 'resume' ? { loadWorkspace: async () => ({ handle: handle('notes'), workspaceId: 'w' }), hasAccess: async () => false } : {},
+    );
+    const open = d.openWorkspace;
+    let opening = false;
+    d.openWorkspace = async (stored) => {
+      opening = true;
+      await gate;
+      const w = await open(stored);
+      const dispose = w.dispose.bind(w);
+      w.dispose = () => (disposed.push('w'), dispose());
+      return w;
+    };
+    const el = mount(d);
+    await waitFor(() => el.screen === (mode === 'resume' ? 'resume' : 'start'));
+    el.querySelector('hmd-start-screen')!.dispatchEvent(new CustomEvent(`hmd-start-${mode}`, { bubbles: true }));
+    await waitFor(() => opening);
+    el.remove();
+    release();
+    await waitFor(() => disposed.length === 1);
+    assert.equal(el.screen, mode === 'resume' ? 'resume' : 'start');
+    assert.deepEqual(log.filter((line) => line !== 'update none'), [], 'né setUpdateWorkspace con la cartella, né saveWorkspace');
+  });
+}
+
+test('detached and reattached while booting: the boot starts again, the old one stays void', async () => {
+  let release: () => void = () => {};
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  let loads = 0;
+  const el = mount(deps({ loadWorkspace: async () => (++loads, await gate, null) }).deps);
+  el.remove();
+  document.body.append(el);
+  release();
+  await waitFor(() => el.screen === 'start');
+  assert.equal(loads, 2, 'un secondo avvio alla riconnessione');
+});
+
+test('the focus follows the folder: from the start screen button to the tree, after picking and after resuming', async () => {
+  for (const mode of ['pick', 'resume'] as const) {
+    const el = mount(deps(mode === 'resume' ? { loadWorkspace: async () => ({ handle: handle('notes'), workspaceId: 'w' }), hasAccess: async () => false } : {}).deps);
+    await waitFor(() => el.screen === (mode === 'resume' ? 'resume' : 'start'));
+    const label = mode === 'resume' ? EN_MESSAGES['start.resume'].replace('{folder}', 'notes') : EN_MESSAGES['start.openFolder'];
+    const button = [...el.querySelectorAll<HTMLButtonElement>('hmd-start-screen button')].find((b) => b.textContent === label)!;
+    button.focus();
+    button.click();
+    // Chrome toglie il focus a un pulsante che diventa `disabled` (la schermata iniziale è `busy` durante il
+    // cambio); jsdom no: lo si fa a mano.
+    button.blur();
+    await waitFor(() => el.screen === 'open');
+    const row = el.querySelector('hmd-file-tree [tabindex="0"]');
+    assert.ok(row !== null && document.activeElement === row, `${mode}: the tree row with the tab stop, not ${document.activeElement?.localName}`);
+    el.remove();
+  }
+});
+
+test('detached while the picked folder is being recognised (knownWorkspaceId): it is not even opened', async () => {
+  let release: () => void = () => {};
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  let asked = false;
+  const { deps: d, opened, log } = deps({ knownWorkspaceId: async () => ((asked = true), await gate, null) });
+  const el = mount(d);
+  await waitFor(() => el.screen === 'start');
+  el.querySelector('hmd-start-screen')!.dispatchEvent(new CustomEvent('hmd-start-pick', { bubbles: true }));
+  await waitFor(() => asked);
+  el.remove();
+  release();
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.equal(opened.length, 0, 'openWorkspace mai chiamato');
+  assert.deepEqual(log.filter((line) => line !== 'update none'), []);
+});
+
+test('an empty folder picked from the start screen: the focus goes to New file in the sidebar header', async () => {
+  const { deps: d } = deps();
+  d.openWorkspace = async (stored) => {
+    const workspace = new Workspace({ fs: createWorkspaceFS(memoryOps()), workspaceId: stored.workspaceId, name: stored.handle.name, buffers: memoryBufferStore() });
+    await workspace.load();
+    return workspace;
+  };
+  const el = mount(d);
+  await waitFor(() => el.screen === 'start');
+  const button = [...el.querySelectorAll<HTMLButtonElement>('hmd-start-screen button')].find((b) => b.textContent === EN_MESSAGES['start.openFolder'])!;
+  button.focus();
+  button.click();
+  button.blur();
+  await waitFor(() => el.screen === 'open');
+  const active = document.activeElement;
+  assert.ok(active?.getAttribute('aria-label') === EN_MESSAGES['file.new'] && !!active.closest('aside'), `New file in the sidebar, not ${active?.localName} ${active?.getAttribute('aria-label')}`);
+});
+
+test('the saved folder reopened by the boot: the focus is not moved (nothing that had it went away)', async () => {
+  const el = mount(deps({ loadWorkspace: async () => ({ handle: handle('notes'), workspaceId: 'w' }) }).deps);
+  await waitFor(() => el.screen === 'open');
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.ok(document.activeElement === document.body, `body, not ${document.activeElement?.localName}`);
+});
