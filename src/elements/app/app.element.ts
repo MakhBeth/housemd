@@ -38,8 +38,14 @@ export class HmdApp extends HmdElement {
   #guard = switchGuard();
   #switching = false;
   #dbBlocked = false;
-  #booted = false;
-  #boot: AbortController | null = null;
+  /**
+   * Vita dell'app nel documento: si interrompe al distacco (non a `reconnect()`). Avvio, scelta e ripresa
+   * della cartella catturano il suo `signal` all'inizio e lo ricontrollano dopo ogni `await`: un risultato
+   * arrivato dopo il distacco si butta senza effetti (né schermata, né `setUpdateWorkspace`, né salvataggio).
+   */
+  #alive = new AbortController();
+  /** Scelta o ripresa partita con il focus nella schermata iniziale. */
+  #focusOnOpen = false;
   #start: HmdStartScreen | null = null;
   #workspace: HmdWorkspace | null = null;
   #updateNotice: HmdUpdateNotice | null = null;
@@ -67,35 +73,37 @@ export class HmdApp extends HmdElement {
   /** Schermata corrente (per i test). */
   get screen(): Screen['kind'] { return this.#screen.kind; }
 
+  connectedCallback(): void {
+    if (this.#alive.signal.aborted) this.#alive = new AbortController();
+    super.connectedCallback();
+    // L'avvio riparte a ogni collegamento finché la schermata è ancora `boot` (un avvio interrotto dal
+    // distacco resta interrotto: il suo risultato tardivo si butta).
+    if (this.#screen.kind === 'boot') this.#startBoot(this.#deps, this.#alive.signal);
+  }
+
   protected connect(signal: AbortSignal): void {
     const deps = this.#deps;
     signal.addEventListener('abort', deps.onDbBlocked(() => this.#set({ dbBlocked: true })), { once: true });
-    if (!this.#booted) {
-      this.#booted = true;
-      this.#startBoot(deps);
-    }
     if (this.#i18n) this.watch(this.#i18n, () => this.#loop.update(), signal);
   }
 
   disconnectedCallback(): void {
     super.disconnectedCallback();
-    this.#boot?.abort();
+    this.#alive.abort();
   }
 
   /** Avvio: la cartella salvata, riaperta se c'è ancora il permesso. Uno workspace aperto dopo il distacco si butta. */
-  #startBoot(deps: AppDeps): void {
+  #startBoot(deps: AppDeps, signal: AbortSignal): void {
     if (!deps.isSupported()) return this.#show({ kind: 'unsupported' });
-    const boot = (this.#boot = new AbortController());
     void (async () => {
       const stored = await deps.loadWorkspace().catch(() => null);
-      if (boot.signal.aborted) return;
+      if (signal.aborted) return;
       if (!stored) return this.#show({ kind: 'start' });
-      if (!(await deps.hasAccess(stored.handle))) {
-        if (!boot.signal.aborted) this.#show({ kind: 'resume', stored });
-        return;
-      }
+      const access = await deps.hasAccess(stored.handle);
+      if (signal.aborted) return;
+      if (!access) return this.#show({ kind: 'resume', stored });
       const workspace = await deps.openWorkspace(stored);
-      if (boot.signal.aborted) return workspace.dispose();
+      if (signal.aborted) return workspace.dispose();
       this.#show({ kind: 'open', stored, workspace });
     })();
   }
@@ -112,30 +120,41 @@ export class HmdApp extends HmdElement {
     this.#screen = screen;
     this.#deps.setUpdateWorkspace(screen.kind === 'open' ? screen.workspace : null);
     this.#loop.update();
+    // Il pulsante della schermata iniziale, che aveva il focus, non c'è più: il focus va all'albero.
+    if (screen.kind === 'open' && this.#focusOnOpen) this.#workspace?.focusStart();
+    this.#focusOnOpen = false;
   }
 
   // Un cambio cartella (o ripresa dell'accesso) alla volta: ognuno cattura lo workspace aperto all'inizio.
   async #exclusive(task: () => Promise<void>): Promise<void> {
     if (this.#guard.active) return;
+    // Il focus sta nella schermata iniziale adesso, prima che `busy` spenga i suoi pulsanti (Chrome toglie il
+    // focus a un pulsante che diventa `disabled`): a cartella aperta va nello workspace nuovo (A2).
+    this.#focusOnOpen = !!this.#start?.contains(document.activeElement);
     this.#set({ switching: true });
     try {
       await this.#guard.run(task);
     } finally {
+      this.#focusOnOpen = false;
       this.#set({ switching: false });
     }
   }
 
   #choose(): void {
     const deps = this.#deps;
+    const signal = this.#alive.signal;
     void this.#exclusive(async () => {
       const screen = this.#screen;
       const current = screen.kind === 'open' ? screen.workspace : null;
       const result = await switchFolder({
         pick: () => deps.pickFolder(),
         current,
+        signal,
         open: async (handle: FileSystemDirectoryHandle) => {
           // Una cartella già aperta in passato tiene il suo workspaceId (bozze e ultimo file restano suoi).
           const workspaceId = (await deps.knownWorkspaceId(handle).catch(() => null)) ?? crypto.randomUUID();
+          // Staccata nel frattempo: niente apertura (l'errore finisce in switchFolder, che lo ignora dopo il distacco).
+          if (signal.aborted) throw new DOMException('hmd-app staccato', 'AbortError');
           const stored: StoredWorkspace = { handle, workspaceId };
           return { stored, workspace: await deps.openWorkspace(stored) };
         },
@@ -144,6 +163,7 @@ export class HmdApp extends HmdElement {
         // La cartella vecchia non si è potuta lasciare: quella nuova, già caricata, si butta.
         discard: ({ workspace }) => workspace.dispose(),
       });
+      if (signal.aborted) return;
       match(afterSwitch(result, current !== null))
         .with({ kind: 'show' }, ({ screen: next }) => this.#show(next))
         .with({ kind: 'reportError' }, ({ detail }) => current?.reportFolderError(detail))
@@ -154,11 +174,14 @@ export class HmdApp extends HmdElement {
 
   #resume(): void {
     const deps = this.#deps;
+    const signal = this.#alive.signal;
     void this.#exclusive(async () => {
       const screen = this.#screen;
       if (screen.kind !== 'resume') return;
-      if (!(await deps.requestAccess(screen.stored.handle))) return;
+      const granted = await deps.requestAccess(screen.stored.handle);
+      if (signal.aborted || !granted) return;
       const workspace = await deps.openWorkspace(screen.stored);
+      if (signal.aborted) return workspace.dispose();
       this.#show({ kind: 'open', stored: screen.stored, workspace });
     });
   }
