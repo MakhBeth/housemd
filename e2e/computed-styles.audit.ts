@@ -216,8 +216,8 @@ const STATES: State[] = [
       await composer.fill('fix');
       await composer.press('Enter');
       await expect(page.locator('.cm-mergeView')).toBeVisible(); // la proposta è arrivata (non «Accetta tutto attivo»: dalla 6c passerebbe subito)
-      // Modifica locale non salvata nel documento (lato sinistro del diff) e modifica esterna: conflitto,
-      // e i pulsanti «accetta» dei blocchi si disattivano (stile :disabled).
+      // Modifica locale non salvata nel documento (lato sinistro del diff) e modifica esterna: conflitto. I pulsanti
+      // «accetta» dei blocchi restano attivi con lo stesso aspetto (dall'8b; la baseline 8a li disattivava): attivati, la nota dice perché.
       await page.clock.pauseAt(new Date(Date.now() + 10_000));
       await page.locator('.cm-mergeView .cm-content').first().click();
       await page.keyboard.press('ControlOrMeta+End');
@@ -226,7 +226,7 @@ const STATES: State[] = [
       await app.writeExternal('a.md', 'theirs');
       await app.windowFocus();
       await expect(page.getByRole('alert').filter({ hasText: app.t('conflict.message') })).toBeVisible();
-      await expect(page.locator('.cm-merge-revert button[data-action=accept]').first()).toBeDisabled();
+      await expect(page.locator('.cm-merge-revert button[data-action=accept]').first()).toBeVisible();
     },
   },
   {
@@ -575,7 +575,7 @@ const STATES: State[] = [
       await page.getByRole('button', { name: app.t('toolbar.settings') }).click();
       const settings = page.getByRole('region', { name: app.t('settings.title') });
       await settings.getByRole('link', { name: app.t('settings.aiPresets') }).click();
-      await settings.locator('#settings-ai-presets').getByRole('button').first().click();
+      await settings.getByRole('region', { name: app.t('settings.aiPresets') }).getByRole('button').first().click();
       await expect(settings.getByRole('button', { name: app.t('ai.restoreOriginal') })).toBeVisible();
     },
   },
