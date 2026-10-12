@@ -2,8 +2,6 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Stato:** in scrittura (LAB-54). Le sezioni arrivano una alla volta; il piano è pronto quando questa riga sparisce.
-
 **Goal:** Chiudere la migrazione a Web Components (spec §7 «Fase 8»): correggere i rilievi aperti di ciclo di vita, focus e annunci (review finale della 7b, LAB-42 P1–P12, handover 6c, 7 e 8), applicare a tutta l'app la regola di Davide «i pulsanti non diventano mai `disabled`», rendere distinguibili in `forced-colors` gli stati segnati solo dal colore, togliere i tre `!important` dei pulsanti del merge, misurare bundle e tempo di avvio contro la fase 3 e preparare la richiesta di merge dell'epica in `main` a Davide (checklist §9 in Chrome ed Edge). Due sotto-fasi (decisione 1): **8a** senza cambi d'aspetto voluti (comportamento, focus, annunci, nomi accessibili, refactoring), **8b** con i cambi d'aspetto passati prima da Designer (note «mai disabled», contorni in `forced-colors`, regioni live sempre presenti) e la chiusura della migrazione. Fuori: la rimozione dei toast (lavoro a sé dopo la migrazione); dei toast si corregge solo il riavvio dei timer, perché la correzione è piccola e misurata (decisione 9).
 
 **Architecture:** Nessun elemento nuovo. Le correzioni stanno negli elementi esistenti e, dove c'è una regola, in un modulo puro o in un helper del DOM testato da solo: `switchFolder` impara a fermarsi a metà (`signal`), `hmd-app` ha una vita nel documento (un `AbortController` che si interrompe al distacco, non a `reconnect()`) e riparte dall'avvio se viene riattaccato mentre la schermata è ancora `boot`; il recupero del focus usa il `focusScope`/`refocus` di `RenderLoop` già esistente (workspace, app, profili, preset), con bersagli stabili nuovi esposti come metodi (`hmd-file-tree.focusTabStop()`, `hmd-workspace.focusStart()`); il ri-annuncio della stessa nota passa da un helper nuovo, `src/dom/announce.ts` (svuota e riscrive al fotogramma dopo); le forme singolare e plurale da `pluralKey()` in `src/i18n/i18n.ts` (`Intl.PluralRules`, chiavi `<base>.one`/`<base>.other`); la sezione corrente dell'indice delle impostazioni da una funzione pura nuova in `settingsView.ts`. La regola «mai disabled» riusa lo schema della 6b e della 6c (nota `role="status"` accanto al pulsante, ragione calcolata da una funzione pura o dal controller, focus che resta sul pulsante). I contorni in `forced-colors` stanno in `@media (forced-colors: active)` dentro i fogli degli elementi (e in `global.css` per le icone), sempre nel layer `components` con `@scope`. I tre `!important` di `diff-pane.css` diventano un `StyleModule` di CodeMirror registrato dalla vista del diff (analisi del layer `vendor` nel piano 6c, decisione 10 di quel piano).
@@ -48,11 +46,24 @@ La schermata iniziale arriva 67 ms prima (−33 %); la riapertura di una cartell
 
 **Prototipo.** Il codice dei task dell'8a e le regole `forced-colors` dell'8b sono stati provati su una seconda copia (`/home/agent/work/housemd-proto-8-code`, stesso commit, `npm ci`, niente commit; una terza copia `housemd-proto-8-f3` per la build della fase 3; tutte rimosse alla fine). Le note «mai disabled» dell'8b **non** sono nel prototipo: il loro aspetto lo decide Designer (decisione 2) e lo schema è quello già provato nella 6b e nella 6c. Riproduzioni della review della 7b (allegato di LAB-54, `review-app-lifecycle.test.ts`): **3 rossi** su `0cb7652` (`late pick result`, `late resume result`, `boot restarts after detach and reconnect`), **3 verdi** dopo il Task 2, riscritti come test di `app.dom.test.ts`.
 
-Misure sul prototipo finale (8a + le regole `forced-colors` dell'8b): `npx tsc --noEmit` e `npm run lint` puliti; `npm test` 1045 → **1066** (+4 `app.dom`, +1 `switchFolder`, +2 `workspace.dom`, +1 `toasts.dom`, +1 `profiles.dom`, +3 `settings.dom`, +1 `sync.dom`, +1 `i18n`, +3 `announce`, +1 `reviewBarView`, +1 `review-bar.dom`, +1 `review.dom`, +1 `composer.dom`, +1 `editor.dom`; gli altri test toccati sono estesi, non nuovi); risultati delle suite complete nel paragrafo «Suite del prototipo» qui sotto. Differenze dell'audit contro la build di `0cb7652`, **tutte previste** e nessun'altra:
+Misure sul prototipo finale (8a + le regole `forced-colors` dell'8b, senza le note «mai disabled»), nel lock, 2 worker, nessuna caduta per memoria, nessun processo appeso:
 
-- `ai-review-generating`, `ai-review-note`, `ai-composer-running`: `…>hmd-ai-review-bar:0>span:2: nuovo` (la regione live nascosta della generazione, P1);
-- `ai-review-truncated`, `ai-review-warnings`: il tooltip del pulsante degli avvisi, `content: "1 warnings" → "1 warning"` e `width: 80px → 73px` (P4);
-- nessuna differenza dai tre `!important` diventati `StyleModule` (stati `ai-review`, `ai-review-hover`, `ai-review-conflict`, `ai-review-applied` verdi): il cambio è invisibile, come doveva;
+| | Partenza (`0cb7652`) | Prototipo finale |
+|---|---|---|
+| `npx tsc --noEmit`, `npm run lint` | puliti | puliti |
+| `npm test` | 1045 (52 s) | **1069** (+30 test nuovi, 6 rinominati; dettaglio per task negli Step «gate») |
+| `npm run test:e2e` | 202 (200 + 2 noti), 3,0 min | **208** (206 + i 2 noti dello start screen), 2,7 min; snapshot invariati |
+| `npm run test:e2e:dev` | 187, 5,4 min | **193**, 5,0 min, console pulita |
+| `npm run test:e2e:audit` | 136, 4,2 min | 136 (125 verdi + 11 stati che cambiano **di proposito**, elencati qui sotto), 4,3 min |
+| bundle principale gzip | 379 234 B | **380 493 B** (+1 259 B: testi nuovi in nove lingue, `announce`, `pluralKey`, regole) |
+| avvio, `start` / `reopen` (21 giri, mediana) | 139 / 220 ms (fase 3: 206 / 228) | **138 / 215 ms** (fase 3 nello stesso giro: 204 / 239) |
+
+I 3 stati `forced-colors-*` del Task 1 non sono nel conteggio del prototipo (provati a parte sulla build di oggi: Task 1, «Esecuzione»). Differenze dell'audit contro la build di `0cb7652`, **tutte previste** e nessun'altra:
+
+- Task 2 (A2): `workspace-empty`, `toast`: `…>nav:2>ul:0>li:0>div:0>button:1 { opacity: 0 → 1 }` (aperta la cartella, il focus è sulla prima riga dell'albero e la riga con il focus mostra il suo «⋯»);
+- Task 4: `ai-review-generating`, `ai-review-note`, `ai-composer-running`: `…>hmd-ai-review-bar:0>span:2: nuovo` (P1); `ai-review-truncated`, `ai-review-warnings`: tooltip `content: "1 warnings" → "1 warning"`, `width: 80px → 73px` (P4); `ai-composer-note-no-document`: la nota più lunga va su più righe (12 righe di altezze e origini nella sidebar AI, LAB-10);
+- Task 5: `settings-preset`, `settings-sync-folder`: la voce corrente dell'indice (`background-color` su `a:3`/`a:4` invece di `a:2`);
+- nessuna differenza dai tre `!important` diventati `StyleModule` (stati `ai-review`, `ai-review-hover`, `ai-review-conflict`, `ai-review-applied` verdi);
 - solo 8b: `focus-search-keyboard-forced-colors` (le icone in `forced-colors` prendono `CanvasText`).
 
 Misurato anche:
@@ -95,7 +106,7 @@ Ogni punto del perimetro: dove sta, la causa, il test che lo copre, se cambia l'
 | P12 | `settings.element.ts:292` | la nota delle larghezze non è collegata ai campi | `settings.dom.test.ts` «every section is a region … the width hint describes both width fields» | no | 5 |
 | Sezioni | `settings.element.ts:265`, `:274` | `<section>` senza `aria-labelledby`: gli e2e le raggiungono con `#settings-ai-presets` o per posizione | idem; e2e: via `#settings-ai-presets` (`settings-sections.spec.ts:109`, audit `:576`) e i localizzatori per posizione elencati nel Task 4 | no | 5 |
 | Indice | `settings.element.ts:395-410`, `settingsView.ts:32` (`topSection`), `settings.css:63` (40vh) | la regola sceglie la sezione più in alto tra quelle nella fascia del 40 %: le ultime sezioni, corte, non diventano mai correnti | `settingsView.test.ts` «the current section: the last one whose top is in the upper 40 %…»; e2e `settings-sections.spec.ts` (rovesciato: Sync) | **voce segnata** (audit `settings-preset`, `settings-sync-folder`: la voce corrente è quella giusta) | 5 |
-| P7 | `settings.css:57`, `sections.css:41` | voce corrente segnata solo da `--c-accent-soft`, che in `forced-colors` diventa Canvas | stato di audit nuovo `forced-colors-settings`; e2e `forced-colors.spec.ts` | **sì** (solo `forced-colors`) | 10 |
+| P7 | `settings.css:57`, `sections.css:41` | voce corrente segnata solo da `--c-accent-soft`, che in `forced-colors` diventa Canvas | stato di audit `forced-colors-settings` (Task 1) | **sì** (solo `forced-colors`) | 10 |
 | P8 | `profiles.element.ts:247`, `:312` | il `p[role=status]` «Connesso» entra nel DOM già scritto | `profiles.dom.test.ts` «Connection: … the status enters empty and is written a frame later» | no (entra vuoto e il testo arriva al fotogramma dopo, con `announce`: decisione 4) | 5 |
 
 **AI (LAB-42 P1–P4, handover 6c e 7, LAB-6)**
@@ -113,8 +124,8 @@ Ogni punto del perimetro: dove sta, la causa, il test che lo copre, se cambia l'
 | Chip | `model-chip.element.ts:182-209` | i rami di `reconcileList` fanno `as` sul nodo generico | i test di `model-chip.dom.test.ts` invariati; `grep " as " ` vuoto nel file | no | 4 |
 | `anchor-scope` | `model-chip.css:37-44` | oggi esiste un solo chip (unico creatore: il composer) | — | — | nessuno (decisione 11) |
 | `!important` | `diff-pane.css:35-50` (tre), `docExtensions.ts:48` (quarto) | `@codemirror/merge` dichiara i pulsanti per blocco in un `StyleModule` fuori dai layer | audit `ai-review*` invariato (misurato) | no | 6 |
-| P2 | `src/styles/global.css:98` | l'icona è una maschera colorata da `background-color: currentColor`, che `forced-colors` porta a Canvas | audit `focus-search-keyboard-forced-colors` + stati nuovi; e2e `forced-colors.spec.ts` | **sì** (solo `forced-colors`) | 10 |
-| A3 | `workspace.css:139`, `:231`, `:71` | modalità attiva, bozza orfana corrente e separatore (5 px) distinti solo dallo sfondo | stato di audit nuovo `forced-colors-workspace`; e2e `forced-colors.spec.ts` | **sì** (solo `forced-colors`) | 10 |
+| P2 | `src/styles/global.css:98` | l'icona è una maschera colorata da `background-color: currentColor`, che `forced-colors` porta a Canvas | audit `focus-search-keyboard-forced-colors` e `forced-colors-review` (Task 1) | **sì** (solo `forced-colors`) | 10 |
+| A3 | `workspace.css:139`, `:231`, `:71` | modalità attiva, bozza orfana corrente e separatore (5 px) distinti solo dallo sfondo | stato di audit `forced-colors-workspace` (Task 1) | **sì** (solo `forced-colors`) | 10 |
 
 **Regola «mai disabled» (Davide, 11/10)** — oggi nove punti, misurati (nessun `aria-disabled`, nessun `disabled` nei dialog):
 
@@ -150,7 +161,7 @@ La fase 8 cambia l'aspetto di proposito, ma solo nell'8b. Ogni cambio visibile, 
 
 **`dist-baseline/` e snapshot.**
 
-- **8a.** Il Task 1 costruisce `dist-baseline/` da `0cb7652` più i soli commit di test (nessun commit dell'app), con `BASELINE_SHA`. I Task 2, 3 e 6 lasciano l'audit verde contro la baseline del momento (misurato). Il **Task 4** cambia di proposito 6 stati: `ai-review-generating`, `ai-review-note`, `ai-composer-running` (riga `span:2: nuovo`), `ai-review-truncated`, `ai-review-warnings` (tooltip al singolare), `ai-composer-note-no-document` (testo della nota). Il **Task 5** ne cambia 2: `settings-preset` e `settings-sync-folder` (la voce corrente dell'indice diventa Preset e Sync: è la correzione dell'indice, non uno stile). In entrambi: audit con `-g` di quegli stati, differenze identiche a quelle elencate (incollate nel commento), poi `dist-baseline/` ricostruita dal commit del task e audit completo verde. Nessuno snapshot cambia nell'8a (misurato: `visual.spec.ts` verde salvo i 2 noti).
+- **8a.** Il Task 1 costruisce `dist-baseline/` da `0cb7652` più i soli commit di test (nessun commit dell'app), con `BASELINE_SHA`. Il **Task 2** cambia 2 stati (`workspace-empty`, `toast`: il «⋯» della riga che ora ha il focus). I Task 3 e 6 lasciano l'audit verde contro la baseline del momento (misurato). Il **Task 4** cambia di proposito 6 stati: `ai-review-generating`, `ai-review-note`, `ai-composer-running` (riga `span:2: nuovo`), `ai-review-truncated`, `ai-review-warnings` (tooltip al singolare), `ai-composer-note-no-document` (testo della nota). Il **Task 5** ne cambia 2: `settings-preset` e `settings-sync-folder` (la voce corrente dell'indice diventa Preset e Sync: è la correzione dell'indice, non uno stile). In entrambi: audit con `-g` di quegli stati, differenze identiche a quelle elencate (incollate nel commento), poi `dist-baseline/` ricostruita dal commit del task e audit completo verde. Nessuno snapshot cambia nell'8a (misurato: `visual.spec.ts` verde salvo i 2 noti).
 - **8b.** Ogni task che cambia l'aspetto segue il rito dei vincoli globali: audit verde prima, differenze solo negli stati e nelle proprietà elencati dal task, baseline ricostruita dal commit del task. Stati attesi: Task 8 `ai-review-conflict`, `ai-review-generating`, `ai-review-note` (pulsanti dei blocchi); Task 9 `settings-cloud-profile`, `settings-sync-folder`, `settings-connected`, `workspace-empty`, più gli stati che Designer tocca; Task 10 `focus-search-keyboard-forced-colors` e i tre stati `forced-colors-*` del Task 1. **Snapshot**: da rigenerare solo se il task li tocca davvero (`--update-snapshots=all -g "<nome>"`, con il motivo nel commento): i candidati sono `settings` (Task 9, se Designer mette una nota visibile senza interazione) e `ai-review` (Task 8, se cambia l'aspetto dei pulsanti dei blocchi a riposo). Nessuno snapshot è in `forced-colors`.
 
 ### Divisione
@@ -215,7 +226,7 @@ La fase è un insieme di rifiniture indipendenti, non una catena: l'app funziona
 | File | Responsabilità |
 |---|---|
 | `e2e/startup.config.ts`, `e2e/startup.measure.ts`, `.gitignore` (`dist-phase3`) | Misura ripetibile del tempo di avvio contro la fase 3 (Task 1, rilanciata nel Task 11). |
-| `e2e/computed-styles.audit.ts` (stati `forced-colors-workspace`, `forced-colors-settings`, `forced-colors-review`), `e2e/forced-colors.spec.ts`, e2e toccati nei Task 1–5 | Rete di sicurezza e test dei comportamenti nuovi. |
+| `e2e/computed-styles.audit.ts` (stati `forced-colors-workspace`, `forced-colors-settings`, `forced-colors-review`), e2e toccati nei Task 1–5 | Rete di sicurezza e test dei comportamenti nuovi. |
 | `src/app/switchFolder.ts` (+ test), `src/elements/app/app.element.ts` (+ `.dom.test.ts`) | Vita dell'app, avvio, scelta e ripresa (Task 2). |
 | `src/elements/file-tree/file-tree.element.ts` (`focusTabStop()`), `src/elements/workspace/workspace.element.ts` (`focusStart()`, `focusScope`/`refocus`), `layout.ts` (+ test), `src/elements/toasts/toasts.element.ts` (+ test) | Focus e separatore del workspace, timer dei toast (Task 2, 3). |
 | `src/dom/announce.ts` (+ test) | Testo di una regione live che si ri-annuncia (Task 4). |
@@ -861,7 +872,7 @@ test('after opening a folder from the start screen the focus goes to the tree ro
 });
 ```
 
-- [ ] **Step 6: gate.** `npm test` (atteso **1050** = 1045 + 4 + 1), `npm run lint`, `e2e/startup.spec.ts` in build e in sviluppo (nel lock), audit con `-g "start"` (stati della schermata iniziale invariati). Commit: `test: risultati tardivi e avvio di hmd-app (RED)`, poi `fix: hmd-app scarta i risultati tardivi e riparte dall'avvio dopo il distacco`, `fix: il focus va all'albero dopo l'apertura della cartella`.
+- [ ] **Step 6: gate e baseline.** `npm test` (atteso **1050** = 1045 + 4 + 1), `npm run lint`, `e2e/startup.spec.ts` in build e in sviluppo (nel lock). Audit completo: cadono **solo** `workspace-empty` e `toast` con `…>nav:2>ul:0>li:0>div:0>button:1 { opacity: 0 → 1 }` (misurato: il focus sulla prima riga dell'albero ne mostra il «⋯»); righe nel commento, poi `dist-baseline/` ricostruita dal commit del task (rito dei vincoli globali) e audit completo verde. Commit: `test: risultati tardivi e avvio di hmd-app (RED)`, poi `fix: hmd-app scarta i risultati tardivi e riparte dall'avvio dopo il distacco`, `fix: il focus va all'albero dopo l'apertura della cartella`.
 
 ### Task 3: `hmd-workspace` — focus quando la sidebar sparisce, Home/End, timer dei toast (Builder)
 
@@ -2582,6 +2593,14 @@ index 96d9e44..b0e9d22 100644
    });
  
    test('Enter in the composer during a generation says so and keeps the draft; the note goes when the generation ends', async ({ app, ai, page }) => {
+```
+
+Nell'audit, lo stato `ai-composer-note-no-document` (`computed-styles.audit.ts:419`) aspettava la nota **per testo**: con il testo nuovo il progetto `baseline` (build vecchia, testo vecchio) cade e il `current` non parte (misurato). Diventa indipendente dal testo:
+
+```ts
+      // La nota per testo non basta: l'audit prepara lo stato anche sulla baseline, che può avere il testo di prima
+      // (LAB-10 lo cambia). Basta una nota non vuota.
+      await expect(page.getByRole('status').filter({ hasText: /\S/ }).first()).toBeVisible();
 ```
 
 `ai-review.spec.ts:222` e `computed-styles.audit.ts:280`: `app.t('ai.warningsCount', { count: 1 })` → `app.t('ai.warningsCount.one', { count: 1 })` (nell'audit il nome «1 warning» trova anche il «1 warnings» della baseline: il nome si confronta per sottostringa). In `ai-composer.spec.ts` il test del doppio clic del Task 1 si rovescia:
