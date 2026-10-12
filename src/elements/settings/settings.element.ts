@@ -15,7 +15,7 @@ import { emit } from '../events';
 import { showChildren } from './fields';
 import type { HmdSettingsPresets, PresetsController } from './presets.element';
 import type { HmdSettingsProfiles, ProfilesController } from './profiles.element';
-import { SECTION_LABELS, commitDelay, commitWidths, sectionId, settingsSections, topSection, widthText } from './settingsView';
+import { SECTION_LABELS, commitDelay, commitWidths, currentSection, sectionId, settingsSections, widthText } from './settingsView';
 import type { HmdSettingsSync, SyncController } from './sync.element';
 import './settings.css';
 
@@ -75,9 +75,12 @@ export class HmdSettings extends HmdElement {
   #dirty = new Set<SettingsSection>();
   #visible: SettingsSection = 'general';
   #confirming = false;
-  #observer: IntersectionObserver | null = null;
-  /** Sezioni osservate (cambiano solo con il controller AI). */
-  #observed: SettingsSection[] = [];
+  /**
+   * La sezione appena raggiunta dall'indice o dalla rotta, con lo scorrimento che le ha dato: resta la corrente
+   * finché chi usa la pagina non scorre altrove (le ultime sezioni non arrivano in cima, la regola dello
+   * scorrimento non le sceglierebbe mai da sola).
+   */
+  #pinned: { section: SettingsSection; scrollTop: number } | null = null;
   /** Sezione e controller dell'ultimo scorrimento: si scorre solo quando cambiano (l'effetto `[section, ai]`). */
   #scrolled: { section: SettingsSection; ai: SettingsController | null } | null = null;
   #dialogs: AbortController | null = null;
@@ -152,10 +155,14 @@ export class HmdSettings extends HmdElement {
     this.#dialogs ??= new AbortController();
     const parts = this.#parts!;
     parts.content.addEventListener('hmd-settings-dirty', (event) => this.#onDirty(event), { signal });
+    parts.content.addEventListener('scroll', () => this.#onScroll(), { passive: true, signal });
     window.addEventListener(
       'keydown',
       (event) => {
-        if (event.key === 'Escape' && !document.querySelector('dialog[open]')) this.#close();
+        if (event.key !== 'Escape' || document.querySelector('dialog[open]')) return;
+        // Consumato: altrimenti Chrome usa lo stesso Esc per chiudere il dialog di conferma appena aperto.
+        event.preventDefault();
+        this.#close();
       },
       { signal },
     );
@@ -169,9 +176,7 @@ export class HmdSettings extends HmdElement {
 
   disconnectedCallback(): void {
     super.disconnectedCallback();
-    this.#observer?.disconnect();
-    this.#observer = null;
-    this.#observed = [];
+    this.#pinned = null;
     this.#scrolled = null;
     this.#dialogs?.abort();
     this.#dialogs = null;
@@ -220,7 +225,31 @@ export class HmdSettings extends HmdElement {
   }
 
   #scrollTo(section: SettingsSection): void {
-    this.#parts?.content.querySelector(`#${sectionId(section)}`)?.scrollIntoView({ block: 'start' });
+    const content = this.#parts?.content;
+    if (!content) return;
+    content.querySelector(`#${sectionId(section)}`)?.scrollIntoView({ block: 'start' });
+    // La sezione chiesta è la corrente anche se non arriva in cima; il suo evento scroll non la cambia.
+    this.#pinned = { section, scrollTop: content.scrollTop };
+    if (this.#visible !== section) {
+      this.#visible = section;
+      this.#loop.update();
+    }
+  }
+
+  /** L'indice segue lo scorrimento (`currentSection`), salvo l'evento scroll del salto appena fatto. */
+  #onScroll(): void {
+    const content = this.#parts!.content;
+    if (this.#pinned && Math.abs(content.scrollTop - this.#pinned.scrollTop) < 1) return;
+    this.#pinned = null;
+    const box = content.getBoundingClientRect().top;
+    const tops = settingsSections(!!this.#ai).flatMap((section) => {
+      const node = content.querySelector(`#${sectionId(section)}`);
+      return node ? [{ section, top: node.getBoundingClientRect().top - box }] : [];
+    });
+    const current = currentSection(tops, content);
+    if (!current || current === this.#visible) return;
+    this.#visible = current;
+    this.#loop.update();
   }
 
   #build(): Parts {
@@ -255,6 +284,7 @@ export class HmdSettings extends HmdElement {
             min: String(MIN_TEXT_WIDTH),
             max: String(MAX_TEXT_WIDTH),
             step: '1',
+            'aria-describedby': 'settings-width-hint',
             on: { input: (e) => (this.#widthTexts = { ...this.#widthTexts, [pane]: value(e) }), blur: () => this.#commitWidths(), keydown: onEnter(() => this.#commitWidths()) },
           }),
         },
@@ -262,8 +292,10 @@ export class HmdSettings extends HmdElement {
     ) as Parts['widths'];
     delay.value = this.#delayText;
     for (const pane of TEXT_WIDTH_PANES) widths[pane].input.value = this.#widthTexts[pane];
-    const sectionBox = (id: SettingsSection, ...children: Node[]) => el('section', { id: sectionId(id), class: 'section' }, ...children);
-    const titles = [el('h2'), el('h2'), el('h2')];
+    // Ogni sezione è una regione con il nome del suo titolo; il titolo prende il focus dopo un salto dall'indice.
+    const title = (id: SettingsSection) => el('h2', { id: `${sectionId(id)}-title`, tabIndex: -1 });
+    const sectionBox = (id: SettingsSection, ...children: Node[]) => el('section', { id: sectionId(id), class: 'section', 'aria-labelledby': `${sectionId(id)}-title` }, ...children);
+    const titles = [title('ai-profiles'), title('ai-presets'), title('ai-sync')];
     const parts: Parts = {
       view: el('div', { class: 'view', role: 'region' }),
       nav: el('nav', { class: 'nav' }),
@@ -271,8 +303,8 @@ export class HmdSettings extends HmdElement {
       title: el('h1', { tabIndex: -1 }),
       links: new Map(),
       content: el('div', { class: 'content' }),
-      general: el('section', { id: sectionId('general'), class: 'section' }),
-      generalTitle: el('h2'),
+      general: el('section', { id: sectionId('general'), class: 'section', 'aria-labelledby': `${sectionId('general')}-title` }),
+      generalTitle: title('general'),
       languageCaption: el('span'),
       language: el(
         'select',
@@ -289,7 +321,7 @@ export class HmdSettings extends HmdElement {
       delay,
       widthLegend: el('legend'),
       widths,
-      widthHint: el('p', { class: 'hint' }),
+      widthHint: el('p', { class: 'hint', id: 'settings-width-hint' }),
       saveAll: el('button', { type: 'button', class: 'secondary', on: { click: () => emit(this, 'hmd-settings-save-all', null) } }),
       ai: { profiles: el('section'), presets: el('section'), sync: el('section'), titles },
       profiles: el('hmd-settings-profiles'),
@@ -327,6 +359,8 @@ export class HmdSettings extends HmdElement {
           emit(this, 'hmd-settings-section', { section });
           // Se la sezione è già quella della rotta non cambia nulla: si scorre direttamente.
           this.#scrollTo(section);
+          // Il focus segue il salto (WCAG 2.4.3): sul titolo della sezione, senza un secondo scorrimento.
+          this.#parts?.content.querySelector<HTMLElement>(`#${sectionId(section)}-title`)?.focus({ preventScroll: true });
         },
       },
     });
@@ -383,7 +417,6 @@ export class HmdSettings extends HmdElement {
       if (parts.sync.i18n !== i18n) parts.sync.i18n = i18n;
     }
     showChildren(parts.content, [parts.general, ...(ai ? [parts.ai.profiles, parts.ai.presets, parts.ai.sync] : [])], [parts.ai.profiles, parts.ai.presets, parts.ai.sync]);
-    this.#observe(parts, sections);
     // Entrando (o cambiando sezione dalla rotta) si scorre alla sezione; anche quando compaiono le sezioni AI.
     if (this.#scrolled?.section !== this.#section || this.#scrolled.ai !== ai) {
       this.#scrolled = { section: this.#section, ai };
@@ -391,23 +424,6 @@ export class HmdSettings extends HmdElement {
     }
   }
 
-  /** La voce dell'indice segue la sezione visibile mentre si scorre (un observer per insieme di sezioni). */
-  #observe(parts: Parts, sections: SettingsSection[]): void {
-    if (this.#observer && this.#observed.join() === sections.join()) return;
-    this.#observer?.disconnect();
-    this.#observed = sections;
-    if (typeof IntersectionObserver === 'undefined') return;
-    this.#observer = new IntersectionObserver(
-      (entries) => {
-        const top = topSection(entries.map((e) => ({ id: e.target.id, top: e.boundingClientRect.top, intersecting: e.isIntersecting })), this.#observed);
-        if (!top || top === this.#visible) return;
-        this.#visible = top;
-        this.#loop.update();
-      },
-      { root: parts.content, rootMargin: '0px 0px -60% 0px' },
-    );
-    parts.content.querySelectorAll('section[id^="settings-"]').forEach((section) => this.#observer!.observe(section));
-  }
 }
 
 declare global {
