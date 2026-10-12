@@ -7,7 +7,9 @@ import { uid } from '../../dom/uid';
 import type { MessageKey } from '../../i18n/messages';
 import type { I18nStore } from '../../state/i18nStore';
 import { showConfirmDialog } from '../dialogs/confirmDialog';
+import { syncNowBlocker } from './blockers';
 import { showChildren } from './fields';
+import { announce } from '../../dom/announce';
 import './sections.css';
 
 /** Quello che la sezione della sync usa del controller. */
@@ -28,6 +30,8 @@ interface Parts {
   conflicts: HTMLParagraphElement;
   syncActions: HTMLDivElement;
   syncNow: HTMLButtonElement;
+  /** Nota di «Sincronizza ora»: entra nel DOM solo con una ragione, vuota, e il testo arriva dopo `ANNOUNCE_DELAY_MS`. */
+  syncNote: HTMLParagraphElement;
   backups: HTMLDetailsElement;
   backupsSummary: HTMLElement;
 }
@@ -51,6 +55,9 @@ export class HmdSettingsSync extends HmdElement {
   /** Chiave (servizio + ultima sync) dell'ultimo elenco chiesto, e contatore delle richieste. */
   #backupsKey: unknown = null;
   #request = 0;
+  /** «Sincronizza ora» è stato attivato durante una sync: la nota resta finché la sync dura. */
+  #syncNote = false;
+  #announceSync = false;
   /** Il ripristino in corso (conteggio e conferma): il controller è il suo token, uno alla volta. Legato al servizio: se cambia o si spegne si annulla e libera subito il posto. */
   #restoreAbort: AbortController | null = null;
   #dialogs: AbortController | null = null;
@@ -97,7 +104,8 @@ export class HmdSettingsSync extends HmdElement {
         error: el('p', { class: 'help', role: 'alert' }),
         conflicts: el('p', { class: 'help' }),
         syncActions: el('div', { class: 'actions' }),
-        syncNow: el('button', { type: 'button', on: { click: () => void (this.#sync?.service as SyncDetailsService | undefined)?.syncNow() } }),
+        syncNow: el('button', { type: 'button', on: { click: () => this.#syncNow() } }),
+        syncNote: el('p', { class: 'note syncNote', role: 'status' }),
         backups: el('details'),
         backupsSummary: el('summary'),
       };
@@ -154,6 +162,19 @@ export class HmdSettingsSync extends HmdElement {
     this.#loop.update();
   }
 
+  /** Durante una sync non se ne accoda un'altra (decisione 17): solo la nota, e il focus resta sul pulsante. */
+  #syncNow(): void {
+    const sync = this.#sync?.service as SyncDetailsService | undefined;
+    if (!sync) return;
+    if (syncNowBlocker(sync.getState().status)) {
+      this.#announceSync = this.#syncNote;
+      this.#syncNote = true;
+      this.#loop.update();
+      return;
+    }
+    void sync.syncNow();
+  }
+
   #restore(path: string): void {
     const sync = this.#sync?.service as SyncDetailsService | undefined;
     const t = this.#i18n?.t;
@@ -198,12 +219,16 @@ export class HmdSettingsSync extends HmdElement {
       setText(parts.error, state.error ? t(`ai.error.${state.error}` as MessageKey) : '');
       setText(parts.conflicts, `${t('ai.syncConflict')}: ${state.conflicts.join(', ')}`);
       setText(parts.syncNow, t('ai.syncNow'));
-      parts.syncNow.disabled = state.status === 'syncing';
+      if (!syncNowBlocker(state.status)) this.#syncNote = false;
+      announce(parts.syncNote, this.#syncNote ? t('ai.syncNow.running') : '', this.#syncNote && (this.#announceSync || parts.syncNote.parentNode !== parts.root));
+      this.#announceSync = false;
       setText(parts.backupsSummary, t('ai.backups'));
       this.#renderBackups(parts, t);
-      wanted.push(parts.status, ...(state.error ? [parts.error] : []), ...(state.conflicts.length > 0 ? [parts.conflicts] : []), parts.syncActions, parts.backups);
+      wanted.push(parts.status, ...(state.error ? [parts.error] : []), ...(state.conflicts.length > 0 ? [parts.conflicts] : []), parts.syncActions, ...(this.#syncNote ? [parts.syncNote] : []), parts.backups);
+    } else {
+      this.#syncNote = false;
     }
-    showChildren(parts.root, wanted, [parts.status, parts.error, parts.conflicts, parts.syncActions, parts.backups]);
+    showChildren(parts.root, wanted, [parts.status, parts.error, parts.conflicts, parts.syncActions, parts.syncNote, parts.backups]);
   }
 
   /** Un `p` per backup, figli diretti di `details` dopo il `summary` (come in React), riusati per percorso. */
