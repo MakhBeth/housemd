@@ -176,7 +176,7 @@
   "ai.review.generating": "Generation in progress: wait for it to finish, or stop it from the chat",
   "ai.review.updating": "An update is in progress: try again in a moment",
   "ai.review.conflict": "Resolve the file conflict first: reload from disk or overwrite",
-  "ai.review.scopeLost": "Nothing can be accepted: the selection was lost. Discard the proposal, or select the text again and retry",
+  "ai.review.scopeLost": "The selection was lost: discard the proposal, or select the text again and retry.",
   "ai.review.truncated": "Accept all is not available for a truncated proposal: accept the changes one at a time from the diff",
   "ai.review.notAcceptable": "Nothing can be accepted right now",
   "ai.name": "Name",

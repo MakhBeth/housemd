@@ -176,7 +176,7 @@
   "ai.review.generating": "Génération en cours : attendez qu’elle se termine, ou arrêtez-la depuis la discussion",
   "ai.review.updating": "Une mise à jour est en cours : réessayez dans un instant",
   "ai.review.conflict": "Résolvez d’abord le conflit du fichier : rechargez depuis le disque ou écrasez",
-  "ai.review.scopeLost": "Rien ne peut être accepté : la sélection a été perdue. Rejetez la proposition, ou sélectionnez à nouveau le texte et réessayez",
+  "ai.review.scopeLost": "La sélection a été perdue : rejetez la proposition, ou sélectionnez à nouveau le texte et réessayez.",
   "ai.review.truncated": "« Tout accepter » n’est pas disponible pour une proposition tronquée : acceptez les modifications une par une depuis le diff",
   "ai.review.notAcceptable": "Rien ne peut être accepté pour le moment",
   "ai.name": "Nom",

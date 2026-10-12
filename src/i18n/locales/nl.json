@@ -176,7 +176,7 @@
   "ai.review.generating": "Generatie bezig: wacht tot die klaar is, of stop die vanuit de chat",
   "ai.review.updating": "Er is een update bezig: probeer het zo opnieuw",
   "ai.review.conflict": "Los eerst het bestandsconflict op: opnieuw laden van schijf of overschrijven",
-  "ai.review.scopeLost": "Er valt niets te accepteren: de selectie is verloren gegaan. Verwerp het voorstel, of selecteer de tekst opnieuw en probeer het nog eens",
+  "ai.review.scopeLost": "De selectie is verloren gegaan: verwerp het voorstel, of selecteer de tekst opnieuw en probeer het nog eens.",
   "ai.review.truncated": "„Alles accepteren” is niet beschikbaar voor een afgekapt voorstel: accepteer de wijzigingen een voor een vanuit de diff",
   "ai.review.notAcceptable": "Er valt op dit moment niets te accepteren",
   "ai.name": "Naam",

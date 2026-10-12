@@ -310,3 +310,7 @@ test('when the generation ends the hidden region says the outcome (ready, partia
   el.status = { kind: 'none' };
   assert.equal(el.querySelector(':scope > .spoken'), null);
 });
+
+test('the lost-selection note is neutral: right for «accept» and «reject» alike', () => {
+  assert.equal(EN_MESSAGES['ai.review.scopeLost'], 'The selection was lost: discard the proposal, or select the text again and retry.');
+});

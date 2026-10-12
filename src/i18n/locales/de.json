@@ -176,7 +176,7 @@
   "ai.review.generating": "Generierung läuft: warte, bis sie fertig ist, oder stoppe sie im Chat",
   "ai.review.updating": "Eine Aktualisierung läuft: versuche es gleich noch einmal",
   "ai.review.conflict": "Löse zuerst den Dateikonflikt: vom Datenträger neu laden oder überschreiben",
-  "ai.review.scopeLost": "Es kann nichts übernommen werden: die Auswahl ist verloren gegangen. Verwirf den Vorschlag, oder wähle den Text erneut aus und versuche es noch einmal",
+  "ai.review.scopeLost": "Die Auswahl ist verloren gegangen: verwirf den Vorschlag, oder wähle den Text erneut aus und versuche es noch einmal.",
   "ai.review.truncated": "„Alles übernehmen“ ist bei einem abgeschnittenen Vorschlag nicht verfügbar: übernimm die Änderungen einzeln im Diff",
   "ai.review.notAcceptable": "Im Moment kann nichts übernommen werden",
   "ai.name": "Name",

@@ -176,7 +176,7 @@
   "ai.review.generating": "Generazione in corso: aspetta che finisca, oppure fermala dalla chat",
   "ai.review.updating": "Aggiornamento in corso: riprova tra un momento",
   "ai.review.conflict": "Risolvi prima il conflitto del file: ricarica dal disco o sovrascrivi",
-  "ai.review.scopeLost": "Non c’è niente da accettare: la selezione è andata persa. Scarta la proposta, oppure seleziona di nuovo il testo e riprova",
+  "ai.review.scopeLost": "La selezione è andata persa: scarta la proposta, oppure seleziona di nuovo il testo e riprova.",
   "ai.review.truncated": "Accetta tutto non è disponibile per una proposta troncata: accetta le modifiche una alla volta dal diff",
   "ai.review.notAcceptable": "Non c’è niente da accettare in questo momento",
   "ai.name": "Nome",

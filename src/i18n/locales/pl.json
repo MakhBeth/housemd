@@ -176,7 +176,7 @@
   "ai.review.generating": "Trwa generowanie: poczekaj, aż się skończy, albo zatrzymaj je z czatu",
   "ai.review.updating": "Trwa aktualizacja: spróbuj ponownie za chwilę",
   "ai.review.conflict": "Najpierw rozwiąż konflikt pliku: wczytaj ponownie z dysku albo nadpisz",
-  "ai.review.scopeLost": "Nie ma nic do zaakceptowania: zaznaczenie zostało utracone. Odrzuć propozycję albo zaznacz tekst ponownie i spróbuj jeszcze raz",
+  "ai.review.scopeLost": "Zaznaczenie zostało utracone: odrzuć propozycję albo zaznacz tekst ponownie i spróbuj jeszcze raz.",
   "ai.review.truncated": "„Zaakceptuj wszystko” nie jest dostępne dla uciętej propozycji: akceptuj zmiany pojedynczo z widoku różnic",
   "ai.review.notAcceptable": "W tej chwili nie ma nic do zaakceptowania",
   "ai.name": "Nazwa",

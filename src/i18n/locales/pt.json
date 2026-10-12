@@ -176,7 +176,7 @@
   "ai.review.generating": "Geração em curso: espere que termine, ou pare-a a partir da conversa",
   "ai.review.updating": "Há uma atualização em curso: tente novamente daqui a pouco",
   "ai.review.conflict": "Resolva primeiro o conflito do ficheiro: recarregue do disco ou substitua",
-  "ai.review.scopeLost": "Não há nada a aceitar: a seleção perdeu-se. Descarte a proposta, ou selecione o texto de novo e tente outra vez",
+  "ai.review.scopeLost": "A seleção perdeu-se: descarte a proposta, ou selecione o texto de novo e tente outra vez.",
   "ai.review.truncated": "«Aceitar tudo» não está disponível para uma proposta truncada: aceite as alterações uma a uma a partir do diff",
   "ai.review.notAcceptable": "Não há nada a aceitar neste momento",
   "ai.name": "Nome",
