@@ -94,7 +94,7 @@ async function mount(options: { files?: Record<string, string>; ai?: boolean; la
   if (options.ai) await waitFor(() => !!el.querySelector('[aria-label="' + EN_MESSAGES['mode.ai'] + '"]'));
   const button = (label: string) => el.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!;
   const listeners = () => counted.listeners() + countedRoute.listeners();
-  return { el, workspace, ai, route, win, documents, button, listeners, closed: () => closed };
+  return { el, workspace, ops, ai, route, win, documents, button, listeners, closed: () => closed };
 }
 
 test('the same DOM as WorkspaceView.tsx with no file open: layout with sidebar, separator and main, then the toasts', async () => {
@@ -161,6 +161,36 @@ test('shortcuts on the window: Ctrl+B toggles the sidebar and is remembered; det
   el.remove();
   window.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', ctrlKey: true }));
   assert.equal(storage.get('housemd:sidebarOpen'), 'false');
+});
+
+/** Percorsi dei nodi (cartelle comprese) dell'albero dei file, o null se la sidebar è nascosta. */
+function treePaths(el: HTMLElement): string[] | null {
+  const tree = el.querySelector('hmd-file-tree') as (HTMLElement & { nodes: { path: string }[] }) | null;
+  return tree ? tree.nodes.map((n) => n.path) : null;
+}
+
+const toggleSidebar = () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', ctrlKey: true }));
+
+test('a file created while the sidebar is hidden is in the tree when the sidebar comes back', async () => {
+  const { el, workspace } = await mount();
+  await workspace.openFile('a.md');
+  toggleSidebar();
+  assert.equal(el.querySelector('aside'), null);
+  await workspace.createFile('c.md', 'C');
+  assert.ok(workspace.getState().entries.some((e) => e.path === 'c.md'));
+  toggleSidebar();
+  assert.ok(treePaths(el)!.includes('c.md'), 'c.md in the tree');
+});
+
+test('an external change found while the sidebar is hidden is in the tree when the sidebar comes back', async () => {
+  const { el, workspace, ops } = await mount();
+  await workspace.openFile('a.md');
+  toggleSidebar();
+  ops.setFile('d.md', 'D');
+  await workspace.checkExternal();
+  assert.ok(workspace.getState().entries.some((e) => e.path === 'd.md'));
+  toggleSidebar();
+  assert.ok(treePaths(el)!.includes('d.md'), 'd.md in the tree');
 });
 
 test('the separator: arrows resize the panel and save the width', async () => {

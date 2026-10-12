@@ -142,7 +142,7 @@ export class HmdWorkspace extends HmdElement {
   #lastFile: string | null = null;
   #settingsWasOpen = false;
   #focusBeforeSettings: HTMLElement | null = null;
-  #memo: { entries?: WorkspaceState['entries']; locale?: string; tree?: TreeNode[]; files?: string[]; drafts?: readonly string[]; draftSet?: ReadonlySet<string> } = {};
+  #memo: { treeEntries?: WorkspaceState['entries']; filesEntries?: WorkspaceState['entries']; locale?: string; tree?: TreeNode[]; files?: string[]; drafts?: readonly string[]; draftSet?: ReadonlySet<string> } = {};
   #toastKey: unknown[] = [];
   // Sessione AI e sync: vivono con l'elemento collegato.
   #ai: AiController | null = null;
@@ -694,7 +694,8 @@ export class HmdWorkspace extends HmdElement {
     )!;
     // Albero, file e bozze ricalcolati solo quando cambiano le voci (o la lingua), come gli useMemo di React.
     const memo = this.#memo;
-    if (memo.entries !== state.entries || memo.locale !== i18n.getState().locale) {
+    if (memo.treeEntries !== state.entries || memo.locale !== i18n.getState().locale) {
+      memo.treeEntries = state.entries;
       memo.tree = buildTree(state.entries, i18n.getState().locale);
       memo.locale = i18n.getState().locale;
     }
@@ -726,8 +727,8 @@ export class HmdWorkspace extends HmdElement {
 
   #files(state: WorkspaceState): string[] {
     const memo = this.#memo;
-    if (memo.entries !== state.entries || !memo.files) {
-      memo.entries = state.entries;
+    if (memo.filesEntries !== state.entries || !memo.files) {
+      memo.filesEntries = state.entries;
       memo.files = state.entries.filter((e) => e.kind === 'file').map((e) => e.path);
     }
     return memo.files;
