@@ -885,6 +885,26 @@ const orphanCurrent: State = {
     await expect(orphan).toHaveAttribute('aria-current', 'true');
   },
 };
+// Task 10: focus da tastiera su una modalità (la premuta) in forced-colors, dove l'anello sta dentro il pulsante.
+const focusModeKeyboard: State = {
+  name: 'focus-mode-keyboard',
+  async setup(app, page) {
+    await workspace(app);
+    // Come focus-ring.spec.ts: dopo il dialog l'ultima interazione è la tastiera.
+    await page.getByRole('button', { name: app.t('folder.new') }).first().click();
+    await page.keyboard.press('Escape');
+    // Il focus arriva dalla tastiera sulla modalità premuta: l'anello dentro il pulsante è HighlightText.
+    const mode = app.modes().getByRole('button', { pressed: true });
+    await mode.focus();
+    await page.keyboard.press('Shift+Tab');
+    await page.keyboard.press('Tab');
+    await expect(mode).toBeFocused();
+  },
+};
+for (const scheme of ['light', 'dark'] as const) {
+  STATES.push({ ...focusModeKeyboard, name: `focus-mode-keyboard-forced-colors-${scheme}`, scheme, forcedColors: true });
+}
+
 for (const [name, from] of [
   ['forced-colors-workspace', STATES.find((s) => s.name === 'workspace-light')!],
   ['forced-colors-settings', STATES.find((s) => s.name === 'settings-profile')!],
