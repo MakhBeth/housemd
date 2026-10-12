@@ -3527,6 +3527,14 @@ Con l'8b (Task 8) le regole `:disabled` del `StyleModule` e del foglio cambiano 
 - [ ] **Step 3: spec.** §7 «Fase 8»: paragrafo «8a **fatta** (PR #12)» nello stile della 7a/7b (cosa, misure, decisioni che cambiano il contratto: `announce`, `pluralKey`, `currentSection`, `StyleModule`, `style-mod` in `package.json`); §13: questo piano nell'elenco.
 - [ ] **Step 4: PR pronta.** Paragrafo «Esecuzione 8a» in questo piano (misure, deviazioni), `gh pr ready 12`, corpo aggiornato. La PR la mergia il PM nell'epica; da lì nasce il branch dell'8b.
 
+**Esecuzione 8a (12/10).** Branch `lab/LAB-6-fase-8`, PR #12. Tre correzioni della review come primi commit, ognuna col suo test:
+
+- R1 (`hmd-editor`): `i18nChanged()` rifà le iscrizioni (`reconnect()`) e riscrive il nome; test sulla sostituzione dello store (nome di B, anche dopo un cambio lingua di B; iscrizioni A=0, B=1). RED: nome rimasto «A-NAME».
+- A11y 1: `generationOutcome` conta i blocchi (`blockCount` in `diffLogic.ts`, memoizzato in `hmd-ai-review` sulle coppie di testi e mai durante la generazione) e dice «Proposal ready: {count} block(s) to review» (`ai.proposalBlocks.one|other`, nove lingue); il numero si dice una volta per esito. RED: i test sono stati scritti prima di `blockCount`, della proprietà `blocks` e della nuova firma, quindi fallivano per assenza (non rieseguiti con il codice vecchio).
+- A11y 2: `focusStart()` usa lo slot `newFile`. Refactor senza RED: il test della cartella vuota resta verde e ora afferma anche il nodo.
+
+Misure sul commit finale, nel lock, 2 worker, nessun processo appeso: `npx tsc --noEmit` e `npm run lint` puliti; `npm test` **1077** (1075 + 2); `test:e2e` **210** (208 verdi + i 2 snapshot noti dello start screen); `test:e2e:dev` **195**; `test:e2e:audit` **152** verdi contro `dist-baseline/` (`BASELINE_SHA` 3a9bc01, copiata dal checkout di LAB-62: il Task 6 non cambia lo stile calcolato), nessuna riga cambiata dalla regione nascosta. Bundle `dist/assets/index-CLC_xY1Y.js` 1 142 520 B, gzip **380 897 B** (+1 663 B su 379 234; il prototipo era +1 259 B: la differenza sono le chiavi nuove e le correzioni). Deviazioni: nessuna al codice del piano; il tempo di avvio non è stato rimisurato.
+
 ### Task 8: «Mai disabled» per i pulsanti dei blocchi del diff (Planner)
 
 **Prerequisiti:** 8a mergiata nell'epica; branch `lab/LAB-6-fase-8b` da `epic/LAB-3-web-components`, PR in bozza nuova; `dist-baseline/` copiata dal checkout della chiusura dell'8a (`BASELINE_SHA` = il commit del Task 5, l'ultimo dell'8a che l'ha rinnovata: il Task 7 non la tocca) o ricostruita da quello SHA in un worktree separato; proposta di Designer accettata dal PM (punto 7 di «Cambi d'aspetto»).
