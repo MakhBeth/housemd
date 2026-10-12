@@ -156,6 +156,17 @@ export class HmdWorkspace extends HmdElement {
     render: () => this.#render(this.#parts!, this.#workspace!, this.#i18n!),
   });
 
+  /**
+   * Il focus d'ingresso nello workspace (dopo l'apertura della cartella, o quando la sidebar cambia sotto il
+   * focus): la riga col tab stop dell'albero; con l'albero vuoto «Nuovo file» nella testata della sidebar (l'azione
+   * utile in una cartella vuota); con la sidebar nascosta «Mostra sidebar» nella barra.
+   */
+  focusStart(): void {
+    if (this.#slots.tree?.focusTabStop()) return;
+    const newFile = this.#slots.treeHeader?.children[2] as HTMLElement | undefined;
+    (newFile ?? this.#parts?.toggle)?.focus();
+  }
+
   get workspace(): Workspace | null { return this.#workspace; }
   set workspace(value: Workspace | null) {
     value ??= null;
