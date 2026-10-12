@@ -51,6 +51,8 @@ export class HmdSettingsSync extends HmdElement {
   #backupsKey: unknown = null;
   #request = 0;
   #restoring = false;
+  /** Conteggio e conferma del ripristino in corso: legati al servizio, si annullano se cambia o si spegne. */
+  #restoreAbort: AbortController | null = null;
   #dialogs: AbortController | null = null;
   #loop = new RenderLoop(this, {
     ready: () => !!this.#parts && !!this.#controller && !!this.#binding && !!this.#i18n && this.isConnected,
@@ -121,6 +123,7 @@ export class HmdSettingsSync extends HmdElement {
   #follow(service: SyncService | null): void {
     if (service !== (this.#sync?.service ?? null)) {
       this.#sync?.off();
+      this.#restoreAbort?.abort();
       this.#sync = service ? { service, off: service.subscribe(() => this.#onSyncState()) } : null;
       this.#backups = [];
       this.#backupsKey = null;
@@ -152,15 +155,17 @@ export class HmdSettingsSync extends HmdElement {
   #restore(path: string): void {
     const sync = this.#sync?.service as SyncDetailsService | undefined;
     const t = this.#i18n?.t;
-    const signal = this.#dialogs?.signal;
+    const dialogs = this.#dialogs?.signal;
     const controller = this.#controller;
     // Una sola conferma di ripristino alla volta, anche durante backupCounts.
-    if (!sync || !t || !signal || !controller || this.#restoring) return;
+    if (!sync || !t || !dialogs || !controller || this.#restoring) return;
     this.#restoring = true;
+    const abort = (this.#restoreAbort = new AbortController());
+    const signal = AbortSignal.any([dialogs, abort.signal]);
     void sync
       .backupCounts(path)
       .then((counts) =>
-        showConfirmDialog({
+        signal.aborted ? false : showConfirmDialog({
           title: t('ai.restoreTitle'),
           message: t('ai.syncCounts', { profiles: counts.profiles, presets: counts.presets }) + '\n' + t('ai.syncRestoreWarning'),
           confirmLabel: t('ai.restoreBackup'),
@@ -168,10 +173,11 @@ export class HmdSettingsSync extends HmdElement {
           signal,
         }),
       )
-      .then((ok) => (ok ? sync.restore(path).then(() => controller.reload()) : undefined))
+      .then((ok) => (ok && !signal.aborted ? sync.restore(path).then(() => controller.reload()) : undefined))
       .catch((error) => controller.report(error))
       .finally(() => {
         this.#restoring = false;
+        if (this.#restoreAbort === abort) this.#restoreAbort = null;
       });
   }
 

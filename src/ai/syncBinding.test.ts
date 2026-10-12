@@ -139,6 +139,22 @@ test('disposed: the service stops, late answers change nothing, listeners are dr
   assert.equal(services.length, 1);
 });
 
+test('disposed while choose() waits for setMeta: no service starts and no listener is installed', async () => {
+  const { binding, host, deps, services } = setup(null);
+  await flush();
+  let finish!: () => void;
+  host.store.setMeta = () => new Promise<void>((resolve) => (finish = resolve));
+  deps.picked = handle('late');
+  const choosing = binding.choose();
+  await flush();
+  binding.dispose();
+  finish();
+  await choosing;
+  assert.equal(services.length, 0);
+  assert.equal(host.onSettingsChanged, undefined);
+  assert.equal(binding.getState().handle, null);
+});
+
 test('a failed read of the saved folder is reported to the controller', async () => {
   const reports: unknown[] = [];
   const host: SyncHost = {

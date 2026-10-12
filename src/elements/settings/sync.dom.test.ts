@@ -16,7 +16,7 @@ test.afterEach(() => document.body.replaceChildren());
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-function service(backups: string[][]) {
+function service(backups: string[][], counts?: () => Promise<{ profiles: number; presets: number }>) {
   let state: AiSyncState = { status: 'idle', error: null, lastSync: null, conflicts: [] };
   const listeners = new Set<() => void>();
   const pending: ((paths: string[]) => void)[] = [];
@@ -31,7 +31,7 @@ function service(backups: string[][]) {
     /** Ogni richiesta resta in attesa finché il test non la risolve con `answer`. */
     listBackups: () => new Promise<string[]>((resolve) => pending.push(resolve)),
     answer: (i: number) => pending[i](backups[i]),
-    backupCounts: async () => ({ profiles: 2, presets: 3 }),
+    backupCounts: () => (counts ? counts() : Promise.resolve({ profiles: 2, presets: 3 })),
     restore: async (path: string) => void calls.push(`restore ${path}`),
     set(patch: Partial<AiSyncState>) {
       state = { ...state, ...patch };
@@ -42,7 +42,7 @@ function service(backups: string[][]) {
   };
 }
 
-async function mount(saved: FileSystemDirectoryHandle | null, access = true) {
+async function mount(saved: FileSystemDirectoryHandle | null, access = true, counts?: () => Promise<{ profiles: number; presets: number }>) {
   const i18n = createI18nStore({ locale: 'en', messages: EN_MESSAGES, load: async (locale) => ({ locale, messages: EN_MESSAGES }), persist() {} });
   const meta = new Map<string, unknown>([['folderHandle', saved]]);
   const services: ReturnType<typeof service>[] = [];
@@ -58,7 +58,7 @@ async function mount(saved: FileSystemDirectoryHandle | null, access = true) {
     requestAccess: async () => true,
     pickFolder: async () => ({ name: 'picked' }) as FileSystemDirectoryHandle,
     createSync: () => {
-      const s = service([['a.json', 'b.json'], ['c.json']]);
+      const s = service([['a.json', 'b.json'], ['c.json']], counts);
       services.push(s);
       return s as unknown as SyncService;
     },
@@ -121,4 +121,31 @@ test('restoring a backup: the confirmation says how many profiles and presets; c
   [...dialog.querySelectorAll('button')].find((b) => b.textContent === EN_MESSAGES['ai.restoreBackup'])!.click();
   await waitFor(() => reloads() === 1);
   assert.deepEqual(services[0].calls, ['restore a.json']);
+});
+
+test('Disable while the counts are pending: the late answer opens no confirmation', async () => {
+  let answer!: (counts: { profiles: number; presets: number }) => void;
+  const { el, services, button, binding } = await mount({ name: 'sync' } as FileSystemDirectoryHandle, true, () => new Promise((resolve) => (answer = resolve)));
+  services[0].answer(0);
+  await waitFor(() => el.querySelectorAll('details > p').length === 2);
+  el.querySelector<HTMLButtonElement>('details > p button')!.click();
+  button(EN_MESSAGES['ai.syncDisable'])!.click();
+  await waitFor(() => binding.getState().sync === null);
+  answer({ profiles: 2, presets: 3 });
+  await flush();
+  assert.equal(document.querySelector('dialog'), null);
+  assert.deepEqual(services[0].calls, []);
+});
+
+test('Disable with the confirmation open: the dialog closes and nothing is restored', async () => {
+  const { el, services, button, binding, reloads } = await mount({ name: 'sync' } as FileSystemDirectoryHandle);
+  services[0].answer(0);
+  await waitFor(() => el.querySelectorAll('details > p').length === 2);
+  el.querySelector<HTMLButtonElement>('details > p button')!.click();
+  await waitFor(() => document.querySelector('dialog') !== null);
+  button(EN_MESSAGES['ai.syncDisable'])!.click();
+  await waitFor(() => binding.getState().sync === null);
+  await waitFor(() => document.querySelector('dialog') === null);
+  assert.deepEqual(services[0].calls, []);
+  assert.equal(reloads(), 0);
 });

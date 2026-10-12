@@ -82,6 +82,8 @@ export class SyncBinding {
     const handle = await this.#deps.pickFolder();
     if (!handle || this.#disposed) return;
     await this.#host.store.setMeta('folderHandle', handle);
+    // Il lavoro asincrono tardivo si scarta: dopo dispose() non parte nessun servizio.
+    if (this.#disposed) return;
     this.#set({ handle, permission: true });
   }
 
