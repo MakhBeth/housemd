@@ -201,8 +201,10 @@ export class HmdAiReview extends HmdElement {
   }
 
   #discard(): void {
-    const p = this.#current();
-    if (p) this.#controller?.discard(p.path);
+    // Durante la generazione la proposta può non esserci ancora: `discard` del documento ferma la richiesta
+    // in corso su quel percorso e toglie l'eventuale proposta (Scarta = Ferma + scarta).
+    const path = this.#current()?.path ?? this.#doc?.path;
+    if (path) this.#controller?.discard(path);
   }
 
   /**

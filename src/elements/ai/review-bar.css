@@ -85,5 +85,15 @@
     .note:not(:empty) {
       padding-block: 0 8px;
     }
+
+    /* Regione live della generazione: letta dallo screen reader, nascosta alla vista (il contatore visibile resta). */
+    .spoken {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
   }
 }
