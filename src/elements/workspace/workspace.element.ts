@@ -154,6 +154,15 @@ export class HmdWorkspace extends HmdElement {
   #loop = new RenderLoop(this, {
     ready: () => !!this.#parts && !!this.#workspace && !!this.#i18n && !!this.#theme && !!this.#route && this.isConnected,
     render: () => this.#render(this.#parts!, this.#workspace!, this.#i18n!),
+    // La sidebar (o il suo contenuto) è sparita con il focus dentro: «Nascondi», Ctrl+B nell'albero o nella
+    // ricerca, la chat che sostituisce l'albero entrando in AI, l'albero che sostituisce la chat uscendo. Entrando
+    // in AI il focus va sul pulsante della modalità; altrimenti dove entra `focusStart()` (l'albero, o «Mostra
+    // sidebar» se la sidebar non c'è più).
+    focusScope: () => this.#slots.aside ?? null,
+    refocus: () => {
+      if (this.#sidebarOpen && this.#shown === 'ai') this.#parts!.modeButtons.get('ai')!.focus();
+      else this.focusStart();
+    },
   });
 
   /**
