@@ -144,6 +144,8 @@
   "ai.request": "Zapytaj o ten dokument… (Shift+Enter – nowy wiersz)",
   "ai.working": "Przetwarzanie…",
   "ai.proposalReady": "Propozycja jest gotowa do sprawdzenia.",
+  "ai.proposalBlocks.one": "Propozycja gotowa: {count} blok do sprawdzenia",
+  "ai.proposalBlocks.other": "Propozycja gotowa: {count} bloków do sprawdzenia",
   "ai.diff.current": "Bieżący dokument",
   "ai.diff.proposal": "Propozycja AI",
   "ai.retry": "Spróbuj ponownie",

@@ -144,6 +144,8 @@
   "ai.request": "この文書について質問…（Shift+Enter で改行）",
   "ai.working": "処理中…",
   "ai.proposalReady": "提案を確認できます。",
+  "ai.proposalBlocks.one": "提案の準備ができました：確認するブロックは{count}件",
+  "ai.proposalBlocks.other": "提案の準備ができました：確認するブロックは{count}件",
   "ai.diff.current": "現在のドキュメント",
   "ai.diff.proposal": "AI の提案",
   "ai.retry": "再試行",

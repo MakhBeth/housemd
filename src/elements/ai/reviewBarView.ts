@@ -1,5 +1,6 @@
 import type { AcceptBlocker } from '../../ai/aiController';
 import { isBusy, type ReviewStatus } from '../../ai/reviewStatus';
+import { pluralKey, type Locale } from '../../i18n/i18n';
 import type { I18nStore } from '../../state/i18nStore';
 
 /** Azioni della barra di revisione, mandate con `hmd-ai-review-action`. */
@@ -63,11 +64,12 @@ export function statusLine(status: ReviewStatus, t: I18nStore['t']): StatusLine 
  * troncata. Null se non c'è una proposta (generazione fermata o fallita: lo dicono il registro e i toast) o se
  * l'esito ha già la sua regione (`scopeLost` è un `role="alert"`).
  */
-export function generationOutcome(status: ReviewStatus, hasProposal: boolean, t: I18nStore['t']): string | null {
+export function generationOutcome(status: ReviewStatus, hasProposal: boolean, blocks: number, locale: Locale, t: I18nStore['t']): string | null {
   if (!hasProposal) return null;
   switch (status.kind) {
     case 'none':
-      return t('ai.proposalReady');
+      // Il registro dice già «Proposta pronta» quando il modello non scrive un commento: la regione dice il numero dei blocchi.
+      return blocks > 0 ? t(pluralKey(locale, 'ai.proposalBlocks', blocks), { count: blocks }) : t('ai.proposalReady');
     case 'partial':
       return t('ai.status.partial');
     case 'truncated':

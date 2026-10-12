@@ -262,7 +262,7 @@ test('while generating a hidden polite region says the start and each new part, 
 
 test('when the generation ends the hidden region says the outcome (ready, partial, truncated) until the next action; no proposal, nothing', async () => {
   const outcomes: [ReviewStatus, string | null][] = [
-    [{ kind: 'none' }, EN_MESSAGES['ai.proposalReady']],
+    [{ kind: 'none' }, 'Proposal ready: 2 blocks to review'],
     [{ kind: 'partial' }, EN_MESSAGES['ai.status.partial']],
     [{ kind: 'truncated' }, EN_MESSAGES['ai.status.truncated']],
   ];
@@ -270,9 +270,12 @@ test('when the generation ends the hidden region says the outcome (ready, partia
     const { el, buttons } = mount(GENERATING, [], 'generating');
     const spoken = () => el.querySelector<HTMLElement>(':scope > .spoken');
     el.proposalId = 'a.md#1';
+    el.blocks = 2;
     el.status = end;
     el.acceptBlocker = null;
     assert.equal(spoken()?.textContent, text, end.kind);
+    el.blocks = 5;
+    assert.equal(spoken()?.textContent, text, `${end.kind}: the count said once does not change under the user's edits`);
     buttons()[1].click();
     assert.equal(spoken(), null, `${end.kind}: the next action empties it`);
     el.remove();

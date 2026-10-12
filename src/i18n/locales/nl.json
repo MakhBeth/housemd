@@ -144,6 +144,8 @@
   "ai.request": "Vraag iets over dit document… (Shift+Enter voor een nieuwe regel)",
   "ai.working": "Bezig…",
   "ai.proposalReady": "Voorstel klaar om te beoordelen.",
+  "ai.proposalBlocks.one": "Voorstel klaar: {count} blok om te beoordelen",
+  "ai.proposalBlocks.other": "Voorstel klaar: {count} blokken om te beoordelen",
   "ai.diff.current": "Huidig document",
   "ai.diff.proposal": "AI-voorstel",
   "ai.retry": "Opnieuw proberen",

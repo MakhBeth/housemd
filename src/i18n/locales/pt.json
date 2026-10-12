@@ -144,6 +144,8 @@
   "ai.request": "Pergunte sobre este documento… (Shift+Enter para nova linha)",
   "ai.working": "A processar…",
   "ai.proposalReady": "Proposta pronta para revisão.",
+  "ai.proposalBlocks.one": "Proposta pronta: {count} bloco para revisar",
+  "ai.proposalBlocks.other": "Proposta pronta: {count} blocos para revisar",
   "ai.diff.current": "Documento atual",
   "ai.diff.proposal": "Proposta da IA",
   "ai.retry": "Tentar novamente",

@@ -144,6 +144,8 @@
   "ai.request": "Ask about this document… (Shift+Enter for a new line)",
   "ai.working": "Working…",
   "ai.proposalReady": "Proposal ready for review.",
+  "ai.proposalBlocks.one": "Proposal ready: {count} block to review",
+  "ai.proposalBlocks.other": "Proposal ready: {count} blocks to review",
   "ai.diff.current": "Current document",
   "ai.diff.proposal": "AI proposal",
   "ai.retry": "Retry",

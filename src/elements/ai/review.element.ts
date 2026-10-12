@@ -7,6 +7,7 @@ import type { I18nStore } from '../../state/i18nStore';
 import { showConfirmDialog } from '../dialogs/confirmDialog';
 import type { HmdEditor } from '../editor/editor.element';
 import type { HmdAiDiffPane } from './diff-pane.element';
+import { blockCount } from './diffLogic';
 import type { HmdAiReviewBar } from './review-bar.element';
 import type { ReviewAction } from './reviewBarView';
 import { acceptNeedsConfirm, editedProposal, elapsedSeconds, reviewModel, type ReviewController, type ReviewDoc } from './reviewView';
@@ -43,6 +44,7 @@ export class HmdAiReview extends HmdElement {
   /** Contatore dei secondi legato al run in corso (l'effetto `[state.running]` di ReviewView.tsx). */
   #timer: { running: NonNullable<AiState['running']>; id: ReturnType<typeof setInterval> } | null = null;
   #shownView: 'plain' | 'diff' | null = null;
+  #blocksKey: { doc: string; proposal: string; counting: boolean; count: number } | null = null;
   /** I dialog aperti da qui si chiudono al distacco. */
   #dialogs: AbortController | null = null;
   #loop = new RenderLoop(this, {
@@ -263,6 +265,12 @@ export class HmdAiReview extends HmdElement {
     // Identità della proposta (come ReviewView.tsx dopo LAB-11): quando cambia, la nota della barra si svuota senza ricreare la barra.
     const proposalId = m.proposal ? `${m.proposal.path}#${m.proposal.createdAt}` : '';
     if (bar.proposalId !== proposalId) bar.proposalId = proposalId;
+    // I blocchi del diff, calcolati dai testi solo quando cambiano e mai durante la generazione (una chiave di memo).
+    const counting = m.view === 'diff' && !m.streaming;
+    if (this.#blocksKey?.doc !== doc.text || this.#blocksKey.proposal !== m.text || this.#blocksKey.counting !== counting) {
+      this.#blocksKey = { doc: doc.text, proposal: m.text, counting, count: counting ? blockCount(doc.text, m.text) : 0 };
+    }
+    bar.blocks = this.#blocksKey.count;
     if (diff.proposal !== m.text) diff.proposal = m.text;
     if (diff.range?.from !== m.range?.from || diff.range?.to !== m.range?.to) diff.range = m.range;
     const canAcceptBlock = m.proposal ? controller.canAccept(m.proposal) : false;

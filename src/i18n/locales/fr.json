@@ -144,6 +144,8 @@
   "ai.request": "Posez une question sur ce document… (Maj+Entrée pour aller à la ligne)",
   "ai.working": "Traitement en cours…",
   "ai.proposalReady": "Proposition prête à être examinée.",
+  "ai.proposalBlocks.one": "Proposition prête : {count} bloc à examiner",
+  "ai.proposalBlocks.other": "Proposition prête : {count} blocs à examiner",
   "ai.diff.current": "Document actuel",
   "ai.diff.proposal": "Proposition de l'IA",
   "ai.retry": "Réessayer",

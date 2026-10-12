@@ -51,6 +51,9 @@ export class HmdAiReviewBar extends HmdElement {
   #proposalId = '';
   /** Stato con cui è finita l'ultima generazione: la regione nascosta ne dice l'esito fino alla prossima azione. */
   #outcome: ReviewStatus | null = null;
+  /** Blocchi del diff (dalla revisione) e quelli detti con l'esito: il numero si dice una volta, le modifiche dopo non lo riscrivono. */
+  #blocks = 0;
+  #told: { outcome: ReviewStatus; blocks: number } | null = null;
   /** Nota mostrata: l'azione che l'ha prodotta e la sua chiave, per sapere quando la causa sparisce. */
   #note: { action: ReviewAction; key: ReviewBlocker } | null = null;
   /** Il prossimo render riscrive la nota anche se il testo è lo stesso (un altro clic bloccato). */
@@ -72,6 +75,12 @@ export class HmdAiReviewBar extends HmdElement {
     if (this.#status.kind === 'generating' && next.kind !== 'generating') this.#outcome = next;
     if (next.kind === 'generating') this.#outcome = null;
     this.#status = next;
+    this.#loop.update();
+  }
+  /** Quanti blocchi ha il diff della proposta: l'esito «pronta» della regione nascosta li conta. */
+  get blocks(): number { return this.#blocks; }
+  set blocks(value: number) {
+    this.#blocks = value > 0 ? value : 0;
     this.#loop.update();
   }
   get warnings(): CheckWarning[] { return this.#warnings; }
@@ -178,7 +187,8 @@ export class HmdAiReviewBar extends HmdElement {
     }
     // La regione della generazione: entrata nel DOM vuota, il testo arriva dopo `ANNOUNCE_DELAY_MS` (così si annuncia);
     // a generazione finita dice l'esito, fino alla prossima azione.
-    const spoken = line?.spoken ?? (this.#outcome ? generationOutcome(this.#outcome, this.#proposalId !== '', t) : null);
+    if (this.#told?.outcome !== this.#outcome) this.#told = this.#outcome ? { outcome: this.#outcome, blocks: this.#blocks } : null;
+    const spoken = line?.spoken ?? (this.#told ? generationOutcome(this.#told.outcome, this.#proposalId !== '', this.#told.blocks, i18n.getState().locale, t) : null);
     if (spoken) {
       const entering = parts.spoken.parentNode !== this;
       if (entering) this.append(parts.spoken);

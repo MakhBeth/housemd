@@ -51,9 +51,12 @@ test('the status line: nothing, the counter with progress and a live region, par
 });
 
 test('the outcome of a generation: ready, partial, truncated; nothing without a proposal or for a lost selection (it has its alert)', () => {
-  assert.equal(generationOutcome({ kind: 'none' }, true, t), t('ai.proposalReady'));
-  assert.equal(generationOutcome({ kind: 'partial' }, true, t), t('ai.status.partial'));
-  assert.equal(generationOutcome({ kind: 'truncated' }, true, t), t('ai.status.truncated'));
-  assert.equal(generationOutcome({ kind: 'none' }, false, t), null);
-  assert.equal(generationOutcome({ kind: 'scopeLost' }, true, t), null);
+  assert.equal(generationOutcome({ kind: 'none' }, true, 3, 'en', t), 'Proposal ready: 3 blocks to review');
+  assert.equal(generationOutcome({ kind: 'none' }, true, 1, 'en', t), 'Proposal ready: 1 block to review', 'singular');
+  assert.notEqual(generationOutcome({ kind: 'none' }, true, 3, 'en', t), t('ai.proposalReady'), 'not the text the chat log already says');
+  assert.equal(generationOutcome({ kind: 'none' }, true, 0, 'en', t), t('ai.proposalReady'), 'no blocks counted: the plain text');
+  assert.equal(generationOutcome({ kind: 'partial' }, true, 3, 'en', t), t('ai.status.partial'));
+  assert.equal(generationOutcome({ kind: 'truncated' }, true, 3, 'en', t), t('ai.status.truncated'));
+  assert.equal(generationOutcome({ kind: 'none' }, false, 3, 'en', t), null);
+  assert.equal(generationOutcome({ kind: 'scopeLost' }, true, 3, 'en', t), null);
 });

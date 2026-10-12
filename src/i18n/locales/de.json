@@ -144,6 +144,8 @@
   "ai.request": "Frage zu diesem Dokument… (Umschalt+Enter für neue Zeile)",
   "ai.working": "Wird bearbeitet…",
   "ai.proposalReady": "Vorschlag zur Prüfung bereit.",
+  "ai.proposalBlocks.one": "Vorschlag bereit: {count} Block zu prüfen",
+  "ai.proposalBlocks.other": "Vorschlag bereit: {count} Blöcke zu prüfen",
   "ai.diff.current": "Aktuelles Dokument",
   "ai.diff.proposal": "KI-Vorschlag",
   "ai.retry": "Erneut versuchen",

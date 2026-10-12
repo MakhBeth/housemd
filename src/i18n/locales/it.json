@@ -144,6 +144,8 @@
   "ai.request": "Chiedi qualcosa su questo documento… (Shift+Invio per andare a capo)",
   "ai.working": "Al lavoro…",
   "ai.proposalReady": "Proposta pronta per la revisione.",
+  "ai.proposalBlocks.one": "Proposta pronta: {count} blocco da rivedere",
+  "ai.proposalBlocks.other": "Proposta pronta: {count} blocchi da rivedere",
   "ai.diff.current": "Documento attuale",
   "ai.diff.proposal": "Proposta dell'AI",
   "ai.retry": "Riprova",
