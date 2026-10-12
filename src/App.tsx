@@ -8,11 +8,12 @@ import { createWorkspaceFS } from './fs/workspaceFS';
 import { switchFolder, switchGuard } from './app/switchFolder';
 import { afterSwitch, type Screen as AppScreen } from './elements/app/screens';
 import { useI18nStore, useT } from './i18n/I18nProvider';
+import { browserRouteWindow, createRouteStore } from './state/routeStore';
+import { getThemeStore } from './theme/useTheme';
 import { onDbBlocked } from './lib/db';
 import { readValidPref } from './lib/prefs';
 import type { UpdateFlow } from './pwa/updateFlow';
 import { setUpdateWorkspace } from './pwa/updateHost';
-import { WorkspaceView } from './ui/WorkspaceView';
 import { indexedDbHistoryStore } from './history/historyStore';
 import { indexedDbBufferStore } from './workspace/buffers';
 import { parseAutosave } from './workspace/autosave';
@@ -39,11 +40,13 @@ async function openWorkspace(stored: StoredWorkspace): Promise<Workspace> {
 export default function App({ updates }: { updates: UpdateFlow }) {
   const t = useT();
   const i18nStore = useI18nStore();
+  // Uno store della rotta per l'app (decisione 7 del piano 13): lo workspace imposta la guardia collegandosi.
+  const [route] = useState(() => createRouteStore(browserRouteWindow()));
   const [dbBlocked, setDbBlocked] = useState(false);
   useEffect(() => onDbBlocked(() => setDbBlocked(true)), []);
 
   const [screen, setScreen] = useState<Screen>({ kind: 'boot' });
-  // Incrementato a ogni apertura riuscita: entra nella key di WorkspaceView così che riaprire la
+  // Incrementato a ogni apertura riuscita: entra nella key di hmd-workspace così che riaprire la
   // STESSA cartella (stesso workspaceId) forzi comunque lo smontaggio/rimontaggio del componente,
   // invece di lasciarne leaked lo stato interno (es. `reopened`).
   const [openCount, setOpenCount] = useState(0);
@@ -142,13 +145,16 @@ export default function App({ updates }: { updates: UpdateFlow }) {
       <hmd-start-screen mode="resume" folderName={s.stored.handle.name} busy={switching} i18n={i18nStore} onhmd-start-resume={resume} onhmd-start-pick={choose} />
     ))
     .with({ kind: 'open' }, (s) => (
-      <WorkspaceView
+      <hmd-workspace
         key={`${s.stored.workspaceId}:${openCount}`}
         workspace={s.workspace}
         workspaceId={s.stored.workspaceId}
         handle={s.stored.handle}
-        onChangeFolder={choose}
         switchingFolder={switching}
+        i18n={i18nStore}
+        theme={getThemeStore()}
+        route={route}
+        onhmd-workspace-change-folder={choose}
       />
     ))
     .exhaustive();
