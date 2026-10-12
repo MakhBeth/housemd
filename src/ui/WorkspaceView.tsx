@@ -2,8 +2,8 @@ import { useAiController } from './ai/useAiController';
 import { useAiState } from './ai/useAiState';
 import { createDocSession } from '../editor/docSession';
 import { sameRange, type TextRange } from '../ai/selectionChip';
-import { useAiSync } from './ai/settings/AiSyncSection';
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
+import { browserSyncBinding, type SyncBinding } from '../ai/syncBinding';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type PointerEvent } from 'react';
 
 import { requestAccess } from '../fs/access';
 import { useI18n, useI18nStore } from '../i18n/I18nProvider';
@@ -15,10 +15,10 @@ import type { SettingsSection } from '../lib/route';
 import type { HmdEditor } from '../elements/editor/editor.element';
 import type { HmdPreview } from '../elements/preview/preview.element';
 import type { HmdSearchPanel } from '../elements/search-panel/search-panel.element';
-import { getThemeStore, useTheme } from '../theme/useTheme';
+import type { HmdSettings } from '../elements/settings/settings.element';
+import { getThemeStore } from '../theme/useTheme';
 import type { Workspace } from '../workspace/workspace';
 import { Icon } from './Icon';
-import { SettingsView } from './SettingsView';
 import { useRoute } from './useRoute';
 import { shortcutFor } from './shortcuts';
 import type { ToastItem } from '../elements/toasts/toasts.element';
@@ -47,6 +47,7 @@ interface Props {
 }
 
 const NO_TERMS: string[] = [];
+const noSubscribe = () => () => {};
 
 export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, switchingFolder = false }: Props) {
   const { t, locale } = useI18n();
@@ -61,7 +62,18 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
   // onSelection scatta a ogni movimento del cursore: si aggiorna lo stato solo se il tratto cambia.
   const onSelection = useCallback((range: TextRange | null) => setAiSelection((prev) => (sameRange(prev, range) ? prev : range)), []);
   useEffect(() => setAiSelection(null), [doc?.path, doc?.revision]);
-  const syncBinding = useAiSync(ai);
+  // Una sync per controller: la sidebar AI ne legge il permesso, le impostazioni la gestiscono.
+  const [syncBinding, setSyncBinding] = useState<SyncBinding | null>(null);
+  useEffect(() => {
+    if (!ai) return;
+    const binding = browserSyncBinding(ai);
+    setSyncBinding(binding);
+    return () => {
+      binding.dispose();
+      setSyncBinding(null);
+    };
+  }, [ai]);
+  const syncNeedsPermission = useSyncExternalStore(syncBinding?.subscribe ?? noSubscribe, () => !!syncBinding?.needsPermission);
   useEffect(() => { if (doc) ai?.documentChanged(doc.path, { iterChangedRanges: () => {}, mapPos: (n: number) => n } as never, true); }, [doc?.path, doc?.revision]);
   const [mode, setMode] = useState<Mode>(() => readPref('mode'));
   // Preferenza 'ai' con il controller non ancora pronto (IndexedDB lento): intanto la vista divisa.
@@ -71,18 +83,13 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
   const [sidebarWidth, setSidebarWidth] = useState(() => clampWidth('sidebar', readPref('sidebarWidth')));
   const dialogSignal = useUnmountSignal();
   const [highlight, setHighlight] = useState<string[]>(NO_TERMS);
-  const [theme, setTheme] = useTheme();
   const [textWidth, setTextWidth] = useState(() => readValidPref('textWidth', parseTextWidth));
   useEffect(() => {
     const root = document.documentElement.style;
     for (const [name, value] of Object.entries(textWidthVars(textWidth))) root.setProperty(name, value);
   }, [textWidth]);
-  const settingsDirty = useRef(false);
-  const [closeRequest, setCloseRequest] = useState(0);
-  const { route, navigate } = useRoute({ canLeave: () => !settingsDirty.current, onBlocked: () => setCloseRequest((n) => n + 1) });
-  const onSettingsDirty = useCallback((dirty: boolean) => {
-    settingsDirty.current = dirty;
-  }, []);
+  const settingsRef = useRef<HmdSettings>(null);
+  const { route, navigate } = useRoute({ canLeave: () => !settingsRef.current?.dirty, onBlocked: () => settingsRef.current?.requestClose() });
   const settingsOpen = route.view === 'settings';
   // Titolo della scheda; smontando (ritorno alla schermata iniziale) torna il nome dell'app.
   useEffect(() => {
@@ -372,7 +379,7 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
                   ? { from: selected.from, to: selected.to, originalText: session.textLf.slice(selected.from, selected.to), status: 'valid' }
                   : undefined;
               }}
-              syncNeedsPermission={!!syncBinding.handle && !syncBinding.permission}
+              syncNeedsPermission={syncNeedsPermission}
               i18n={i18nStore}
               onhmd-ai-manage={() => openSettings('ai-profiles')}
               onhmd-ai-sync-reactivate={() => openSettings('ai-sync')}
@@ -584,27 +591,26 @@ export function WorkspaceView({ workspace, workspaceId, handle, onChangeFolder, 
     </div>
 
       {settingsOpen && (
-        <SettingsView
+        <hmd-settings
+          ref={settingsRef}
           section={route.section}
-          onSection={(section) => navigate({ view: 'settings', section })}
-          onClose={() => navigate({ view: 'workspace' })}
-          onDirtyChange={onSettingsDirty}
-          closeRequest={closeRequest}
           ai={ai}
           syncBinding={syncBinding}
-          theme={theme}
-          onTheme={setTheme}
+          theme={getThemeStore()}
           autosave={state.autosave}
-          onAutosave={(next) => {
-            writePref('autosave', next);
-            workspace.setAutosave(next);
-          }}
           textWidth={textWidth}
-          onTextWidth={(next) => {
-            writePref('textWidth', next);
-            setTextWidth(next);
+          i18n={i18nStore}
+          onhmd-settings-section={(event) => navigate({ view: 'settings', section: event.detail.section })}
+          onhmd-settings-close={() => navigate({ view: 'workspace' })}
+          onhmd-settings-autosave={(event) => {
+            writePref('autosave', event.detail.autosave);
+            workspace.setAutosave(event.detail.autosave);
           }}
-          onSaveAll={() => void workspace.saveAll()}
+          onhmd-settings-text-width={(event) => {
+            writePref('textWidth', event.detail.textWidth);
+            setTextWidth(event.detail.textWidth);
+          }}
+          onhmd-settings-save-all={() => void workspace.saveAll()}
         />
       )}
 

@@ -3,17 +3,21 @@
  * React nella fase 7 (spec WC §5.1).
  */
 import type { Key, Ref } from 'react';
+import type { SyncBinding } from '../ai/syncBinding';
 import type { TextRange } from '../ai/selectionChip';
 import type { GenParams, ModelProfile, SelectionScope } from '../ai/types';
 import type { HouseConfig } from '../config/config';
 import type { DocSession } from '../editor/docSession';
 import type { RestoreCommand } from '../editor/restoreCommand';
 import type { UnsupportedReason } from '../fs/access';
+import type { SettingsSection } from '../lib/route';
+import type { TextWidth } from '../lib/textWidth';
 import type { DocTitle } from '../search/searchIndex';
 import type { UpdateFlow } from '../pwa/updateFlow';
 import type { I18nStore } from '../state/i18nStore';
 import type { ThemeStore } from '../state/themeStore';
 import type { TreeNode } from '../ui/tree';
+import type { AutosaveSettings } from '../workspace/autosave';
 import type { ModelSelectController } from './ai/modelSelectView';
 import type { ReviewController, ReviewDoc } from './ai/reviewView';
 import type { SidebarController } from './ai/sidebar.element';
@@ -23,6 +27,10 @@ import type { HmdEvents } from './events';
 import type { HistorySource } from './history-panel/history-panel.element';
 import type { HmdPreview } from './preview/preview.element';
 import type { HmdSearchPanel, SearchSource } from './search-panel/search-panel.element';
+import type { PresetsController } from './settings/presets.element';
+import type { ProfilesController } from './settings/profiles.element';
+import type { HmdSettings, SettingsController } from './settings/settings.element';
+import type { SyncController } from './settings/sync.element';
 import type { StartMode } from './start-screen/startView';
 import type { ToastItem } from './toasts/toasts.element';
 
@@ -78,6 +86,21 @@ declare module 'react' {
       'hmd-search-panel': HmdProps<{ index: SearchSource; indexRevision: number; i18n: I18nStore }, 'hmd-search-open'> & {
         ref?: Ref<HmdSearchPanel>;
       };
+      'hmd-settings': HmdProps<
+        {
+          section: SettingsSection;
+          ai: SettingsController | null;
+          syncBinding: SyncBinding | null;
+          theme: ThemeStore;
+          autosave: AutosaveSettings;
+          textWidth: TextWidth;
+          i18n: I18nStore;
+        },
+        'hmd-settings-autosave' | 'hmd-settings-close' | 'hmd-settings-save-all' | 'hmd-settings-section' | 'hmd-settings-text-width'
+      > & { ref?: Ref<HmdSettings> };
+      'hmd-settings-presets': HmdProps<{ controller: PresetsController; i18n: I18nStore }, 'hmd-settings-dirty'>;
+      'hmd-settings-profiles': HmdProps<{ controller: ProfilesController; i18n: I18nStore }, 'hmd-settings-dirty'>;
+      'hmd-settings-sync': HmdProps<{ controller: SyncController; binding: SyncBinding | null; i18n: I18nStore }>;
       'hmd-start-screen': HmdProps<
         { mode: StartMode; reason: UnsupportedReason; error: string; folderName: string; busy: boolean; i18n: I18nStore },
         'hmd-start-pick' | 'hmd-start-resume'
