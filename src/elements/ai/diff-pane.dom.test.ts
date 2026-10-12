@@ -259,6 +259,20 @@ test('a block button removed while the focus is elsewhere: the focus is not take
   el.remove();
 });
 
+test('a block button removed after the focus left on purpose (blur to the body): the focus is not taken back', async () => {
+  const { el, buttons } = await mount({ streaming: true, acceptBlocker: 'generating', rejectBlocker: 'generating' });
+  const reject = buttons('reject')[1];
+  reject.focus();
+  reject.blur();
+  assert.ok(document.activeElement === document.body, 'the focus is on the body');
+  el.proposal = 'A2\n\nB\n\nC';
+  await tick();
+  await tick();
+  assert.equal(buttons('reject').length, 1);
+  assert.ok(document.activeElement === document.body, `focus stays on the body, not on ${document.activeElement?.localName}.${document.activeElement?.className}`);
+  el.remove();
+});
+
 test('a new proposal from outside replaces the right side, outside its history and without an edit event', async () => {
   const { el, b, events } = await mount();
   events.length = 0;

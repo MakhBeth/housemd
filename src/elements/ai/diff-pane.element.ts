@@ -129,6 +129,10 @@ export class HmdAiDiffPane extends HmdDocElement {
         const target = event.target as HTMLElement;
         this.#focusedControl = target.matches('.cm-merge-revert > .revert > button') ? (target as HTMLButtonElement) : null;
       });
+      // Un'uscita voluta (il pulsante è ancora nel DOM) non si recupera; se il nodo è stato rimosso, sì.
+      this.#box.addEventListener('focusout', (event) => {
+        if (event.target === this.#focusedControl && this.#focusedControl?.isConnected) this.#focusedControl = null;
+      });
       // La MergeView ridisegna i controlli nel suo fotogramma di misura: dopo, il focus perso su un pulsante si recupera.
       new MutationObserver(() => this.#keepControlFocus()).observe(this.#box, { childList: true, subtree: true });
     }
