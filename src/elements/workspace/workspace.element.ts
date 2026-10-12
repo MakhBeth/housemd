@@ -624,7 +624,7 @@ export class HmdWorkspace extends HmdElement {
     if (settings) this.#renderSettings(settings, state, i18n);
     place(this, [parts.layout, ...(settings ? [settings] : []), parts.toasts]);
     assign(parts.toasts, 'i18n', i18n);
-    // Un array nuovo solo quando cambiano toast, errore AI o lingua (lo useMemo di React): i toast riavviano i timer a ogni array.
+    // Un array nuovo solo quando cambiano toast, errore AI o lingua (lo useMemo di React); i timer sono per chiave in hmd-toasts.
     const toastKey = [state.toasts, aiState?.error, i18n.getState()];
     if (!toastKey.every((v, i) => v === this.#toastKey[i])) {
       this.#toastKey = toastKey;

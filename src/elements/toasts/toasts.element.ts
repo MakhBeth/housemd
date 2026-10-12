@@ -18,20 +18,22 @@ const INFO_TIMEOUT_MS = 6000;
 
 /**
  * Toast in basso a destra (era Toasts.tsx): popover `manual` aperto finché ci sono toast. I toast
- * informativi si chiudono dopo 6 s; come l'effetto React di prima, ogni nuovo array `items` riavvia i timer.
+ * informativi si chiudono 6 s dopo la loro comparsa: un array `items` nuovo (un altro toast, un errore AI, la
+ * lingua) avvia solo i timer dei toast nuovi e ferma quelli dei toast spariti, per chiave.
  */
 export class HmdToasts extends HmdElement {
   #items: readonly ToastItem[] = [];
   #i18n: I18nStore | null = null;
   #box: HTMLDivElement | null = null;
   #open = false;
-  #timers: ReturnType<typeof setTimeout>[] = [];
+  /** Chiave del toast informativo → il suo timer. */
+  #timers = new Map<string, ReturnType<typeof setTimeout>>();
 
   get items(): readonly ToastItem[] { return this.#items; }
   set items(value: readonly ToastItem[]) {
     this.#items = value ?? [];
     this.#render();
-    if (this.isConnected) this.#restartTimers();
+    if (this.isConnected) this.#syncTimers();
   }
   get i18n(): I18nStore | null { return this.#i18n; }
   set i18n(value: I18nStore | null) {
@@ -45,7 +47,7 @@ export class HmdToasts extends HmdElement {
     this.#box ??= this.appendChild(el('div', { class: 'toasts', popover: 'manual' }));
     if (this.#i18n) this.watch(this.#i18n, () => this.#render(), signal);
     else this.#render();
-    this.#restartTimers();
+    this.#syncTimers();
     // Il signal si interrompe al distacco e al reconnect: i timer ripartono in entrambi i casi.
     signal.addEventListener('abort', () => this.#clearTimers(), { once: true });
   }
@@ -85,16 +87,22 @@ export class HmdToasts extends HmdElement {
     }
   }
 
-  #restartTimers(): void {
-    this.#clearTimers();
-    this.#timers = this.#items
-      .filter((item) => item.kind === 'info')
-      .map((item) => setTimeout(() => emit(this, 'hmd-toast-dismiss', { key: item.key }), INFO_TIMEOUT_MS));
+  /** Un timer per ogni toast informativo presente: i nuovi partono, quelli già avviati continuano, gli altri si fermano. */
+  #syncTimers(): void {
+    const keys = new Set(this.#items.filter((item) => item.kind === 'info').map((item) => item.key));
+    for (const [key, timer] of this.#timers) {
+      if (keys.has(key)) continue;
+      clearTimeout(timer);
+      this.#timers.delete(key);
+    }
+    for (const key of keys) {
+      if (!this.#timers.has(key)) this.#timers.set(key, setTimeout(() => emit(this, 'hmd-toast-dismiss', { key }), INFO_TIMEOUT_MS));
+    }
   }
 
   #clearTimers(): void {
     this.#timers.forEach(clearTimeout);
-    this.#timers = [];
+    this.#timers.clear();
   }
 }
 
