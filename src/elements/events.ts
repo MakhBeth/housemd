@@ -81,6 +81,8 @@ export interface HmdEvents {
   'hmd-tree-action': CustomEvent<{ action: TreeAction; node: TreeNode | null }>;
   /** Chiusura di un toast (dal pulsante o dal timer dei toast informativi). */
   'hmd-toast-dismiss': CustomEvent<{ key: string }>;
+  /** Workspace: cambiare cartella (pulsante con il nome della cartella nella sidebar). */
+  'hmd-workspace-change-folder': CustomEvent<null>;
 }
 
 export function emit<K extends keyof HmdEvents>(target: Element, type: K, detail: HmdEvents[K] extends CustomEvent<infer D> ? D : never): void {

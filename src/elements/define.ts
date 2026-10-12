@@ -25,6 +25,7 @@ import { HmdStartScreen } from './start-screen/start-screen.element';
 import { HmdToasts } from './toasts/toasts.element';
 import { HmdThemeSwitcher } from './theme-switcher/theme-switcher.element';
 import { HmdUpdateNotice } from './update-notice/update-notice.element';
+import { HmdWorkspace } from './workspace/workspace.element';
 
 /**
  * Unico punto con `customElements.define` (spec WC §8.3). `main.tsx` lo importa prima del primo render:
@@ -61,6 +62,7 @@ const ELEMENTS: Definitions = [
   ['hmd-theme-switcher', HmdThemeSwitcher],
   ['hmd-toasts', HmdToasts],
   ['hmd-update-notice', HmdUpdateNotice],
+  ['hmd-workspace', HmdWorkspace],
 ];
 
 export function defineElements(elements: Definitions): void {
