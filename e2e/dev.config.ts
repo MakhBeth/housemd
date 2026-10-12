@@ -8,8 +8,8 @@ const root = fileURLToPath(new URL('..', import.meta.url));
 const PORT = 5174;
 
 /**
- * Le stesse spec contro `vite` in sviluppo: React in modalità dev, con StrictMode che monta due volte
- * gli effetti e con i suoi avvisi in console, che qui fanno fallire il test (spec WC R18). Restano fuori
+ * Le stesse spec contro `vite` in sviluppo: con gli avvisi in console, che qui fanno fallire
+ * il test (spec WC R18); fino alla fase 7 anche React con StrictMode, che montava due volte gli effetti. Restano fuori
  * gli snapshot (il riferimento è la build) e il test che trattiene `assets/index-*.js`, che in sviluppo
  * non esiste.
  */

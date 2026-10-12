@@ -24,10 +24,15 @@ npm run dev      # server di sviluppo
 npm test         # test (tsx con gli hook degli asset, Node ≥ 22.15)
 npm run test:e2e # test end-to-end (Playwright, Chromium); la prima volta: npx playwright install chromium
 npm run test:e2e:audit # stili calcolati uguali a dist-baseline/ (prima: build copiata in dist-baseline/)
-npm run test:e2e:dev   # e2e contro vite in sviluppo (StrictMode), console senza errori né avvisi
+npm run test:e2e:dev   # e2e contro vite in sviluppo, console senza errori né avvisi
 npm run lint     # typecheck
 npm run build    # build di produzione in dist/
 ```
+
+Com'è fatto: TypeScript e custom element senza framework (light DOM, CSS con `@layer` e `@scope`), CodeMirror 6
+per l'editor e il diff, markdown-it con DOMPurify (o la Sanitizer API) per l'anteprima, MiniSearch per la ricerca,
+zod ai confini (file system, storage, risposte dei provider), ts-pattern per i `match` esaustivi; Vite e
+vite-plugin-pwa per la build. I test: `node:test` con jsdom, Playwright per gli e2e e per l'audit degli stili.
 
 I test end-to-end usano una cartella finta nell'Origin Private File System al posto del selettore
 di cartelle (`e2e/support/fsHarness.ts`) e un modello finto al posto di Ollama
