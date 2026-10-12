@@ -83,14 +83,39 @@ test('unsupported: the reason and no buttons', () => {
   el.remove();
 });
 
-test('busy disables the buttons without recreating them', () => {
+test('busy never disables the buttons, which are not recreated: data-busy on the screen, no note until a button is activated', () => {
   const { el, buttons } = mount({ mode: 'resume', folderName: 'notes' });
   const before = buttons();
   el.busy = true;
   assert.deepEqual(buttons(), before);
-  assert.ok(before.every((b) => b.disabled));
+  assert.ok(before.every((b) => !b.disabled && !b.hasAttribute('aria-disabled')));
+  assert.equal(el.querySelector('main')!.hasAttribute('data-busy'), true);
+  assert.equal(el.querySelector('.note'), null);
   el.busy = false;
-  assert.ok(before.every((b) => !b.disabled));
+  assert.equal(el.querySelector('main')!.hasAttribute('data-busy'), false);
+  el.remove();
+});
+
+test('a button activated while busy emits nothing, keeps the focus and says why in a status, the last child of the panel; the note goes away at the end', async () => {
+  const { el, buttons } = mount({ mode: 'resume', folderName: 'notes' });
+  const events: string[] = [];
+  for (const name of ['hmd-start-pick', 'hmd-start-resume']) el.addEventListener(name, () => events.push(name));
+  const [resume, other] = buttons();
+  resume.focus();
+  resume.click();
+  assert.deepEqual(events, ['hmd-start-resume']);
+  el.busy = true;
+  resume.click();
+  other.click();
+  assert.deepEqual(events, ['hmd-start-resume']);
+  const note = () => el.querySelector<HTMLElement>('.panel > p.note[role="status"]');
+  assert.equal(note(), el.querySelector('.panel')!.lastElementChild);
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  assert.equal(note()!.textContent, EN_MESSAGES['folder.opening']);
+  assert.equal(document.activeElement, resume);
+  el.busy = false;
+  assert.equal(note(), null);
+  assert.equal(document.activeElement, resume);
   el.remove();
 });
 
