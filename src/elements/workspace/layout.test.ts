@@ -34,6 +34,11 @@ test('arrow keys resize by 16px within the limits; other keys do nothing', () =>
   assert.equal(resizeByKey('sidebar', 475, 'ArrowRight'), 480);
   assert.equal(resizeByKey('ai', 305, 'ArrowLeft'), 300);
   assert.equal(resizeByKey('sidebar', 280, 'Enter'), null);
+  // Home e End (APG, window splitter): al minimo e al massimo del pannello.
+  assert.equal(resizeByKey('sidebar', 280, 'Home'), 180);
+  assert.equal(resizeByKey('sidebar', 280, 'End'), 480);
+  assert.equal(resizeByKey('ai', 380, 'Home'), 300);
+  assert.equal(resizeByKey('ai', 380, 'End'), 640);
 });
 
 test('grid columns: side panel, 5px resizer and the main area; only the main area when closed', () => {

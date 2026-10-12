@@ -248,3 +248,52 @@ test('detached: no store or window listener is left', async () => {
   window.dispatchEvent(unload);
   assert.equal(unload.defaultPrevented, false);
 });
+
+test('the focus never falls on the body when the sidebar goes: Hide sidebar and Ctrl+B to the toolbar toggle, AI mode to its button', async () => {
+  const { el, workspace, button } = await mount({ ai: true });
+  await workspace.openFile('a.md');
+  const focusOn = (node: Element | null, what: string) => assert.ok(node !== null && document.activeElement === node, `${what}, not ${document.activeElement?.localName}`);
+  // «Hide sidebar» dentro la sidebar: il pulsante sparisce con lei.
+  const hide = el.querySelector<HTMLButtonElement>(`aside button[aria-label="${EN_MESSAGES['sidebar.hide']}"]`)!;
+  hide.focus();
+  hide.click();
+  assert.equal(el.querySelector('aside'), null);
+  focusOn(button(EN_MESSAGES['sidebar.show']), 'Show sidebar in the toolbar');
+  // Ctrl+B con il focus nella ricerca.
+  toggleSidebar();
+  el.querySelector<HTMLInputElement>('hmd-search-panel input')!.focus();
+  toggleSidebar();
+  focusOn(button(EN_MESSAGES['sidebar.show']), 'Show sidebar after Ctrl+B');
+  // Modalità AI con il focus nell'albero: l'albero lascia il posto alla chat.
+  toggleSidebar();
+  el.querySelector<HTMLElement>('hmd-file-tree [tabindex="0"]')!.focus();
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'E', ctrlKey: true, shiftKey: true }));
+  assert.ok(el.querySelector('hmd-ai-sidebar'));
+  focusOn(button(EN_MESSAGES['mode.ai']), 'the AI mode button');
+  // Con il focus fuori dalla sidebar non si sposta niente.
+  button(EN_MESSAGES['mode.split']).focus();
+  button(EN_MESSAGES['mode.split']).click();
+  toggleSidebar();
+  focusOn(button(EN_MESSAGES['mode.split']), 'the button that had it');
+});
+
+test('the separator: Home and End take the panel to its minimum and maximum', async () => {
+  const { el } = await mount();
+  const separator = el.querySelector<HTMLElement>('[role="separator"]')!;
+  separator.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }));
+  assert.equal(separator.getAttribute('aria-valuenow'), '180');
+  separator.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true }));
+  assert.equal(separator.getAttribute('aria-valuenow'), '480');
+  assert.equal(storage.get('housemd:sidebarWidth'), '480');
+});
+
+test('leaving AI mode with the focus in the chat (Ctrl+Shift+E): the focus goes to the tree, not to Hide sidebar', async () => {
+  const { el, workspace, button } = await mount({ ai: true });
+  await workspace.openFile('a.md');
+  button(EN_MESSAGES['mode.ai']).click();
+  el.querySelector<HTMLTextAreaElement>('hmd-ai-composer textarea')!.focus();
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'E', ctrlKey: true, shiftKey: true }));
+  assert.ok(el.querySelector('hmd-file-tree'));
+  const row = el.querySelector('hmd-file-tree [tabindex="0"]');
+  assert.ok(row !== null && document.activeElement === row, `the tree row with the tab stop, not ${document.activeElement?.getAttribute('aria-label') ?? document.activeElement?.localName}`);
+});

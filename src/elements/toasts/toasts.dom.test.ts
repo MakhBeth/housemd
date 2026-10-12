@@ -56,17 +56,39 @@ test('nodes are reused by key; the close button sends hmd-toast-dismiss', () => 
   el.remove();
 });
 
-test('info toasts close after 6 s, errors stay; a new items array restarts the info timers', () => {
+test('info toasts close 6 s after they appear, errors stay; a new items array keeps the running timers', () => {
   mock.timers.enable({ apis: ['setTimeout'] });
   try {
     const { el, dismissed } = mount();
     el.items = [info, error];
     mock.timers.tick(5000);
-    el.items = [info, error, { key: 'ws-2', kind: 'info', text: 'altro' }];
+    // Un array nuovo (un altro toast, un errore AI, la lingua) non riavvia il timer di ws-1.
+    el.items = [{ ...info }, error, { key: 'ws-2', kind: 'info', text: 'altro' }];
+    mock.timers.tick(1000);
+    assert.deepEqual(dismissed, ['ws-1']);
+    el.items = [error, { key: 'ws-2', kind: 'info', text: 'altro' }];
+    mock.timers.tick(4000);
+    assert.deepEqual(dismissed, ['ws-1']);
+    mock.timers.tick(1000);
+    assert.deepEqual(dismissed, ['ws-1', 'ws-2']);
+    el.remove();
+  } finally {
+    mock.timers.reset();
+  }
+});
+
+test('a toast that goes and comes back with the same key starts a new timer', () => {
+  mock.timers.enable({ apis: ['setTimeout'] });
+  try {
+    const { el, dismissed } = mount();
+    el.items = [info];
+    mock.timers.tick(5000);
+    el.items = [];
+    el.items = [info];
     mock.timers.tick(5000);
     assert.deepEqual(dismissed, []);
     mock.timers.tick(1000);
-    assert.deepEqual(dismissed.sort(), ['ws-1', 'ws-2']);
+    assert.deepEqual(dismissed, ['ws-1']);
     el.remove();
   } finally {
     mock.timers.reset();
