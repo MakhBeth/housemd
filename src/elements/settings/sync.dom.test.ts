@@ -178,3 +178,21 @@ test('B can restore while the cancelled count of A is still pending; the late an
   assert.equal(document.querySelectorAll('dialog').length, 1);
   assert.deepEqual(services[0].calls, []);
 });
+
+test('the sync status is a polite live region and its error an alert; each Restore is described by its own backup path', async () => {
+  const { el, services } = await mount({ name: 'sync' } as FileSystemDirectoryHandle);
+  const s = services[0];
+  const [status] = [...el.firstElementChild!.children].filter((c) => c.localName === 'p').slice(1);
+  assert.equal(status.getAttribute('role'), 'status');
+  s.set({ status: 'error', error: 'server' } as never);
+  const error = [...el.querySelectorAll('p')].find((p) => p.textContent === EN_MESSAGES['ai.error.server']);
+  assert.equal(error?.getAttribute('role'), 'alert');
+  s.answer(0);
+  await waitFor(() => el.querySelectorAll('details > p').length === 2);
+  for (const p of el.querySelectorAll('details > p')) {
+    const path = p.firstElementChild!;
+    const restore = p.querySelector('button')!;
+    assert.equal(restore.getAttribute('aria-describedby'), path.id, path.textContent!);
+    assert.ok(path.id, 'the path has an id');
+  }
+});

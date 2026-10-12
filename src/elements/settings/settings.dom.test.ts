@@ -156,3 +156,38 @@ test('detached: no keydown listener left (Esc does nothing), the dialog closes, 
   assert.deepEqual(events, []);
   assert.equal(listeners(), 0);
 });
+
+test('Esc that opens the confirmation is consumed: the same key press does not close the new dialog', () => {
+  const { el } = mount({ ai: true });
+  const presets = el.querySelector('hmd-settings-presets')!;
+  presets.querySelector<HTMLButtonElement>('.list button')!.click();
+  const name = presets.querySelector<HTMLInputElement>('.detail input')!;
+  name.value = 'Changed';
+  name.dispatchEvent(new Event('input', { bubbles: true }));
+  const esc = new KeyboardEvent('keydown', { key: 'Escape', cancelable: true });
+  window.dispatchEvent(esc);
+  assert.equal(esc.defaultPrevented, true, 'Chrome would use the same Esc to close the dialog just opened');
+  assert.equal(document.querySelectorAll('dialog[open]').length, 1);
+  // Senza modifiche Esc chiude e basta: anche lì il tasto è consumato.
+});
+
+test('every section is a region named by its h2; the width hint describes both width fields', () => {
+  const { el, field } = mount({ ai: true });
+  for (const section of el.querySelectorAll<HTMLElement>('.content > section')) {
+    const h2 = section.querySelector('h2')!;
+    assert.ok(h2.id, `${section.id}: the h2 has an id`);
+    assert.equal(section.getAttribute('aria-labelledby'), h2.id, section.id);
+  }
+  const hint = el.querySelector<HTMLElement>('.hint')!;
+  for (const key of ['settings.textWidth.editor', 'settings.textWidth.preview'] as const) assert.equal(field(EN_MESSAGES[key]).getAttribute('aria-describedby'), hint.id, key);
+});
+
+test('a link activated from the keyboard scrolls to its section and moves the focus to the section title', () => {
+  const { el } = mount({ ai: true });
+  const link = el.querySelectorAll<HTMLAnchorElement>('nav a')[3];
+  link.focus();
+  link.click();
+  const h2 = el.querySelector('#settings-ai-sync h2')!;
+  assert.equal(h2.getAttribute('tabindex'), '-1');
+  assert.ok(document.activeElement === h2, `the Sync title, not ${document.activeElement?.localName}`);
+});

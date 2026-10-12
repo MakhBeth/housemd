@@ -262,7 +262,7 @@ const STATES: State[] = [
       const composer = page.getByRole('textbox', { name: app.t('ai.request') });
       await composer.fill('fix');
       await composer.press('Enter');
-      await expect(page.getByText(app.t('ai.status.truncated'))).toBeVisible();
+      await expect(page.getByText(app.t('ai.status.truncated')).first()).toBeVisible();
     },
   },
   {
@@ -277,7 +277,7 @@ const STATES: State[] = [
       const composer = page.getByRole('textbox', { name: app.t('ai.request') });
       await composer.fill('fix');
       await composer.press('Enter');
-      await page.getByRole('button', { name: app.t('ai.warningsCount', { count: 1 }) }).click();
+      await page.getByRole('button', { name: app.t('ai.warningsCount.one', { count: 1 }) }).click();
       await expect(page.getByRole('button', { name: app.t('ai.warning.wikilinks') })).toBeVisible();
     },
   },
@@ -416,7 +416,9 @@ const STATES: State[] = [
       await app.mode('mode.ai').click();
       await page.getByRole('textbox', { name: app.t('ai.request') }).fill('fix');
       await page.getByRole('button', { name: app.t('ai.send'), exact: true }).click();
-      await expect(page.getByRole('status').filter({ hasText: app.t('ai.composer.noDocument') })).toBeVisible();
+      // La nota per testo non basta: l'audit prepara lo stato anche sulla baseline, che può avere il testo di prima
+      // (LAB-10 lo cambia). Basta una nota non vuota.
+      await expect(page.getByRole('status').filter({ hasText: /\S/ }).first()).toBeVisible();
     },
   },
   {
@@ -870,6 +872,27 @@ const STATES: State[] = [
   },
   { name: 'focus-search-keyboard-forced-colors', forcedColors: true, setup: searchFromKeyboard },
 ];
+
+// Rete della fase 8 (Task 1): stati già noti ripresi in forced-colors, in schema chiaro e scuro (icone, voce
+// corrente, modalità, bozza orfana corrente, separatore). Oggi registrano il difetto (sfondi portati a Canvas);
+// il Task 10 li cambia di proposito.
+const orphanCurrent: State = {
+  name: 'orphans-current',
+  async setup(app, page, ai) {
+    await STATES.find((s) => s.name === 'orphans')!.setup(app, page, ai);
+    // Dopo il ricaricamento la bozza orfana è riaperta (ultimo file con bozza): la sua voce è quella corrente.
+    const orphan = page.getByRole('region', { name: app.t('orphans.title') }).getByRole('button', { name: 'note.md', exact: true });
+    await expect(orphan).toHaveAttribute('aria-current', 'true');
+  },
+};
+for (const [name, from] of [
+  ['forced-colors-workspace', STATES.find((s) => s.name === 'workspace-light')!],
+  ['forced-colors-settings', STATES.find((s) => s.name === 'settings-profile')!],
+  ['forced-colors-review', STATES.find((s) => s.name === 'ai-review')!],
+  ['forced-colors-orphans', orphanCurrent],
+] as const) {
+  for (const scheme of ['light', 'dark'] as const) STATES.push({ ...from, name: `${name}-${scheme}`, scheme, forcedColors: true });
+}
 
 for (const state of STATES) {
   test.describe(state.name, () => {

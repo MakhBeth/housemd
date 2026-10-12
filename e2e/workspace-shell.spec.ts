@@ -68,3 +68,11 @@ test('Escape in AI mode, with the focus outside the composer, stops the generati
   await page.keyboard.press('Escape');
   await expect(page.getByRole('button', { name: app.t('ai.send'), exact: true })).toBeVisible();
 });
+
+test('Hide sidebar from inside the sidebar: the focus goes to Show sidebar in the toolbar (A1)', async ({ app, page }) => {
+  await app.openFolder({ 'a.md': '# A' });
+  // «Nascondi» esiste due volte: questo è quello nella testata della sidebar (l'altro è l'interruttore della barra).
+  await page.getByRole('complementary').getByRole('button', { name: app.t('sidebar.hide') }).click();
+  await expect(app.tree()).toHaveCount(0);
+  await expect(page.getByRole('button', { name: app.t('sidebar.show'), exact: true })).toBeFocused();
+});

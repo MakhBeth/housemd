@@ -26,12 +26,18 @@ export function sectionOf(id: string, sections: readonly SettingsSection[]): Set
 }
 
 /**
- * Sezione da segnare nell'indice: la più in alto tra quelle che si intersecano (come il callback
- * dell'IntersectionObserver di SettingsView.tsx). Null = nessuna, l'indice resta com'è.
+ * Sezione da segnare nell'indice mentre si scorre: in fondo allo scorrimento l'ultima (le ultime sezioni sono
+ * corte e non arrivano mai in cima), altrimenti l'ultima il cui inizio sta nel 40 % alto del contenitore, o la
+ * prima. `top` è misurato dal bordo alto del contenitore che scorre. Null senza sezioni.
  */
-export function topSection(entries: readonly { id: string; top: number; intersecting: boolean }[], sections: readonly SettingsSection[]): SettingsSection | null {
-  const top = entries.filter((e) => e.intersecting).sort((a, b) => a.top - b.top)[0];
-  return top ? sectionOf(top.id, sections) : null;
+export function currentSection(
+  tops: readonly { section: SettingsSection; top: number }[],
+  view: { scrollTop: number; clientHeight: number; scrollHeight: number },
+): SettingsSection | null {
+  if (tops.length === 0) return null;
+  if (view.scrollTop + view.clientHeight >= view.scrollHeight - 1) return tops[tops.length - 1].section;
+  const band = view.clientHeight * 0.4;
+  return tops.filter((t) => t.top <= band).at(-1)?.section ?? tops[0].section;
 }
 
 /** Testo del campo di una larghezza: vuoto = nessun limite. */

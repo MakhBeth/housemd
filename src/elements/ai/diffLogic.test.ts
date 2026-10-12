@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { Chunk } from '@codemirror/merge';
 import { ChangeSet, EditorState } from '@codemirror/state';
 
-import { controlDisabled, insideRange, rejectChange } from './diffLogic';
+import { blockCount, controlDisabled, insideRange, rejectChange } from './diffLogic';
 
 /** Rifiuta il blocco `index` come farebbe hmd-ai-diff-pane e restituisce la proposta che ne esce. */
 function reject(original: string, proposal: string, index = 0): string {
@@ -41,4 +41,12 @@ test('block buttons: accept follows canAccept, reject is off only while generati
     ],
     [false, true, false, true],
   );
+});
+
+test('blockCount: the blocks the diff shows, as many as Chunk.build finds', () => {
+  assert.equal(blockCount('a\nb\nc', 'a\nb\nc'), 0);
+  assert.equal(blockCount('a\nb\nc', 'a\nB\nc'), 1);
+  assert.equal(blockCount('a\nb\nc\nd\ne', 'A\nb\nc\nd\nE'), 2);
+  assert.equal(blockCount('a\r\nb', 'a\r\nB'), 1, 'CRLF is one line break');
+  assert.equal(blockCount('', 'new'), 1);
 });

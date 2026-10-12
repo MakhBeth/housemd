@@ -25,6 +25,8 @@ export interface DocHost {
   /** Sessione in cui salvare testo, selezione e cronologia a ogni aggiornamento (null = nessuna). */
   session(): DocSession | null;
   t(): Translate;
+  /** Nome accessibile del contenuto (`aria-label` di `.cm-content`), letto a ogni aggiornamento della vista. */
+  contentLabel(): string;
   getDocs(): DocTitle[];
   /** Salva un'immagine incollata o trascinata; restituisce il link relativo, null se non salvata. */
   saveImage(file: File): Promise<string | null>;
@@ -44,6 +46,8 @@ const theme = EditorView.theme({
   '.cm-gutters': { backgroundColor: 'var(--c-surface)', color: 'var(--c-muted)', border: 'none' },
   '.cm-activeLine, .cm-activeLineGutter': { backgroundColor: 'color-mix(in srgb, var(--c-accent-soft) 35%, transparent)' },
   '.cm-cursor': { borderLeftColor: 'var(--c-text)' },
+  // !important: il tema base di @codemirror/view (`&light.cm-focused > .cm-scroller > .cm-selectionLayer
+  // .cm-selectionBackground`) ha una specificità più alta; toglierlo vorrebbe dire copiare quel selettore interno.
   '&.cm-focused .cm-selectionBackground, .cm-selectionBackground': {
     backgroundColor: 'color-mix(in srgb, var(--c-accent) 25%, transparent) !important',
   },
@@ -113,6 +117,8 @@ export function docExtensions(host: DocHost) {
       editable.of(readOnlyExtensions(host.readOnly())),
       autocompletion({ override: [wikiCompletionSource(() => host.getDocs())] }),
       formatToolbar(() => host.t()),
+      // Il contenuto è un textbox: senza nome lo screen reader dice solo «modifica testo» (LAB-42 P3, WCAG 4.1.2).
+      EditorView.contentAttributes.of(() => ({ 'aria-label': host.contentLabel() })),
       EditorView.updateListener.of((update) => {
         // La sessione si salva prima di emettere: un listener sincrono può cambiare documento (anche staccare
         // e ricollegare l'elemento), e da lì host.session() sarebbe la sessione del documento nuovo.

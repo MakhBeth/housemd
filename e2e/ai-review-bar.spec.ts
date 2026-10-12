@@ -31,29 +31,50 @@ test.describe('review bar', () => {
     await enterAi(app);
   });
 
-  test('while generating nothing is disabled: Previous, Next, Discard and Accept all say why in the note and keep the focus; the counter is a polite live region; the note goes with the proposal', async ({ app, ai, page }) => {
+  test('while generating nothing is disabled: Previous, Next and Accept all say why in the note (again at every click) and keep the focus; the seconds are not live, a hidden region says the start; the note goes with the proposal', async ({ app, ai, page }) => {
     await page.clock.install();
     ai.hold();
     await composer(app).fill('fix');
     await composer(app).press('Enter');
     const counter = page.getByText(app.t('ai.generating', { seconds: 0 }).replace(/0 s$/, ''), { exact: false });
     await expect(counter).toBeVisible();
-    await expect(counter).toHaveAttribute('aria-live', 'polite');
+    await expect(counter).not.toHaveAttribute('aria-live');
+    // La regione nascosta entra vuota e il testo arriva dopo `ANNOUNCE_DELAY_MS`: con l'orologio finto si fa avanzare.
+    await page.clock.runFor(200);
+    await expect(page.getByText(app.t('ai.generatingStarted'), { exact: true })).toHaveAttribute('aria-live', 'polite');
     const note = page.getByRole('status').filter({ hasText: app.t('ai.review.generating') });
-    for (const button of [previous(app), next(app), discard(app), acceptAll(app)]) {
+    for (const button of [previous(app), next(app), acceptAll(app)]) {
       await expect(button).toBeEnabled();
       await button.click();
+      // Dal secondo clic la stessa nota si svuota e torna dopo `ANNOUNCE_DELAY_MS` (ri-annuncio, LAB-11).
+      await page.clock.runFor(200);
       await expect(note).toBeVisible();
       await expect(button).toBeFocused();
     }
     expect(ai.requests).toBe(1);
-    await page.clock.runFor(2100);
-    await expect(page.getByText(app.t('ai.generating', { seconds: 2 }))).toBeVisible();
+    // Tre pause di 200 ms già passate: 1,5 s in più portano il contatore ad almeno 2 s. Almeno: dopo `install()`
+    // l'orologio finto scorre anche da solo, e in sviluppo le pause reali tra un clic e l'altro lo portano oltre.
+    await page.clock.runFor(1500);
+    await expect.poll(async () => Number((await counter.textContent())?.match(/(\d+) s/)?.[1] ?? 0)).toBeGreaterThanOrEqual(2);
     ai.release();
     await proposalShown(app);
     await expect(counter).toHaveCount(0);
     await expect(note).toHaveCount(0);
     for (const button of [previous(app), next(app), discard(app), acceptAll(app)]) await expect(button).toBeEnabled();
+  });
+
+  test('Discard while generating stops the request and discards the proposal (Discard = Stop + discard)', async ({ app, ai, page }) => {
+    ai.hold();
+    await composer(app).fill('fix');
+    await composer(app).press('Enter');
+    await expect(stop(app)).toBeVisible();
+    await discard(app).click();
+    await expect(send(app)).toBeVisible();
+    await expect(discard(app)).toHaveCount(0);
+    await expect(page.getByRole('status').filter({ hasText: app.t('ai.review.generating') })).toHaveCount(0);
+    ai.release();
+    await expect(mergeView(app)).toHaveCount(0);
+    expect(ai.requests).toBe(1);
   });
 
   test('the proposal arrives with the focus on Accept all (keyboard): the focus stays on the button, it does not jump into the diff', async ({ app, ai, page }) => {
@@ -79,7 +100,8 @@ test.describe('review bar', () => {
     await composer(app).fill('fix');
     await composer(app).press('Enter');
     await proposalShown(app);
-    await expect(page.getByText(app.t('ai.status.truncated'))).toBeVisible();
+    // Il testo c'è due volte: lo stato visibile e la regione nascosta che annuncia l'esito (P1): il primo è quello visibile.
+    await expect(page.getByText(app.t('ai.status.truncated')).first()).toBeVisible();
     const note = page.getByRole('status').filter({ hasText: app.t('ai.review.truncated') });
     await expect(acceptAll(app)).toBeEnabled();
     await acceptAll(app).click();
@@ -179,7 +201,7 @@ test.describe('review bar', () => {
 });
 
 test.describe('composer without a document', () => {
-  test('with no document open, Send says so, keeps the draft and the focus', async ({ app, ai, page }) => {
+  test('with no document open, Send says where to go, keeps the draft and the focus; the draft is still there after opening a document from the editor (LAB-10)', async ({ app, ai, page }) => {
     await app.openFolder({ 'a.md': 'A' });
     await enterAi(app);
     await composer(app).fill('fix');
@@ -189,11 +211,14 @@ test.describe('composer without a document', () => {
     await expect(composer(app)).toHaveValue('fix');
     await expect(send(app)).toBeFocused();
     expect(ai.requests).toBe(0);
-    // Aprire un documento passa dalla modalità editor: la sidebar AI si smonta e si rimonta (bozza e nota ripartono da zero, come oggi).
+    // Aprire un documento passa dalla modalità editor: la sidebar AI si ricrea, la nota riparte da zero, la bozza resta.
     await app.mode('mode.editor').click();
     await app.openFile('a.md');
     await app.mode('mode.ai').click();
     await expect(note).toHaveCount(0);
+    await expect(composer(app)).toHaveValue('fix');
+    await send(app).click();
+    await expect.poll(() => ai.requests).toBe(1);
   });
 
   test('Enter in the composer during a generation says so and keeps the draft; the note goes when the generation ends', async ({ app, ai, page }) => {

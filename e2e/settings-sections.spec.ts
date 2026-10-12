@@ -60,16 +60,21 @@ test('the index follows the scroll: the section brought into view is the current
   await openSettings(app);
   const index = settings(app).getByRole('navigation', { name: app.t('settings.sections') });
   await expect(index.getByRole('link', { name: app.t('settings.general') })).toHaveAttribute('aria-current', 'true');
-  // Profili, non Sync: le ultime sezioni non arrivano in cima (padding di 40vh) e l'indice resta su Profili (limite di oggi, fase 8).
   await index.getByRole('link', { name: app.t('settings.aiProfiles') }).click();
   await expect(index.getByRole('link', { name: app.t('settings.aiProfiles') })).toHaveAttribute('aria-current', 'true');
   await expect(index.getByRole('link', { name: app.t('settings.general') })).not.toHaveAttribute('aria-current', 'true');
+  // Le ultime sezioni, corte, non arrivano in cima: il salto le rende correnti lo stesso, e il focus va sul titolo.
+  for (const key of ['settings.aiSync', 'settings.aiPresets'] as const) {
+    await index.getByRole('link', { name: app.t(key) }).click();
+    await expect(index.getByRole('link', { name: app.t(key) })).toHaveAttribute('aria-current', 'true');
+    await expect(settings(app).getByRole('heading', { name: app.t(key), level: 2 })).toBeFocused();
+  }
 });
 
 test('a cloud profile asks for the key: the address is fixed, Save key is off until something is typed', async ({ app }) => {
   await openSettings(app);
   await settings(app).getByRole('link', { name: app.t('settings.aiProfiles') }).click();
-  await settings(app).getByRole('button', { name: `+ ${app.t('ai.create')}` }).first().click();
+  await settings(app).getByRole('region', { name: app.t('settings.aiProfiles') }).getByRole('button', { name: `+ ${app.t('ai.create')}` }).click();
   await settings(app).getByRole('combobox', { name: app.t('ai.provider'), exact: true }).selectOption('anthropic');
   await expect(settings(app).getByRole('textbox', { name: app.t('ai.url') })).toBeDisabled();
   await expect(settings(app).getByRole('textbox', { name: app.t('ai.url') })).toHaveValue('https://api.anthropic.com');
@@ -85,7 +90,7 @@ test('a cloud profile asks for the key: the address is fixed, Save key is off un
 test('the key typed in the password field stays in the field, never in the serialized DOM', async ({ app, page }) => {
   await openSettings(app);
   await settings(app).getByRole('link', { name: app.t('settings.aiProfiles') }).click();
-  await settings(app).getByRole('button', { name: `+ ${app.t('ai.create')}` }).first().click();
+  await settings(app).getByRole('region', { name: app.t('settings.aiProfiles') }).getByRole('button', { name: `+ ${app.t('ai.create')}` }).click();
   await settings(app).getByRole('combobox', { name: app.t('ai.provider'), exact: true }).selectOption('anthropic');
   await settings(app).getByLabel(app.t('ai.secret')).fill('sk-test');
   await expect(settings(app).getByLabel(app.t('ai.secret'))).toHaveValue('sk-test');
@@ -105,8 +110,7 @@ test('a built-in preset offers Restore original instead of Delete, and restoring
   await openSettings(app);
   await settings(app).getByRole('link', { name: app.t('settings.aiPresets') }).click();
   // La seconda sezione AI è quella dei preset: il primo pulsante dell'elenco è un preset predefinito.
-  // Eccezione accettata al «solo ruolo e nome»: le sezioni non hanno ancora un nome accessibile (da risolvere in fase 8, vedi handover).
-  const presets = settings(app).locator('#settings-ai-presets');
+  const presets = settings(app).getByRole('region', { name: app.t('settings.aiPresets') });
   await presets.getByRole('button').first().click();
   const instructions = presets.getByRole('textbox', { name: app.t('ai.instructions') });
   const original = await instructions.inputValue();

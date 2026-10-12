@@ -93,12 +93,19 @@ test('changing provider sets its default url and forgets the typed key', () => {
   assert.equal(field(EN_MESSAGES['ai.secret'])!.value, '');
 });
 
-test('Connection: «Connected» as a status only after a good answer; an unreachable server is reported', async () => {
+test('Connection: «Connected» as a status only after a good answer, entering empty and written a frame later; an unreachable server is reported', async () => {
   const { el, ai, button, down } = mount();
   button('ollama')!.click();
+  // Il testo della regione a ogni mutazione: entra vuota e il testo arriva dopo, come una mutazione che lo
+  // screen reader legge (LAB-42 P8).
+  const seen: string[] = [];
+  new MutationObserver(() => {
+    const status = el.querySelector('[role="status"]');
+    if (status && seen.at(-1) !== status.textContent) seen.push(status.textContent!);
+  }).observe(el, { subtree: true, childList: true, characterData: true });
   button(EN_MESSAGES['ai.connection'])!.click();
-  await waitFor(() => el.querySelector('[role="status"]') !== null);
-  assert.equal(el.querySelector('[role="status"]')!.textContent, EN_MESSAGES['ai.connected']);
+  await waitFor(() => el.querySelector('[role="status"]')?.textContent === EN_MESSAGES['ai.connected']);
+  assert.deepEqual(seen, ['', EN_MESSAGES['ai.connected']]);
   down();
   button(EN_MESSAGES['ai.connection'])!.click();
   assert.equal(el.querySelector('[role="status"]'), null);
@@ -114,4 +121,17 @@ test('Save validates the profile and makes the draft clean', async () => {
   button(EN_MESSAGES['ai.save'])!.click();
   await waitFor(() => saved.length === 1 && !el.dirty);
   assert.equal(saved[0].name, 'Local');
+});
+
+test('Delete asks first; once the profile is gone the focus goes to the first item, not the body', async () => {
+  const { el, button } = mount();
+  const items = () => [...el.querySelectorAll<HTMLButtonElement>('.list > button')];
+  items()[1].click();
+  const remove = button(EN_MESSAGES['ai.delete'])!;
+  remove.click();
+  [...document.querySelector('dialog')!.querySelectorAll('button')].find((b) => b.textContent === EN_MESSAGES['ai.delete'])!.click();
+  // Chiuso il dialog, il browser ridà il focus a chi l'aveva aperto (lo stub di jsdom no).
+  remove.focus();
+  await waitFor(() => el.querySelector('.detail') === null);
+  assert.ok(document.activeElement === items()[0], `the first item, not ${document.activeElement?.localName}`);
 });

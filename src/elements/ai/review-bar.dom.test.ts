@@ -11,6 +11,7 @@ import { EN_MESSAGES } from '../../i18n/messages';
 import { createI18nStore } from '../../state/i18nStore';
 import { countListeners } from '../../testing/countListeners';
 import { installPopoverStub } from '../../testing/popoverStub';
+import { waitFor } from '../../testing/waitFor';
 import type { HmdEvents } from '../events';
 
 installPopoverStub();
@@ -69,21 +70,26 @@ test('the same DOM as ReviewBar.tsx without status or warnings, then the empty s
   assert.ok(byLabel(EN_MESSAGES['ai.acceptAll']));
 });
 
-test('while generating: the counter with progress in a polite live region; every button active, activated it writes the note and keeps the focus', () => {
+test('while generating: the counter with progress, not live; every button active, activated it writes the note and keeps the focus', async () => {
   const { status, byLabel, buttons, note, events } = mount(GENERATING, [], 'generating');
   assert.equal(status()!.textContent, `${EN_MESSAGES['ai.generating'].replace('{seconds}', '3')} 1/3`);
-  assert.equal(status()!.getAttribute('aria-live'), 'polite');
+  assert.equal(status()!.hasAttribute('aria-live'), false, 'i secondi non parlano (LAB-42 P1)');
   assert.equal(status()!.hasAttribute('role'), false);
   assert.equal(status()!.previousElementSibling, buttons()[1]);
   assert.equal(status()!.nextElementSibling!.className, 'spacer');
-  for (const button of [buttons()[0], buttons()[1], byLabel(EN_MESSAGES['ai.discard']), byLabel(EN_MESSAGES['ai.acceptAll'])]) {
+  for (const button of [buttons()[0], buttons()[1], byLabel(EN_MESSAGES['ai.acceptAll'])]) {
     assert.equal(button.disabled, false);
     button.focus();
     button.click();
-    assert.equal(note().textContent, EN_MESSAGES['ai.review.generating']);
+    // Dal secondo clic la stessa nota si svuota e torna dopo `ANNOUNCE_DELAY_MS`: lo screen reader la rilegge.
+    await waitFor(() => note().textContent === EN_MESSAGES['ai.review.generating']);
     focusOn(button, button.getAttribute('aria-label') ?? button.textContent ?? '');
   }
   assert.deepEqual(events, []);
+  // Scarta durante la generazione non ha nota: sale, e lo workspace ferma e scarta (controller.discard).
+  byLabel(EN_MESSAGES['ai.discard']).click();
+  assert.deepEqual(events, [['hmd-ai-review-action', { action: 'discard' }]]);
+  assert.equal(note().textContent, '');
 });
 
 test('the note goes when its cause goes: the generation ends, Accept all is possible again, or an action succeeds', () => {
@@ -126,7 +132,7 @@ test('Accept all says the reason of the controller, one text per reason, in the 
 
 test('detached and attached again the note is forgotten', () => {
   const { el, byLabel, note } = mount(GENERATING, [], 'generating');
-  byLabel(EN_MESSAGES['ai.discard']).click();
+  byLabel(EN_MESSAGES['ai.acceptAll']).click();
   assert.equal(note().textContent, EN_MESSAGES['ai.review.generating']);
   el.remove();
   document.body.append(el);
@@ -161,9 +167,12 @@ test('warnings: a button with the count and a popover with one button per warnin
   const { el, bar, popover, events } = mount({ kind: 'none' }, warnings);
   const button = bar().querySelector<HTMLButtonElement>('button[popovertarget]')!;
   assert.equal(button.className, 'secondary tooltip');
-  assert.equal(button.getAttribute('aria-label'), EN_MESSAGES['ai.warningsCount'].replace('{count}', '2'));
-  assert.equal(button.getAttribute('data-tooltip'), EN_MESSAGES['ai.warningsCount'].replace('{count}', '2'));
+  assert.equal(button.getAttribute('aria-label'), EN_MESSAGES['ai.warningsCount.other'].replace('{count}', '2'));
+  assert.equal(button.getAttribute('data-tooltip'), EN_MESSAGES['ai.warningsCount.other'].replace('{count}', '2'));
   assert.equal(button.textContent, ' 2');
+  el.warnings = [{ code: 'code' }];
+  assert.equal(button.getAttribute('aria-label'), EN_MESSAGES['ai.warningsCount.one'].replace('{count}', '1'), 'one warning: singular');
+  el.warnings = warnings;
   assert.ok(button.querySelector('span.icon'));
   assert.equal(button.previousElementSibling!.className, 'spacer');
   assert.equal(popover()!.id, button.getAttribute('popovertarget'));
@@ -222,7 +231,7 @@ test('the proposal changes while the same block holds: the note is forgotten and
 
 test('a language change rewrites labels, tooltips, warnings and the note; detached, no listener stays', async () => {
   const { el, i18n, listeners, buttons, byLabel, popover, note } = mount(GENERATING, [{ code: 'wikilinks' }], 'generating');
-  byLabel(EN_MESSAGES['ai.discard']).click();
+  buttons()[1].click();
   await i18n.setLocale('it');
   assert.equal(note().textContent, 'ASPETTA');
   assert.equal(buttons()[0].getAttribute('aria-label'), 'PRIMA');
@@ -233,4 +242,46 @@ test('a language change rewrites labels, tooltips, warnings and the note; detach
   assert.equal(listeners(), 1);
   el.remove();
   assert.equal(listeners(), 0);
+});
+
+test('while generating a hidden polite region says the start and each new part, never the seconds', async () => {
+  const { el } = mount(GENERATING, [], 'generating');
+  const spoken = () => el.querySelector<HTMLElement>(':scope > .spoken');
+  assert.equal(spoken()!.getAttribute('aria-live'), 'polite');
+  assert.equal(spoken()!.textContent, '', 'entrata vuota: il testo arriva dopo la pausa');
+  const part = (done: number) => EN_MESSAGES['ai.generatingProgress'].replace('{done}', String(done)).replace('{total}', '3');
+  await waitFor(() => spoken()!.textContent === part(1));
+  const changes: string[] = [];
+  new MutationObserver(() => changes.push(spoken()!.textContent!)).observe(spoken()!, { childList: true, characterData: true, subtree: true });
+  el.status = { ...GENERATING, seconds: 4 };
+  el.status = { ...GENERATING, seconds: 5 };
+  el.status = { ...GENERATING, seconds: 6, done: 2 };
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.deepEqual(changes, [part(2)]);
+});
+
+test('when the generation ends the hidden region says the outcome (ready, partial, truncated) until the next action; no proposal, nothing', async () => {
+  const outcomes: [ReviewStatus, string | null][] = [
+    [{ kind: 'none' }, 'Proposal ready: 2 blocks to review'],
+    [{ kind: 'partial' }, EN_MESSAGES['ai.status.partial']],
+    [{ kind: 'truncated' }, EN_MESSAGES['ai.status.truncated']],
+  ];
+  for (const [end, text] of outcomes) {
+    const { el, buttons } = mount(GENERATING, [], 'generating');
+    const spoken = () => el.querySelector<HTMLElement>(':scope > .spoken');
+    el.proposalId = 'a.md#1';
+    el.blocks = 2;
+    el.status = end;
+    el.acceptBlocker = null;
+    assert.equal(spoken()?.textContent, text, end.kind);
+    el.blocks = 5;
+    assert.equal(spoken()?.textContent, text, `${end.kind}: the count said once does not change under the user's edits`);
+    buttons()[1].click();
+    assert.equal(spoken(), null, `${end.kind}: the next action empties it`);
+    el.remove();
+  }
+  // Generazione fermata prima di una proposta: nessun esito da dire.
+  const { el } = mount(GENERATING, [], 'generating');
+  el.status = { kind: 'none' };
+  assert.equal(el.querySelector(':scope > .spoken'), null);
 });

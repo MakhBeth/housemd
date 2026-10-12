@@ -612,6 +612,18 @@ Bundle principale gzip 441 143 → 379 234 B (−61 909 B).
 - Passata di accessibilità con l'albero di accessibilità di Chrome sulle schermate principali.
 - Richiesta di approvazione del merge a Davide.
 
+8a **fatta** (PR #12): focus, annunci, nomi accessibili e plurali, senza cambi d'aspetto voluti oltre ai 14 stati di audit elencati nel
+piano (il «⋯» della riga col focus, la regione nascosta, l'indice delle impostazioni). Decisioni che cambiano il contratto:
+`announce` (`src/dom/announce.ts`) è l'unico modo di scrivere in una regione live che deve ri-annunciarsi (svuota, poi riscrive dopo
+`ANNOUNCE_DELAY_MS`); `pluralKey` (`src/i18n/i18n.ts`) sceglie `<chiave>.one|other` con `Intl.PluralRules`, e ogni testo con un numero
+ha le due forme in tutte e nove le lingue; `currentSection` (`settingsView.ts`) calcola la voce corrente dell'indice delle
+impostazioni, fino alle ultime sezioni; `StyleModule` di `style-mod` (ora in `package.json`, già dipendenza di CodeMirror) porta gli
+stili dei pulsanti dei blocchi del diff, così i tre `!important` spariscono. Correzioni della review: `hmd-editor` sposta le
+iscrizioni e riscrive il nome quando cambia lo store i18n; l'esito «pronta» della regione nascosta della barra dice i blocchi da
+rivedere (`ai.proposalBlocks.one|other`, contati da `blockCount` in `diffLogic.ts`) invece di ripetere il registro; `focusStart()`
+usa il nodo di «Nuovo file». Suite sul commit finale: `npm test` 1077, e2e 210 (208 + i 2 noti dello start screen), dev 195, audit 152
+contro la baseline del Task 5. Bundle principale gzip 379 234 → 380 897 B (+1 663 B).
+
 ---
 
 ## 8. Cosa succede ai test
@@ -847,6 +859,7 @@ wikilink:
    `docs/superpowers/plans/2026-10-10-housemd-wc-10-fase-6a-pannelli-del-workspace.md` (fase 6a);
    `docs/superpowers/plans/2026-10-11-housemd-wc-11-fase-6b-composer-e-sidebar-ai.md` (fase 6b);
    `docs/superpowers/plans/2026-10-11-housemd-wc-12-fase-6c-revisione.md` (fase 6c);
-   `docs/superpowers/plans/2026-10-12-housemd-wc-13-fase-7-impostazioni-workspace-app.md` (fase 7, 7a e 7b).
+   `docs/superpowers/plans/2026-10-12-housemd-wc-13-fase-7-impostazioni-workspace-app.md` (fase 7, 7a e 7b);
+   `docs/superpowers/plans/2026-10-12-housemd-wc-14-fase-8-rifinitura-accessibilita.md` (fase 8, 8a e 8b; 8a: PR #12).
 3. Fasi 4–6 (elementi in convivenza).
 4. Fasi 7–8 (impostazioni, workspace, via React, rifinitura, richiesta di merge).

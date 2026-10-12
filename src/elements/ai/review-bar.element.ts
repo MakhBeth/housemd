@@ -2,14 +2,16 @@ import type { AcceptBlocker } from '../../ai/aiController';
 import type { ReviewStatus } from '../../ai/reviewStatus';
 import type { CheckWarning } from '../../ai/types';
 import { HmdElement } from '../../dom/element';
+import { announce } from '../../dom/announce';
 import { el, setText, toggleAttr } from '../../dom/el';
 import { icon } from '../../dom/icon';
 import { RenderLoop } from '../../dom/renderLoop';
 import { uid } from '../../dom/uid';
+import { pluralKey } from '../../i18n/i18n';
 import type { MessageKey } from '../../i18n/messages';
 import type { I18nStore } from '../../state/i18nStore';
 import { emit } from '../events';
-import { actionBlocker, statusLine, type ReviewAction, type ReviewBlocker } from './reviewBarView';
+import { actionBlocker, generationOutcome, statusLine, type ReviewAction, type ReviewBlocker } from './reviewBarView';
 import './review-bar.css';
 
 interface Parts {
@@ -27,6 +29,8 @@ interface Parts {
   acceptAll: HTMLButtonElement;
   /** Nota sotto la riga dei pulsanti (`role="status"`): perché il pulsante attivato non ha fatto nulla. Vuota di norma. */
   note: HTMLParagraphElement;
+  /** Regione live della generazione, nascosta alla vista: dopo la nota, solo durante la generazione. */
+  spoken: HTMLSpanElement;
 }
 
 /**
@@ -45,8 +49,15 @@ export class HmdAiReviewBar extends HmdElement {
   #acceptBlocker: AcceptBlocker | null = 'generating';
   #i18n: I18nStore | null = null;
   #proposalId = '';
+  /** Stato con cui è finita l'ultima generazione: la regione nascosta ne dice l'esito fino alla prossima azione. */
+  #outcome: ReviewStatus | null = null;
+  /** Blocchi del diff (dalla revisione) e quelli detti con l'esito: il numero si dice una volta, le modifiche dopo non lo riscrivono. */
+  #blocks = 0;
+  #told: { outcome: ReviewStatus; blocks: number } | null = null;
   /** Nota mostrata: l'azione che l'ha prodotta e la sua chiave, per sapere quando la causa sparisce. */
   #note: { action: ReviewAction; key: ReviewBlocker } | null = null;
+  /** Il prossimo render riscrive la nota anche se il testo è lo stesso (un altro clic bloccato). */
+  #announceAgain = false;
 
   #parts: Parts | null = null;
   #loop = new RenderLoop(this, {
@@ -59,7 +70,17 @@ export class HmdAiReviewBar extends HmdElement {
 
   get status(): ReviewStatus { return this.#status; }
   set status(value: ReviewStatus) {
-    this.#status = value ?? { kind: 'none' };
+    const next = value ?? { kind: 'none' };
+    // Fine della generazione: la regione nascosta dirà l'esito finché non arriva un'azione (P1, A11y).
+    if (this.#status.kind === 'generating' && next.kind !== 'generating') this.#outcome = next;
+    if (next.kind === 'generating') this.#outcome = null;
+    this.#status = next;
+    this.#loop.update();
+  }
+  /** Quanti blocchi ha il diff della proposta: l'esito «pronta» della regione nascosta li conta. */
+  get blocks(): number { return this.#blocks; }
+  set blocks(value: number) {
+    this.#blocks = value > 0 ? value : 0;
     this.#loop.update();
   }
   get warnings(): CheckWarning[] { return this.#warnings; }
@@ -74,6 +95,8 @@ export class HmdAiReviewBar extends HmdElement {
     if (value === this.#proposalId) return;
     this.#proposalId = value;
     this.#note = null;
+    // L'esito era della proposta di prima (la prima proposta arrivata durante la generazione non ha esito).
+    if (this.#status.kind !== 'generating') this.#outcome = null;
     this.#loop.update();
   }
   /** Perché Accetta tutto non può (dal controller, `acceptBlocker(p, true)`), o null. */
@@ -109,6 +132,7 @@ export class HmdAiReviewBar extends HmdElement {
         discard: action('discard', 'secondary'),
         acceptAll: action('acceptAll', 'secondary accept'),
         note: el('p', { class: 'note', role: 'status' }),
+        spoken: el('span', { class: 'spoken', 'aria-live': 'polite' }),
       };
       this.#parts = parts;
       parts.bar.append(parts.previous, parts.next, parts.spacer, parts.discard, parts.acceptAll);
@@ -121,14 +145,19 @@ export class HmdAiReviewBar extends HmdElement {
 
   disconnectedCallback(): void {
     super.disconnectedCallback();
-    // La barra sparita (proposta scartata o applicata) non ricorda la nota.
+    // La barra sparita (proposta scartata o applicata) non ricorda la nota né l'esito.
     this.#note = null;
+    this.#outcome = null;
   }
 
   /** Un pulsante attivato: se l'azione non è possibile la nota dice perché, altrimenti l'azione sale e la nota se ne va. */
   #onAction(action: ReviewAction): void {
     const key = actionBlocker(action, this.#status, this.#acceptBlocker);
+    // La stessa nota di nuovo (Successivo, Scarta, Accetta tutto durante la generazione): si ri-annuncia.
+    this.#announceAgain = key !== null && this.#note?.key === key;
     this.#note = key ? { action, key } : null;
+    // L'esito della generazione si è detto: alla prossima azione la regione si svuota.
+    this.#outcome = null;
     this.#loop.update();
     if (!key) emit(this, 'hmd-ai-review-action', { action });
   }
@@ -144,7 +173,6 @@ export class HmdAiReviewBar extends HmdElement {
     const line = statusLine(this.#status, t);
     if (line) {
       setText(parts.status, line.text);
-      toggleAttr(parts.status, 'aria-live', line.live, 'polite');
       toggleAttr(parts.status, 'role', line.alert, 'alert');
       if (parts.status.parentNode !== bar) bar.insertBefore(parts.status, parts.spacer);
       if (line.withContinue) {
@@ -157,10 +185,22 @@ export class HmdAiReviewBar extends HmdElement {
       parts.status.remove();
       parts.continue.remove();
     }
+    // La regione della generazione: entrata nel DOM vuota, il testo arriva dopo `ANNOUNCE_DELAY_MS` (così si annuncia);
+    // a generazione finita dice l'esito, fino alla prossima azione.
+    if (this.#told?.outcome !== this.#outcome) this.#told = this.#outcome ? { outcome: this.#outcome, blocks: this.#blocks } : null;
+    const spoken = line?.spoken ?? (this.#told ? generationOutcome(this.#told.outcome, this.#proposalId !== '', this.#told.blocks, i18n.getState().locale, t) : null);
+    if (spoken) {
+      const entering = parts.spoken.parentNode !== this;
+      if (entering) this.append(parts.spoken);
+      announce(parts.spoken, spoken, entering);
+    } else {
+      announce(parts.spoken, '');
+      parts.spoken.remove();
+    }
     // Avvisi: pulsante e popover solo se ce ne sono; i pulsanti del popover si riusano per posizione (come React senza chiavi).
     const warnings = this.#warnings;
     if (warnings.length > 0) {
-      const label = t('ai.warningsCount', { count: warnings.length });
+      const label = t(pluralKey(i18n.getState().locale, 'ai.warningsCount', warnings.length), { count: warnings.length });
       toggleAttr(parts.warnings, 'aria-label', true, label);
       toggleAttr(parts.warnings, 'data-tooltip', true, label);
       setText(parts.count, ` ${warnings.length}`);
@@ -181,9 +221,10 @@ export class HmdAiReviewBar extends HmdElement {
     }
     setText(parts.discard, t('ai.discard'));
     setText(parts.acceptAll, t('ai.acceptAll'));
-    // La nota resta finché vale la causa che l'ha prodotta (per quella azione); la stessa nota due volte di fila non si ri-annuncia: accettato.
+    // La nota resta finché vale la causa che l'ha prodotta (per quella azione); la stessa nota a un altro clic si ri-annuncia.
     if (this.#note && actionBlocker(this.#note.action, this.#status, this.#acceptBlocker) !== this.#note.key) this.#note = null;
-    setText(parts.note, this.#note ? t(this.#note.key) : '');
+    announce(parts.note, this.#note ? t(this.#note.key) : '', this.#announceAgain);
+    this.#announceAgain = false;
   }
 }
 

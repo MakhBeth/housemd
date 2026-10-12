@@ -101,16 +101,20 @@ test('switching with unsaved changes asks first: Cancel keeps the draft, Discard
   assert.ok(button(EN_MESSAGES['ai.restoreOriginal']));
 });
 
-test('Delete asks first and removes the preset; the detail goes away', async () => {
+test('Delete asks first and removes the preset; the detail goes away and the focus goes to the first item', async () => {
   const { el, items, button, deleted } = mount();
   items()[1].click();
-  button(EN_MESSAGES['ai.delete']).click();
+  const remove = button(EN_MESSAGES['ai.delete']);
+  remove.click();
   const dialog = document.querySelector('dialog')!;
   assert.ok(dialog.textContent!.includes(EN_MESSAGES['ai.deleteMessage']));
   [...dialog.querySelectorAll('button')].find((b) => b.textContent === EN_MESSAGES['ai.delete'])!.click();
+  // Chiuso il dialog, il browser ridà il focus a chi l'aveva aperto (lo stub di jsdom no).
+  remove.focus();
   await waitFor(() => deleted.length === 1);
   assert.deepEqual(deleted, ['mine']);
   await waitFor(() => el.querySelector('.detail') === null);
+  assert.ok(document.activeElement === items()[0], `the first item, not ${document.activeElement?.localName}`);
 });
 
 test('detached: the confirmation closes, the store and language listeners are gone', async () => {

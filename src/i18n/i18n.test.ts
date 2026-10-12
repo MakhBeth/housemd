@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { detectLocale, formatDate, formatRelative, parseLocale, placeholders, translate } from './i18n';
+import { detectLocale, formatDate, formatRelative, parseLocale, placeholders, pluralKey, translate } from './i18n';
 import { EN_MESSAGES, loadMessages, loadWithFallback } from './messages';
 
 test('detectLocale matches on the language prefix, case-insensitively', () => {
@@ -57,4 +57,14 @@ test('loadMessages returns English synchronously available and loads the others'
 test('loadMessages falls back to English (locale included) if the chunk fails to load', async () => {
   const failing = () => Promise.reject(new Error('chunk non raggiungibile'));
   assert.deepEqual(await loadWithFallback('de', failing), { locale: 'en', messages: EN_MESSAGES });
+});
+
+test('pluralKey: the singular form only where the language has one, the plural everywhere else', () => {
+  assert.equal(pluralKey('en', 'ai.warningsCount', 1), 'ai.warningsCount.one');
+  assert.equal(pluralKey('en', 'ai.warningsCount', 2), 'ai.warningsCount.other');
+  assert.equal(pluralKey('en', 'ai.warningsCount', 0), 'ai.warningsCount.other');
+  assert.equal(pluralKey('it', 'ai.warningsCount', 1), 'ai.warningsCount.one');
+  assert.equal(pluralKey('fr', 'ai.warningsCount', 0), 'ai.warningsCount.one', 'in francese 0 è singolare');
+  assert.equal(pluralKey('ja', 'ai.warningsCount', 1), 'ai.warningsCount.other', 'il giapponese non ha il singolare');
+  assert.equal(pluralKey('pl', 'ai.warningsCount', 5), 'ai.warningsCount.other', 'few/many ricadono su other');
 });

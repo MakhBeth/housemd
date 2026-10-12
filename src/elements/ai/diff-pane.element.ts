@@ -2,6 +2,7 @@ import { MergeView, goToNextChunk, goToPreviousChunk } from '@codemirror/merge';
 import { Compartment, EditorState, Transaction } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { basicSetup } from 'codemirror';
+import { StyleModule } from 'style-mod';
 
 import type { TextRange } from '../../ai/selectionChip';
 import { el } from '../../dom/el';
@@ -17,6 +18,21 @@ import './diff-pane.css';
 const LABEL: Record<ControlAction, 'ai.acceptBlock' | 'ai.rejectBlock'> = { accept: 'ai.acceptBlock', reject: 'ai.rejectBlock' };
 
 /**
+ * Le tre proprietà dei pulsanti per blocco che `@codemirror/merge` dichiara nel suo `StyleModule`, fuori da ogni
+ * layer (`.cm-merge-revert button`: `position: absolute`, `background: none`, `cursor: pointer`). Uno stile fuori
+ * dai layer vince su ogni regola normale di un layer (`diff-pane.css`): qui stanno nella stessa origine, con una
+ * specificità più alta (0,2,1 contro 0,1,1), e vincono senza forzare la priorità (analisi del layer `vendor`, piano 6c).
+ * Il resto dell'aspetto dei pulsanti resta nel foglio.
+ */
+const revertButtonStyles = EditorView.styleModule.of(
+  new StyleModule({
+    '.cm-merge-revert > .revert > button': { position: 'static' },
+    '.cm-merge-revert > .revert > button:hover:not(:disabled)': { background: 'var(--c-accent-soft)' },
+    '.cm-merge-revert > .revert > button:disabled': { cursor: 'default' },
+  }),
+);
+
+/**
  * Diff della revisione AI (era DiffPane.tsx): MergeView con il documento a sinistra (a, dalla sessione:
  * stesse estensioni e stessi eventi di hmd-editor) e la proposta a destra (b). Regola: mai `setState`
  * sull'editor posseduto da MergeView; i ripristini passano da una transazione su `a`. Un documento nuovo
@@ -25,6 +41,8 @@ const LABEL: Record<ControlAction, 'ai.acceptBlock' | 'ai.rejectBlock'> = { acce
  * Ctrl+Z lo annulli), → rifiuta (l'originale torna in `b`, focus su `b`; l'ultimo rifiutato chiude).
  */
 export class HmdAiDiffPane extends HmdDocElement {
+  /** Il lato sinistro del diff è il documento attuale (il destro, la proposta, ha il suo nome). */
+  protected override readonly contentLabelKey = 'ai.diff.current';
   #proposal = '';
   #range: TextRange | null = null;
   #canAccept = false;
@@ -133,6 +151,8 @@ export class HmdAiDiffPane extends HmdDocElement {
           basicSetup,
           EditorState.transactionFilter.of((tr) => (this.#remote || !tr.docChanged || insideRange(tr.changes, this.#range) ? tr : [])),
           docAppearance(),
+          EditorView.contentAttributes.of(() => ({ 'aria-label': this.translator()('ai.diff.proposal') })),
+          revertButtonStyles,
           this.#rightEditable.of(readOnlyExtensions(this.#streaming)),
           EditorView.updateListener.of((update) => {
             if (!update.docChanged || this.#remote) return;
@@ -257,6 +277,9 @@ export class HmdAiDiffPane extends HmdDocElement {
   /** Stato ed etichette dei pulsanti già disegnati (la MergeView li ricrea solo quando cambiano i blocchi). */
   #refreshControls(): void {
     const t = this.translator();
+    // I nomi dei due contenuti nella lingua di adesso (contentAttributes li rilegge solo al prossimo aggiornamento).
+    this.#merge?.a.contentDOM.setAttribute('aria-label', this.docHost.contentLabel());
+    this.#merge?.b.contentDOM.setAttribute('aria-label', t('ai.diff.proposal'));
     for (const button of this.#box?.querySelectorAll<HTMLButtonElement>('.cm-merge-revert button') ?? []) {
       const action = button.dataset.action as ControlAction;
       button.disabled = controlDisabled(action, { canAccept: this.#canAccept, streaming: this.#streaming });

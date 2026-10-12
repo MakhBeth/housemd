@@ -69,6 +69,8 @@ interface Slots {
   resizer: HTMLDivElement;
   aiSidebar: HmdAiSidebar;
   treeHeader: HTMLDivElement;
+  /** «Nuovo file» della testata: dove entra il focus con l'albero vuoto. */
+  newFile: HTMLButtonElement;
   search: HmdSearchPanel;
   orphans: HTMLElement;
   tree: HmdFileTree;
@@ -132,6 +134,8 @@ export class HmdWorkspace extends HmdElement {
   #historyPath = '';
   #queuedRestore: { id: number; path: string } | null = null;
   #aiSelection: TextRange | null = null;
+  /** Bozza del composer AI: la sidebar si ricrea a ogni ritorno alla modalità AI, il testo scritto resta (LAB-10). */
+  #aiDraft = '';
   #orphans: string[] = [];
   #orphanNodes = new Map<string, HTMLButtonElement>();
   #orphanKey: unknown[] = [];
@@ -154,7 +158,26 @@ export class HmdWorkspace extends HmdElement {
   #loop = new RenderLoop(this, {
     ready: () => !!this.#parts && !!this.#workspace && !!this.#i18n && !!this.#theme && !!this.#route && this.isConnected,
     render: () => this.#render(this.#parts!, this.#workspace!, this.#i18n!),
+    // La sidebar (o il suo contenuto) è sparita con il focus dentro: «Nascondi», Ctrl+B nell'albero o nella
+    // ricerca, la chat che sostituisce l'albero entrando in AI, l'albero che sostituisce la chat uscendo. Entrando
+    // in AI il focus va sul pulsante della modalità; altrimenti dove entra `focusStart()` (l'albero, o «Mostra
+    // sidebar» se la sidebar non c'è più).
+    focusScope: () => this.#slots.aside ?? null,
+    refocus: () => {
+      if (this.#sidebarOpen && this.#shown === 'ai') this.#parts!.modeButtons.get('ai')!.focus();
+      else this.focusStart();
+    },
   });
+
+  /**
+   * Il focus d'ingresso nello workspace (dopo l'apertura della cartella, o quando la sidebar cambia sotto il
+   * focus): la riga col tab stop dell'albero; con l'albero vuoto «Nuovo file» nella testata della sidebar (l'azione
+   * utile in una cartella vuota); con la sidebar nascosta «Mostra sidebar» nella barra.
+   */
+  focusStart(): void {
+    if (this.#slots.tree?.focusTabStop()) return;
+    (this.#slots.newFile ?? this.#parts?.toggle)?.focus();
+  }
 
   get workspace(): Workspace | null { return this.#workspace; }
   set workspace(value: Workspace | null) {
@@ -240,6 +263,7 @@ export class HmdWorkspace extends HmdElement {
     this.#aiSession?.close();
     this.#aiSession = null;
     this.#ai = null;
+    this.#aiDraft = '';
     // Tornando alla schermata iniziale il titolo è quello dell'app.
     document.title = APP_TITLE;
   }
@@ -540,7 +564,7 @@ export class HmdWorkspace extends HmdElement {
       }),
     );
     if (aside) this.#renderSidebar(aside, workspace, state, i18n);
-    else for (const name of ['aiSidebar', 'treeHeader', 'search', 'orphans', 'tree'] as const) delete this.#slots[name];
+    else for (const name of ['aiSidebar', 'treeHeader', 'newFile', 'search', 'orphans', 'tree'] as const) delete this.#slots[name];
     if (resizer) {
       toggleAttr(resizer, 'aria-label', true, t('sidebar.resize'));
       toggleAttr(resizer, 'aria-valuenow', true, String(width));
@@ -613,7 +637,7 @@ export class HmdWorkspace extends HmdElement {
     if (settings) this.#renderSettings(settings, state, i18n);
     place(this, [parts.layout, ...(settings ? [settings] : []), parts.toasts]);
     assign(parts.toasts, 'i18n', i18n);
-    // Un array nuovo solo quando cambiano toast, errore AI o lingua (lo useMemo di React): i toast riavviano i timer a ogni array.
+    // Un array nuovo solo quando cambiano toast, errore AI o lingua (lo useMemo di React); i timer sono per chiave in hmd-toasts.
     const toastKey = [state.toasts, aiState?.error, i18n.getState()];
     if (!toastKey.every((v, i) => v === this.#toastKey[i])) {
       this.#toastKey = toastKey;
@@ -644,8 +668,14 @@ export class HmdWorkspace extends HmdElement {
     const aiMode = this.#shown === 'ai' && !!ai;
     const aiSidebar = this.#slot('aiSidebar', aiMode, () => {
       const sidebar = el('hmd-ai-sidebar', {
-        on: { 'hmd-ai-manage': () => this.#openSettings('ai-profiles'), 'hmd-ai-sync-reactivate': () => this.#openSettings('ai-sync') },
+        on: {
+          'hmd-ai-manage': () => this.#openSettings('ai-profiles'),
+          'hmd-ai-sync-reactivate': () => this.#openSettings('ai-sync'),
+          'hmd-ai-draft': (event) => void (this.#aiDraft = event.detail.text),
+        },
       });
+      // Prima dell'inserimento: il composer legge la bozza solo nascendo.
+      sidebar.draft = this.#aiDraft;
       sidebar.getSelection = () => {
         const selected = this.#session.selection?.main;
         return selected && !selected.empty ? { from: selected.from, to: selected.to, originalText: this.#session.textLf.slice(selected.from, selected.to), status: 'valid' } : undefined;
@@ -659,7 +689,7 @@ export class HmdWorkspace extends HmdElement {
       assign(aiSidebar, 'syncNeedsPermission', !!this.#sync?.needsPermission);
       assign(aiSidebar, 'i18n', i18n);
       place(aside, [aiSidebar]);
-      for (const name of ['treeHeader', 'search', 'orphans', 'tree'] as const) delete this.#slots[name];
+      for (const name of ['treeHeader', 'newFile', 'search', 'orphans', 'tree'] as const) delete this.#slots[name];
       return;
     }
     const header = this.#slot('treeHeader', true, () =>
@@ -673,6 +703,7 @@ export class HmdWorkspace extends HmdElement {
       ),
     )!;
     const [hide, folder, newFile, newFolder] = [...header.children] as HTMLButtonElement[];
+    this.#slots.newFile = newFile;
     for (const [button, label] of [[hide, t('sidebar.hide')], [newFile, t('file.new')], [newFolder, t('folder.new')]] as const) {
       toggleAttr(button, 'aria-label', true, label);
       toggleAttr(button, 'data-tooltip', true, label);
