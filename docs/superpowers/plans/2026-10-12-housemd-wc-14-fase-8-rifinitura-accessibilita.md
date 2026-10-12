@@ -492,3 +492,349 @@ Attesi tutti verdi sull'app di oggi (i quattro stati con `forced-colors` nel nom
 - [ ] **Step 8: commit** (piccoli, uno per gruppo: `test: misura ripetibile dell'avvio contro la fase 3`, `test: stati di audit in forced-colors`, `test: difetti di focus, Esc e doppio clic affermati come sono oggi`), `git -c core.hooksPath=/dev/null commit`, `git log --format=%B -n 3` senza `Co-authored-by`, push. Commento finale: `BASELINE_SHA`, conteggi (`npm test` 1045 invariato; e2e toccati, dev, audit con `-g`), misura dell'avvio, gzip.
 
 **Esecuzione (prototipo, 12/10).** I test dello Step 5 e gli stati dello Step 4 girati sulla build di `0cb7652`: risultati nel paragrafo «Suite del prototipo».
+
+### Task 2: `hmd-app` — risultati tardivi, avvio che riparte, focus dopo l'apertura (Builder)
+
+**Files:**
+- Modify: `src/app/switchFolder.ts` (+ `switchFolder.test.ts`), `src/elements/app/app.element.ts` (+ `app.dom.test.ts`), `src/elements/file-tree/file-tree.element.ts`, `src/elements/workspace/workspace.element.ts` (solo `focusStart()`), `e2e/startup.spec.ts`
+
+R1, R2 (review della 7b) e A2. Il codice qui sotto è quello del prototipo, con i test verdi (decisione 3).
+
+- [ ] **Step 1: test che falliscono** (RED da annotare). Le tre riproduzioni dell'allegato di LAB-54 diventano test di `app.dom.test.ts` (stesso `deps()` e `mount()` del file), più il focus (A2) e il `signal` di `switchFolder`:
+
+```diff
+diff --git a/src/app/switchFolder.test.ts b/src/app/switchFolder.test.ts
+index 0bb0558..11e6908 100644
+--- a/src/app/switchFolder.test.ts
++++ b/src/app/switchFolder.test.ts
+@@ -234,3 +234,27 @@ test('switchGuard is released when the switch throws', async () => {
+   );
+   assert.equal(guard.active, false);
+ });
++
++test('a switch whose caller goes away stops at the next await: nothing opens, nothing is disposed or saved', async () => {
++  // Interrotto durante ognuno dei quattro await: scelta, prima messa al sicuro, apertura, seconda messa al sicuro.
++  for (const at of ['pick', 'close1', 'open', 'close2'] as const) {
++    const abort = new AbortController();
++    const calls: string[] = [];
++    let closes = 0;
++    const result = await switchFolder({
++      signal: abort.signal,
++      pick: async () => (at === 'pick' && abort.abort(), 'handle'),
++      current: {
++        closeFile: async () => (++closes === (at === 'close1' ? 1 : 2) && at.startsWith('close') && abort.abort(), calls.push('closeFile'), true),
++        dispose: () => void calls.push('dispose'),
++      },
++      open: async () => (calls.push('open'), at === 'open' && abort.abort(), 'nuova'),
++      discard: (value) => void calls.push(`discard ${value}`),
++      persist: (value) => void calls.push(`persist ${value}`),
++    });
++    assert.deepEqual(result, { kind: 'cancelled' }, at);
++    assert.ok(!calls.includes('dispose') && !calls.some((c) => c.startsWith('persist')), `${at}: ${calls.join(', ')}`);
++    assert.equal(calls.includes('discard nuova'), at === 'open' || at === 'close2', `${at}: ${calls.join(', ')}`);
++    assert.equal(calls.includes('open'), at !== 'pick' && at !== 'close1', `${at}: ${calls.join(', ')}`);
++  }
++});
+diff --git a/src/elements/app/app.dom.test.ts b/src/elements/app/app.dom.test.ts
+index c751db3..e2c05ee 100644
+--- a/src/elements/app/app.dom.test.ts
++++ b/src/elements/app/app.dom.test.ts
+@@ -144,3 +144,60 @@ test('detached while the folder is opening: the folder opened afterwards is disp
+   await waitFor(() => disposed.length === 1);
+   assert.equal(el.screen, 'boot');
+ });
++
++for (const mode of ['pick', 'resume'] as const) {
++  test(`detached while ${mode === 'pick' ? 'a picked folder' : 'the resumed folder'} opens: the late folder is disposed, nothing is shown, saved or published`, async () => {
++    let release: () => void = () => {};
++    const gate = new Promise<void>((resolve) => (release = resolve));
++    const disposed: string[] = [];
++    const { deps: d, log } = deps(
++      mode === 'resume' ? { loadWorkspace: async () => ({ handle: handle('notes'), workspaceId: 'w' }), hasAccess: async () => false } : {},
++    );
++    const open = d.openWorkspace;
++    let opening = false;
++    d.openWorkspace = async (stored) => {
++      opening = true;
++      await gate;
++      const w = await open(stored);
++      const dispose = w.dispose.bind(w);
++      w.dispose = () => (disposed.push('w'), dispose());
++      return w;
++    };
++    const el = mount(d);
++    await waitFor(() => el.screen === (mode === 'resume' ? 'resume' : 'start'));
++    el.querySelector('hmd-start-screen')!.dispatchEvent(new CustomEvent(`hmd-start-${mode}`, { bubbles: true }));
++    await waitFor(() => opening);
++    el.remove();
++    release();
++    await waitFor(() => disposed.length === 1);
++    assert.equal(el.screen, mode === 'resume' ? 'resume' : 'start');
++    assert.deepEqual(log.filter((line) => line !== 'update none'), [], 'né setUpdateWorkspace con la cartella, né saveWorkspace');
++  });
++}
++
++test('detached and reattached while booting: the boot starts again, the old one stays void', async () => {
++  let release: () => void = () => {};
++  const gate = new Promise<void>((resolve) => (release = resolve));
++  let loads = 0;
++  const el = mount(deps({ loadWorkspace: async () => (++loads, await gate, null) }).deps);
++  el.remove();
++  document.body.append(el);
++  release();
++  await waitFor(() => el.screen === 'start');
++  assert.equal(loads, 2, 'un secondo avvio alla riconnessione');
++});
++
++test('the focus follows the folder: from the start screen button to the tree, after picking and after resuming', async () => {
++  for (const mode of ['pick', 'resume'] as const) {
++    const el = mount(deps(mode === 'resume' ? { loadWorkspace: async () => ({ handle: handle('notes'), workspaceId: 'w' }), hasAccess: async () => false } : {}).deps);
++    await waitFor(() => el.screen === (mode === 'resume' ? 'resume' : 'start'));
++    const label = mode === 'resume' ? EN_MESSAGES['start.resume'].replace('{folder}', 'notes') : EN_MESSAGES['start.openFolder'];
++    const button = [...el.querySelectorAll<HTMLButtonElement>('hmd-start-screen button')].find((b) => b.textContent === label)!;
++    button.focus();
++    button.click();
++    await waitFor(() => el.screen === 'open');
++    const row = el.querySelector('hmd-file-tree [tabindex="0"]');
++    assert.ok(row !== null && document.activeElement === row, `${mode}: the tree row with the tab stop, not ${document.activeElement?.localName}`);
++    el.remove();
++  }
++});
+```
+
+RED atteso (misurato): `switchFolder.test.ts` 1 rosso («a switch whose caller goes away…»); `app.dom.test.ts` 4 rossi: i due «detached while … opens» (la cartella tardiva non viene eliminata, `log` contiene `update open` e, nella scelta, `save picked`), «detached and reattached while booting» (`waitFor` scade: la schermata resta `boot`), «the focus follows the folder» (`pick: … not body`).
+
+- [ ] **Step 2: `switchFolder` con `signal`, `hmd-app` con la vita nel documento.**
+
+```diff
+diff --git a/src/app/switchFolder.ts b/src/app/switchFolder.ts
+index c48a2b6..4aa487d 100644
+--- a/src/app/switchFolder.ts
++++ b/src/app/switchFolder.ts
+@@ -28,26 +28,38 @@ export async function switchFolder<H, T>(deps: {
+    * cambio bloccato o fallito non fa riaprire al prossimo avvio una cartella mai davvero aperta.
+    */
+   persist?(value: T): void;
++  /**
++   * Il chiamante non c'è più (per esempio `hmd-app` staccato): ricontrollato dopo ogni `await`. Un cambio
++   * interrotto finisce come annullato, senza effetti: la cartella appena aperta si elimina, quella vecchia
++   * resta com'è e niente si salva.
++   */
++  signal?: AbortSignal;
+ }): Promise<FolderSwitch<T>> {
++  const aborted = () => deps.signal?.aborted === true;
+   let handle: H | null;
+   try {
+     handle = await deps.pick();
+   } catch (err) {
+     return { kind: 'error', detail: errorDetail(err) };
+   }
+-  if (handle === null) return { kind: 'cancelled' };
++  if (handle === null || aborted()) return { kind: 'cancelled' };
+   try {
+     // Documento non messo al sicuro: toast draftNotPersisted già mostrato dal Workspace.
+     if (deps.current && !(await deps.current.closeFile())) return { kind: 'blocked' };
+   } catch (err) {
+     return { kind: 'error', detail: errorDetail(err) };
+   }
++  if (aborted()) return { kind: 'cancelled' };
+   let value: T;
+   try {
+     value = await deps.open(handle);
+   } catch (err) {
+     return { kind: 'error', detail: errorDetail(err) };
+   }
++  if (aborted()) {
++    deps.discard?.(value);
++    return { kind: 'cancelled' };
++  }
+   // Durante l'apertura (anche lunga: si leggono tutti i file) lo workspace vecchio è rimasto usabile:
+   // l'utente può aver aperto un file e scritto. Si rimette al sicuro quello che c'è ADESSO; se non si
+   // può, si rinuncia al cambio. Tra la fine di closeFile() e dispose() non c'è nessun await.
+@@ -60,6 +72,10 @@ export async function switchFolder<H, T>(deps: {
+     deps.discard?.(value);
+     return { kind: 'error', detail: errorDetail(err) };
+   }
++  if (aborted()) {
++    deps.discard?.(value);
++    return { kind: 'cancelled' };
++  }
+   deps.current?.dispose();
+   deps.persist?.(value);
+   return { kind: 'opened', value };
+diff --git a/src/elements/app/app.element.ts b/src/elements/app/app.element.ts
+index 102ff4c..d0552b5 100644
+--- a/src/elements/app/app.element.ts
++++ b/src/elements/app/app.element.ts
+@@ -38,8 +38,12 @@ export class HmdApp extends HmdElement {
+   #guard = switchGuard();
+   #switching = false;
+   #dbBlocked = false;
+-  #booted = false;
+-  #boot: AbortController | null = null;
++  /**
++   * Vita dell'app nel documento: si interrompe al distacco (non a `reconnect()`). Avvio, scelta e ripresa
++   * della cartella catturano il suo `signal` all'inizio e lo ricontrollano dopo ogni `await`: un risultato
++   * arrivato dopo il distacco si butta senza effetti (né schermata, né `setUpdateWorkspace`, né salvataggio).
++   */
++  #alive = new AbortController();
+   #start: HmdStartScreen | null = null;
+   #workspace: HmdWorkspace | null = null;
+   #updateNotice: HmdUpdateNotice | null = null;
+@@ -47,6 +51,9 @@ export class HmdApp extends HmdElement {
+   #loop = new RenderLoop(this, {
+     ready: () => !!this.#updates && !!this.#i18n && !!this.#theme && !!this.#route && this.isConnected,
+     render: () => this.#render(this.#i18n!),
++    // Scelta o ripresa riuscita: il pulsante della schermata iniziale sparisce con il focus dentro.
++    focusScope: () => this.#start,
++    refocus: () => this.#workspace?.focusStart(),
+   });
+ 
+   get updates(): UpdateFlow | null { return this.#updates; }
+@@ -67,35 +74,37 @@ export class HmdApp extends HmdElement {
+   /** Schermata corrente (per i test). */
+   get screen(): Screen['kind'] { return this.#screen.kind; }
+ 
++  connectedCallback(): void {
++    if (this.#alive.signal.aborted) this.#alive = new AbortController();
++    super.connectedCallback();
++    // L'avvio riparte a ogni collegamento finché la schermata è ancora `boot` (un avvio interrotto dal
++    // distacco resta interrotto: il suo risultato tardivo si butta).
++    if (this.#screen.kind === 'boot') this.#startBoot(this.#deps, this.#alive.signal);
++  }
++
+   protected connect(signal: AbortSignal): void {
+     const deps = this.#deps;
+     signal.addEventListener('abort', deps.onDbBlocked(() => this.#set({ dbBlocked: true })), { once: true });
+-    if (!this.#booted) {
+-      this.#booted = true;
+-      this.#startBoot(deps);
+-    }
+     if (this.#i18n) this.watch(this.#i18n, () => this.#loop.update(), signal);
+   }
+ 
+   disconnectedCallback(): void {
+     super.disconnectedCallback();
+-    this.#boot?.abort();
++    this.#alive.abort();
+   }
+ 
+   /** Avvio: la cartella salvata, riaperta se c'è ancora il permesso. Uno workspace aperto dopo il distacco si butta. */
+-  #startBoot(deps: AppDeps): void {
++  #startBoot(deps: AppDeps, signal: AbortSignal): void {
+     if (!deps.isSupported()) return this.#show({ kind: 'unsupported' });
+-    const boot = (this.#boot = new AbortController());
+     void (async () => {
+       const stored = await deps.loadWorkspace().catch(() => null);
+-      if (boot.signal.aborted) return;
++      if (signal.aborted) return;
+       if (!stored) return this.#show({ kind: 'start' });
+-      if (!(await deps.hasAccess(stored.handle))) {
+-        if (!boot.signal.aborted) this.#show({ kind: 'resume', stored });
+-        return;
+-      }
++      const access = await deps.hasAccess(stored.handle);
++      if (signal.aborted) return;
++      if (!access) return this.#show({ kind: 'resume', stored });
+       const workspace = await deps.openWorkspace(stored);
+-      if (boot.signal.aborted) return workspace.dispose();
++      if (signal.aborted) return workspace.dispose();
+       this.#show({ kind: 'open', stored, workspace });
+     })();
+   }
+@@ -127,12 +136,14 @@ export class HmdApp extends HmdElement {
+ 
+   #choose(): void {
+     const deps = this.#deps;
++    const signal = this.#alive.signal;
+     void this.#exclusive(async () => {
+       const screen = this.#screen;
+       const current = screen.kind === 'open' ? screen.workspace : null;
+       const result = await switchFolder({
+         pick: () => deps.pickFolder(),
+         current,
++        signal,
+         open: async (handle: FileSystemDirectoryHandle) => {
+           // Una cartella già aperta in passato tiene il suo workspaceId (bozze e ultimo file restano suoi).
+           const workspaceId = (await deps.knownWorkspaceId(handle).catch(() => null)) ?? crypto.randomUUID();
+@@ -144,6 +155,7 @@ export class HmdApp extends HmdElement {
+         // La cartella vecchia non si è potuta lasciare: quella nuova, già caricata, si butta.
+         discard: ({ workspace }) => workspace.dispose(),
+       });
++      if (signal.aborted) return;
+       match(afterSwitch(result, current !== null))
+         .with({ kind: 'show' }, ({ screen: next }) => this.#show(next))
+         .with({ kind: 'reportError' }, ({ detail }) => current?.reportFolderError(detail))
+@@ -154,11 +166,14 @@ export class HmdApp extends HmdElement {
+ 
+   #resume(): void {
+     const deps = this.#deps;
++    const signal = this.#alive.signal;
+     void this.#exclusive(async () => {
+       const screen = this.#screen;
+       if (screen.kind !== 'resume') return;
+-      if (!(await deps.requestAccess(screen.stored.handle))) return;
++      const granted = await deps.requestAccess(screen.stored.handle);
++      if (signal.aborted || !granted) return;
+       const workspace = await deps.openWorkspace(screen.stored);
++      if (signal.aborted) return workspace.dispose();
+       this.#show({ kind: 'open', stored: screen.stored, workspace });
+     });
+   }
+```
+
+- [ ] **Step 3: i due bersagli del focus.** In `src/elements/file-tree/file-tree.element.ts` il recupero esistente diventa un metodo pubblico:
+
+```diff
+diff --git a/src/elements/file-tree/file-tree.element.ts b/src/elements/file-tree/file-tree.element.ts
+index dee118f..6b7fb39 100644
+--- a/src/elements/file-tree/file-tree.element.ts
++++ b/src/elements/file-tree/file-tree.element.ts
+@@ -76,12 +76,15 @@ export class HmdFileTree extends HmdElement {
+     focusScope: () => this.#parts?.nav ?? null,
+     // La riga con il focus è sparita (file eliminato o rinominato): il focus va sulla riga col tab stop
+     // (il suo focusin ricalcola i tab stop).
+-    refocus: () => {
+-      const stop = tabStop(this.#items, this.#focused, this.#openPath);
+-      if (stop !== null) this.#focusables.get(stop)?.focus();
+-    },
++    refocus: () => this.focusTabStop(),
+   });
+ 
++  /** Focus sulla riga col tab stop (il file aperto, o la prima riga): l'ingresso nell'albero da fuori. */
++  focusTabStop(): void {
++    const stop = tabStop(this.#items, this.#focused, this.#openPath);
++    if (stop !== null) this.#focusables.get(stop)?.focus();
++  }
++
+   get nodes(): readonly TreeNode[] { return this.#nodes; }
+   set nodes(value: readonly TreeNode[]) {
+     value ??= [];
+```
+
+In `src/elements/workspace/workspace.element.ts`, subito sopra `get workspace()`:
+
+```ts
+  /**
+   * Il primo focus dopo l'apertura della cartella (il pulsante della schermata iniziale è sparito): la riga col
+   * tab stop dell'albero; con la sidebar nascosta, «Mostra sidebar» nella barra.
+   */
+  focusStart(): void {
+    const tree = this.#slots.tree;
+    if (tree) tree.focusTabStop();
+    else this.#parts?.toggle.focus();
+  }
+```
+
+- [ ] **Step 4: verde.** `npx tsx --import ./src/testing/assetHooks.ts --test --test-timeout=20000 src/app/switchFolder.test.ts src/elements/app/app.dom.test.ts src/elements/file-tree/*.test.ts` (atteso: tutto verde; `app.dom.test.ts` 10 test). Le tre riproduzioni dell'allegato, lanciate così come sono dalla radice del checkout (`npx tsx --import ./src/testing/assetHooks.ts --test review-app-lifecycle.test.ts`, file **non** committato), devono passare tutte e tre; poi il file si cancella.
+
+- [ ] **Step 5: e2e rovesciato.** In `e2e/startup.spec.ts` il test del Task 1 diventa:
+
+```ts
+test('after opening a folder from the start screen the focus goes to the tree row with the tab stop (A2)', async ({ app }) => {
+  await app.openFolder({ 'a.md': '# A' });
+  await expect(app.treeFile('a.md')).toBeFocused();
+});
+```
+
+- [ ] **Step 6: gate.** `npm test` (atteso **1050** = 1045 + 4 + 1), `npm run lint`, `e2e/startup.spec.ts` in build e in sviluppo (nel lock), audit con `-g "start"` (stati della schermata iniziale invariati). Commit: `test: risultati tardivi e avvio di hmd-app (RED)`, poi `fix: hmd-app scarta i risultati tardivi e riparte dall'avvio dopo il distacco`, `fix: il focus va all'albero dopo l'apertura della cartella`.
