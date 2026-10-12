@@ -432,11 +432,10 @@ test('after opening a folder from the start screen: today the focus is on the bo
 });
 ```
 
-In fondo a `e2e/settings.spec.ts`:
+In fondo a `e2e/settings.spec.ts` (il `beforeEach` del file apre già la cartella):
 
 ```ts
 test('Escape with unsaved changes: today nothing happens, no confirmation and the settings stay open (P5, the Task 5 of phase 8 fixes it)', async ({ app, page }) => {
-  await app.openFolder({ 'a.md': '# A' });
   await page.getByRole('button', { name: app.t('toolbar.settings') }).click();
   const settings = page.getByRole('region', { name: app.t('settings.title') });
   await settings.getByRole('link', { name: app.t('settings.aiPresets') }).click();
@@ -460,22 +459,27 @@ test('changing the language from the keyboard keeps the focus on the select (A4:
   await select.focus();
   await page.keyboard.press('ArrowDown');
   await expect(page.locator('html')).not.toHaveAttribute('lang', 'en');
-  await expect(select).toBeFocused();
+  // L'etichetta adesso è in un'altra lingua: il focus si guarda sul nodo, non per nome.
+  await expect.poll(() => page.evaluate(() => document.activeElement?.localName)).toBe('select');
 });
 ```
 
 In `e2e/ai-composer.spec.ts`, nel `describe('composer')`, subito prima di «the Stop button stops the generation»:
 
 ```ts
-  test('a double click on Send: today the second click stops the request just sent (the Task 4 of phase 8 keeps it going)', async ({ app, ai }) => {
+  test('a double click on Send: today the second click of the pair stops the request just sent (the Task 4 of phase 8 keeps it going)', async ({ app, ai }) => {
     ai.hold();
     await composer(app).fill('fix');
-    await send(app).dblclick();
+    await send(app).click();
+    // Il secondo clic di un doppio clic umano arriva quando il pulsante è già Stop, con detail 2.
+    await stop(app).dispatchEvent('click', { detail: 2 });
     await expect(send(app)).toBeVisible();
     expect(ai.requests).toBe(1);
     ai.release();
   });
 ```
+
+Misurato: `send(app).dblclick()` di Playwright è troppo veloce (il secondo clic arriva prima che il pulsante diventi Stop e non riproduce il difetto); con un clic e poi un clic `detail: 2` su Stop il difetto si vede in modo deterministico.
 
 - [ ] **Step 6: lint.** `npx tsc --noEmit -p e2e` e `npm run lint` puliti.
 
@@ -492,7 +496,7 @@ Attesi tutti verdi sull'app di oggi (i quattro stati con `forced-colors` nel nom
 
 - [ ] **Step 8: commit** (piccoli, uno per gruppo: `test: misura ripetibile dell'avvio contro la fase 3`, `test: stati di audit in forced-colors`, `test: difetti di focus, Esc e doppio clic affermati come sono oggi`), `git -c core.hooksPath=/dev/null commit`, `git log --format=%B -n 3` senza `Co-authored-by`, push. Commento finale: `BASELINE_SHA`, conteggi (`npm test` 1045 invariato; e2e toccati, dev, audit con `-g`), misura dell'avvio, gzip.
 
-**Esecuzione (prototipo, 12/10).** I test dello Step 5 e gli stati dello Step 4 girati sulla build di `0cb7652`: risultati nel paragrafo «Suite del prototipo».
+**Esecuzione (prototipo, 12/10).** I test dello Step 5 e gli stati dello Step 4 girati sulla build di `0cb7652`, nel lock: i cinque file in build **44** verdi (36 s), in sviluppo **43** verdi (1,3 min, console pulita), audit con `-g "forced-colors"` **75** verdi (il progetto `baseline` intero più i quattro stati `forced-colors` del `current`; 2,2 min). Tre correzioni ai test durante la prova, già nel codice qui sopra: il test P5 apriva la cartella due volte (il `beforeEach` la apre già: «Target page… closed»), il test A4 cercava la select con l'etichetta inglese dopo aver cambiato lingua, il test del doppio clic usava `dblclick()`.
 
 ### Task 2: `hmd-app` — risultati tardivi, avvio che riparte, focus dopo l'apertura (Builder)
 
