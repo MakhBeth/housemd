@@ -5,7 +5,7 @@ import type { I18nStore } from '../../state/i18nStore';
 import type { HmdNotice } from '../notice/notice.element';
 import './update-notice.css';
 
-/** "Nuova versione" con "Aggiorna" (disabilitato mentre si mette al sicuro il documento). Era UpdateNotice.tsx. */
+/** "Nuova versione" con "Aggiorna" (mai disabled: mentre si mette al sicuro il documento il messaggio dice «in corso»). Era UpdateNotice.tsx. */
 export class HmdUpdateNotice extends HmdElement {
   #flow: UpdateFlow | null = null;
   #i18n: I18nStore | null = null;
@@ -51,7 +51,7 @@ export class HmdUpdateNotice extends HmdElement {
       }),
     );
     Object.assign(this.#notice, {
-      message: i18n.t('toast.newVersion'),
+      message: i18n.t(state.busy ? 'update.applying' : 'toast.newVersion'),
       actionLabel: i18n.t('update.apply'),
       busy: state.busy,
       dismissLabel: i18n.t('update.dismiss'),

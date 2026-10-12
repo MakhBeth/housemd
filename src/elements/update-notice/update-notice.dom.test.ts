@@ -73,6 +73,9 @@ test('Update calls apply; Later calls dismiss; while busy it cannot be dismissed
   assert.equal(el.querySelector('hmd-notice'), notice);
   assert.equal(notice.busy, true);
   assert.equal(notice.dismissible, false);
+  assert.equal(notice.message, EN_MESSAGES['update.applying']);
+  set({ available: true, busy: false });
+  assert.equal(notice.message, EN_MESSAGES['toast.newVersion']);
   el.remove();
 });
 

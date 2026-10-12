@@ -4,6 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import '../define';
+import { waitFor } from '../../testing/waitFor';
 import { installPopoverStub, isPopoverOpen } from '../../testing/popoverStub';
 
 installPopoverStub();
@@ -41,13 +42,31 @@ test('action and dismiss buttons exist only when asked, and send their events', 
   el.remove();
 });
 
-test('busy disables the same action button; not dismissible removes the dismiss button', () => {
+test('busy never disables the same action button (data-busy instead); not dismissible removes the dismiss button', () => {
   const { el, box } = mount({ actionLabel: 'Aggiorna', dismissible: true });
   const action = box.querySelector('button')!;
   Object.assign(el, { busy: true, dismissible: false });
   assert.equal(box.querySelector('button'), action);
-  assert.equal(action.disabled, true);
+  assert.equal(action.disabled, false);
+  assert.equal(action.hasAttribute('aria-disabled'), false);
+  assert.equal(action.hasAttribute('data-busy'), true);
   assert.equal(box.querySelectorAll('button').length, 1);
+  el.busy = false;
+  assert.equal(action.hasAttribute('data-busy'), false);
+  el.remove();
+});
+
+test('the action while busy sends nothing, keeps the focus and announces the message again: emptied, then written back', async () => {
+  const { el, box } = mount({ actionLabel: 'Aggiorna', busy: true, message: 'in corso' });
+  const action = box.querySelector('button')!;
+  const events: string[] = [];
+  el.addEventListener('hmd-notice-action', () => events.push('action'));
+  action.focus();
+  action.click();
+  assert.deepEqual(events, []);
+  assert.equal(box.querySelector('p')!.textContent, '');
+  await waitFor(() => box.querySelector('p')!.textContent === 'in corso');
+  assert.equal(document.activeElement, action);
   el.remove();
 });
 
