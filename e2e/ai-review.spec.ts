@@ -219,7 +219,7 @@ test('the warnings button of the review opens its popover', async ({ app, ai, pa
   const composer = page.getByRole('textbox', { name: app.t('ai.request') });
   await composer.fill('fix');
   await composer.press('Enter');
-  const warnings = page.getByRole('button', { name: app.t('ai.warningsCount', { count: 1 }) });
+  const warnings = page.getByRole('button', { name: app.t('ai.warningsCount.one', { count: 1 }) });
   const item = page.getByRole('button', { name: app.t('ai.warning.wikilinks') });
   await expect(warnings).toBeVisible();
   await expect(item).toBeHidden();

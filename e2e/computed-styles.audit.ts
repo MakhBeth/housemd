@@ -262,7 +262,7 @@ const STATES: State[] = [
       const composer = page.getByRole('textbox', { name: app.t('ai.request') });
       await composer.fill('fix');
       await composer.press('Enter');
-      await expect(page.getByText(app.t('ai.status.truncated'))).toBeVisible();
+      await expect(page.getByText(app.t('ai.status.truncated')).first()).toBeVisible();
     },
   },
   {
@@ -277,7 +277,7 @@ const STATES: State[] = [
       const composer = page.getByRole('textbox', { name: app.t('ai.request') });
       await composer.fill('fix');
       await composer.press('Enter');
-      await page.getByRole('button', { name: app.t('ai.warningsCount', { count: 1 }) }).click();
+      await page.getByRole('button', { name: app.t('ai.warningsCount.one', { count: 1 }) }).click();
       await expect(page.getByRole('button', { name: app.t('ai.warning.wikilinks') })).toBeVisible();
     },
   },
@@ -416,7 +416,9 @@ const STATES: State[] = [
       await app.mode('mode.ai').click();
       await page.getByRole('textbox', { name: app.t('ai.request') }).fill('fix');
       await page.getByRole('button', { name: app.t('ai.send'), exact: true }).click();
-      await expect(page.getByRole('status').filter({ hasText: app.t('ai.composer.noDocument') })).toBeVisible();
+      // La nota per testo non basta: l'audit prepara lo stato anche sulla baseline, che può avere il testo di prima
+      // (LAB-10 lo cambia). Basta una nota non vuota.
+      await expect(page.getByRole('status').filter({ hasText: /\S/ }).first()).toBeVisible();
     },
   },
   {
