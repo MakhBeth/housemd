@@ -3,6 +3,7 @@ import type { SyncBinding, SyncService } from '../../ai/syncBinding';
 import { HmdElement } from '../../dom/element';
 import { el, setText } from '../../dom/el';
 import { RenderLoop } from '../../dom/renderLoop';
+import { uid } from '../../dom/uid';
 import type { MessageKey } from '../../i18n/messages';
 import type { I18nStore } from '../../state/i18nStore';
 import { showConfirmDialog } from '../dialogs/confirmDialog';
@@ -91,8 +92,9 @@ export class HmdSettingsSync extends HmdElement {
         folder: el('span'),
         disable: el('button', { type: 'button', on: { click: () => void this.#binding?.disable().catch(report) } }),
         reactivate: el('button', { type: 'button', on: { click: () => void this.#binding?.reactivate().catch(report) } }),
-        status: el('p', { class: 'help' }),
-        error: el('p', { class: 'help' }),
+        // Lo stato cambia dopo ogni sync (LAB-42 P9): regione live; l'errore entra già scritto, come avviso.
+        status: el('p', { class: 'help', role: 'status' }),
+        error: el('p', { class: 'help', role: 'alert' }),
         conflicts: el('p', { class: 'help' }),
         syncActions: el('div', { class: 'actions' }),
         syncNow: el('button', { type: 'button', on: { click: () => void (this.#sync?.service as SyncDetailsService | undefined)?.syncNow() } }),
@@ -208,12 +210,18 @@ export class HmdSettingsSync extends HmdElement {
   #renderBackups(parts: Parts, t: I18nStore['t']): void {
     const nodes = new Map<string, HTMLParagraphElement>();
     for (const path of this.#backups) {
-      const node = this.#backupNodes.get(path) ?? el('p', { class: 'help' }, path, el('button', { type: 'button', on: { click: () => this.#restore(path) } }));
+      // Il percorso descrive il suo «Ripristina»: i pulsanti hanno lo stesso nome (LAB-42 P10, WCAG 2.4.6).
+      const node = this.#backupNodes.get(path) ?? this.#backupNode(path);
       setText(node.lastElementChild!, t('ai.restoreBackup'));
       nodes.set(path, node);
     }
     showChildren(parts.backups, [parts.backupsSummary, ...nodes.values()], [...this.#backupNodes.values()]);
     this.#backupNodes = nodes;
+  }
+
+  #backupNode(path: string): HTMLParagraphElement {
+    const id = uid('hmd-settings-backup');
+    return el('p', { class: 'help' }, el('span', { id }, path), el('button', { type: 'button', 'aria-describedby': id, on: { click: () => this.#restore(path) } }));
   }
 }
 
