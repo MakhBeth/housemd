@@ -162,7 +162,7 @@ export class App {
 
 /** Opzioni impostabili dalla configurazione (`use`). */
 export interface AppOptions {
-  /** Ogni errore o avviso in console fa fallire il test: per la suite in sviluppo, dove React avvisa lì. */
+  /** Ogni errore o avviso in console fa fallire il test: per la suite in sviluppo, dove gli avvisi compaiono in console. */
   failOnConsole: boolean;
   /**
    * Errori di console attesi dal test (confronto sul testo, solo per i messaggi di tipo `error`). Vuoto per

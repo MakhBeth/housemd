@@ -6,16 +6,12 @@ import assert from 'node:assert/strict';
 import { EditorSelection } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { undo } from '@codemirror/commands';
-import { StrictMode, createElement, useEffect, useRef } from 'react';
-import { flushSync } from 'react-dom';
-import { createRoot } from 'react-dom/client';
 
 import '../define';
 import { createDocSession } from '../../editor/docSession';
 import { EN_MESSAGES } from '../../i18n/messages';
 import { createI18nStore } from '../../state/i18nStore';
 import type { HmdEvents } from '../events';
-import type { HmdEditor } from './editor.element';
 
 // Una vista di CodeMirror rimasta montata (test fallito a metà) tiene vivo il processo: si smonta sempre.
 test.afterEach(() => document.body.replaceChildren());
@@ -258,25 +254,4 @@ test('a listener that assigns another document while a new one is announced: the
   assert.equal(b.textLf, 'B');
   assert.deepEqual(events.map(([type]) => type), ['hmd-selection', 'hmd-selection', 'hmd-doc-change', 'hmd-selection']);
   el.remove();
-});
-
-test('under React StrictMode: properties (also saveImage) set before connecting, the view is never recreated', () => {
-  const host = document.createElement('div');
-  document.body.append(host);
-  const root = createRoot(host);
-  const saveImage = async () => null;
-  let editor: HmdEditor | null = null;
-  function Parent() {
-    const ref = useRef<HmdEditor>(null);
-    // Come ReviewView: il genitore dà il focus all'editor appena montato.
-    useEffect(() => ref.current?.focus(), []);
-    return createElement('hmd-editor', { ref, text: 'abc', resetKey: 'a.md#1', session: createDocSession('a.md#1', 'abc'), saveImage, i18n });
-  }
-  flushSync(() => root.render(createElement(StrictMode, null, createElement(Parent))));
-  editor = host.querySelector('hmd-editor');
-  assert.equal(editor!.saveImage, saveImage);
-  assert.equal(host.querySelectorAll('.cm-editor').length, 1);
-  assert.equal(document.activeElement, editor!.querySelector('.cm-content'));
-  flushSync(() => root.unmount());
-  host.remove();
 });

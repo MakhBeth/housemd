@@ -9,6 +9,7 @@ import { HmdAiReview } from './ai/review.element';
 import { HmdAiReviewBar } from './ai/review-bar.element';
 import { HmdAiSidebar } from './ai/sidebar.element';
 import { HmdAiSuggestions } from './ai/suggestions.element';
+import { HmdApp } from './app/app.element';
 import { HmdConflictBar } from './conflict-bar/conflict-bar.element';
 import { HmdEditor } from './editor/editor.element';
 import { HmdFileTree } from './file-tree/file-tree.element';
@@ -25,10 +26,11 @@ import { HmdStartScreen } from './start-screen/start-screen.element';
 import { HmdToasts } from './toasts/toasts.element';
 import { HmdThemeSwitcher } from './theme-switcher/theme-switcher.element';
 import { HmdUpdateNotice } from './update-notice/update-notice.element';
+import { HmdWorkspace } from './workspace/workspace.element';
 
 /**
- * Unico punto con `customElements.define` (spec WC §8.3). `main.tsx` lo importa prima del primo render:
- * React 19 assegna come proprietà solo ciò che esiste già sull'istanza (spec §5.1, R9). Con l'HMR di Vite il
+ * Unico punto con `customElements.define` (spec WC §8.3). `main.ts` lo importa prima di creare `<hmd-app>`:
+ * le proprietà assegnate prima della definizione oscurerebbero i setter (spec R9). Con l'HMR di Vite il
  * modulo può rieseguire: un nome già definito si salta (R8).
  */
 type Definitions = readonly (readonly [string, CustomElementConstructor])[];
@@ -45,6 +47,7 @@ const ELEMENTS: Definitions = [
   ['hmd-ai-review-bar', HmdAiReviewBar],
   ['hmd-ai-sidebar', HmdAiSidebar],
   ['hmd-ai-suggestions', HmdAiSuggestions],
+  ['hmd-app', HmdApp],
   ['hmd-conflict-bar', HmdConflictBar],
   ['hmd-editor', HmdEditor],
   ['hmd-file-tree', HmdFileTree],
@@ -61,6 +64,7 @@ const ELEMENTS: Definitions = [
   ['hmd-theme-switcher', HmdThemeSwitcher],
   ['hmd-toasts', HmdToasts],
   ['hmd-update-notice', HmdUpdateNotice],
+  ['hmd-workspace', HmdWorkspace],
 ];
 
 export function defineElements(elements: Definitions): void {

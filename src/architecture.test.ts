@@ -88,6 +88,17 @@ test('elements reach the AI providers only through the controller and never touc
   assert.deepEqual(offenders(ELEMENT_AI, ELEMENT_AI_ALLOWED, withoutAllowedSecretWrite(sources)), []);
 });
 
+/** Fase 7 (spec WC §8.3, §11): React non c'è più, né come import né come file `.tsx`. */
+const REACT = /\bfrom\s+['"](?:react|react-dom)(?:\/[^'"]*)?['"]|\bimport\(\s*['"](?:react|react-dom)(?:\/[^'"]*)?['"]/;
+
+test('no React anywhere in src/: no import of react or react-dom, no .tsx file (tests included)', () => {
+  const all = walk(SRC).map((full) => ({ path: relative(SRC, full).split(sep).join('/'), full }));
+  assert.deepEqual(all.filter(({ path }) => path.endsWith('.tsx')).map(({ path }) => path), []);
+  // Questo file contiene i casi sintetici del controllo: si salta.
+  const ts = all.filter(({ path }) => path.endsWith('.ts') && path !== 'architecture.test.ts').map(({ path, full }) => ({ path, source: readFileSync(full, 'utf8') }));
+  assert.deepEqual(offenders(REACT, () => false, ts), []);
+});
+
 test('customElements.define appears only in elements/define.ts', () => {
   assert.deepEqual(offenders(DEFINE, inSet(DEFINE_ALLOWED)), []);
 });
@@ -120,6 +131,12 @@ test('the patterns fire on what they must and ignore what they must', () => {
   }
   for (const ok of ["import type { AiController } from '../../ai/aiController';", 'controller.provider(profile)', '// la rete passa da src/ai/providers', 'profile.secretId']) {
     assert.ok(!ELEMENT_AI.test(ok), ok);
+  }
+  for (const bad of ["import { useState } from 'react';", "import { createRoot } from 'react-dom/client';", "await import('react')"]) {
+    assert.ok(REACT.test(bad), bad);
+  }
+  for (const ok of ["import { reactive } from './reactive';", '// niente React qui', "import { x } from 'preact'"]) {
+    assert.ok(!REACT.test(ok), ok);
   }
   assert.ok(DEFINE.test("customElements.define('hmd-file-tree', HmdFileTree)"));
   assert.ok(!DEFINE.test("customElements.get('hmd-file-tree')"));

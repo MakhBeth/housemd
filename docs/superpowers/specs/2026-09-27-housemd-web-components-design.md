@@ -333,12 +333,12 @@ export abstract class HmdElement extends HTMLElement {
   callback-proprietà non comincia mai con `on`: React 19 tratta ogni prop funzione `on…` di un
   custom element come un listener dell'evento omonimo, anche se la proprietà esiste (misurato
   nella fase 5b).
-- **Convivenza con React 19 (fasi 4–7).** React 19 assegna come proprietà ogni prop il cui nome
+- **Convivenza con React 19 (fasi 4–7, finita nella 7b).** React 19 assegnava come proprietà ogni prop il cui nome
   esiste sull'istanza dell'elemento e registra come listener le prop `on<nome-evento>`. Quindi:
   `define.ts` va importato **prima** del primo render (altrimenti React vede un elemento non
-  aggiornato e imposta attributi); i nomi degli eventi sono minuscoli con trattino (`hmd-open` →
-  prop `onhmd-open`); i tipi JSX dei tag `hmd-*` si dichiarano in un solo file temporaneo
-  `src/elements/jsx.d.ts`, cancellato nella fase 7.
+  aggiornato e imposta attributi); i nomi degli eventi erano minuscoli con trattino (`hmd-open` →
+  prop `onhmd-open`); i tipi JSX dei tag `hmd-*` stavano in un solo file temporaneo
+  `src/elements/jsx.d.ts`, cancellato nella 7b insieme a React.
 
 Host con `display: contents` quando l'elemento sostituisce un componente dentro un layout React: l'albero interno resta quello di React e l'audit degli stili (`e2e/support/styleAudit.ts`) salta il wrapper.
 
@@ -595,10 +595,20 @@ non finisce più nell'attributo `value` del campo password, quindi non è nel DO
 audit nuovi (116 → 136), `npm test` 980 → 1017, e2e 187 → 202 (200 + i 2 noti dello start screen), dev 172 → 187, snapshot
 invariati. In `src/ui/` restano `WorkspaceView`, `App` e gli hook (7b). Bundle gzip 441 143 → 444 254 B (React c'è ancora).
 
+7b **fatta** (PR #11): `hmd-workspace` (`workspace.element.ts`) e `hmd-app` (`app.element.ts`) al posto di `WorkspaceView.tsx` e
+`App.tsx`; moduli puri `aiSession.ts`, `workspaceView.ts`, `appDeps.ts` (dipendenze del browser iniettabili) e
+`theme/browserTheme.ts` (il tema senza `flushSync`); store unici (lingua, tema, rotta, aggiornamenti) creati da `main.ts`.
+Figli condizionali ricreati come faceva React, `doc` nuovo a ogni render per `hmd-ai-review`, test di React tolti
+(`reactInterop.dom.test.ts` e i due «under React StrictMode…»). In `src/` nessun `.tsx` né `*.module.css`; `package.json` senza
+`react`, `react-dom`, `@types/react*` e `@vitejs/plugin-react`; `"jsx"` fuori da `tsconfig.json`. Una correzione della review: chiavi di
+cache separate per l'albero e per la lista dei file (con la sidebar nascosta l'albero restava vecchio). Suite sul commit finale:
+`npm test` 1045, e2e 202 (200 + i 2 noti dello start screen), dev 187, audit 136, snapshot e `dist-baseline/` invariati.
+Bundle principale gzip 441 143 → 379 234 B (−61 909 B).
+
 ### Fase 8: rifinitura e richiesta di merge
 
-- Bundle e tempo di avvio rispetto al baseline della fase 0 (atteso: −40 KB gzip circa per
-  React/ReactDOM, + zod/mini + ts-pattern). Il baseline per misurare la rimozione di React è il bundle della fase 3, 432 419 B gzip con React 19; rispetto alla fase 0 (410 158 B, React 18) il guadagno netto atteso è di circa 22 KB in meno.
+- Bundle e tempo di avvio rispetto al baseline della fase 0 (la rimozione di React è già fatta nella 7b: il
+  riferimento del bundle è la sua misura, 379 234 B gzip, contro i −40 KB attesi ne ha dati −62 KB). Il baseline per misurare la rimozione di React è il bundle della fase 3, 432 419 B gzip con React 19; rispetto alla fase 0 (410 158 B, React 18) il guadagno netto atteso è di circa 22 KB in meno.
 - Passata di accessibilità con l'albero di accessibilità di Chrome sulle schermate principali.
 - Richiesta di approvazione del merge a Davide.
 
@@ -667,9 +677,8 @@ Limiti di jsdom 30.1.1, verificati nella fase 2: mancano `moveBefore`, `showModa
 
 - nessun `innerHTML`, `outerHTML`, `insertAdjacentHTML`, `document.write` in `src/` fuori da
   `preview/sanitize.ts` (e dai test);
-- nessun import di `react`/`react-dom` e nessun `.tsx` in `src/` **a partire dalla fase 7** (prima
-  saltato con `{ skip }` legato all'esistenza di `src/elements/jsx.d.ts` o di `src/main.tsx`: quando
-  spariscono, il test si attiva da solo);
+- nessun import di `react`/`react-dom` e nessun `.tsx` in `src/` **attivo dalla 7b** (era saltato
+  con `{ skip }` legato a `src/elements/jsx.d.ts` e `src/main.tsx`: spariti quelli, è un test normale);
 - ogni CSS in `src/elements/<cartella>/` contiene solo blocchi `@scope` con le radici di §4.2, dentro
   `@layer components`;
 - `customElements.define` solo in `elements/define.ts`;
@@ -803,16 +812,16 @@ wikilink:
 ## 11. Criteri di completamento
 
 - `package.json` senza `react`, `react-dom`, `@types/react*`, `@vitejs/plugin-react`; con
-  `ts-pattern` e `zod`; senza `tests/browser/` né `test:browser`.
-- Nessun `.tsx` né `*.module.css` in `src/`; `architecture.test.ts` completamente attivo.
+  `ts-pattern` e `zod`; senza `tests/browser/` né `test:browser` (fatto, 7b).
+- Nessun `.tsx` né `*.module.css` in `src/`; `architecture.test.ts` completamente attivo (fatto, 7b).
 - `npm test`: tutti i test del baseline (488 al 01/10, più quelli aggiunti in `main` nel frattempo)
   ci sono ancora (stesso nome o rinominati in modo tracciato) e passano, più i nuovi di §8.2–8.3.
 - `npm run lint` e `npm run build` puliti; PWA installabile e funzionante offline.
 - `npm run test:e2e` verde con gli **stessi snapshot** della fase 0 (ogni rigenerazione elencata e
   motivata).
 - Merge del branch in `main` solo dopo l'approvazione esplicita di Davide.
-- Checklist §9 completata in Chrome ed Edge.
-- `CLAUDE.md` e `README.md` aggiornati.
+- Checklist §9 completata in Chrome ed Edge (resta: Davide).
+- `CLAUDE.md` e `README.md` aggiornati (fatto nella 7b).
 
 ## 12. Domande aperte → decisioni
 

@@ -194,7 +194,7 @@ test.describe('selection', () => {
   });
 });
 
-// React 19 vuole `popoverTarget`: il chip del profilo deve continuare ad aprire il suo popover.
+// Il chip del profilo deve continuare ad aprire il suo popover.
 test('the profile chip opens its popover with the profile choice', async ({ app, page }) => {
   await app.openFolder({ 'a.md': 'A' });
   await app.openFile('a.md');
@@ -209,7 +209,7 @@ test('the profile chip opens its popover with the profile choice', async ({ app,
   await expect(current).toBeHidden();
 });
 
-// Anche il pulsante degli avvisi della revisione apre il suo popover con popovertarget (popoverTarget in React 19).
+// Anche il pulsante degli avvisi della revisione apre il suo popover con popovertarget (prima della fase 7 era `popoverTarget` di React 19).
 test('the warnings button of the review opens its popover', async ({ app, ai, page }) => {
   ai.reply = 'See [[Other]]';
   await app.openFolder({ 'a.md': 'See [[Target]]' });
