@@ -66,3 +66,67 @@ Misurato anche:
 - **L'orologio finto di Playwright ferma `requestAnimationFrame`**: con `page.clock.install()` la nota ri-annunciata (svuotata e riscritta al fotogramma dopo, Task 5) resta vuota finché il test non fa avanzare l'orologio (`page.clock.runFor(50)`). Vale per ogni e2e che clicca due volte lo stesso pulsante bloccato con l'orologio installato.
 - **Il quarto `!important`** non sta su `.cm-activeLine` (come diceva il piano 6c) ma su `.cm-selectionBackground` in `docExtensions.ts`, e combatte il tema base di `@codemirror/view` (`&light.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground`, specificità più alta): `Prec` da solo non basta (decisione 8).
 - **`style-mod`** è già nel bundle (dipendenza di `@codemirror/view`, `4.1.4`): dichiararlo in `package.json` con la stessa versione esatta non cambia il bundle e non scarica nulla.
+
+### Inventario
+
+Ogni punto del perimetro: dove sta, la causa, il test che lo copre, se cambia l'aspetto (**no** = audit e snapshot invariati; **nodo** = un nodo nuovo invisibile, una riga «nuovo» nell'audit; **sì** = cambio visibile, passa da Designer), il task.
+
+**Ciclo di vita e focus (review della 7b, A11y)**
+
+| Id | Dove | Causa | Test | Aspetto | Task |
+|---|---|---|---|---|---|
+| R1 | `src/elements/app/app.element.ts:147` (`#choose`), `:160` (`#resume`); `src/app/switchFolder.ts` | dopo gli `await` nessuno controlla se l'app è ancora collegata: lo workspace tardivo arriva a `#show` (schermata `open`, `setUpdateWorkspace`) e, nella scelta, `switchFolder` chiama `persist` | `app.dom.test.ts` «detached while a picked folder opens…», «…the resumed folder opens…»; `switchFolder.test.ts` «a switch whose caller goes away stops at the next await…» | no | 2 |
+| R2 | `app.element.ts:73` e `:80` | `#booted = true` resta dopo il distacco che interrompe l'avvio: riattaccata, l'app non riparte e resta su `boot` | `app.dom.test.ts` «detached and reattached while booting…» | no | 2 |
+| A2 | `app.element.ts:171` | il pulsante della schermata iniziale, con il focus, sparisce con la schermata; nessuno sposta il focus | `app.dom.test.ts` «the focus follows the folder…»; e2e `startup.spec.ts` (nuovo caso) | no | 2 |
+| A1 | `src/elements/workspace/workspace.element.ts:532` (slot `aside`), `:669` («Nascondi» nella sidebar), `#changeMode('ai')` | il `RenderLoop` del workspace non ha `focusScope`/`refocus`: «Nascondi», Ctrl+B nell'albero o nella ricerca, la modalità AI che sostituisce l'albero tolgono il nodo con il focus | `workspace.dom.test.ts` «the focus never falls on the body when the sidebar goes…»; e2e `workspace-shell.spec.ts` (nuovi casi) | no | 3 |
+| A5 | `src/elements/workspace/layout.ts:40` (`resizeByKey`) | solo frecce; l'APG del window splitter vuole anche Home ed End | `layout.test.ts` (esteso), `workspace.dom.test.ts` «the separator: Home and End…» | no | 3 |
+| T | `src/elements/toasts/toasts.element.ts:31`, `:88` (`#restartTimers`) | un array `items` nuovo (toast, errore AI, lingua) riavvia i timer di tutti i toast informativi | `toasts.dom.test.ts` «info toasts close 6 s after they appear…» (riscritto), «a toast that goes and comes back…» | no | 3 |
+| A4 | `src/elements/settings/settings.element.ts` (select della lingua) | **non riprodotta** in Chromium senza screen reader (misure); l'unico `focus()` sul titolo è alla prima connessione | e2e `theme-i18n.spec.ts` (nuovo: il focus resta sulla select) | no | 4 (+ checklist) |
+
+**Impostazioni (LAB-42 P5–P12, handover)**
+
+| Id | Dove | Causa | Test | Aspetto | Task |
+|---|---|---|---|---|---|
+| P5 | `settings.element.ts:155-161` | l'Esc che apre `showDiscardChangesDialog` non è consumato: Chrome lo usa per chiudere subito il `<dialog closedby="any">` appena aperto | `settings.dom.test.ts` «Esc that opens the confirmation is consumed…»; e2e `settings.spec.ts` (nuovo, da tastiera) | no | 4 |
+| P6 | `profiles.element.ts:149`, `presets.element.ts:126` | «Elimina» sparisce con il dettaglio; i due `RenderLoop` non hanno `focusScope` | `profiles.dom.test.ts` «Delete asks first; once the profile is gone the focus goes to the first item…», `presets.dom.test.ts` (esteso); e2e `settings.spec.ts` (esteso) | no | 4 |
+| P9 | `sync.element.ts:94-96` | stato ed errore della sync sono `p.help` senza ruolo | `sync.dom.test.ts` «the sync status is a polite live region and its error an alert…» | no | 4 |
+| P10 | `sync.element.ts:211` | i «Ripristina questo backup» hanno lo stesso nome e niente che li distingua | idem (`aria-describedby` verso il percorso) | no (il percorso passa da testo a `span`: nessuno stato di audit ha backup) | 4 |
+| P11 | `settings.element.ts:320-333` | il link dell'indice scorre ma il focus resta sul link | `settings.dom.test.ts` «a link activated from the keyboard scrolls … moves the focus to the section title» | no (anello del focus sul titolo, solo da tastiera) | 4 |
+| P12 | `settings.element.ts:292` | la nota delle larghezze non è collegata ai campi | `settings.dom.test.ts` «every section is a region … the width hint describes both width fields» | no | 4 |
+| Sezioni | `settings.element.ts:265`, `:274` | `<section>` senza `aria-labelledby`: gli e2e le raggiungono con `#settings-ai-presets` o per posizione | idem; e2e: via `#settings-ai-presets` (`settings-sections.spec.ts:109`, audit `:576`) e i localizzatori per posizione elencati nel Task 4 | no | 4 |
+| Indice | `settings.element.ts:395-410`, `settingsView.ts:32` (`topSection`), `settings.css:63` (40vh) | la regola sceglie la sezione più in alto tra quelle nella fascia del 40 %: le ultime sezioni, corte, non diventano mai correnti | `settingsView.test.ts` «the current section: the last one whose top is in the upper 40 %…»; e2e `settings-sections.spec.ts` (rovesciato: Sync) | no (cambia quale voce è segnata, non lo stile) | 4 |
+| P7 | `settings.css:57`, `sections.css:41` | voce corrente segnata solo da `--c-accent-soft`, che in `forced-colors` diventa Canvas | stato di audit nuovo `forced-colors-settings`; e2e `forced-colors.spec.ts` | **sì** (solo `forced-colors`) | 9 |
+| P8 | `profiles.element.ts:247`, `:312` | il `p[role=status]` «Connesso» entra nel DOM già scritto | `profiles.dom.test.ts` (esteso) | **sì** se la regione resta sempre nel DOM (decisione 4) | 9 |
+
+**AI (LAB-42 P1–P4, handover 6c e 7, LAB-6)**
+
+| Id | Dove | Causa | Test | Aspetto | Task |
+|---|---|---|---|---|---|
+| P1 | `review-bar.element.ts:145-147`, `reviewBarView.ts:38` | il contatore «Generating… N s» è una regione `aria-live` che cambia ogni secondo (il composer non ha contatori: la sua nota è `ai.composer.generating`, fissa) | `reviewBarView.test.ts` (esteso), `review-bar.dom.test.ts` «while generating a hidden polite region says the start and each new part…»; e2e `ai-review-bar.spec.ts` (rovesciato) | **nodo** (`span.spoken`, nascosto) | 5 |
+| P3 | `editor.element.ts:47`, `diff-pane.element.ts:127` | `.cm-content` (ruolo `textbox`) senza nome; nessun `contentAttributes` | `editor.dom.test.ts` «the content is a textbox named after the document text…»; `review.dom.test.ts` (conteggio degli ascoltatori) | no | 5 |
+| P4 | `review-bar.element.ts:163`; `src/i18n/i18n.ts` | `ai.warningsCount` ha solo il plurale; `t()` non conosce le forme | `i18n.test.ts` «pluralKey…», `review-bar.dom.test.ts` (esteso) | **testo** (tooltip «1 warning», audit di 2 stati) | 5 |
+| LAB-11 | `review-bar.element.ts:184`, `composer.element.ts:234`, `sidebar.element.ts:162` | `setText` non scrive un testo uguale: la stessa nota a un altro clic non cambia la regione e non si ri-annuncia | `announce.test.ts`; `review-bar.dom.test.ts`, `composer.dom.test.ts` (estesi: la nota si svuota e torna) | no | 5 |
+| Scarta | `reviewBarView.ts:17` (`actionBlocker`), `review.element.ts:203` | durante la generazione Scarta scrive solo la nota; e senza una proposta già arrivata non chiamerebbe comunque `discard` | `reviewBarView.test.ts`, `review-bar.dom.test.ts`, `review.dom.test.ts` «Discard while generating, before any proposal…»; e2e `ai-review-bar.spec.ts` (nuovo) | no | 5 |
+| Continua | `reviewBarView.ts:19`, `aiController.ts:118` | durante un aggiornamento il controller ignora Continua in silenzio | `reviewBarView.test.ts` «Continue during an update says so…» | no (la nota esiste già) | 5 |
+| Doppio clic | `composer.element.ts:167-172` | `send()` mette `running` prima del primo `await`: il secondo clic del doppio clic trova Stop e ferma la richiesta | `composer.dom.test.ts` «a double click on Send sends once and does not stop…»; e2e `ai-composer.spec.ts` (nuovo) | no | 5 |
+| LAB-10 | `en.json:155` (`ai.composer.noDocument`), `workspace.element.ts:640-662` | in modalità AI l'albero non c'è e la nota non dice dove aprire il documento; passare all'editor smonta la sidebar e la bozza si perde | e2e `ai-review-bar.spec.ts:182` (rovesciato: la bozza resta); `composer.dom.test.ts` | **testo** (nota più lunga: stato `ai-composer-note-no-document`) | 5 |
+| Chip | `model-chip.element.ts:182-209` | i rami di `reconcileList` fanno `as` sul nodo generico | i test di `model-chip.dom.test.ts` invariati; `grep " as " ` vuoto nel file | no | 5 |
+| `anchor-scope` | `model-chip.css:37-44` | oggi esiste un solo chip (unico creatore: il composer) | — | — | nessuno (decisione 11) |
+| `!important` | `diff-pane.css:35-50` (tre), `docExtensions.ts:48` (quarto) | `@codemirror/merge` dichiara i pulsanti per blocco in un `StyleModule` fuori dai layer | audit `ai-review*` invariato (misurato) | no | 6 |
+| P2 | `src/styles/global.css:98` | l'icona è una maschera colorata da `background-color: currentColor`, che `forced-colors` porta a Canvas | audit `focus-search-keyboard-forced-colors` + stati nuovi; e2e `forced-colors.spec.ts` | **sì** (solo `forced-colors`) | 9 |
+| A3 | `workspace.css:139`, `:231`, `:71` | modalità attiva, bozza orfana corrente e separatore (5 px) distinti solo dallo sfondo | stato di audit nuovo `forced-colors-workspace`; e2e `forced-colors.spec.ts` | **sì** (solo `forced-colors`) | 9 |
+
+**Regola «mai disabled» (Davide, 11/10)** — oggi nove punti, misurati (nessun `aria-disabled`, nessun `disabled` nei dialog):
+
+| Pulsante o campo | Dove | Condizione | Test di oggi | Task |
+|---|---|---|---|---|
+| Salva chiave | `profiles.element.ts:293` | campo chiave vuoto | `profiles.dom.test.ts:67`, e2e `settings-sections.spec.ts:77`, audit `:589` | 8 |
+| Indirizzo del server (campo) | `profiles.element.ts:290` | provider `anthropic` | `profiles.dom.test.ts:63`, e2e `settings-sections.spec.ts:74` | 8 |
+| Sincronizza ora | `sync.element.ts:199` | sync in corso (oggi un clic accoderebbe un'altra sync: `AiSync.syncNow` mette `pending`) | `sync.dom.test.ts:97`, audit `:613` | 8 |
+| Cronologia | `workspace.element.ts:581` | nessun documento | `workspace.dom.test.ts:114`, e2e `workspace-shell.spec.ts:27` | 8 |
+| Cartella (cambio) | `workspace.element.ts:681` | cambio di cartella in corso | nessuno | 8 |
+| Apri cartella, Riprendi, Apri un'altra | `start-screen.element.ts:86` | cambio in corso (`busy`) | `start-screen.dom.test.ts:91` | 8 |
+| Aggiorna (avviso di nuova versione) | `notice.element.ts:65` | aggiornamento in corso | `notice.dom.test.ts:49` | 8 |
+| ← accetta / → rifiuta dei blocchi del diff | `diff-pane.element.ts:251`, `:262`; `diffLogic.ts:36` | accetta: `!canAccept`; rifiuta: generazione | `diffLogic.test.ts:34`, `diff-pane.dom.test.ts:138`, `:180`, audit `:229` | 7 |
+
+Fogli con `:disabled` che cambiano con la regola: `start-screen.css:102` (`opacity .6; cursor: progress`), `workspace.css:48` e `:53` (cartella), `notice.css:44`, `diff-pane.css:42` e `:47` (`opacity .35`), `suggestions.css:25` (già morto). Salva chiave, Sincronizza ora e l'indirizzo hanno oggi l'aspetto `disabled` del browser (nessuno stile d'autore).
