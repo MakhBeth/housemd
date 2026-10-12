@@ -80,6 +80,25 @@
       font-size: 13px;
     }
 
+    /* Nota «mai disabled»: entra solo con una ragione (regione status vuota di norma). */
+    .note {
+      margin: 0;
+      color: var(--c-muted);
+      font-size: 12px;
+    }
+
+    .syncNote {
+      text-align: end;
+    }
+
+    /* Indirizzo fisso (Anthropic): di sola lettura, ma leggibile e copiabile. `input[readonly]`, non `:read-only`. */
+    :scope .detail input[readonly] {
+      background: var(--c-code-bg);
+      border: 1px solid var(--c-border);
+      border-radius: 2px;
+      color: var(--c-text);
+    }
+
     .actions {
       display: flex;
       flex-wrap: wrap;

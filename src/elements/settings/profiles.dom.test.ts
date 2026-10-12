@@ -57,18 +57,70 @@ test('a local profile: name, provider, url, help, model, parameters, context, ef
   assert.equal(el.querySelector('hmd-ai-model-select')!.profile?.id, 'o');
 });
 
-test('a cloud profile: the key field, Remember, the notice and Save key (off while the field is empty); the url is off for Anthropic', () => {
+test('a cloud profile: the key field, Remember, the notice and Save key; no button is ever disabled; the Anthropic url is read-only and described by the help', () => {
   const { el, button, field } = mount();
   button('Cloud')!.click();
-  assert.equal(field(EN_MESSAGES['ai.url'])!.disabled, true);
+  const url = field(EN_MESSAGES['ai.url'])!;
+  assert.equal(url.disabled, false);
+  assert.equal(url.readOnly, true);
+  const help = el.querySelector<HTMLElement>(`#${url.getAttribute('aria-describedby')}`)!;
+  assert.equal(help.textContent, EN_MESSAGES['ai.help.anthropic']);
   const key = field(EN_MESSAGES['ai.secret'])!;
   assert.equal(key.type, 'password');
   assert.equal(key.autocomplete, 'off');
-  assert.equal(button(EN_MESSAGES['ai.saveSecret'])!.disabled, true);
-  type(key, 'sk-test');
   assert.equal(button(EN_MESSAGES['ai.saveSecret'])!.disabled, false);
+  assert.equal(button(EN_MESSAGES['ai.saveSecret'])!.hasAttribute('aria-disabled'), false);
   // La chiave non finisce mai in un attributo.
+  type(key, 'sk-test');
   assert.ok(!el.outerHTML.includes('sk-test'));
+});
+
+test('the url is editable again for a provider other than Anthropic, and loses the description', () => {
+  const { button, field } = mount();
+  button('Cloud')!.click();
+  const provider = field(EN_MESSAGES['ai.provider'])! as unknown as HTMLSelectElement;
+  provider.value = 'openai-compatible';
+  provider.dispatchEvent(new Event('change', { bubbles: true }));
+  const url = field(EN_MESSAGES['ai.url'])!;
+  assert.equal(url.readOnly, false);
+  assert.equal(url.hasAttribute('aria-describedby'), false);
+});
+
+test('Save key with an empty field says why in a status right after the button; no call, the focus stays; the note empties when a key is typed', async () => {
+  const { el, button, field, secrets } = mount();
+  button('Cloud')!.click();
+  const save = button(EN_MESSAGES['ai.saveSecret'])!;
+  assert.equal(el.querySelector('.detail > p.note'), null, 'la nota entra su richiesta');
+  save.focus();
+  save.click();
+  const note = () => el.querySelector<HTMLElement>('.detail > p.note[role="status"]')!;
+  assert.equal(save.nextElementSibling, note());
+  await waitFor(() => note().textContent === EN_MESSAGES['ai.saveSecret.needKey']);
+  assert.equal(secrets.length, 0);
+  assert.equal(document.activeElement, save);
+  // Un altro clic la ri-annuncia: si svuota e torna.
+  save.click();
+  assert.equal(note().textContent, '');
+  await waitFor(() => note().textContent === EN_MESSAGES['ai.saveSecret.needKey']);
+  type(field(EN_MESSAGES['ai.secret'])!, 's');
+  assert.equal(el.querySelector('.detail > p.note'), null);
+  assert.equal(document.activeElement, save);
+});
+
+test('the Save key note goes away when the profile or the provider changes', async () => {
+  const { el, button, field } = mount();
+  button('Cloud')!.click();
+  button(EN_MESSAGES['ai.saveSecret'])!.click();
+  const note = () => el.querySelector<HTMLElement>('.detail > p.note[role="status"]');
+  await waitFor(() => note()?.textContent === EN_MESSAGES['ai.saveSecret.needKey']);
+  const provider = field(EN_MESSAGES['ai.provider'])! as unknown as HTMLSelectElement;
+  provider.value = 'openai-compatible';
+  provider.dispatchEvent(new Event('change', { bubbles: true }));
+  assert.ok(!note() || note()!.textContent === '');
+  button(EN_MESSAGES['ai.saveSecret'])!.click();
+  await waitFor(() => note()?.textContent === EN_MESSAGES['ai.saveSecret.needKey']);
+  button('ollama')!.click();
+  assert.equal(note(), null);
 });
 
 test('Save key hands the key to the controller once and empties the field', async () => {

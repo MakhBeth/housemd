@@ -4,7 +4,7 @@ import { DEFAULT_URLS, defaultProfile, PROVIDER_KINDS, validateProfile } from '.
 import type { ModelProfile, ProviderKind } from '../../ai/types';
 import { announce } from '../../dom/announce';
 import { HmdElement } from '../../dom/element';
-import { el, setText } from '../../dom/el';
+import { el, setText, toggleAttr } from '../../dom/el';
 import { RenderLoop } from '../../dom/renderLoop';
 import type { MessageKey } from '../../i18n/messages';
 import { cancelSwitch, confirmSwitch, editDraft, emptyDraft, isDirty, openDraft, selectDraft, type DraftState } from '../../state/draftState';
@@ -13,12 +13,15 @@ import type { HmdAiModelSelect } from '../ai/model-select.element';
 import type { HmdAiParameters } from '../ai/parameters.element';
 import { showConfirmDialog, showDiscardChangesDialog } from '../dialogs/confirmDialog';
 import { emit } from '../events';
+import { saveSecretBlocker } from './blockers';
 import { checkbox, field, showChildren, syncChecked, syncValue } from './fields';
 import { renderItemList } from './itemList';
 import './sections.css';
 
 /** Quello che la sezione dei profili usa del controller (il selettore del modello compreso). */
 export type ProfilesController = Pick<AiController, 'subscribe' | 'getState' | 'report' | 'provider' | 'saveProfile' | 'deleteProfile' | 'setSecret'>;
+
+let helpCount = 0;
 
 /** Provider con l'effort come opzione del profilo, e provider con una chiave. */
 const EFFORT_KINDS: readonly ProviderKind[] = ['ollama', 'lmstudio', 'openai-compatible'];
@@ -48,6 +51,8 @@ interface Detail {
   rememberText: Text;
   secretNotice: HTMLParagraphElement;
   saveSecret: HTMLButtonElement;
+  /** Nota di «Salva chiave»: entra nel DOM solo con una ragione, vuota, e il testo arriva dopo `ANNOUNCE_DELAY_MS`. */
+  saveSecretNote: HTMLParagraphElement;
   actions: HTMLDivElement;
   connection: HTMLButtonElement;
   duplicate: HTMLButtonElement;
@@ -71,7 +76,11 @@ export class HmdSettingsProfiles extends HmdElement {
   #detail: Detail | null = null;
   #draft: DraftState<ModelProfile> = emptyDraft();
   #connected = false;
+  /** «Salva chiave» è stato attivato senza chiave: la nota resta finché la causa c'è. */
+  #needKey = false;
+  #announceKey = false;
   #dialogs: AbortController | null = null;
+  readonly #helpId = `profile-help-${++helpCount}`;
   #loop = new RenderLoop(this, {
     ready: () => !!this.#list && !!this.#controller && !!this.#i18n && this.isConnected,
     render: () => this.#render(this.#list!, this.#controller!, this.#i18n!),
@@ -147,6 +156,7 @@ export class HmdSettingsProfiles extends HmdElement {
   }
 
   #forgetKey(): void {
+    this.#needKey = false;
     if (this.#detail) this.#detail.secret.value = '';
   }
 
@@ -180,6 +190,12 @@ export class HmdSettingsProfiles extends HmdElement {
     const controller = this.#controller;
     const detail = this.#detail;
     if (!draft || !controller || !detail) return;
+    if (saveSecretBlocker(detail.secret.value)) {
+      this.#announceKey = this.#needKey;
+      this.#needKey = true;
+      this.#loop.update();
+      return;
+    }
     this.#run(
       controller.setSecret(validateProfile(draft), detail.secret.value, detail.remember.checked).then(() => {
         this.#forgetKey();
@@ -228,7 +244,7 @@ export class HmdSettingsProfiles extends HmdElement {
         PROVIDER_KINDS.map((k) => el('option', null, k)),
       ),
       url: el('input', { type: 'url', on: { input: (e) => this.#edit({ baseUrl: value(e) }) } }),
-      help: el('p', { class: 'help' }),
+      help: el('p', { class: 'help', id: this.#helpId }),
       model: el('hmd-ai-model-select', { on: { 'hmd-ai-model-change': (e) => this.#edit({ ...e.detail.selection }) } }),
       params: el('hmd-ai-parameters', { on: { 'hmd-params-change': (e) => this.#edit({ params: e.detail.params }) } }),
       contextTokensLabel: field(captions.contextTokens, contextTokens),
@@ -243,6 +259,7 @@ export class HmdSettingsProfiles extends HmdElement {
       rememberText,
       secretNotice: el('p', { class: 'help' }),
       saveSecret: el('button', { type: 'button', on: { click: () => this.#storeKey() } }),
+      saveSecretNote: el('p', { class: 'note', role: 'status' }),
       actions: el('div', { class: 'actions' }),
       connection: el('button', { type: 'button', on: { click: () => this.#testConnection(draft()) } }),
       duplicate: el('button', { type: 'button', on: { click: () => this.#edit({ id: crypto.randomUUID(), secretId: null }) } }),
@@ -293,11 +310,16 @@ export class HmdSettingsProfiles extends HmdElement {
     syncValue(d.name, draft.name);
     syncValue(d.provider, draft.kind);
     syncValue(d.url, draft.baseUrl);
-    // Campi e pulsanti spenti come oggi: la regola «mai disabled» sulle impostazioni è della fase 8.
-    d.url.disabled = draft.kind === 'anthropic';
+    // L'indirizzo di Anthropic è fisso: di sola lettura, non `disabled`, e il perché sta nell'aiuto (decisione 10).
+    d.url.readOnly = draft.kind === 'anthropic';
+    toggleAttr(d.url, 'aria-describedby', draft.kind === 'anthropic', this.#helpId);
     syncValue(d.contextTokens, draft.contextTokens === null ? '' : String(draft.contextTokens));
     syncChecked(d.effort, !!draft.params.effort);
-    d.saveSecret.disabled = !d.secret.value;
+    // Con una chiave scritta la ragione è sparita; il cambio di profilo e di provider la dimenticano (#forgetKey).
+    if (!saveSecretBlocker(d.secret.value)) this.#needKey = false;
+    const needKey = this.#needKey && SECRET_KINDS.includes(draft.kind);
+    announce(d.saveSecretNote, needKey ? t('ai.saveSecret.needKey') : '', needKey && (this.#announceKey || d.saveSecretNote.parentNode !== d.root));
+    this.#announceKey = false;
     // Proprietà dei figli hmd-* prima dell'inserimento, e solo se cambiano.
     if (d.model.controller !== controller) d.model.controller = controller;
     if (d.model.i18n !== i18n) d.model.i18n = i18n;
@@ -314,11 +336,11 @@ export class HmdSettingsProfiles extends HmdElement {
         d.params,
         d.contextTokensLabel,
         ...(EFFORT_KINDS.includes(draft.kind) ? [d.effortLabel] : []),
-        ...(SECRET_KINDS.includes(draft.kind) ? [d.secretLabel, d.rememberLabel, d.secretNotice, d.saveSecret] : []),
+        ...(SECRET_KINDS.includes(draft.kind) ? [d.secretLabel, d.rememberLabel, d.secretNotice, d.saveSecret, ...(needKey ? [d.saveSecretNote] : [])] : []),
         d.actions,
         ...(this.#connected ? [d.connected] : []),
       ],
-      [d.effortLabel, d.secretLabel, d.rememberLabel, d.secretNotice, d.saveSecret, d.connected],
+      [d.effortLabel, d.secretLabel, d.rememberLabel, d.secretNotice, d.saveSecret, d.saveSecretNote, d.connected],
     );
     if (d.root.parentNode !== split) split.append(d.root);
   }
