@@ -78,7 +78,24 @@ test('an invalid .housemd.json shows a toast and the app still opens', async ({ 
   await expect(app.treeFile('a.md')).toBeVisible();
 });
 
-test('after opening a folder from the start screen: today the focus is on the body (A2, the Task 2 of phase 8 moves it to the tree)', async ({ app, page }) => {
+test('after opening a folder from the start screen the focus goes to the tree row with the tab stop (A2)', async ({ app }) => {
   await app.openFolder({ 'a.md': '# A' });
+  await expect(app.treeFile('a.md')).toBeFocused();
+});
+
+test('an empty folder opened from the start screen: the focus goes to New file in the sidebar (A2)', async ({ app, page }) => {
+  await app.start();
+  await seedFolder(page, 'vuota', {});
+  await app.setFlags({ folder: 'vuota' });
+  await page.getByRole('button', { name: app.t('start.openFolder') }).click();
+  await expect(page.getByRole('complementary').getByRole('button', { name: app.t('file.new') })).toBeFocused();
+});
+
+test('the saved folder reopened at startup: the focus is not moved (decision 18)', async ({ app, page }) => {
+  // Come «after a reload the folder and the last open file come back»: un file aperto prima di ricaricare.
+  await app.openFolder({ 'a.md': 'alpha' });
+  await app.openFile('a.md');
+  await page.reload();
+  await app.expectOpen('a.md');
   await expect(page.locator('body')).toBeFocused();
 });
