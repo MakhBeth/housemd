@@ -69,6 +69,8 @@ interface Slots {
   resizer: HTMLDivElement;
   aiSidebar: HmdAiSidebar;
   treeHeader: HTMLDivElement;
+  /** «Nuovo file» della testata: dove entra il focus con l'albero vuoto. */
+  newFile: HTMLButtonElement;
   search: HmdSearchPanel;
   orphans: HTMLElement;
   tree: HmdFileTree;
@@ -174,8 +176,7 @@ export class HmdWorkspace extends HmdElement {
    */
   focusStart(): void {
     if (this.#slots.tree?.focusTabStop()) return;
-    const newFile = this.#slots.treeHeader?.children[2] as HTMLElement | undefined;
-    (newFile ?? this.#parts?.toggle)?.focus();
+    (this.#slots.newFile ?? this.#parts?.toggle)?.focus();
   }
 
   get workspace(): Workspace | null { return this.#workspace; }
@@ -563,7 +564,7 @@ export class HmdWorkspace extends HmdElement {
       }),
     );
     if (aside) this.#renderSidebar(aside, workspace, state, i18n);
-    else for (const name of ['aiSidebar', 'treeHeader', 'search', 'orphans', 'tree'] as const) delete this.#slots[name];
+    else for (const name of ['aiSidebar', 'treeHeader', 'newFile', 'search', 'orphans', 'tree'] as const) delete this.#slots[name];
     if (resizer) {
       toggleAttr(resizer, 'aria-label', true, t('sidebar.resize'));
       toggleAttr(resizer, 'aria-valuenow', true, String(width));
@@ -688,7 +689,7 @@ export class HmdWorkspace extends HmdElement {
       assign(aiSidebar, 'syncNeedsPermission', !!this.#sync?.needsPermission);
       assign(aiSidebar, 'i18n', i18n);
       place(aside, [aiSidebar]);
-      for (const name of ['treeHeader', 'search', 'orphans', 'tree'] as const) delete this.#slots[name];
+      for (const name of ['treeHeader', 'newFile', 'search', 'orphans', 'tree'] as const) delete this.#slots[name];
       return;
     }
     const header = this.#slot('treeHeader', true, () =>
@@ -702,6 +703,7 @@ export class HmdWorkspace extends HmdElement {
       ),
     )!;
     const [hide, folder, newFile, newFolder] = [...header.children] as HTMLButtonElement[];
+    this.#slots.newFile = newFile;
     for (const [button, label] of [[hide, t('sidebar.hide')], [newFile, t('file.new')], [newFolder, t('folder.new')]] as const) {
       toggleAttr(button, 'aria-label', true, label);
       toggleAttr(button, 'data-tooltip', true, label);

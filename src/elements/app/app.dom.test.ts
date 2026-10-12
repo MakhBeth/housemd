@@ -237,6 +237,8 @@ test('an empty folder picked from the start screen: the focus goes to New file i
   await waitFor(() => el.screen === 'open');
   const active = document.activeElement;
   assert.ok(active?.getAttribute('aria-label') === EN_MESSAGES['file.new'] && !!active.closest('aside'), `New file in the sidebar, not ${active?.localName} ${active?.getAttribute('aria-label')}`);
+  const header = el.querySelector('aside > .sidebarHeader')!;
+  assert.ok(active === header.querySelector(`[aria-label="${EN_MESSAGES['file.new']}"]`), 'the node of the New file button of the header, not another one');
 });
 
 test('the saved folder reopened by the boot: the focus is not moved (nothing that had it went away)', async () => {
