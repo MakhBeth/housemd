@@ -265,3 +265,29 @@ test('the content is a textbox named after the document text; a language change 
   await store.setLocale('it');
   assert.equal(content.getAttribute('aria-label'), 'TESTO');
 });
+
+test('replacing the i18n store on a connected editor renames the content and moves the subscription', async () => {
+  const counted = (name: string) => {
+    const store = createI18nStore({ locale: 'en', messages: { ...EN_MESSAGES, 'editor.content': name }, load: async (locale) => ({ locale, messages: { ...EN_MESSAGES, 'editor.content': `${name}-${locale}` } }), persist() {} });
+    const subscribe = store.subscribe.bind(store);
+    let active = 0;
+    store.subscribe = (listener) => {
+      active++;
+      const off = subscribe(listener);
+      return () => { active--; off(); };
+    };
+    return { store, active: () => active };
+  };
+  const a = counted('A-NAME');
+  const b = counted('B-NAME');
+  const { el } = mount('# A', 'a.md#1', a.store);
+  const content = el.querySelector('.cm-content')!;
+  assert.equal(content.getAttribute('aria-label'), 'A-NAME');
+  assert.deepEqual([a.active(), b.active()], [1, 0]);
+  el.i18n = b.store;
+  assert.equal(content.getAttribute('aria-label'), 'B-NAME');
+  assert.deepEqual([a.active(), b.active()], [0, 1]);
+  await b.store.setLocale('it');
+  assert.equal(content.getAttribute('aria-label'), 'B-NAME-it');
+  el.remove();
+});
