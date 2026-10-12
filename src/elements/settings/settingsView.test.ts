@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { commitDelay, commitWidths, sectionId, sectionOf, settingsSections, topSection, widthText } from './settingsView';
+import { commitDelay, commitWidths, currentSection, sectionId, sectionOf, settingsSections, widthText } from './settingsView';
 
 test('without the AI controller only the general section is shown, with it all four in order', () => {
   assert.deepEqual(settingsSections(false), ['general']);
@@ -15,15 +15,21 @@ test('section ids go both ways; an unknown or hidden section is null', () => {
   assert.equal(sectionOf('settings-nope', settingsSections(true)), null);
 });
 
-test('the index follows the topmost intersecting section; none intersecting leaves it alone', () => {
-  const sections = settingsSections(true);
-  const entries = [
-    { id: 'settings-ai-presets', top: 300, intersecting: true },
-    { id: 'settings-general', top: -900, intersecting: false },
-    { id: 'settings-ai-profiles', top: 20, intersecting: true },
+test('the current section: the last one whose top is in the upper 40 %, the last one at the end of the scroll', () => {
+  // Misure prese nel browser (1280×800) con tutte e quattro le sezioni: in fondo, Sync non arriva in cima.
+  const tops = (general: number, profiles: number, presets: number, sync: number) => [
+    { section: 'general' as const, top: general },
+    { section: 'ai-profiles' as const, top: profiles },
+    { section: 'ai-presets' as const, top: presets },
+    { section: 'ai-sync' as const, top: sync },
   ];
-  assert.equal(topSection(entries, sections), 'ai-profiles');
-  assert.equal(topSection([{ id: 'settings-general', top: 0, intersecting: false }], sections), null);
+  const view = (scrollTop: number) => ({ scrollTop, clientHeight: 800, scrollHeight: 1619 });
+  assert.equal(currentSection(tops(24, 747, 905, 1128), view(0)), 'general');
+  assert.equal(currentSection(tops(-723, 16, 174, 397), view(747)), 'ai-presets', 'presets entra nella fascia alta');
+  assert.equal(currentSection(tops(-795, -56, 102, 325), view(819)), 'ai-sync', 'in fondo: l\'ultima');
+  assert.equal(currentSection(tops(-795, -56, 102, 325), view(818.5)), 'ai-sync', 'mezzo pixel di arrotondamento');
+  assert.equal(currentSection(tops(-300, 400, 560, 780), view(300)), 'general', 'nessun titolo nella fascia: quella sopra');
+  assert.equal(currentSection([], view(0)), null);
 });
 
 test('text widths: an empty field is no limit, values are clamped, unchanged widths give no update', () => {
