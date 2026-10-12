@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Chiudere la migrazione a Web Components (spec §7 «Fase 8»): correggere i rilievi aperti di ciclo di vita, focus e annunci (review finale della 7b, LAB-42 P1–P12, handover 6c, 7 e 8), applicare a tutta l'app la regola di Davide «i pulsanti non diventano mai `disabled`», rendere distinguibili in `forced-colors` gli stati segnati solo dal colore, togliere i tre `!important` dei pulsanti del merge, misurare bundle e tempo di avvio contro la fase 3 e preparare la richiesta di merge dell'epica in `main` a Davide (checklist §9 in Chrome ed Edge). Due sotto-fasi (decisione 1): **8a** senza cambi d'aspetto voluti (comportamento, focus, annunci, nomi accessibili, refactoring), **8b** con i cambi d'aspetto passati prima da Designer (note «mai disabled», contorni in `forced-colors`, regioni live sempre presenti) e la chiusura della migrazione. Fuori: la rimozione dei toast (lavoro a sé dopo la migrazione); dei toast si corregge solo il riavvio dei timer, perché la correzione è piccola e misurata (decisione 9).
+**Goal:** Chiudere la migrazione a Web Components (spec §7 «Fase 8»): correggere i rilievi aperti di ciclo di vita, focus e annunci (review finale della 7b, LAB-42 P1–P12, handover 6c, 7 e 8), applicare a tutta l'app la regola di Davide «i pulsanti non diventano mai `disabled`», rendere distinguibili in `forced-colors` gli stati segnati solo dal colore, togliere i tre `!important` dei pulsanti del merge, misurare bundle e tempo di avvio contro la fase 3 e preparare la richiesta di merge dell'epica in `main` (la checklist §9 per Davide nella nota di chiusura; PR verso `main` e sub-issue «[Davide]» le apre il PM dopo il merge dell'8b). Due sotto-fasi (decisione 1): **8a** senza cambi d'aspetto voluti (comportamento, focus, annunci, nomi accessibili, refactoring), **8b** con i cambi d'aspetto passati prima da Designer (note «mai disabled», contorni in `forced-colors`, regioni live sempre presenti) e la chiusura della migrazione. Fuori: la rimozione dei toast (lavoro a sé dopo la migrazione); dei toast si corregge solo il riavvio dei timer, perché la correzione è piccola e misurata (decisione 9).
 
-**Architecture:** Nessun elemento nuovo. Le correzioni stanno negli elementi esistenti e, dove c'è una regola, in un modulo puro o in un helper del DOM testato da solo: `switchFolder` impara a fermarsi a metà (`signal`), `hmd-app` ha una vita nel documento (un `AbortController` che si interrompe al distacco, non a `reconnect()`) e riparte dall'avvio se viene riattaccato mentre la schermata è ancora `boot`; il recupero del focus usa il `focusScope`/`refocus` di `RenderLoop` già esistente (workspace, app, profili, preset), con bersagli stabili nuovi esposti come metodi (`hmd-file-tree.focusTabStop()`, `hmd-workspace.focusStart()`); il ri-annuncio della stessa nota passa da un helper nuovo, `src/dom/announce.ts` (svuota e riscrive al fotogramma dopo); le forme singolare e plurale da `pluralKey()` in `src/i18n/i18n.ts` (`Intl.PluralRules`, chiavi `<base>.one`/`<base>.other`); la sezione corrente dell'indice delle impostazioni da una funzione pura nuova in `settingsView.ts`. La regola «mai disabled» riusa lo schema della 6b e della 6c (nota `role="status"` accanto al pulsante, ragione calcolata da una funzione pura o dal controller, focus che resta sul pulsante). I contorni in `forced-colors` stanno in `@media (forced-colors: active)` dentro i fogli degli elementi (e in `global.css` per le icone), sempre nel layer `components` con `@scope`. I tre `!important` di `diff-pane.css` diventano un `StyleModule` di CodeMirror registrato dalla vista del diff (analisi del layer `vendor` nel piano 6c, decisione 10 di quel piano).
+**Architecture:** Nessun elemento nuovo. Le correzioni stanno negli elementi esistenti e, dove c'è una regola, in un modulo puro o in un helper del DOM testato da solo: `switchFolder` impara a fermarsi a metà (`signal`), `hmd-app` ha una vita nel documento (un `AbortController` che si interrompe al distacco, non a `reconnect()`) e riparte dall'avvio se viene riattaccato mentre la schermata è ancora `boot`; il recupero del focus usa il `focusScope`/`refocus` di `RenderLoop` già esistente (workspace, app, profili, preset), con bersagli stabili nuovi esposti come metodi (`hmd-file-tree.focusTabStop()`, `hmd-workspace.focusStart()`); il ri-annuncio della stessa nota passa da un helper nuovo, `src/dom/announce.ts` (svuota la regione e riscrive il testo dopo una pausa vera, `ANNOUNCE_DELAY_MS` = 150 ms); le forme singolare e plurale da `pluralKey()` in `src/i18n/i18n.ts` (`Intl.PluralRules`, chiavi `<base>.one`/`<base>.other`); la sezione corrente dell'indice delle impostazioni da una funzione pura nuova in `settingsView.ts`. La regola «mai disabled» riusa lo schema della 6b e della 6c (nota `role="status"` accanto al pulsante, ragione calcolata da una funzione pura o dal controller, focus che resta sul pulsante). I contorni in `forced-colors` stanno in `@media (forced-colors: active)` dentro i fogli degli elementi (e in `global.css` per le icone), sempre nel layer `components` con `@scope`. I tre `!important` di `diff-pane.css` diventano un `StyleModule` di CodeMirror registrato dalla vista del diff (analisi del layer `vendor` nel piano 6c, decisione 10 di quel piano).
 
 **Tech Stack:** TypeScript 7, Custom Elements, CSS `@scope`/`@layer`, `@media (forced-colors: active)`, `Intl.PluralRules`, CodeMirror 6 (`StyleModule` di `style-mod`, `EditorView.contentAttributes`), `tsx --test` con jsdom 30, Playwright 1.63 (`forcedColors: 'active'`).
 
@@ -14,7 +14,7 @@
 
 - **Branch** `lab/LAB-6-fase-8` creato da `epic/LAB-3-web-components` (merge della 7b `0cb7652`): ogni sub-issue di esecuzione dell'8a committa lì. PR in bozza #12 verso `epic/LAB-3-web-components`, aperta da questo piano (`gh pr create --draft --base epic/LAB-3-web-components`), portata a pronta dal task di chiusura dell'8a (`gh pr ready`). Con la divisione (decisione 1) la PR #12 è quella dell'8a; l'8b ha un branch `lab/LAB-6-fase-8b` creato da `epic/LAB-3-web-components` **dopo** il merge dell'8a, e una PR in bozza sua. Commit piccoli in italiano, all'imperativo, prefisso convenzionale (`test:`, `feat:`, `fix:`, `refactor:`, `docs:`, `chore:`), niente emoji, **nessuna riga di attribuzione**. Il daemon di Multica installa un hook `prepare-commit-msg` che aggiunge `Co-authored-by: multica-agent`: si committa con `git -c core.hooksPath=/dev/null commit …` e prima di ogni push si controlla `git log --format=%B -n <N>`. Mai push su `main` né sul branch dell'epica, nessun merge: la PR la mergia il PM dopo la review (Reviewer, A11y) e i gate verdi. Verso `main` mergia solo Davide.
 - **Task 1 prima di tutto**: la rete di sicurezza è scritta e verde **sull'app di oggi** (i difetti noti affermati come sono oggi, oppure rossi con il RED annotato), `dist-baseline/` costruita dal branch **prima di qualsiasi modifica all'app** (`git rev-parse HEAD > dist-baseline/BASELINE_SHA`, atteso `0cb7652` più i soli commit di test e documenti), conteggi delle suite, gzip del bundle e tempo di avvio annotati.
-- **`dist-baseline/` nell'8a non si ricostruisce mai.** L'8a non cambia l'aspetto di proposito: l'audit resta verde contro la build di `0cb7652` dal primo all'ultimo task, salvo gli stati elencati nel task che li tocca (sezione «Cambi d'aspetto»: solo nuovi nodi invisibili o testi, con le differenze attese scritte riga per riga). **Nell'8b** `dist-baseline/` si rinnova **una volta per task che cambia l'aspetto**, sempre con lo stesso rito: (1) prima del cambio l'audit è verde contro la baseline corrente; (2) dopo il cambio l'audit cade **solo** negli stati elencati dal task e **solo** sulle proprietà elencate (le righe di `styleDifferences` si incollano nel commento finale); (3) si ricostruisce la baseline dal commit del task (`npm run build && rm -rf dist-baseline && cp -r dist dist-baseline && git rev-parse HEAD > dist-baseline/BASELINE_SHA`) e l'audit torna verde. Ogni audit si lancia dopo `cat dist-baseline/BASELINE_SHA`. Attraversando il confine 8a/8b la baseline si copia dal checkout della chiusura dell'8a (strada (a)) o si ricostruisce in un worktree separato dallo SHA di quella chiusura (strada (b)); mai da una build di un commit sconosciuto.
+- **`dist-baseline/`: un solo rito, in 8a e in 8b.** Il Task 1 la costruisce da `0cb7652` (più i soli commit di test e documenti). Un task che cambia di proposito lo stile calcolato di qualche stato la rinnova **una volta**, sempre così: (1) prima del cambio l'audit **con `-g` sugli stati toccati** è verde contro la baseline corrente; (2) dopo il cambio lo stesso `-g` cade **solo** negli stati elencati dal task e **solo** sulle proprietà elencate (le righe di `styleDifferences` si incollano nel commento finale); (3) si ricostruisce la baseline dal commit del task (`npm run build && rm -rf dist-baseline && cp -r dist dist-baseline && git rev-parse HEAD > dist-baseline/BASELINE_SHA`) e lo stesso `-g` torna verde. Mai l'audit completo dentro un task: le suite complete girano solo nei Task 7 e 11. Con `-g` il progetto `baseline` gira comunque tutto, perché in Playwright 1.63 `current` dipende da `baseline` (e una sua instabilità nota ferma `current`: si ripete). Nell'8a rinnovano la baseline il **Task 2** (2 stati), il **Task 4** (10 stati) e il **Task 5** (2 stati): 14 stati in tutto, elencati in «Cambi d'aspetto»; i Task 3 e 6 la lasciano com'è. Nell'8b la rinnovano i Task 8, 9 e 10. Ogni audit si lancia dopo `cat dist-baseline/BASELINE_SHA`. Attraversando il confine 8a/8b la baseline si copia dal checkout della chiusura dell'8a (strada (a), `BASELINE_SHA` = il commit del Task 5, l'ultimo che l'ha rinnovata) o si ricostruisce in un worktree separato da quello SHA (strada (b)); mai da una build di un commit sconosciuto.
 - **Snapshot visivi**: nell'8a nessuno cambia (misurato nel prototipo). Nell'8b si rigenerano solo quelli elencati nel task, con il motivo, `--update-snapshots=all -g "<nome>"`, e solo dopo l'approvazione di Designer (sezione «Cambi d'aspetto»).
 - **Prima i test, poi il codice**: il RED si vede e si annota nel commento finale prima di scrivere il codice (nel dispatch va chiesto «test prima, poi il codice», non «scrivere tutto e ripristinare HEAD»). Un difetto noto si afferma com'è oggi nel Task 1 e si rovescia nel task che lo corregge; **mai `test.fail`**.
 - Regole degli elementi (spec §2, §5): elementi sottili, logica nei moduli puri testati senza DOM, DOM solo con `el()`, light DOM + `@scope`, ogni `addEventListener` verso nodi che sopravvivono all'elemento con il `signal`.
@@ -51,20 +51,20 @@ Misure sul prototipo finale (8a + le regole `forced-colors` dell'8b, senza le no
 | | Partenza (`0cb7652`) | Prototipo finale |
 |---|---|---|
 | `npx tsc --noEmit`, `npm run lint` | puliti | puliti |
-| `npm test` | 1045 (52 s) | **1069** (+30 test nuovi, 6 rinominati; dettaglio per task negli Step «gate») |
-| `npm run test:e2e` | 202 (200 + 2 noti), 3,0 min | **208** (206 + i 2 noti dello start screen), 2,7 min; snapshot invariati |
-| `npm run test:e2e:dev` | 187, 5,4 min | **193**, 5,0 min, console pulita |
-| `npm run test:e2e:audit` | 136, 4,2 min | 136 (125 verdi + 11 stati che cambiano **di proposito**, elencati qui sotto), 4,3 min |
+| `npm test` | 1045 (52 s) | **1075** (+30 test nuovi; 6 test esistenti rinominati o riscritti, che non cambiano il conteggio; dettaglio per task negli Step «gate») |
+| `npm run test:e2e` | 202 (200 + 2 noti), 3,0 min | **208** (206 + i 2 noti dello start screen), 2,7 min; snapshot invariati. Con le correzioni della review il Task 2 aggiunge 2 e2e (cartella vuota, decisione 18): attesi 210, verdi nei file toccati |
+| `npm run test:e2e:dev` | 187, 5,4 min | **193**, 5,0 min, console pulita (attesi 195 con i 2 del Task 2) |
+| `npm run test:e2e:audit` | 136, 4,2 min | 136 (125 verdi + 11 stati che cambiano **di proposito**, elencati qui sotto), 4,3 min; dopo le correzioni della review rimisurato solo con `-g`: gli stati dell'8a che cambiano diventano 14 |
 | bundle principale gzip | 379 234 B | **380 493 B** (+1 259 B: testi nuovi in nove lingue, `announce`, `pluralKey`, regole) |
 | avvio, `start` / `reopen` (21 giri, mediana) | 139 / 220 ms (fase 3: 206 / 228) | **138 / 215 ms** (fase 3 nello stesso giro: 204 / 239) |
 
-I 3 stati `forced-colors-*` del Task 1 non sono nel conteggio del prototipo (provati a parte sulla build di oggi: Task 1, «Esecuzione»). Differenze dell'audit contro la build di `0cb7652`, **tutte previste** e nessun'altra:
+Gli 8 stati `forced-colors-*` del Task 1 (4 schermate in chiaro e in scuro) non sono nel conteggio della tabella: provati a parte sulla build di oggi (Task 1, «Esecuzione»). I conteggi della tabella sono del primo giro; le correzioni della review (A–I del PM) portano `npm test` a 1075 (misurato) e cambiano gli stati di audit come sotto (misurato con `-g`). Differenze dell'audit contro la build di `0cb7652`, **tutte previste** e nessun'altra:
 
 - Task 2 (A2): `workspace-empty`, `toast`: `…>nav:2>ul:0>li:0>div:0>button:1 { opacity: 0 → 1 }` (aperta la cartella, il focus è sulla prima riga dell'albero e la riga con il focus mostra il suo «⋯»);
-- Task 4: `ai-review-generating`, `ai-review-note`, `ai-composer-running`: `…>hmd-ai-review-bar:0>span:2: nuovo` (P1); `ai-review-truncated`, `ai-review-warnings`: tooltip `content: "1 warnings" → "1 warning"`, `width: 80px → 73px` (P4); `ai-composer-note-no-document`: la nota più lunga va su più righe (12 righe di altezze e origini nella sidebar AI, LAB-10);
+- Task 4: `ai-review`, `ai-review-hover`, `ai-review-conflict`, `ai-chat-summary`, `ai-review-generating`, `ai-review-note`, `ai-composer-running`: `…>hmd-ai-review-bar:0>span:2: nuovo` (P1: la regione nascosta, in generazione o con l'esito «Proposal ready»); `ai-review-truncated`, `ai-review-warnings`: la stessa riga più il tooltip `content: "1 warnings" → "1 warning"`, `width: 80px → 73px` (P4); `ai-composer-note-no-document`: la nota più lunga va su più righe (12 righe di altezze e origini nella sidebar AI, LAB-10);
 - Task 5: `settings-preset`, `settings-sync-folder`: la voce corrente dell'indice (`background-color` su `a:3`/`a:4` invece di `a:2`);
-- nessuna differenza dai tre `!important` diventati `StyleModule` (stati `ai-review`, `ai-review-hover`, `ai-review-conflict`, `ai-review-applied` verdi);
-- solo 8b: `focus-search-keyboard-forced-colors` (le icone in `forced-colors` prendono `CanvasText`).
+- nessuna differenza dai tre `!important` diventati `StyleModule` (misurato al primo giro, prima dell'esito di P1: stati `ai-review`, `ai-review-hover`, `ai-review-conflict`, `ai-review-applied` verdi; `ai-review-applied` resta verde anche dopo);
+- solo 8b: `focus-search-keyboard-forced-colors` e gli 8 `forced-colors-*` (le icone prendono `CanvasText`, le voci correnti `Highlight`).
 
 Misurato anche:
 
@@ -73,8 +73,8 @@ Misurato anche:
 - **L'indice delle impostazioni**, nel browser (1280×800, quattro sezioni): saltando a «AI · Sync» il contenitore arriva in fondo (`scrollTop` 819 = `scrollHeight` 1619 − 800) con Sync a 325 px dall'alto, fuori dalla fascia del 40 % (320 px); Profili (−56 px, alto 117) e Preset (102 px) sono nella fascia e la regola di oggi («la più in alto tra quelle che si intersecano») sceglie Profili. Anche saltando a Preset l'indice dice Profili. Con la regola nuova (decisione 6) i tre salti segnano Sync, Preset, Profili, e la rotella dopo un salto torna a seguire lo scorrimento.
 - **A4 non si riproduce in Chromium senza screen reader**: cambiando lingua dalla select con `selectOption` o con Freccia giù (la lingua cambia davvero) il focus resta sulla select, lo stesso `hmd-settings` resta collegato. L'unico `focus()` sul titolo è in `connect` alla prima connessione. La causa va cercata con lo screen reader (decisione 12).
 - **Le icone in `forced-colors`**: oggi `background-color` dell'icona diventa Canvas (misurato: `rgb(255, 255, 255)` su sfondo bianco, la barra degli strumenti è vuota); con il solo `forced-color-adjust: none` l'icona prende il colore d'autore (`rgb(31, 29, 26)`), invisibile con un tema scuro ad alto contrasto; con `CanvasText` (proposta di LAB-42) è nera su bianco e bianca su nero, e con `HighlightText` sui pulsanti premuti resta leggibile sullo sfondo `Highlight`. Provato con `forcedColors: 'active'` in schema chiaro e scuro.
-- **Scarta durante la generazione, prima che arrivi una proposta**: `hmd-ai-review` chiamava `discard` solo con una proposta già presente, quindi Scarta non avrebbe fermato niente anche togliendo la nota. Il Task 5 usa il percorso del documento (`controller.discard(path)` ferma la richiesta in corso su quel percorso). Trovato dall'e2e del prototipo.
-- **L'orologio finto di Playwright ferma `requestAnimationFrame`**: con `page.clock.install()` la nota ri-annunciata (svuotata e riscritta al fotogramma dopo, Task 5) resta vuota finché il test non fa avanzare l'orologio (`page.clock.runFor(50)`). Vale per ogni e2e che clicca due volte lo stesso pulsante bloccato con l'orologio installato.
+- **Scarta durante la generazione, prima che arrivi una proposta**: `hmd-ai-review` chiamava `discard` solo con una proposta già presente, quindi Scarta non avrebbe fermato niente anche togliendo la nota. Il Task 4 usa il percorso del documento (`controller.discard(path)` ferma la richiesta in corso su quel percorso). Trovato dall'e2e del prototipo.
+- **L'orologio finto di Playwright ferma la pausa di `announce`**: con `page.clock.install()` la nota ri-annunciata (svuotata e riscritta dopo `ANNOUNCE_DELAY_MS`, Task 4) resta vuota finché il test non fa avanzare l'orologio (`page.clock.runFor(200)`, e il resto del tempo del test si conta da lì: misurato, «Generating… 2 s» arriva con `runFor(1500)` dopo tre pause). Vale per ogni e2e che clicca due volte lo stesso pulsante bloccato con l'orologio installato.
 - **Il quarto `!important`** non sta su `.cm-activeLine` (come diceva il piano 6c) ma su `.cm-selectionBackground` in `docExtensions.ts`, e combatte il tema base di `@codemirror/view` (`&light.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground`, specificità più alta): `Prec` da solo non basta (decisione 8).
 - **`style-mod`** è già nel bundle (dipendenza di `@codemirror/view`, `4.1.4`): dichiararlo in `package.json` con la stessa versione esatta non cambia il bundle e non scarica nulla.
 
@@ -86,10 +86,10 @@ Ogni punto del perimetro: dove sta, la causa, il test che lo copre, se cambia l'
 
 | Id | Dove | Causa | Test | Aspetto | Task |
 |---|---|---|---|---|---|
-| R1 | `src/elements/app/app.element.ts:147` (`#choose`), `:160` (`#resume`); `src/app/switchFolder.ts` | dopo gli `await` nessuno controlla se l'app è ancora collegata: lo workspace tardivo arriva a `#show` (schermata `open`, `setUpdateWorkspace`) e, nella scelta, `switchFolder` chiama `persist` | `app.dom.test.ts` «detached while a picked folder opens…», «…the resumed folder opens…»; `switchFolder.test.ts` «a switch whose caller goes away stops at the next await…» | no | 2 |
+| R1 | `src/elements/app/app.element.ts:147` (`#choose`), `:160` (`#resume`); `src/app/switchFolder.ts` | dopo gli `await` nessuno controlla se l'app è ancora collegata: lo workspace tardivo arriva a `#show` (schermata `open`, `setUpdateWorkspace`) e, nella scelta, `switchFolder` chiama `persist` | `app.dom.test.ts` «detached while a picked folder opens…», «…the resumed folder opens…», «…being recognised (knownWorkspaceId)…»; `switchFolder.test.ts` «a switch whose caller goes away stops at the next await…» | no | 2 |
 | R2 | `app.element.ts:73` e `:80` | `#booted = true` resta dopo il distacco che interrompe l'avvio: riattaccata, l'app non riparte e resta su `boot` | `app.dom.test.ts` «detached and reattached while booting…» | no | 2 |
-| A2 | `app.element.ts:171` | il pulsante della schermata iniziale, con il focus, sparisce con la schermata; nessuno sposta il focus | `app.dom.test.ts` «the focus follows the folder…»; e2e `startup.spec.ts` (nuovo caso) | no | 2 |
-| A1 | `src/elements/workspace/workspace.element.ts:532` (slot `aside`), `:669` («Nascondi» nella sidebar), `#changeMode('ai')` | il `RenderLoop` del workspace non ha `focusScope`/`refocus`: «Nascondi», Ctrl+B nell'albero o nella ricerca, la modalità AI che sostituisce l'albero tolgono il nodo con il focus | `workspace.dom.test.ts` «the focus never falls on the body when the sidebar goes…»; e2e `workspace-shell.spec.ts` (nuovi casi) | no | 3 |
+| A2 | `app.element.ts:171` | il pulsante della schermata iniziale, con il focus, sparisce con la schermata; nessuno sposta il focus | `app.dom.test.ts` «the focus follows the folder…», «an empty folder…» («Nuovo file»), «the saved folder reopened by the boot…» (il focus non si sposta, decisione 18); e2e `startup.spec.ts` (tre casi) | il «⋯» della riga con il focus (audit, 2 stati) | 2 |
+| A1 | `src/elements/workspace/workspace.element.ts:532` (slot `aside`), `:669` («Nascondi» nella sidebar), `#changeMode('ai')` | il `RenderLoop` del workspace non ha `focusScope`/`refocus`: «Nascondi», Ctrl+B nell'albero o nella ricerca, la modalità AI che sostituisce l'albero tolgono il nodo con il focus | `workspace.dom.test.ts` «the focus never falls on the body when the sidebar goes…», «leaving AI mode with the focus in the chat…»; e2e `workspace-shell.spec.ts` (nuovi casi) | no | 3 |
 | A5 | `src/elements/workspace/layout.ts:40` (`resizeByKey`) | solo frecce; l'APG del window splitter vuole anche Home ed End | `layout.test.ts` (esteso), `workspace.dom.test.ts` «the separator: Home and End…» | no | 3 |
 | T | `src/elements/toasts/toasts.element.ts:31`, `:88` (`#restartTimers`) | un array `items` nuovo (toast, errore AI, lingua) riavvia i timer di tutti i toast informativi | `toasts.dom.test.ts` «info toasts close 6 s after they appear…» (riscritto), «a toast that goes and comes back…» | no | 3 |
 | A4 | `src/elements/settings/settings.element.ts` (select della lingua) | **non riprodotta** in Chromium senza screen reader (misure); l'unico `focus()` sul titolo è alla prima connessione | e2e `theme-i18n.spec.ts` (nuovo: il focus resta sulla select) | no | 1 (+ checklist, decisione 12) |
@@ -107,7 +107,7 @@ Ogni punto del perimetro: dove sta, la causa, il test che lo copre, se cambia l'
 | Sezioni | `settings.element.ts:265`, `:274` | `<section>` senza `aria-labelledby`: gli e2e le raggiungono con `#settings-ai-presets` o per posizione | idem; e2e: via `#settings-ai-presets` (`settings-sections.spec.ts:109`, audit `:576`) e i localizzatori per posizione elencati nel Task 4 | no | 5 |
 | Indice | `settings.element.ts:395-410`, `settingsView.ts:32` (`topSection`), `settings.css:63` (40vh) | la regola sceglie la sezione più in alto tra quelle nella fascia del 40 %: le ultime sezioni, corte, non diventano mai correnti | `settingsView.test.ts` «the current section: the last one whose top is in the upper 40 %…»; e2e `settings-sections.spec.ts` (rovesciato: Sync) | **voce segnata** (audit `settings-preset`, `settings-sync-folder`: la voce corrente è quella giusta) | 5 |
 | P7 | `settings.css:57`, `sections.css:41` | voce corrente segnata solo da `--c-accent-soft`, che in `forced-colors` diventa Canvas | stato di audit `forced-colors-settings` (Task 1) | **sì** (solo `forced-colors`) | 10 |
-| P8 | `profiles.element.ts:247`, `:312` | il `p[role=status]` «Connesso» entra nel DOM già scritto | `profiles.dom.test.ts` «Connection: … the status enters empty and is written a frame later» | no (entra vuoto e il testo arriva al fotogramma dopo, con `announce`: decisione 4) | 5 |
+| P8 | `profiles.element.ts:247`, `:312` | il `p[role=status]` «Connesso» entra nel DOM già scritto | `profiles.dom.test.ts` «Connection: … entering empty and written a frame later» | no (entra vuoto e il testo arriva dopo `ANNOUNCE_DELAY_MS`, con `announce`: decisione 4) | 5 |
 
 **AI (LAB-42 P1–P4, handover 6c e 7, LAB-6)**
 
@@ -148,7 +148,9 @@ La fase 8 cambia l'aspetto di proposito, ma solo nell'8b. Ogni cambio visibile, 
 
 | # | Cambio | Dove si vede | Designer prima di Builder? | Sotto-fase, task |
 |---|---|---|---|---|
-| 1 | Regione live nascosta della generazione (`span.spoken`, `clip-path`) | nessuna parte: nodo nuovo invisibile | no | 8a, 4 |
+| 1 | Regione live nascosta della generazione (`span.spoken`, `clip-path`), che a generazione finita dice l'esito fino alla prossima azione | nessuna parte: nodo nuovo invisibile | no | 8a, 4 |
+| 1b | Una nota ri-annunciata sparisce per circa 150 ms (`ANNOUNCE_DELAY_MS`) e la barra perde per un attimo gli 8 px di `.note:not(:empty)` | barra della revisione, composer, Nuova chat, «Connesso» | no (A11y: conferma a chi vede che il clic è arrivato; il PM lo dice a Designer) | 8a, 4 e 5 |
+| 1c | Il «⋯» della prima riga dell'albero visibile dopo l'apertura della cartella (la riga ha il focus) | albero, appena aperta una cartella | no (è il comportamento della riga con il focus) | 8a, 2 |
 | 2 | Tooltip degli avvisi al singolare («1 warning») | tooltip al passaggio, nome accessibile | no | 8a, 4 |
 | 3 | Testo della nota «nessun documento» in modalità AI, più lungo (LAB-10) | nota sotto il composer | no (testo: lo rivede il Reviewer; A11y conferma che dice dove andare) | 8a, 4 |
 | 4 | Anello del focus sul titolo `h2` dopo un salto dall'indice da tastiera | impostazioni, solo da tastiera | no (è l'anello di sempre, `:focus-visible`) | 8a, 5 |
@@ -161,8 +163,8 @@ La fase 8 cambia l'aspetto di proposito, ma solo nell'8b. Ogni cambio visibile, 
 
 **`dist-baseline/` e snapshot.**
 
-- **8a.** Il Task 1 costruisce `dist-baseline/` da `0cb7652` più i soli commit di test (nessun commit dell'app), con `BASELINE_SHA`. Il **Task 2** cambia 2 stati (`workspace-empty`, `toast`: il «⋯» della riga che ora ha il focus). I Task 3 e 6 lasciano l'audit verde contro la baseline del momento (misurato). Il **Task 4** cambia di proposito 6 stati: `ai-review-generating`, `ai-review-note`, `ai-composer-running` (riga `span:2: nuovo`), `ai-review-truncated`, `ai-review-warnings` (tooltip al singolare), `ai-composer-note-no-document` (testo della nota). Il **Task 5** ne cambia 2: `settings-preset` e `settings-sync-folder` (la voce corrente dell'indice diventa Preset e Sync: è la correzione dell'indice, non uno stile). In entrambi: audit con `-g` di quegli stati, differenze identiche a quelle elencate (incollate nel commento), poi `dist-baseline/` ricostruita dal commit del task e audit completo verde. Nessuno snapshot cambia nell'8a (misurato: `visual.spec.ts` verde salvo i 2 noti).
-- **8b.** Ogni task che cambia l'aspetto segue il rito dei vincoli globali: audit verde prima, differenze solo negli stati e nelle proprietà elencati dal task, baseline ricostruita dal commit del task. Stati attesi: Task 8 `ai-review-conflict`, `ai-review-generating`, `ai-review-note` (pulsanti dei blocchi); Task 9 `settings-cloud-profile`, `settings-sync-folder`, `settings-connected`, `workspace-empty`, più gli stati che Designer tocca; Task 10 `focus-search-keyboard-forced-colors` e i tre stati `forced-colors-*` del Task 1. **Snapshot**: da rigenerare solo se il task li tocca davvero (`--update-snapshots=all -g "<nome>"`, con il motivo nel commento): i candidati sono `settings` (Task 9, se Designer mette una nota visibile senza interazione) e `ai-review` (Task 8, se cambia l'aspetto dei pulsanti dei blocchi a riposo). Nessuno snapshot è in `forced-colors`.
+- **8a.** Il Task 1 costruisce `dist-baseline/` da `0cb7652` più i soli commit di test (nessun commit dell'app), con `BASELINE_SHA`. Cambiano di proposito **14 stati in tre task**, tutti misurati nel prototipo con `-g`: il **Task 2** 2 (`workspace-empty`, `toast`: il «⋯» della riga che ora ha il focus); il **Task 4** 10 (`ai-review`, `ai-review-hover`, `ai-review-conflict`, `ai-chat-summary`, `ai-review-generating`, `ai-review-note`, `ai-composer-running`: la regione nascosta `span:2`; `ai-review-truncated`, `ai-review-warnings`: la stessa più il tooltip al singolare; `ai-composer-note-no-document`: il testo della nota); il **Task 5** 2 (`settings-preset`, `settings-sync-folder`: la voce corrente dell'indice diventa Preset e Sync, è la correzione dell'indice e non uno stile). Ognuno dei tre segue il rito dei vincoli globali (solo `-g`, mai l'audit completo). I Task 3 e 6 lasciano l'audit verde contro la baseline del momento (misurato). Nessuno snapshot cambia nell'8a (misurato: `visual.spec.ts` verde salvo i 2 noti).
+- **8b.** Ogni task che cambia l'aspetto segue il rito dei vincoli globali: audit verde prima, differenze solo negli stati e nelle proprietà elencati dal task, baseline ricostruita dal commit del task. Stati attesi: Task 8 `ai-review-conflict`, `ai-review-generating`, `ai-review-note` (pulsanti dei blocchi); Task 9 `settings-cloud-profile`, `settings-sync-folder`, `settings-connected`, `workspace-empty`, più gli stati che Designer tocca; Task 10 `focus-search-keyboard-forced-colors` e gli 8 stati `forced-colors-*` del Task 1. **Snapshot**: da rigenerare solo se il task li tocca davvero (`--update-snapshots=all -g "<nome>"`, con il motivo nel commento): i candidati sono `settings` (Task 9, se Designer mette una nota visibile senza interazione) e `ai-review` (Task 8, se cambia l'aspetto dei pulsanti dei blocchi a riposo). Nessuno snapshot è in `forced-colors`.
 
 ### Divisione
 
@@ -180,43 +182,44 @@ La fase è un insieme di rifiniture indipendenti, non una catena: l'app funziona
 | 8 | 8b | **Planner** | «Mai disabled» per i pulsanti dei blocchi del diff (controlli ricreati da CodeMirror, nota nella barra) | sì |
 | 9 | 8b | Builder | «Mai disabled» per Salva chiave, indirizzo, Sincronizza ora, Cronologia, cartella, schermata iniziale, Aggiorna | sì |
 | 10 | 8b | Builder | `forced-colors`: icone (P2), voce corrente (P7), modalità, bozza orfana e separatore (A3) | sì |
-| 11 | 8b | Builder | Documenti, misure, chiusura: suite complete, avvio contro la fase 3, spec §7/§11/§13, `CLAUDE.md`, `README.md`, nota di chiusura della migrazione, PR epica → `main` e sub-issue «[Davide]» | suite complete |
+| 11 | 8b | Builder | Documenti, misure, chiusura: suite complete, avvio contro la fase 3, spec §7/§11/§13, `CLAUDE.md`, `README.md`, nota di chiusura della migrazione con la checklist §9 per Davide, PR dell'8b pronta | suite complete |
 
 **Stage.** Tutti i task scrivono sullo stesso branch e quasi tutti toccano gli e2e: si eseguono **uno alla volta, uno per stage**, nell'ordine della tabella (così c'è sempre un solo task con e2e per stage, e nessun conflitto di git). In parallelo all'8a gira solo la sub-issue di Designer (nessun codice, nessun browser). Prima del Task 7 e del Task 11, review (Reviewer e A11y) del diff della sotto-fase; le correzioni della review sono il primo commit del task di chiusura, come nella 7b.
 
-**Task 4 e Task 8 a Planner.** Il 4 mette insieme tempi sottili (una nota svuotata e riscritta al fotogramma dopo, che l'orologio finto di Playwright ferma), la sessione di CodeMirror (un aggiornamento vuoto per il nome del contenuto passa dalla sessione e rompe un test: misurato), il percorso di Scarta senza proposta (trovato solo dall'e2e) e la bozza del composer che deve sopravvivere alla sidebar ricreata (non provata nel prototipo); è anche l'unico task dell'8a che rinnova la baseline. L'8 tocca i controlli che `@codemirror/merge` ricrea a ogni cambio dei blocchi, con il focus da tenere su un pulsante che può essere ricreato. Gli altri sono a Builder con il codice provato nel piano.
+**Task 4 e Task 8 a Planner.** Il 4 mette insieme tempi sottili (una nota svuotata e riscritta dopo `ANNOUNCE_DELAY_MS`, che l'orologio finto di Playwright ferma), la sessione di CodeMirror (un aggiornamento vuoto per il nome del contenuto passa dalla sessione e rompe un test: misurato), il percorso di Scarta senza proposta (trovato solo dall'e2e), la bozza del composer che sopravvive alla sidebar ricreata (provata nel prototipo: test jsdom «AI mode: the draft of the composer survives…» e l'e2e LAB-10 di `ai-review-bar.spec.ts`, verdi), l'esito della generazione che duplica un testo visibile; ed è il task dell'8a che cambia più stati di audit (10). L'8 tocca i controlli che `@codemirror/merge` ricrea a ogni cambio dei blocchi, con il focus da tenere su un pulsante che può essere ricreato. Gli altri sono a Builder con il codice provato nel piano.
 
-**Richiesta di merge a Davide.** Nel Task 11, dopo il merge dell'8b nell'epica: PR `epic/LAB-3-web-components` → `main` (`gh pr create --base main --head epic/LAB-3-web-components`, titolo «LAB-3: migrazione a Web Components», corpo con il riepilogo delle fasi 4–8 e le misure), e una sub-issue «[Davide] Checklist §9 in Chrome ed Edge e merge della migrazione in main» assegnata a davidemak con la checklist §9 completa (automatica già verde, manuale da fare: selettore e permessi veri, popover vicino ai bordi, transizione a pixel e `prefers-reduced-motion`, screen reader, `forced-colors` vero di Windows, Edge, PWA, AI con un provider vero), le prove a mano ancora aperte (LAB-52, i punti 7b dell'handover, A4 con lo screen reader), il link alla PR. Mergia solo Davide.
+**Richiesta di merge a Davide.** Il Task 11 si ferma alla PR dell'8b pronta, con la checklist §9 scritta nella nota di chiusura della migrazione. Dopo il merge dell'8b nell'epica, la PR `epic/LAB-3-web-components` → `main` e la sub-issue «[Davide] Checklist §9 in Chrome ed Edge e merge della migrazione in main» le apre il PM (wakeup già pronta su LAB-6). Mergia solo Davide.
 
 ### Decisioni (tra parentesi la raccomandazione; il PM decide e procede)
 
 1. **Due sotto-fasi, 8a e 8b** (sì). Varianti: **A** una PR sola (scartata: le note «mai disabled» aspettano Designer, e tutto il resto resterebbe fermo con loro); **B** (raccomandata) 8a = tutto quello che non cambia l'aspetto (Task 1–7, PR #12), 8b = i cambi d'aspetto dopo Designer e la chiusura della migrazione (Task 8–11, branch `lab/LAB-6-fase-8b` da `epic/LAB-3-web-components` dopo il merge dell'8a, PR in bozza nuova «LAB-6: fase 8b, regola «mai disabled» e contrasto elevato»); **C** una PR per area (app, workspace, impostazioni, AI) (scartata: quattro giri di suite complete e di review per rifiniture di poche decine di righe). Con A il Task 7 si salta.
 2. **Designer prima dei Task 8–10** (sì): la nota «mai disabled» nella barra degli strumenti e nella testata della sidebar non ha un posto oggi, e il segnale «in corso» della schermata iniziale e dell'avviso (`cursor: progress`, opacità) sparisce con `disabled`; i colori di sistema in `forced-colors` sono una scelta visiva. **Scartato**: Builder che decide da solo con lo schema del composer (la nota sotto la casella non ha un equivalente nella barra).
 3. **R1 e R2: `signal` in `switchFolder` e una vita di `hmd-app` nel documento** (sì, provata). `#alive` è un `AbortController` sostituito a ogni collegamento e interrotto al distacco (non a `reconnect()`, che succede cambiando lo store della lingua); avvio, scelta e ripresa catturano il suo `signal` e lo ricontrollano dopo ogni `await`; `switchFolder` lo riceve e si ferma prima di ogni effetto (apertura, `dispose` del vecchio, `persist`), eliminando la cartella appena aperta. L'avvio riparte a ogni collegamento finché la schermata è `boot`. **Scartate**: un contatore solo in `hmd-app` (il `persist` sta dentro `switchFolder`, dopo l'ultimo `await`: il controllo arriverebbe tardi); `isConnected` dopo ogni `await` (staccata e riattaccata tra due `await`, l'operazione vecchia passerebbe).
-4. **Una regione live che entra nel DOM si annuncia con `announce`: vuota all'ingresso, il testo al fotogramma dopo** (sì; P1, P8): nessun cambio d'aspetto (un fotogramma), nessun nodo sempre presente. **Scartata** per P8 la regione sempre nel DOM proposta da A11y: il `p` vuoto aggiunge 10 px di `gap` nel dettaglio (`.detail` è una colonna flex), quindi un cambio d'aspetto e un giro di Designer per una riga.
-5. **P1: una regione nascosta a parte, il contatore visibile non è più live** (sì, provata). Annuncia «Generating a proposal» all'avvio e «…, part n of m» quando cambia il progresso; i secondi restano visibili. **Scartate**: dividere il testo visibile in parti `aria-hidden` (nove traduzioni da ristrutturare, il contatore cambia DOM in tutti gli stati); togliere solo `aria-live` e contare sul registro della chat («Working…»: il progresso `n/m` non si sentirebbe).
+4. **Una regione live che entra nel DOM si annuncia con `announce`: vuota all'ingresso, il testo dopo `ANNOUNCE_DELAY_MS`** (sì; P1, P8, rivista dopo la review di A11y): nessun nodo sempre presente nel flusso. Per P8 la regione «Connesso» entra vuota e il testo arriva dopo la pausa. **Scartate**: il testo al fotogramma dopo (prima versione del piano: in Chrome il callback di `requestAnimationFrame` gira prima del calcolo dell'albero di accessibilità dello stesso aggiornamento, quindi l'albero vedrebbe la regione entrare già scritta, cioè il difetto di P8); la regione `p` sempre nel DOM (il `p` vuoto aggiunge 10 px di `gap` nel dettaglio, `.detail` è una colonna flex: un cambio d'aspetto); la variante di riserva di A11y, una regione permanente **nascosta** (`position: absolute`, fuori dal `gap`) accanto al «Connesso» visibile (funziona, ma duplica il testo per chi legge in modalità navigazione e serve solo se la pausa non convincesse: con la pausa non serve).
+5. **P1: una regione nascosta a parte, il contatore visibile non è più live; a generazione finita la regione dice l'esito** (sì, provata, completata dopo la review di A11y). Annuncia «Generating a proposal» all'avvio e «{done} of {total} parts ready» quando cambia il progresso; i secondi restano visibili e muti. Quando la generazione finisce resta e dice l'esito (`generationOutcome`: «Proposal ready for review.», parziale, troncata; niente senza una proposta, niente per la selezione persa che ha già il suo `role="alert"`), fino alla prossima azione della barra, a un'altra proposta o al distacco. Per chi legge in modalità navigazione il testo dello stato parziale o troncato compare due volte (visibile e regione) finché non arriva un'azione: accettato. **Scartate**: dividere il testo visibile in parti `aria-hidden` (nove traduzioni da ristrutturare, il contatore cambia DOM in tutti gli stati); togliere solo `aria-live` e contare sul registro della chat («Working…»: il progresso e l'esito non si sentirebbero); togliere la regione a fine generazione (prima versione: dopo le parti, silenzio).
 6. **L'indice delle impostazioni: regola nuova con «salto fissato»** (sì, provata nel browser). `currentSection()` in `settingsView.ts`: in fondo allo scorrimento l'ultima sezione, altrimenti l'ultima il cui inizio sta nel 40 % alto; un salto dall'indice o dalla rotta fissa la sezione chiesta finché chi usa la pagina non scorre altrove (si confronta lo `scrollTop` del salto). Un ascoltatore `scroll` al posto dell'`IntersectionObserver` (jsdom lo ha, il test lo vede). **Scartate**: più spazio in fondo al contenuto perché l'ultima sezione arrivi in cima (cambia il layout, una pagina vuota in fondo); un altro `rootMargin` (le sezioni corte in fondo non entrano in nessuna fascia).
-7. **LAB-11: la stessa nota a un altro clic si svuota e torna al fotogramma dopo** (sì, provata), con l'helper `announce(node, text, again)`; `again` solo quando la nota nuova è uguale a quella mostrata (o la regione è appena entrata). Vale per la barra della revisione, il composer e Nuova chat. **Scartate**: un carattere invisibile alternato in fondo alla nota (lo screen reader lo può leggere, e il testo nel DOM non è più quello di `t()`); ricreare il nodo della regione (meno affidabile di un cambio di testo in una regione esistente).
+7. **LAB-11: la stessa nota a un altro clic si svuota e torna dopo una pausa vera** (sì, provata, rivista dopo la review di A11y), con l'helper `announce(node, text, again)` e la costante unica `ANNOUNCE_DELAY_MS` = 150 ms (`setTimeout`, come il `LiveAnnouncer` di Angular CDK; react-aria usa 100 ms); `again` solo quando la nota nuova è uguale a quella mostrata (o la regione è appena entrata). Vale per la barra della revisione, il composer e Nuova chat. Effetto visibile: la nota sparisce per circa 150 ms (il PM lo dice a Designer). **Scartate**: un solo fotogramma (`requestAnimationFrame`: le due mutazioni arrivano allo stesso aggiornamento dell'albero di accessibilità, quindi niente annuncio); un carattere invisibile alternato in fondo alla nota (lo screen reader lo può leggere, e il testo nel DOM non è più quello di `t()`); ricreare il nodo della regione (meno affidabile di un cambio di testo in una regione esistente).
 8. **I tre `!important` diventano `StyleModule`; il quarto resta** (sì, provata: audit invariato). Il `StyleModule` sta nella stessa origine fuori dai layer degli stili di `@codemirror/merge`, con specificità più alta; `style-mod` si dichiara in `package.json` (`4.1.4`, esatta, già nel bundle). Il quarto (`.cm-selectionBackground` in `docExtensions.ts`) combatte un selettore del tema base di `@codemirror/view` con specificità più alta: toglierlo vorrebbe dire copiare quel selettore interno; resta con il suo commento, corretto (non è `.cm-activeLine`). **Scartati**: `EditorView.theme` (aggiunge un prefisso di classe dell'editor, e i pulsanti stanno fuori dagli editor); un layer `vendor` (analisi del piano 6c: CodeMirror non scrive nei layer).
 9. **Timer dei toast per chiave** (sì, provata): ogni toast informativo ha 6 s dalla sua comparsa; un array nuovo avvia solo i timer dei toast nuovi e ferma quelli spariti. Quindici righe e due test. **Scartato**: lasciarlo alla rimozione dei toast (lavoro lungo e non ancora pianificato, intanto i toast restano a schermo finché si scrive).
 10. **L'indirizzo per Anthropic: `readOnly` con la descrizione** (sì, da confermare con Designer): il campo resta raggiungibile e leggibile, lo screen reader dice «sola lettura», `aria-describedby` verso l'aiuto del provider. **Scartate**: nasconderlo per Anthropic (l'indirizzo fisso non si vedrebbe più); lasciarlo modificabile e ignorarlo (ingannevole).
 11. **`anchor-scope` sul chip: no** (sì): oggi c'è un solo chip (unico creatore: il composer, uno per pagina); `anchor-scope` cambierebbe lo stile calcolato di tutti gli stati AI dell'audit per un caso che non esiste. Se un giorno ci sono due chip, il test «two chips get different popover ids» va esteso e `anchor-scope: --ai-model-chip` aggiunto. **Scartato**: aggiungerlo adesso.
 12. **A4 resta aperto, con un test che afferma il comportamento misurato** (sì): non si riproduce in Chromium (il focus resta sulla select); il Task 1 aggiunge l'e2e «the focus stays on the language select», e la prova con lo screen reader va nella sub-issue di Davide e nella review di A11y dell'8a. Se A11y la riproduce, la correzione entra nell'8b. **Scartato**: spostare il focus da qualche parte «per sicurezza» (WCAG 3.2.2 chiede proprio che resti).
-13. **LAB-10: testo che dice dove andare e bozza conservata** (variante B, sì). **A** solo il testo (scartata: seguendo il consiglio si passa all'editor e la bozza scritta si perde); **B** (raccomandata) testo nuovo («No document open: switch to Editor and open one from the file tree, then send»), più la bozza del composer conservata da `hmd-workspace` quando la sidebar AI si ricrea (proprietà `draft` del composer, in entrata e in uscita con un evento `hmd-ai-draft`); **C** un elenco dei file dentro la modalità AI (scartata: interfaccia nuova, Designer, fuori perimetro).
+13. **LAB-10: testo che dice dove andare e bozza conservata** (variante B, sì). **A** solo il testo (scartata: seguendo il consiglio si passa all'editor e la bozza scritta si perde); **B** (raccomandata) testo nuovo con i nomi che lo screen reader legge («No document open: switch to Editor, open one from “Folder files”, then come back to send»: `mode.editor` e `tree.label`), più la bozza del composer conservata da `hmd-workspace` quando la sidebar AI si ricrea (proprietà `draft` del composer, in entrata e in uscita con un evento `hmd-ai-draft`); **C** un elenco dei file dentro la modalità AI (scartata: interfaccia nuova, Designer, fuori perimetro).
 14. **Icone in `forced-colors`: `CanvasText`, `HighlightText` sui pulsanti premuti** (sì, misurata). **Scartato** `forced-color-adjust: none` da solo (misurato: l'icona prende il colore d'autore, invisibile con un tema scuro).
 15. **Voce premuta o corrente in `forced-colors`: sfondo `Highlight`, testo `HighlightText`** (sì, da confermare con Designer): il modo di sistema per una selezione, nessuno spostamento del layout. **Scartati**: `outline` interno (si scontra con l'anello del focus, che usa `outline` e sta in un layer più debole: un pulsante premuto e con il focus perderebbe l'anello); un bordo (sposta il layout di 2 px solo in `forced-colors`).
-16. **Doppio clic su Invia: il secondo clic del doppio clic (`detail ≥ 2`) non ferma** (sì, provata). Un clic singolo o la tastiera (`detail` 0) fermano come prima; il nodo resta uno (decisione della 6b). **Scartate**: una finestra di 500 ms dopo l'invio (arbitraria, timer nei test); due nodi Invia e Stop (il focus salterebbe).
+16. **Doppio clic su Invia: si ignora solo il clic con `detail` uguale a quello dell'invio più uno** (sì, provata, rivista dopo la review di A11y). Il composer ricorda il `detail` del clic che ha inviato (nessuno se l'invio viene da Invio o da un suggerimento); su Stop scarta solo il clic successivo della stessa sequenza. Una serie rapida su Stop (`detail` 3, 4…: chi ha un tremore clicca così), un clic singolo e la tastiera (`detail` 0) fermano. Il nodo resta uno (decisione della 6b). **Scartate**: ignorare ogni `detail ≥ 2` (prima versione: una serie di clic rapidi non fermerebbe mai); una finestra di 500 ms dopo l'invio (arbitraria, timer nei test); due nodi Invia e Stop (il focus salterebbe).
 17. **Sincronizza ora durante una sync: la nota «sync già in corso» e nessuna sync accodata** (sì, da confermare con Designer per il testo). Oggi il pulsante è spento; attivo, un clic accoderebbe un'altra sync (`AiSync.syncNow` mette `pending`), che non è quello che chi clicca si aspetta.
+18. **Nella riapertura automatica all'avvio il focus non si sposta** (decisione del PM, dalla review di A11y contro quella del Reviewer). Lì non sparisce nessun nodo con il focus: al caricamento il focus sul `body` è normale, e spostarlo disorienta chi comincia a leggere dall'inizio della pagina. Il focus va nello workspace solo quando sparisce il pulsante che lo aveva (scelta della cartella e «Riprendi», che passano da `#exclusive`: Task 2). Test: «the saved folder reopened by the boot: the focus is not moved…» in `app.dom.test.ts` ed e2e «… (decision 18)» in `startup.spec.ts`. **Scartata**: il focus all'albero o al documento anche nel boot automatico.
 
 ## Review Focus
 
-1. **Nessun risultato tardivo con effetti** (8a, Task 2): ogni `await` di avvio, scelta e ripresa in `hmd-app` è seguito dal controllo del `signal` della vita dell'app; `switchFolder` non apre, non elimina il vecchio e non salva dopo un'interruzione; l'avvio riparte riattaccando, una sola volta. Test: i quattro nuovi di `app.dom.test.ts`, «a switch whose caller goes away…» di `switchFolder.test.ts`.
-2. **Il focus non cade mai sul `body`** (Task 2, 3, 5): bersagli stabili per la sidebar che sparisce, la schermata iniziale che sparisce, l'elenco dopo Elimina, il titolo dopo un salto dall'indice; il focus resta sulla select della lingua e sul pulsante attivato quando l'azione non è possibile. Test: `workspace.dom.test.ts`, `app.dom.test.ts`, `profiles`/`presets.dom.test.ts`, `settings.dom.test.ts`, e2e `workspace-shell.spec.ts`, `startup.spec.ts`, `settings.spec.ts`, `theme-i18n.spec.ts`.
-3. **Annunci** (Task 4, 5): il contatore non parla ogni secondo, la regione nascosta parla all'avvio e a ogni parte; la stessa nota a un altro clic si ri-annuncia; «Connesso» e la regione della generazione entrano vuote e si riempiono al fotogramma dopo; stato ed errore della sync sono regioni. `announce` non anticipa né perde un testo (test dei tre casi). Gli e2e con l'orologio finto fanno avanzare l'orologio dopo un clic ripetuto.
-4. **Scarta, Continua, doppio clic** (Task 4): Scarta durante la generazione ferma e scarta anche senza una proposta già arrivata; Continua durante un aggiornamento dice perché; il secondo clic di un doppio clic non ferma. Test: `reviewBarView.test.ts`, `review.dom.test.ts`, `composer.dom.test.ts`, e2e `ai-review-bar.spec.ts`, `ai-composer.spec.ts`.
-5. **Aspetto** (8a): audit verde contro `dist-baseline/` di `0cb7652` in ogni task salvo i 6 stati del Task 4, con le differenze elencate e nessun'altra; `StyleModule` al posto dei tre `!important` senza differenze; nessuno snapshot rigenerato. (8b): ogni rinnovo della baseline giustificato riga per riga, snapshot rigenerati solo se elencati.
+1. **Nessun risultato tardivo con effetti** (8a, Task 2): ogni `await` di avvio, scelta e ripresa in `hmd-app` è seguito dal controllo del `signal` della vita dell'app; `switchFolder` non apre, non elimina il vecchio e non salva dopo un'interruzione; l'avvio riparte riattaccando, una sola volta. Test: i cinque punti di sospensione (quattro in «a switch whose caller goes away…» di `switchFolder.test.ts`, `knownWorkspaceId` in `app.dom.test.ts`) e i test del distacco e dell'avvio di `app.dom.test.ts`; nel boot automatico il focus non si sposta (decisione 18).
+2. **Il focus non cade mai sul `body`** (Task 2, 3, 5): bersagli stabili per la sidebar che sparisce (anche uscendo dalla modalità AI con il focus nella chat: `focusStart()`), la schermata iniziale che sparisce (anche con una cartella vuota: «Nuovo file»), l'elenco dopo Elimina, il titolo dopo un salto dall'indice; il focus resta sulla select della lingua e sul pulsante attivato quando l'azione non è possibile. Test: `workspace.dom.test.ts`, `app.dom.test.ts`, `profiles`/`presets.dom.test.ts`, `settings.dom.test.ts`, e2e `workspace-shell.spec.ts`, `startup.spec.ts`, `settings.spec.ts`, `theme-i18n.spec.ts`.
+3. **Annunci** (Task 4, 5): il contatore non parla ogni secondo, la regione nascosta parla all'avvio e a ogni parte; la stessa nota a un altro clic si ri-annuncia; «Connesso» e la regione della generazione entrano vuote e si riempiono dopo `ANNOUNCE_DELAY_MS`; a generazione finita la regione dice l'esito; stato ed errore della sync sono regioni. `announce` non anticipa né perde un testo (test dei tre casi). Gli e2e con l'orologio finto fanno avanzare l'orologio dopo un clic ripetuto.
+4. **Scarta, Continua, doppio clic** (Task 4): Scarta durante la generazione ferma e scarta anche senza una proposta già arrivata; Continua durante un aggiornamento dice perché; il secondo clic di un doppio clic non ferma, una serie rapida sì. Test: `reviewBarView.test.ts`, `review.dom.test.ts`, `composer.dom.test.ts`, e2e `ai-review-bar.spec.ts`, `ai-composer.spec.ts`.
+5. **Aspetto** (8a): in ogni task audit con `-g` verde contro la baseline del momento, salvo i 14 stati dei Task 2 (2), 4 (10) e 5 (2), con le differenze elencate e nessun'altra, e la baseline rinnovata in quei tre task; `StyleModule` al posto dei tre `!important` senza differenze; nessuno snapshot rigenerato. (8b): ogni rinnovo della baseline giustificato riga per riga, snapshot rigenerati solo se elencati.
 6. **Regola «mai disabled» completa** (8b): `grep -rn "disabled" src --include=*.ts` mostra solo test che affermano `disabled === false` e nessun `aria-disabled`; ogni pulsante bloccato dice perché in una nota `role="status"` accanto, il focus resta, la nota si svuota quando la causa sparisce. Test per ogni pulsante (Task 8, 9).
-7. **`forced-colors`** (8b, Task 10): icone, voce corrente, modalità premuta, bozza orfana, separatore distinguibili in schema chiaro e scuro (`forcedColors: 'active'`), stati di audit `forced-colors-*` rinnovati con il motivo.
+7. **`forced-colors`** (8b, Task 10): icone, voce corrente, modalità premuta, bozza orfana corrente, separatore distinguibili in schema chiaro e scuro (`forcedColors: 'active'`): gli 8 stati di audit `forced-colors-*` del Task 1 (workspace, impostazioni, revisione, bozza orfana corrente, ognuno in chiaro e in scuro) rinnovati con il motivo.
 8. **Testi** (Task 4, 5, 9): ogni chiave nuova in tutte e nove le lingue, `pluralKey` con `Intl.PluralRules`, traduzioni plausibili (il Reviewer le legge).
 
 ---
@@ -226,7 +229,7 @@ La fase è un insieme di rifiniture indipendenti, non una catena: l'app funziona
 | File | Responsabilità |
 |---|---|
 | `e2e/startup.config.ts`, `e2e/startup.measure.ts`, `.gitignore` (`dist-phase3`) | Misura ripetibile del tempo di avvio contro la fase 3 (Task 1, rilanciata nel Task 11). |
-| `e2e/computed-styles.audit.ts` (stati `forced-colors-workspace`, `forced-colors-settings`, `forced-colors-review`), e2e toccati nei Task 1–5 | Rete di sicurezza e test dei comportamenti nuovi. |
+| `e2e/computed-styles.audit.ts` (8 stati `forced-colors-*`: workspace, impostazioni, revisione e bozza orfana corrente, in chiaro e in scuro), e2e toccati nei Task 1–5 | Rete di sicurezza e test dei comportamenti nuovi. |
 | `src/app/switchFolder.ts` (+ test), `src/elements/app/app.element.ts` (+ `.dom.test.ts`) | Vita dell'app, avvio, scelta e ripresa (Task 2). |
 | `src/elements/file-tree/file-tree.element.ts` (`focusTabStop()`), `src/elements/workspace/workspace.element.ts` (`focusStart()`, `focusScope`/`refocus`), `layout.ts` (+ test), `src/elements/toasts/toasts.element.ts` (+ test) | Focus e separatore del workspace, timer dei toast (Task 2, 3). |
 | `src/dom/announce.ts` (+ test) | Testo di una regione live che si ri-annuncia (Task 4). |
@@ -408,19 +411,32 @@ test('startup: current build against phase 3', async ({}, testInfo) => {
 
 Lanciare **dentro il lock, da solo**: `E2E_WORKERS=1 flock /home/agent/work/.browser-tests.lock npx playwright test -c e2e/startup.config.ts` (circa 1 minuto e mezzo con 21 giri). Atteso (misurato scrivendo il piano): `phase3` `start` ≈ 206 ms, `reopen` ≈ 228 ms; `current` `start` ≈ 139 ms, `reopen` ≈ 220 ms. Incollare nel commento finale le due mediane per build e gli intervalli p25–p75 (da `test-results/startup.json`). A fine misura `pgrep -af "vite|chrom|playwright"`: le due `vite preview` le chiude Playwright; chiudere solo i propri PID rimasti. Il worktree `../housemd-phase3` si rimuove (`git worktree remove ../housemd-phase3`); `dist-phase3/` resta nel checkout per il Task 11.
 
-- [ ] **Step 4: tre stati di audit in `forced-colors`.** In `e2e/computed-styles.audit.ts`, subito dopo la chiusura dell'array `STATES`:
+- [ ] **Step 4: otto stati di audit in `forced-colors`.** Quattro schermate già note (workspace, impostazioni con un profilo aperto, revisione, bozza orfana corrente), ognuna in schema chiaro e scuro. In `e2e/computed-styles.audit.ts`, subito dopo la chiusura dell'array `STATES`:
 
 ```ts
-// Rete della fase 8 (Task 1): tre stati già noti, ripresi in forced-colors (icone, voce corrente, modalità,
-// separatore). Oggi registrano il difetto (sfondi portati a Canvas); il Task 10 li cambia di proposito.
+// Rete della fase 8 (Task 1): stati già noti ripresi in forced-colors, in schema chiaro e scuro (icone, voce
+// corrente, modalità, bozza orfana corrente, separatore). Oggi registrano il difetto (sfondi portati a Canvas);
+// il Task 10 li cambia di proposito.
+const orphanCurrent: State = {
+  name: 'orphans-current',
+  async setup(app, page, ai) {
+    await STATES.find((s) => s.name === 'orphans')!.setup(app, page, ai);
+    // Dopo il ricaricamento la bozza orfana è riaperta (ultimo file con bozza): la sua voce è quella corrente.
+    const orphan = page.getByRole('region', { name: app.t('orphans.title') }).getByRole('button', { name: 'note.md', exact: true });
+    await expect(orphan).toHaveAttribute('aria-current', 'true');
+  },
+};
 for (const [name, from] of [
-  ['forced-colors-workspace', 'workspace-light'],
-  ['forced-colors-settings', 'settings-profile'],
-  ['forced-colors-review', 'ai-review'],
+  ['forced-colors-workspace', STATES.find((s) => s.name === 'workspace-light')!],
+  ['forced-colors-settings', STATES.find((s) => s.name === 'settings-profile')!],
+  ['forced-colors-review', STATES.find((s) => s.name === 'ai-review')!],
+  ['forced-colors-orphans', orphanCurrent],
 ] as const) {
-  STATES.push({ ...STATES.find((s) => s.name === from)!, name, scheme: 'light', forcedColors: true });
+  for (const scheme of ['light', 'dark'] as const) STATES.push({ ...from, name: `${name}-${scheme}`, scheme, forcedColors: true });
 }
 ```
+
+Lo stato `orphans` lascia la bozza orfana riaperta dopo il ricaricamento, quindi la sua voce è già quella corrente: un clic in più la toglie dall'elenco (misurato, prima versione), per questo si aspetta solo `aria-current`. Lo stato ricarica la pagina: in caso di «Target page… closed» si ripete da solo.
 
 - [ ] **Step 5: e2e dei difetti di oggi.** In fondo a `e2e/workspace-shell.spec.ts`:
 
@@ -503,22 +519,24 @@ cat dist-baseline/BASELINE_SHA
 E2E_WORKERS=2 flock /home/agent/work/.browser-tests.lock npx playwright test -c e2e/audit.config.ts -g "forced-colors"
 ```
 
-Attesi tutti verdi sull'app di oggi (i quattro stati con `forced-colors` nel nome: i tre nuovi e `focus-search-keyboard-forced-colors`; il progetto `baseline` gira comunque tutto). Un rosso qui vuol dire che il test non descrive l'app di oggi: si corregge il test, non l'app. A fine suite `pgrep -af "vite|chrom|playwright"`.
+Attesi tutti verdi sull'app di oggi (i nove stati con `forced-colors` nel nome: gli otto nuovi e `focus-search-keyboard-forced-colors`; il progetto `baseline` gira comunque tutto: **85** test). Un rosso qui vuol dire che il test non descrive l'app di oggi: si corregge il test, non l'app. A fine suite `pgrep -af "vite|chrom|playwright"`.
 
 - [ ] **Step 8: commit** (piccoli, uno per gruppo: `test: misura ripetibile dell'avvio contro la fase 3`, `test: stati di audit in forced-colors`, `test: difetti di focus, Esc e doppio clic affermati come sono oggi`), `git -c core.hooksPath=/dev/null commit`, `git log --format=%B -n 3` senza `Co-authored-by`, push. Commento finale: `BASELINE_SHA`, conteggi (`npm test` 1045 invariato; e2e toccati, dev, audit con `-g`), misura dell'avvio, gzip.
 
-**Esecuzione (prototipo, 12/10).** I test dello Step 5 e gli stati dello Step 4 girati sulla build di `0cb7652`, nel lock: i cinque file in build **44** verdi (36 s), in sviluppo **43** verdi (1,3 min, console pulita), audit con `-g "forced-colors"` **75** verdi (il progetto `baseline` intero più i quattro stati `forced-colors` del `current`; 2,2 min). Tre correzioni ai test durante la prova, già nel codice qui sopra: il test P5 apriva la cartella due volte (il `beforeEach` la apre già: «Target page… closed»), il test A4 cercava la select con l'etichetta inglese dopo aver cambiato lingua, il test del doppio clic usava `dblclick()`.
+**Esecuzione (prototipo, 12/10).** I test dello Step 5 e gli stati dello Step 4 girati sulla build di `0cb7652`, nel lock: i cinque file in build **44** verdi (36 s), in sviluppo **43** verdi (1,3 min, console pulita), audit con `-g "forced-colors"` **75** verdi con i tre stati della prima versione (2,2 min); con gli otto della versione corretta (bozza orfana corrente, schema scuro: review del piano) **85** verdi (76 del progetto `baseline` più i 9 `forced-colors` del `current`; 2,9 min). Tre correzioni ai test durante la prova, già nel codice qui sopra: il test P5 apriva la cartella due volte (il `beforeEach` la apre già: «Target page… closed»), il test A4 cercava la select con l'etichetta inglese dopo aver cambiato lingua, il test del doppio clic usava `dblclick()`.
 
 ### Task 2: `hmd-app` — risultati tardivi, avvio che riparte, focus dopo l'apertura (Builder)
 
 **Files:**
 - Modify: `src/app/switchFolder.ts` (+ `switchFolder.test.ts`), `src/elements/app/app.element.ts` (+ `app.dom.test.ts`), `src/elements/file-tree/file-tree.element.ts`, `src/elements/workspace/workspace.element.ts` (solo `focusStart()`), `e2e/startup.spec.ts`
 
-R1, R2 (review della 7b) e A2. Il codice qui sotto è quello del prototipo, con i test verdi in jsdom e l'e2e verde nel browser (decisione 3).
+R1, R2 (review della 7b) e A2, con le decisioni 3 e 18. Il codice qui sotto è quello del prototipo, con i test verdi in jsdom e gli e2e verdi nel browser.
 
-**A2, misurato nel browser.** Il recupero con `focusScope`/`refocus` del `RenderLoop` (la prima versione del prototipo, verde in jsdom) nel browser non scatta: durante il cambio la schermata iniziale è `busy` e mette i suoi pulsanti `disabled`, e Chrome toglie subito il focus a un pulsante che diventa `disabled`; quando la schermata sparisce il focus è già sul `body`. Per questo `hmd-app` guarda il focus **all'inizio** dell'operazione (in `#exclusive`, prima di `busy`) e lo porta nello workspace quando l'apertura riesce. Il test jsdom simula Chrome con un `blur()` esplicito, con il commento. (Una scelta annullata lascia comunque il focus sul `body`, per lo stesso `disabled`: lo corregge la regola «mai disabled» sulla schermata iniziale, Task 9.)
+**Cinque punti di sospensione.** Avvio, scelta e ripresa ricontrollano il `signal` della vita dell'app dopo ogni `await`: i quattro di `switchFolder` (scelta, prima messa al sicuro, apertura, seconda messa al sicuro) e, nella callback `open` di `hmd-app`, quello di `knownWorkspaceId`, prima di `openWorkspace` (altrimenti una cartella si costruisce e carica tutti i file per essere buttata alla fine).
 
-- [ ] **Step 1: test che falliscono** (RED da annotare). Le tre riproduzioni dell'allegato di LAB-54 diventano test di `app.dom.test.ts` (stesso `deps()` e `mount()` del file), più il focus (A2) e il `signal` di `switchFolder`:
+**A2, misurato nel browser.** Il recupero con `focusScope`/`refocus` del `RenderLoop` (la prima versione del prototipo, verde in jsdom) nel browser non scatta: durante il cambio la schermata iniziale è `busy` e mette i suoi pulsanti `disabled`, e Chrome toglie subito il focus a un pulsante che diventa `disabled`; quando la schermata sparisce il focus è già sul `body`. Per questo `hmd-app` guarda il focus **all'inizio** dell'operazione (in `#exclusive`, prima di `busy`) e lo porta nello workspace quando l'apertura riesce. Il test jsdom simula Chrome con un `blur()` esplicito, con il commento. Bersagli di `focusStart()`: la riga col tab stop dell'albero; con l'albero vuoto (cartella senza file: `tabStop()` è `null`) «Nuovo file» nella testata della sidebar; con la sidebar nascosta «Mostra sidebar». **Nel boot automatico il focus non si sposta** (decisione 18): lì non sparisce nessun nodo con il focus. (Una scelta annullata lascia comunque il focus sul `body`, per lo stesso `disabled`: lo corregge la regola «mai disabled» sulla schermata iniziale, Task 9.)
+
+- [ ] **Step 1: test che falliscono** (RED da annotare). Le tre riproduzioni dell'allegato di LAB-54 diventano test di `app.dom.test.ts` (stesso `deps()` e `mount()` del file), più il quinto punto di sospensione, il focus (A2, anche con una cartella vuota), il boot che non sposta il focus e il `signal` di `switchFolder`:
 
 ```diff
 diff --git a/src/app/switchFolder.test.ts b/src/app/switchFolder.test.ts
@@ -554,10 +572,10 @@ index 0bb0558..11e6908 100644
 +  }
 +});
 diff --git a/src/elements/app/app.dom.test.ts b/src/elements/app/app.dom.test.ts
-index c751db3..521144e 100644
+index c751db3..49c5c5e 100644
 --- a/src/elements/app/app.dom.test.ts
 +++ b/src/elements/app/app.dom.test.ts
-@@ -144,3 +144,63 @@ test('detached while the folder is opening: the folder opened afterwards is disp
+@@ -144,3 +144,104 @@ test('detached while the folder is opening: the folder opened afterwards is disp
    await waitFor(() => disposed.length === 1);
    assert.equal(el.screen, 'boot');
  });
@@ -621,9 +639,50 @@ index c751db3..521144e 100644
 +    el.remove();
 +  }
 +});
++
++test('detached while the picked folder is being recognised (knownWorkspaceId): it is not even opened', async () => {
++  let release: () => void = () => {};
++  const gate = new Promise<void>((resolve) => (release = resolve));
++  let asked = false;
++  const { deps: d, opened, log } = deps({ knownWorkspaceId: async () => ((asked = true), await gate, null) });
++  const el = mount(d);
++  await waitFor(() => el.screen === 'start');
++  el.querySelector('hmd-start-screen')!.dispatchEvent(new CustomEvent('hmd-start-pick', { bubbles: true }));
++  await waitFor(() => asked);
++  el.remove();
++  release();
++  await new Promise((resolve) => setTimeout(resolve, 30));
++  assert.equal(opened.length, 0, 'openWorkspace mai chiamato');
++  assert.deepEqual(log.filter((line) => line !== 'update none'), []);
++});
++
++test('an empty folder picked from the start screen: the focus goes to New file in the sidebar header', async () => {
++  const { deps: d } = deps();
++  d.openWorkspace = async (stored) => {
++    const workspace = new Workspace({ fs: createWorkspaceFS(memoryOps()), workspaceId: stored.workspaceId, name: stored.handle.name, buffers: memoryBufferStore() });
++    await workspace.load();
++    return workspace;
++  };
++  const el = mount(d);
++  await waitFor(() => el.screen === 'start');
++  const button = [...el.querySelectorAll<HTMLButtonElement>('hmd-start-screen button')].find((b) => b.textContent === EN_MESSAGES['start.openFolder'])!;
++  button.focus();
++  button.click();
++  button.blur();
++  await waitFor(() => el.screen === 'open');
++  const active = document.activeElement;
++  assert.ok(active?.getAttribute('aria-label') === EN_MESSAGES['file.new'] && !!active.closest('aside'), `New file in the sidebar, not ${active?.localName} ${active?.getAttribute('aria-label')}`);
++});
++
++test('the saved folder reopened by the boot: the focus is not moved (nothing that had it went away)', async () => {
++  const el = mount(deps({ loadWorkspace: async () => ({ handle: handle('notes'), workspaceId: 'w' }) }).deps);
++  await waitFor(() => el.screen === 'open');
++  await new Promise((resolve) => setTimeout(resolve, 30));
++  assert.ok(document.activeElement === document.body, `body, not ${document.activeElement?.localName}`);
++});
 ```
 
-RED atteso (misurato): `switchFolder.test.ts` 1 rosso («a switch whose caller goes away…»); `app.dom.test.ts` 4 rossi: i due «detached while … opens» (la cartella tardiva non viene eliminata, `log` contiene `update open` e, nella scelta, `save picked`), «detached and reattached while booting» (`waitFor` scade: la schermata resta `boot`), «the focus follows the folder» (`pick: … not body`).
+RED atteso (misurato): `switchFolder.test.ts` 1 rosso («a switch whose caller goes away…»); `app.dom.test.ts` 6 rossi: i due «detached while … opens» (la cartella tardiva non viene eliminata, `log` contiene `update open` e, nella scelta, `save picked`), «detached while the picked folder is being recognised» (`openWorkspace mai chiamato`), «detached and reattached while booting» (`waitFor` scade: la schermata resta `boot`), «the focus follows the folder» (`pick: … not body`), «an empty folder…» (`New file in the sidebar, not body`). «the saved folder reopened by the boot…» è verde già oggi e deve restarlo.
 
 - [ ] **Step 2: `switchFolder` con `signal`, `hmd-app` con la vita nel documento e il focus catturato all'inizio.**
 
@@ -684,7 +743,7 @@ index c48a2b6..4aa487d 100644
    deps.persist?.(value);
    return { kind: 'opened', value };
 diff --git a/src/elements/app/app.element.ts b/src/elements/app/app.element.ts
-index 102ff4c..090ff33 100644
+index 102ff4c..cfcd938 100644
 --- a/src/elements/app/app.element.ts
 +++ b/src/elements/app/app.element.ts
 @@ -38,8 +38,14 @@ export class HmdApp extends HmdElement {
@@ -755,7 +814,7 @@ index 102ff4c..090ff33 100644
        this.#show({ kind: 'open', stored, workspace });
      })();
    }
-@@ -112,27 +120,36 @@ export class HmdApp extends HmdElement {
+@@ -112,30 +120,41 @@ export class HmdApp extends HmdElement {
      this.#screen = screen;
      this.#deps.setUpdateWorkspace(screen.kind === 'open' ? screen.workspace : null);
      this.#loop.update();
@@ -792,7 +851,12 @@ index 102ff4c..090ff33 100644
          open: async (handle: FileSystemDirectoryHandle) => {
            // Una cartella già aperta in passato tiene il suo workspaceId (bozze e ultimo file restano suoi).
            const workspaceId = (await deps.knownWorkspaceId(handle).catch(() => null)) ?? crypto.randomUUID();
-@@ -144,6 +161,7 @@ export class HmdApp extends HmdElement {
++          // Staccata nel frattempo: niente apertura (l'errore finisce in switchFolder, che lo ignora dopo il distacco).
++          if (signal.aborted) throw new DOMException('hmd-app staccato', 'AbortError');
+           const stored: StoredWorkspace = { handle, workspaceId };
+           return { stored, workspace: await deps.openWorkspace(stored) };
+         },
+@@ -144,6 +163,7 @@ export class HmdApp extends HmdElement {
          // La cartella vecchia non si è potuta lasciare: quella nuova, già caricata, si butta.
          discard: ({ workspace }) => workspace.dispose(),
        });
@@ -800,7 +864,7 @@ index 102ff4c..090ff33 100644
        match(afterSwitch(result, current !== null))
          .with({ kind: 'show' }, ({ screen: next }) => this.#show(next))
          .with({ kind: 'reportError' }, ({ detail }) => current?.reportFolderError(detail))
-@@ -154,11 +172,14 @@ export class HmdApp extends HmdElement {
+@@ -154,11 +174,14 @@ export class HmdApp extends HmdElement {
  
    #resume(): void {
      const deps = this.#deps;
@@ -818,14 +882,14 @@ index 102ff4c..090ff33 100644
    }
 ```
 
-- [ ] **Step 3: i due bersagli del focus.** In `src/elements/file-tree/file-tree.element.ts` il recupero esistente diventa un metodo pubblico:
+- [ ] **Step 3: i bersagli del focus.** In `src/elements/file-tree/file-tree.element.ts` il recupero esistente diventa un metodo pubblico, che dice se ha trovato una riga:
 
 ```diff
 diff --git a/src/elements/file-tree/file-tree.element.ts b/src/elements/file-tree/file-tree.element.ts
-index dee118f..6b7fb39 100644
+index dee118f..b309472 100644
 --- a/src/elements/file-tree/file-tree.element.ts
 +++ b/src/elements/file-tree/file-tree.element.ts
-@@ -76,12 +76,15 @@ export class HmdFileTree extends HmdElement {
+@@ -76,12 +76,20 @@ export class HmdFileTree extends HmdElement {
      focusScope: () => this.#parts?.nav ?? null,
      // La riga con il focus è sparita (file eliminato o rinominato): il focus va sulla riga col tab stop
      // (il suo focusin ricalcola i tab stop).
@@ -833,13 +897,18 @@ index dee118f..6b7fb39 100644
 -      const stop = tabStop(this.#items, this.#focused, this.#openPath);
 -      if (stop !== null) this.#focusables.get(stop)?.focus();
 -    },
-+    refocus: () => this.focusTabStop(),
++    refocus: () => void this.focusTabStop(),
    });
  
-+  /** Focus sulla riga col tab stop (il file aperto, o la prima riga): l'ingresso nell'albero da fuori. */
-+  focusTabStop(): void {
++  /**
++   * Focus sulla riga col tab stop (il file aperto, o la prima riga): l'ingresso nell'albero da fuori. Falso con
++   * l'albero vuoto (nessuna riga da raggiungere): chi chiama sceglie un altro bersaglio.
++   */
++  focusTabStop(): boolean {
 +    const stop = tabStop(this.#items, this.#focused, this.#openPath);
-+    if (stop !== null) this.#focusables.get(stop)?.focus();
++    const row = stop === null ? undefined : this.#focusables.get(stop);
++    row?.focus();
++    return !!row;
 +  }
 +
    get nodes(): readonly TreeNode[] { return this.#nodes; }
@@ -851,28 +920,48 @@ In `src/elements/workspace/workspace.element.ts`, subito sopra `get workspace()`
 
 ```ts
   /**
-   * Il primo focus dopo l'apertura della cartella (il pulsante della schermata iniziale è sparito): la riga col
-   * tab stop dell'albero; con la sidebar nascosta, «Mostra sidebar» nella barra.
+   * Il focus d'ingresso nello workspace (dopo l'apertura della cartella, o quando la sidebar cambia sotto il
+   * focus): la riga col tab stop dell'albero; con l'albero vuoto «Nuovo file» nella testata della sidebar (l'azione
+   * utile in una cartella vuota); con la sidebar nascosta «Mostra sidebar» nella barra.
    */
   focusStart(): void {
-    const tree = this.#slots.tree;
-    if (tree) tree.focusTabStop();
-    else this.#parts?.toggle.focus();
+    if (this.#slots.tree?.focusTabStop()) return;
+    const newFile = this.#slots.treeHeader?.children[2] as HTMLElement | undefined;
+    (newFile ?? this.#parts?.toggle)?.focus();
   }
 ```
 
-- [ ] **Step 4: verde.** `npx tsx --import ./src/testing/assetHooks.ts --test --test-timeout=20000 src/app/switchFolder.test.ts src/elements/app/app.dom.test.ts src/elements/file-tree/*.test.ts` (atteso: tutto verde; `app.dom.test.ts` 10 test). Le tre riproduzioni dell'allegato, lanciate così come sono dalla radice del checkout (`npx tsx --import ./src/testing/assetHooks.ts --test review-app-lifecycle.test.ts`, file **non** committato), devono passare tutte e tre; poi il file si cancella.
+(`treeHeader` ha quattro pulsanti: Nascondi, cartella, Nuovo file, Nuova cartella.)
 
-- [ ] **Step 5: e2e rovesciato.** In `e2e/startup.spec.ts` il test A2 del Task 1 diventa (verde nel prototipo):
+- [ ] **Step 4: verde.** `npx tsx --import ./src/testing/assetHooks.ts --test --test-timeout=20000 src/app/switchFolder.test.ts src/elements/app/app.dom.test.ts src/elements/file-tree/*.test.ts` (atteso: tutto verde; `app.dom.test.ts` 13 test). Le tre riproduzioni dell'allegato, lanciate così come sono dalla radice del checkout (`npx tsx --import ./src/testing/assetHooks.ts --test review-app-lifecycle.test.ts`, file **non** committato), devono passare tutte e tre; poi il file si cancella.
+
+- [ ] **Step 5: e2e.** In `e2e/startup.spec.ts` il test A2 del Task 1 si rovescia e se ne aggiungono due (verdi nel prototipo, in build e in sviluppo; il terzo ripetuto 3 volte, perché ricarica la pagina):
 
 ```ts
 test('after opening a folder from the start screen the focus goes to the tree row with the tab stop (A2)', async ({ app }) => {
   await app.openFolder({ 'a.md': '# A' });
   await expect(app.treeFile('a.md')).toBeFocused();
 });
+
+test('an empty folder opened from the start screen: the focus goes to New file in the sidebar (A2)', async ({ app, page }) => {
+  await app.start();
+  await app.page.getByRole('button', { name: app.t('start.openFolder') }).click();
+  await expect(page.getByRole('complementary').getByRole('button', { name: app.t('file.new') })).toBeFocused();
+});
+
+test('the saved folder reopened at startup: the focus is not moved (decision 18)', async ({ app, page }) => {
+  // Come «after a reload the folder and the last open file come back»: un file aperto prima di ricaricare.
+  await app.openFolder({ 'a.md': 'alpha' });
+  await app.openFile('a.md');
+  await page.reload();
+  await app.expectOpen('a.md');
+  await expect(page.locator('body')).toBeFocused();
+});
 ```
 
-- [ ] **Step 6: gate e baseline.** `npm test` (atteso **1050** = 1045 + 4 + 1), `npm run lint`, `e2e/startup.spec.ts` in build e in sviluppo (nel lock). Audit completo: cadono **solo** `workspace-empty` e `toast` con `…>nav:2>ul:0>li:0>div:0>button:1 { opacity: 0 → 1 }` (misurato: il focus sulla prima riga dell'albero ne mostra il «⋯»); righe nel commento, poi `dist-baseline/` ricostruita dal commit del task (rito dei vincoli globali) e audit completo verde. Commit: `test: risultati tardivi e avvio di hmd-app (RED)`, poi `fix: hmd-app scarta i risultati tardivi e riparte dall'avvio dopo il distacco`, `fix: il focus va all'albero dopo l'apertura della cartella`.
+Misurato: lo stesso test senza `openFile` prima di ricaricare cade 2 volte su 3 in sviluppo con «Target page… closed» (l'instabilità nota del ricaricamento); con il file aperto, 3 su 3 verdi in build e in sviluppo.
+
+- [ ] **Step 6: gate e baseline.** `npm test` (atteso **1053** = 1045 + 7 `app.dom` + 1 `switchFolder`), `npm run lint`, `e2e/startup.spec.ts` in build e in sviluppo (nel lock). Audit **solo con `-g`** (le suite complete restano ai Task 7 e 11; con `-g` il progetto `baseline` gira comunque tutto, perché `current` ne dipende in Playwright): `cat dist-baseline/BASELINE_SHA`, poi `-g "workspace-empty|toast|start"`: cadono **solo** `workspace-empty` e `toast` con `…>nav:2>ul:0>li:0>div:0>button:1 { opacity: 0 → 1 }` (misurato: il focus sulla prima riga dell'albero ne mostra il «⋯»); righe nel commento, poi `dist-baseline/` ricostruita dal commit del task (rito dei vincoli globali) e lo stesso `-g` verde. Commit: `test: risultati tardivi e avvio di hmd-app (RED)`, poi `fix: hmd-app scarta i risultati tardivi e riparte dall'avvio dopo il distacco`, `fix: il focus va all'albero dopo l'apertura della cartella`.
 
 ### Task 3: `hmd-workspace` — focus quando la sidebar sparisce, Home/End, timer dei toast (Builder)
 
@@ -995,7 +1084,7 @@ index 863d67a..6b004d8 100644
 +});
 ```
 
-RED atteso (misurato): `layout.test.ts` «arrow keys resize…» (Home → `null`); `workspace.dom.test.ts` «the focus never falls on the body…» (`Show sidebar in the toolbar, not body`) e «the separator: Home and End…»; `toasts.dom.test.ts` «info toasts close 6 s after they appear…» (a 6 s `ws-1` non è ancora chiuso: il suo timer è ripartito con l'array nuovo).
+RED atteso (misurato), oltre al test dello Step 3: `layout.test.ts` «arrow keys resize…» (Home → `null`); `workspace.dom.test.ts` «the focus never falls on the body…» (`Show sidebar in the toolbar, not body`) e «the separator: Home and End…»; `toasts.dom.test.ts` «info toasts close 6 s after they appear…» (a 6 s `ws-1` non è ancora chiuso: il suo timer è ripartito con l'array nuovo).
 
 - [ ] **Step 2: Home ed End** in `layout.ts`:
 
@@ -1020,23 +1109,38 @@ index f781fa0..32455fe 100644
  
 ```
 
-- [ ] **Step 3: recupero del focus nel workspace.** Nel `RenderLoop` di `workspace.element.ts` (il bersaglio è un pulsante fisso della barra: «Mostra sidebar» se la sidebar non c'è più, il pulsante della modalità AI se la chat ha sostituito l'albero):
+- [ ] **Step 3: recupero del focus nel workspace.** Nel `RenderLoop` di `workspace.element.ts`: entrando in AI (la chat sostituisce l'albero) il bersaglio è il pulsante della modalità AI; in tutti gli altri casi è `focusStart()` del Task 2 (uscendo dalla modalità AI con il focus nella chat, con Ctrl+Maiusc+E o `cycleMode`, il focus va alla riga dell'albero, non a «Nascondi sidebar»; con la sidebar nascosta va su «Mostra sidebar»):
 
 ```ts
   #loop = new RenderLoop(this, {
     ready: () => !!this.#parts && !!this.#workspace && !!this.#i18n && !!this.#theme && !!this.#route && this.isConnected,
     render: () => this.#render(this.#parts!, this.#workspace!, this.#i18n!),
     // La sidebar (o il suo contenuto) è sparita con il focus dentro: «Nascondi», Ctrl+B nell'albero o nella
-    // ricerca, modalità AI che sostituisce l'albero con la chat. Il focus va su un pulsante fisso della barra.
+    // ricerca, la chat che sostituisce l'albero entrando in AI, l'albero che sostituisce la chat uscendo. Entrando
+    // in AI il focus va sul pulsante della modalità; altrimenti dove entra `focusStart()` (l'albero, o «Mostra
+    // sidebar» se la sidebar non c'è più).
     focusScope: () => this.#slots.aside ?? null,
     refocus: () => {
-      const parts = this.#parts!;
-      (this.#sidebarOpen && this.#shown === 'ai' ? parts.modeButtons.get('ai')! : parts.toggle).focus();
+      if (this.#sidebarOpen && this.#shown === 'ai') this.#parts!.modeButtons.get('ai')!.focus();
+      else this.focusStart();
     },
   });
 ```
 
-`focusScope` si legge prima del render: è l'`aside` di prima, anche quando il render lo toglie. Con il focus fuori dalla sidebar (un pulsante della barra) il recupero non scatta (ultimo blocco del test).
+`focusScope` si legge prima del render: è l'`aside` di prima, anche quando il render lo toglie. Con il focus fuori dalla sidebar (un pulsante della barra) il recupero non scatta (ultimo blocco del primo test). Test in più, in fondo a `workspace.dom.test.ts` (RED misurato: `not Hide sidebar (Ctrl+B)`):
+
+```ts
+test('leaving AI mode with the focus in the chat (Ctrl+Shift+E): the focus goes to the tree, not to Hide sidebar', async () => {
+  const { el, workspace, button } = await mount({ ai: true });
+  await workspace.openFile('a.md');
+  button(EN_MESSAGES['mode.ai']).click();
+  el.querySelector<HTMLTextAreaElement>('hmd-ai-composer textarea')!.focus();
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'E', ctrlKey: true, shiftKey: true }));
+  assert.ok(el.querySelector('hmd-file-tree'));
+  const row = el.querySelector('hmd-file-tree [tabindex="0"]');
+  assert.ok(row !== null && document.activeElement === row, `the tree row with the tab stop, not ${document.activeElement?.getAttribute('aria-label') ?? document.activeElement?.localName}`);
+});
+```
 
 - [ ] **Step 4: timer dei toast per chiave.**
 
@@ -1130,7 +1234,7 @@ test('Hide sidebar from inside the sidebar: the focus goes to Show sidebar in th
 });
 ```
 
-- [ ] **Step 6: gate.** `npm test` (atteso **1053** = 1050 + 2 workspace + 1 toasts), `npm run lint`; `e2e/workspace-shell.spec.ts` ed `e2e/editor.spec.ts` (sidebar e separatore) in build e in sviluppo; audit con `-g "sidebar|resizer|toast|workspace"` invariato. Commit: `test: …(RED)`, `fix: il focus resta nella barra quando la sidebar sparisce`, `feat: Home ed End sul separatore`, `fix: i timer dei toast partono una volta per toast`.
+- [ ] **Step 6: gate.** `npm test` (atteso **1057** = 1053 + 3 `workspace.dom` + 1 `toasts`), `npm run lint`; `e2e/workspace-shell.spec.ts` ed `e2e/editor.spec.ts` (sidebar e separatore) in build e in sviluppo; audit solo con `-g "sidebar|resizer|toast|workspace"`, invariato rispetto alla baseline del Task 2. Commit: `test: …(RED)`, `fix: il focus resta nella barra quando la sidebar sparisce`, `feat: Home ed End sul separatore`, `fix: i timer dei toast partono una volta per toast`.
 
 ### Task 4: AI — annunci, nome dell'editor, plurale, Scarta, Continua, doppio clic, bozza conservata, chip (Planner)
 
@@ -1139,9 +1243,9 @@ test('Hide sidebar from inside the sidebar: the focus goes to Show sidebar in th
 - Modify: `src/i18n/i18n.ts` (+ `i18n.test.ts`), `src/i18n/locales/*.json` (nove), `src/elements/events.ts`
 - Modify: `src/elements/ai/review-bar.element.ts`, `review-bar.css`, `reviewBarView.ts`, `review.element.ts`, `composer.element.ts`, `sidebar.element.ts`, `model-chip.element.ts` (+ i loro test)
 - Modify: `src/editor/docExtensions.ts` (+ `docExtensions.dom.test.ts`), `src/elements/editor/docElement.ts`, `editor.element.ts` (+ `editor.dom.test.ts`), `src/elements/ai/diff-pane.element.ts` (solo il nome del lato destro e la riga in `#refreshControls`), `src/elements/workspace/workspace.element.ts` (solo la bozza) (+ `workspace.dom.test.ts`)
-- Modify (e2e): `ai-review-bar.spec.ts`, `ai-review.spec.ts:222`, `ai-composer.spec.ts`, `computed-styles.audit.ts:280`
+- Modify (e2e): `ai-review-bar.spec.ts`, `ai-review.spec.ts:222`, `ai-composer.spec.ts`, `computed-styles.audit.ts` (`:265`, `:280`, `:419`)
 
-P1, P3, P4, LAB-11, Scarta = Ferma + scarta, Continua durante un aggiornamento, doppio clic, LAB-10 (variante B, decisione 13), chip senza cast. Tutto provato nel prototipo, e2e compresi. **Planner** perché: la nota ri-annunciata si svuota e torna al fotogramma dopo (con l'orologio finto di Playwright il fotogramma non arriva da solo: `page.clock.runFor(50)`); il nome del contenuto di CodeMirror **non** si aggiorna con un `dispatch({})` vuoto (passa dalla sessione e rompe «a listener that swaps the document while typing»: misurato), ma scrivendo l'attributo e lasciando `contentAttributes` a riallinearlo al prossimo aggiornamento; Scarta senza proposta già arrivata non fermava niente (trovato dall'e2e); è l'unico task dell'8a che rinnova la baseline.
+P1 (con l'esito della generazione), P3, P4, LAB-11, Scarta = Ferma + scarta, Continua durante un aggiornamento, doppio clic, LAB-10 (variante B, decisione 13), chip senza cast. Tutto provato nel prototipo: test jsdom, e2e toccati in build e in sviluppo, audit con `-g`. **Planner** perché: la nota ri-annunciata si svuota e torna dopo `ANNOUNCE_DELAY_MS` (150 ms: con l'orologio finto di Playwright la pausa non passa da sola, `page.clock.runFor(200)`); il nome del contenuto di CodeMirror **non** si aggiorna con un `dispatch({})` vuoto (passa dalla sessione e rompe «a listener that swaps the document while typing»: misurato), ma scrivendo l'attributo e lasciando `contentAttributes` a riallinearlo al prossimo aggiornamento; Scarta senza proposta già arrivata non fermava niente (trovato dall'e2e); l'esito della generazione ripete nella regione nascosta il testo dello stato visibile (due nodi con lo stesso testo: un `getByText` dell'e2e e dell'audit va preso `.first()`); è il task dell'8a che cambia più stati di audit.
 
 - [ ] **Step 1: helper `announce` e `pluralKey`, test prima.** `src/dom/announce.test.ts`:
 
@@ -1151,9 +1255,9 @@ import '../testing/domEnv';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { announce } from './announce';
+import { ANNOUNCE_DELAY_MS, announce } from './announce';
 
-const nextTask = () => new Promise((resolve) => setTimeout(resolve, 5));
+const later = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 test('without again it is setText: written only when it changes', () => {
   const node = document.createElement('p');
@@ -1162,7 +1266,7 @@ test('without again it is setText: written only when it changes', () => {
   assert.equal(node.textContent, 'a');
 });
 
-test('again: the same text is cleared now and written back a frame later, as a new mutation', async () => {
+test('again: the same text is cleared now and written back after a real pause, as a new mutation', async () => {
   const node = document.createElement('p');
   node.textContent = 'busy';
   announce(node, 'busy', true);
@@ -1170,7 +1274,10 @@ test('again: the same text is cleared now and written back a frame later, as a n
   // Un render nel frattempo con lo stesso testo non lo anticipa.
   announce(node, 'busy');
   assert.equal(node.textContent, '');
-  await nextTask();
+  // Un fotogramma non basta (lo screen reader vedrebbe le due mutazioni insieme): il testo è ancora vuoto.
+  await later(20);
+  assert.equal(node.textContent, '');
+  await later(ANNOUNCE_DELAY_MS);
   assert.equal(node.textContent, 'busy');
 });
 
@@ -1178,52 +1285,52 @@ test('again: another text (or empty) before the frame wins and cancels the wait'
   const node = document.createElement('p');
   announce(node, 'busy', true);
   announce(node, '');
-  await nextTask();
+  await later(ANNOUNCE_DELAY_MS + 20);
   assert.equal(node.textContent, '');
   announce(node, 'busy', true);
   announce(node, 'other');
   assert.equal(node.textContent, 'other');
-  await nextTask();
+  await later(ANNOUNCE_DELAY_MS + 20);
   assert.equal(node.textContent, 'other');
 });
 ```
 
-`src/dom/announce.ts`:
+`src/dom/announce.ts` (decisione 7: una pausa vera, non un fotogramma):
 
 ```ts
-/** Testo in attesa del fotogramma successivo, per nodo. */
-const pending = new WeakMap<Node, { text: string; cancel(): void }>();
+/**
+ * Pausa tra lo svuotamento di una regione live e la riscrittura del testo. Un solo fotogramma non basta: in
+ * Chrome il callback di `requestAnimationFrame` gira prima del calcolo dell'albero di accessibilità dello stesso
+ * aggiornamento, e le due mutazioni arrivano insieme (A11y, review del piano 14). 150 ms come il LiveAnnouncer di
+ * Angular CDK (react-aria ne usa 100). Chi vede lo schermo vede la nota sparire per un attimo.
+ */
+export const ANNOUNCE_DELAY_MS = 150;
+
+/** Testo in attesa della riscrittura, per nodo. */
+const pending = new WeakMap<Node, { text: string; timer: ReturnType<typeof setTimeout> }>();
 
 /**
- * Testo di una regione live (`role="status"`). Senza `again` è `setText`: scrive solo se cambia. Con `again` il
- * testo deve arrivare allo screen reader come una mutazione nuova anche se è uguale a quello di prima (la
- * stessa nota a un secondo clic, WCAG 4.1.3) o se la regione è appena entrata nel DOM: la regione si svuota
- * subito e il testo torna al fotogramma successivo. Fino ad allora un render che chiede lo stesso testo non lo
+ * Testo di una regione live (`role="status"`, `aria-live`). Senza `again` è `setText`: scrive solo se cambia. Con
+ * `again` il testo deve arrivare allo screen reader come una mutazione nuova anche se è uguale a quello di prima
+ * (la stessa nota a un altro clic, WCAG 4.1.3) o se la regione è appena entrata nel DOM: la regione si svuota
+ * subito e il testo torna dopo `ANNOUNCE_DELAY_MS`. Fino ad allora un render che chiede lo stesso testo non lo
  * anticipa; uno che ne chiede un altro (o il vuoto) vince e annulla l'attesa.
  */
 export function announce(node: HTMLElement, text: string, again = false): void {
   const waiting = pending.get(node);
   if (waiting && waiting.text === text && !again) return;
-  waiting?.cancel();
+  if (waiting) clearTimeout(waiting.timer);
   pending.delete(node);
   if (!again || text === '') {
     if (node.textContent !== text) node.textContent = text;
     return;
   }
   node.textContent = '';
-  const win = node.ownerDocument.defaultView;
-  const write = () => {
+  const timer = setTimeout(() => {
     pending.delete(node);
     node.textContent = text;
-  };
-  // Nel browser un fotogramma vero separa le due mutazioni; jsdom senza requestAnimationFrame usa un task.
-  if (win?.requestAnimationFrame) {
-    const frame = win.requestAnimationFrame(write);
-    pending.set(node, { text, cancel: () => win.cancelAnimationFrame(frame) });
-  } else {
-    const timer = setTimeout(write, 0);
-    pending.set(node, { text, cancel: () => clearTimeout(timer) });
-  }
+  }, ANNOUNCE_DELAY_MS);
+  pending.set(node, { text, timer });
 }
 ```
 
@@ -1279,11 +1386,11 @@ index ea25d8c..1a4a95f 100644
  }
 ```
 
-- [ ] **Step 2: chiavi.** Nuove: `ai.warningsCount.one` e `ai.warningsCount.other` (al posto di `ai.warningsCount`), `ai.generatingStarted`, `ai.generatingProgress`, `editor.content`, `ai.diff.current`, `ai.diff.proposal`; cambiata: `ai.composer.noDocument` (LAB-10). Tutte e nove le lingue (testi del prototipo; il Reviewer li legge):
+- [ ] **Step 2: chiavi.** Nuove: `ai.warningsCount.one` e `ai.warningsCount.other` (al posto di `ai.warningsCount`), `ai.generatingStarted`, `ai.generatingProgress` («{done} of {total} parts ready»: niente «part 0 of 3»), `editor.content`, `ai.diff.current`, `ai.diff.proposal`; cambiata: `ai.composer.noDocument` (LAB-10), con i nomi che lo screen reader legge davvero, cioè il pulsante della modalità (`mode.editor`) e il nome dell'albero (`tree.label`, «Folder files», «File della cartella»), scritti uguali nella stessa lingua. Tutte e nove le lingue (testi del prototipo; il Reviewer li legge; se `mode.editor` o `tree.label` cambiano, la nota va riallineata):
 
 ```diff
 diff --git a/src/i18n/locales/de.json b/src/i18n/locales/de.json
-index a8d7d5f..5fd6012 100644
+index a8d7d5f..93a5579 100644
 --- a/src/i18n/locales/de.json
 +++ b/src/i18n/locales/de.json
 @@ -71,6 +71,7 @@
@@ -1307,7 +1414,7 @@ index a8d7d5f..5fd6012 100644
    "ai.composer.needText": "Schreibe eine Nachricht, bevor du sendest",
    "ai.composer.needProfile": "Wähle ein Profil, bevor du sendest",
 -  "ai.composer.noDocument": "Öffne ein Dokument, bevor du sendest",
-+  "ai.composer.noDocument": "Kein Dokument geöffnet: wechsle zum Editor, öffne eines aus der Dateiliste und komm zum Senden zurück",
++  "ai.composer.noDocument": "Kein Dokument geöffnet: wechsle zu Editor, öffne eines in „Dateien im Ordner“ und komm zum Senden zurück",
    "ai.composer.updating": "Eine Aktualisierung läuft: versuche es gleich noch einmal",
    "ai.composer.generating": "Generierung läuft: warte, bis sie fertig ist, oder drücke Stoppen",
    "ai.newChat.alreadyEmpty": "Der Chat ist bereits leer",
@@ -1317,14 +1424,14 @@ index a8d7d5f..5fd6012 100644
    "ai.generating": "Wird erzeugt… {seconds} s",
 -  "ai.warningsCount": "{count} Hinweise",
 +  "ai.generatingStarted": "Vorschlag wird erzeugt",
-+  "ai.generatingProgress": "Vorschlag wird erzeugt, Teil {done} von {total}",
++  "ai.generatingProgress": "{done} von {total} Teilen fertig",
 +  "ai.warningsCount.one": "{count} Hinweis",
 +  "ai.warningsCount.other": "{count} Hinweise",
    "settings.sections": "Einstellungsbereiche",
    "settings.general": "Allgemein",
    "settings.aiProfiles": "KI · Profile",
 diff --git a/src/i18n/locales/en.json b/src/i18n/locales/en.json
-index d4532e9..de05f15 100644
+index d4532e9..94e2cab 100644
 --- a/src/i18n/locales/en.json
 +++ b/src/i18n/locales/en.json
 @@ -71,6 +71,7 @@
@@ -1348,7 +1455,7 @@ index d4532e9..de05f15 100644
    "ai.composer.needText": "Write a message before sending",
    "ai.composer.needProfile": "Choose a profile before sending",
 -  "ai.composer.noDocument": "Open a document before sending",
-+  "ai.composer.noDocument": "No document open: switch to Editor, open one from the file tree, then come back to send",
++  "ai.composer.noDocument": "No document open: switch to Editor, open one from “Folder files”, then come back to send",
    "ai.composer.updating": "An update is in progress: try again in a moment",
    "ai.composer.generating": "Generation in progress: wait for it to finish, or press Stop",
    "ai.newChat.alreadyEmpty": "The chat is already empty",
@@ -1358,14 +1465,14 @@ index d4532e9..de05f15 100644
    "ai.generating": "Generating… {seconds} s",
 -  "ai.warningsCount": "{count} warnings",
 +  "ai.generatingStarted": "Generating a proposal",
-+  "ai.generatingProgress": "Generating a proposal, part {done} of {total}",
++  "ai.generatingProgress": "{done} of {total} parts ready",
 +  "ai.warningsCount.one": "{count} warning",
 +  "ai.warningsCount.other": "{count} warnings",
    "settings.sections": "Settings sections",
    "settings.general": "General",
    "settings.aiProfiles": "AI · Profiles",
 diff --git a/src/i18n/locales/es.json b/src/i18n/locales/es.json
-index d8806af..c939120 100644
+index d8806af..8c71350 100644
 --- a/src/i18n/locales/es.json
 +++ b/src/i18n/locales/es.json
 @@ -71,6 +71,7 @@
@@ -1389,7 +1496,7 @@ index d8806af..c939120 100644
    "ai.composer.needText": "Escribe un mensaje antes de enviar",
    "ai.composer.needProfile": "Elige un perfil antes de enviar",
 -  "ai.composer.noDocument": "Abre un documento antes de enviar",
-+  "ai.composer.noDocument": "No hay ningún documento abierto: pasa al Editor, abre uno desde el árbol de archivos y vuelve para enviar",
++  "ai.composer.noDocument": "No hay ningún documento abierto: pasa a Editor, abre uno desde «Archivos de la carpeta» y vuelve para enviar",
    "ai.composer.updating": "Hay una actualización en curso: inténtalo de nuevo en un momento",
    "ai.composer.generating": "Generación en curso: espera a que termine, o pulsa Detener",
    "ai.newChat.alreadyEmpty": "La conversación ya está vacía",
@@ -1399,14 +1506,14 @@ index d8806af..c939120 100644
    "ai.generating": "Generando… {seconds} s",
 -  "ai.warningsCount": "{count} avisos",
 +  "ai.generatingStarted": "Generando una propuesta",
-+  "ai.generatingProgress": "Generando una propuesta, parte {done} de {total}",
++  "ai.generatingProgress": "{done} de {total} partes listas",
 +  "ai.warningsCount.one": "{count} aviso",
 +  "ai.warningsCount.other": "{count} avisos",
    "settings.sections": "Secciones de ajustes",
    "settings.general": "General",
    "settings.aiProfiles": "IA · Perfiles",
 diff --git a/src/i18n/locales/fr.json b/src/i18n/locales/fr.json
-index 2093257..05598e2 100644
+index 2093257..dc38875 100644
 --- a/src/i18n/locales/fr.json
 +++ b/src/i18n/locales/fr.json
 @@ -71,6 +71,7 @@
@@ -1430,7 +1537,7 @@ index 2093257..05598e2 100644
    "ai.composer.needText": "Écrivez un message avant d’envoyer",
    "ai.composer.needProfile": "Choisissez un profil avant d’envoyer",
 -  "ai.composer.noDocument": "Ouvrez un document avant d’envoyer",
-+  "ai.composer.noDocument": "Aucun document ouvert : passez à l’éditeur, ouvrez-en un depuis l’arborescence, puis revenez envoyer",
++  "ai.composer.noDocument": "Aucun document ouvert : passez à Éditeur, ouvrez-en un depuis « Fichiers du dossier », puis revenez envoyer",
    "ai.composer.updating": "Une mise à jour est en cours : réessayez dans un instant",
    "ai.composer.generating": "Génération en cours : attendez qu’elle se termine, ou appuyez sur Arrêter",
    "ai.newChat.alreadyEmpty": "La conversation est déjà vide",
@@ -1440,14 +1547,14 @@ index 2093257..05598e2 100644
    "ai.generating": "Génération… {seconds} s",
 -  "ai.warningsCount": "{count} avertissements",
 +  "ai.generatingStarted": "Génération d'une proposition",
-+  "ai.generatingProgress": "Génération d'une proposition, partie {done} sur {total}",
++  "ai.generatingProgress": "{done} parties prêtes sur {total}",
 +  "ai.warningsCount.one": "{count} avertissement",
 +  "ai.warningsCount.other": "{count} avertissements",
    "settings.sections": "Sections des réglages",
    "settings.general": "Général",
    "settings.aiProfiles": "IA · Profils",
 diff --git a/src/i18n/locales/it.json b/src/i18n/locales/it.json
-index 1128649..b5806f3 100644
+index 1128649..4eeb926 100644
 --- a/src/i18n/locales/it.json
 +++ b/src/i18n/locales/it.json
 @@ -71,6 +71,7 @@
@@ -1471,7 +1578,7 @@ index 1128649..b5806f3 100644
    "ai.composer.needText": "Scrivi un messaggio prima di inviare",
    "ai.composer.needProfile": "Scegli un profilo prima di inviare",
 -  "ai.composer.noDocument": "Apri un documento prima di inviare",
-+  "ai.composer.noDocument": "Nessun documento aperto: passa all’Editor, aprine uno dall’albero dei file e torna qui a inviare",
++  "ai.composer.noDocument": "Nessun documento aperto: passa a Editor, aprine uno da «File della cartella» e torna qui a inviare",
    "ai.composer.updating": "Aggiornamento in corso: riprova tra un momento",
    "ai.composer.generating": "Generazione in corso: aspetta che finisca, oppure premi Ferma",
    "ai.newChat.alreadyEmpty": "La chat è già vuota",
@@ -1481,14 +1588,14 @@ index 1128649..b5806f3 100644
    "ai.generating": "Generazione… {seconds} s",
 -  "ai.warningsCount": "{count} avvisi",
 +  "ai.generatingStarted": "Generazione della proposta in corso",
-+  "ai.generatingProgress": "Generazione della proposta, parte {done} di {total}",
++  "ai.generatingProgress": "{done} di {total} parti pronte",
 +  "ai.warningsCount.one": "{count} avviso",
 +  "ai.warningsCount.other": "{count} avvisi",
    "settings.sections": "Sezioni delle impostazioni",
    "settings.general": "Generale",
    "settings.aiProfiles": "AI · Profili",
 diff --git a/src/i18n/locales/ja.json b/src/i18n/locales/ja.json
-index 854f03c..f44e51b 100644
+index 854f03c..c4385d4 100644
 --- a/src/i18n/locales/ja.json
 +++ b/src/i18n/locales/ja.json
 @@ -71,6 +71,7 @@
@@ -1512,7 +1619,7 @@ index 854f03c..f44e51b 100644
    "ai.composer.needText": "送信する前にメッセージを入力してください",
    "ai.composer.needProfile": "送信する前にプロファイルを選択してください",
 -  "ai.composer.noDocument": "送信する前にドキュメントを開いてください",
-+  "ai.composer.noDocument": "ドキュメントが開かれていません。エディターに切り替えてファイルツリーから開き、戻って送信してください",
++  "ai.composer.noDocument": "ドキュメントが開かれていません。エディターに切り替え、「フォルダー内のファイル」から開いてから、戻って送信してください",
    "ai.composer.updating": "更新中です。しばらくしてからもう一度お試しください",
    "ai.composer.generating": "生成中です。終わるのを待つか、停止を押してください",
    "ai.newChat.alreadyEmpty": "チャットはすでに空です",
@@ -1522,14 +1629,14 @@ index 854f03c..f44e51b 100644
    "ai.generating": "生成中… {seconds} 秒",
 -  "ai.warningsCount": "警告 {count} 件",
 +  "ai.generatingStarted": "提案を生成中",
-+  "ai.generatingProgress": "提案を生成中、{total} 件中 {done} 件目",
++  "ai.generatingProgress": "{total} 件中 {done} 件の部分が完成",
 +  "ai.warningsCount.one": "警告 {count} 件",
 +  "ai.warningsCount.other": "警告 {count} 件",
    "settings.sections": "設定の項目",
    "settings.general": "一般",
    "settings.aiProfiles": "AI · プロファイル",
 diff --git a/src/i18n/locales/nl.json b/src/i18n/locales/nl.json
-index 02503a3..019b15a 100644
+index 02503a3..57268f1 100644
 --- a/src/i18n/locales/nl.json
 +++ b/src/i18n/locales/nl.json
 @@ -71,6 +71,7 @@
@@ -1553,7 +1660,7 @@ index 02503a3..019b15a 100644
    "ai.composer.needText": "Schrijf een bericht voordat je verzendt",
    "ai.composer.needProfile": "Kies een profiel voordat je verzendt",
 -  "ai.composer.noDocument": "Open een document voordat je verzendt",
-+  "ai.composer.noDocument": "Geen document geopend: ga naar de editor, open er een uit de bestandenlijst en kom terug om te verzenden",
++  "ai.composer.noDocument": "Geen document geopend: ga naar Editor, open er een uit ‘Bestanden in de map’ en kom terug om te verzenden",
    "ai.composer.updating": "Er is een update bezig: probeer het zo opnieuw",
    "ai.composer.generating": "Generatie bezig: wacht tot die klaar is, of druk op Stoppen",
    "ai.newChat.alreadyEmpty": "De chat is al leeg",
@@ -1563,14 +1670,14 @@ index 02503a3..019b15a 100644
    "ai.generating": "Bezig… {seconds} s",
 -  "ai.warningsCount": "{count} waarschuwingen",
 +  "ai.generatingStarted": "Voorstel wordt gemaakt",
-+  "ai.generatingProgress": "Voorstel wordt gemaakt, deel {done} van {total}",
++  "ai.generatingProgress": "{done} van {total} delen klaar",
 +  "ai.warningsCount.one": "{count} waarschuwing",
 +  "ai.warningsCount.other": "{count} waarschuwingen",
    "settings.sections": "Onderdelen van instellingen",
    "settings.general": "Algemeen",
    "settings.aiProfiles": "AI · Profielen",
 diff --git a/src/i18n/locales/pl.json b/src/i18n/locales/pl.json
-index e31c3e5..3d67459 100644
+index e31c3e5..a0a8135 100644
 --- a/src/i18n/locales/pl.json
 +++ b/src/i18n/locales/pl.json
 @@ -71,6 +71,7 @@
@@ -1594,7 +1701,7 @@ index e31c3e5..3d67459 100644
    "ai.composer.needText": "Napisz wiadomość przed wysłaniem",
    "ai.composer.needProfile": "Wybierz profil przed wysłaniem",
 -  "ai.composer.noDocument": "Otwórz dokument przed wysłaniem",
-+  "ai.composer.noDocument": "Brak otwartego dokumentu: przejdź do edytora, otwórz dokument z drzewa plików i wróć, aby wysłać",
++  "ai.composer.noDocument": "Brak otwartego dokumentu: przejdź do trybu Edytor, otwórz dokument z „Pliki w folderze” i wróć, aby wysłać",
    "ai.composer.updating": "Trwa aktualizacja: spróbuj ponownie za chwilę",
    "ai.composer.generating": "Trwa generowanie: poczekaj, aż się skończy, albo naciśnij Zatrzymaj",
    "ai.newChat.alreadyEmpty": "Czat jest już pusty",
@@ -1604,14 +1711,14 @@ index e31c3e5..3d67459 100644
    "ai.generating": "Generowanie… {seconds} s",
 -  "ai.warningsCount": "Ostrzeżenia: {count}",
 +  "ai.generatingStarted": "Generowanie propozycji",
-+  "ai.generatingProgress": "Generowanie propozycji, część {done} z {total}",
++  "ai.generatingProgress": "Gotowe części: {done} z {total}",
 +  "ai.warningsCount.one": "Ostrzeżenia: {count}",
 +  "ai.warningsCount.other": "Ostrzeżenia: {count}",
    "settings.sections": "Sekcje ustawień",
    "settings.general": "Ogólne",
    "settings.aiProfiles": "AI · Profile",
 diff --git a/src/i18n/locales/pt.json b/src/i18n/locales/pt.json
-index 37e3f4f..a8b5117 100644
+index 37e3f4f..70da755 100644
 --- a/src/i18n/locales/pt.json
 +++ b/src/i18n/locales/pt.json
 @@ -71,6 +71,7 @@
@@ -1635,7 +1742,7 @@ index 37e3f4f..a8b5117 100644
    "ai.composer.needText": "Escreva uma mensagem antes de enviar",
    "ai.composer.needProfile": "Escolha um perfil antes de enviar",
 -  "ai.composer.noDocument": "Abra um documento antes de enviar",
-+  "ai.composer.noDocument": "Nenhum documento aberto: mude para o Editor, abra um na árvore de arquivos e volte para enviar",
++  "ai.composer.noDocument": "Nenhum documento aberto: mude para Editor, abra um em «Ficheiros da pasta» e volte para enviar",
    "ai.composer.updating": "Há uma atualização em curso: tente novamente daqui a pouco",
    "ai.composer.generating": "Geração em curso: espere que termine, ou prima Parar",
    "ai.newChat.alreadyEmpty": "A conversa já está vazia",
@@ -1645,7 +1752,7 @@ index 37e3f4f..a8b5117 100644
    "ai.generating": "Gerando… {seconds} s",
 -  "ai.warningsCount": "{count} avisos",
 +  "ai.generatingStarted": "Gerando uma proposta",
-+  "ai.generatingProgress": "Gerando uma proposta, parte {done} de {total}",
++  "ai.generatingProgress": "{done} de {total} partes prontas",
 +  "ai.warningsCount.one": "{count} aviso",
 +  "ai.warningsCount.other": "{count} avisos",
    "settings.sections": "Seções das configurações",
@@ -1669,7 +1776,7 @@ index 79944a5..9349131 100644
      saveImage: patch.saveImage ?? (async () => null),
      docChanged: (changes, texts) => void calls.push(['change', changes, texts]),
 diff --git a/src/elements/ai/composer.dom.test.ts b/src/elements/ai/composer.dom.test.ts
-index 3bc1b9e..08d7091 100644
+index 3bc1b9e..d311f65 100644
 --- a/src/elements/ai/composer.dom.test.ts
 +++ b/src/elements/ai/composer.dom.test.ts
 @@ -16,6 +16,7 @@ import { createI18nStore } from '../../state/i18nStore';
@@ -1694,28 +1801,36 @@ index 3bc1b9e..08d7091 100644
    assert.equal(input().value, 'draft');
    key('Enter');
 -  assert.equal(note().textContent, EN_MESSAGES['ai.composer.generating']);
-+  // La stessa nota di nuovo: svuotata subito e riscritta al fotogramma dopo, così lo screen reader la rilegge.
++  // La stessa nota di nuovo: svuotata subito e riscritta dopo `ANNOUNCE_DELAY_MS`, così lo screen reader la rilegge.
 +  assert.equal(note().textContent, '');
 +  await waitFor(() => note().textContent === EN_MESSAGES['ai.composer.generating']);
    running(false);
    assert.equal(note().textContent, '');
  });
-@@ -388,3 +391,37 @@ test('with the real controller: the updating note goes when cancel() ends the up
+@@ -388,3 +391,45 @@ test('with the real controller: the updating note goes when cancel() ends the up
    assert.equal(note().textContent, '');
    assert.equal(input().value, 'draft');
  });
 +
-+test('a double click on Send sends once and does not stop: the second click of the pair (detail 2) is ignored on Stop', () => {
-+  const { ai, send, type, running } = mount();
++test('a double click on Send sends once and does not stop: only the click right after the sending one (detail + 1) is ignored on Stop', () => {
++  const { ai, send, type, running, key } = mount();
++  const click = (detail: number) => send().dispatchEvent(new MouseEvent('click', { bubbles: true, detail }));
++  const calls = () => ai.calls.map((c) => c[0]);
 +  type('fix');
-+  send().dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
++  click(1);
 +  running(true);
-+  send().dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 2 }));
-+  assert.deepEqual(ai.calls.map((c) => c[0]), ['send']);
-+  // Un clic vero su Stop (detail 1) o dalla tastiera (detail 0) ferma.
-+  send().dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
-+  send().dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 0 }));
-+  assert.deepEqual(ai.calls.map((c) => c[0]), ['send', 'stop', 'stop']);
++  click(2);
++  assert.deepEqual(calls(), ['send'], 'la seconda metà del doppio clic');
++  // Una serie rapida su Stop (detail 3) ferma: chi ha un tremore clicca così.
++  click(3);
++  assert.deepEqual(calls(), ['send', 'stop']);
++  // Invio dalla tastiera, poi un clic singolo su Stop: ferma.
++  running(false);
++  type('again');
++  key('Enter');
++  running(true);
++  click(1);
++  assert.deepEqual(calls(), ['send', 'stop', 'send', 'stop']);
 +});
 +
 +test('the draft: given before connecting it fills the box; typing and sending tell it out with hmd-ai-draft', () => {
@@ -1739,7 +1854,7 @@ index 3bc1b9e..08d7091 100644
 +  assert.equal(input.value, '');
 +});
 diff --git a/src/elements/ai/review-bar.dom.test.ts b/src/elements/ai/review-bar.dom.test.ts
-index e581bfd..f4d0024 100644
+index e581bfd..e469d6c 100644
 --- a/src/elements/ai/review-bar.dom.test.ts
 +++ b/src/elements/ai/review-bar.dom.test.ts
 @@ -11,6 +11,7 @@ import { EN_MESSAGES } from '../../i18n/messages';
@@ -1769,7 +1884,7 @@ index e581bfd..f4d0024 100644
      button.focus();
      button.click();
 -    assert.equal(note().textContent, EN_MESSAGES['ai.review.generating']);
-+    // Dal secondo clic la stessa nota si svuota e torna al fotogramma dopo: lo screen reader la rilegge.
++    // Dal secondo clic la stessa nota si svuota e torna dopo `ANNOUNCE_DELAY_MS`: lo screen reader la rilegge.
 +    await waitFor(() => note().textContent === EN_MESSAGES['ai.review.generating']);
      focusOn(button, button.getAttribute('aria-label') ?? button.textContent ?? '');
    }
@@ -1814,16 +1929,16 @@ index e581bfd..f4d0024 100644
    await i18n.setLocale('it');
    assert.equal(note().textContent, 'ASPETTA');
    assert.equal(buttons()[0].getAttribute('aria-label'), 'PRIMA');
-@@ -234,3 +243,21 @@ test('a language change rewrites labels, tooltips, warnings and the note; detach
+@@ -234,3 +243,42 @@ test('a language change rewrites labels, tooltips, warnings and the note; detach
    el.remove();
    assert.equal(listeners(), 0);
  });
 +
-+test('while generating a hidden polite region says the start and each new part, never the seconds; it goes with the generation', async () => {
++test('while generating a hidden polite region says the start and each new part, never the seconds', async () => {
 +  const { el } = mount(GENERATING, [], 'generating');
 +  const spoken = () => el.querySelector<HTMLElement>(':scope > .spoken');
 +  assert.equal(spoken()!.getAttribute('aria-live'), 'polite');
-+  assert.equal(spoken()!.textContent, '', 'entrata vuota: il testo arriva al fotogramma dopo');
++  assert.equal(spoken()!.textContent, '', 'entrata vuota: il testo arriva dopo la pausa');
 +  const part = (done: number) => EN_MESSAGES['ai.generatingProgress'].replace('{done}', String(done)).replace('{total}', '3');
 +  await waitFor(() => spoken()!.textContent === part(1));
 +  const changes: string[] = [];
@@ -1833,8 +1948,29 @@ index e581bfd..f4d0024 100644
 +  el.status = { ...GENERATING, seconds: 6, done: 2 };
 +  await new Promise((resolve) => setTimeout(resolve, 5));
 +  assert.deepEqual(changes, [part(2)]);
-+  el.status = { kind: 'partial' };
-+  assert.equal(spoken(), null);
++});
++
++test('when the generation ends the hidden region says the outcome (ready, partial, truncated) until the next action; no proposal, nothing', async () => {
++  const outcomes: [ReviewStatus, string | null][] = [
++    [{ kind: 'none' }, EN_MESSAGES['ai.proposalReady']],
++    [{ kind: 'partial' }, EN_MESSAGES['ai.status.partial']],
++    [{ kind: 'truncated' }, EN_MESSAGES['ai.status.truncated']],
++  ];
++  for (const [end, text] of outcomes) {
++    const { el, buttons } = mount(GENERATING, [], 'generating');
++    const spoken = () => el.querySelector<HTMLElement>(':scope > .spoken');
++    el.proposalId = 'a.md#1';
++    el.status = end;
++    el.acceptBlocker = null;
++    assert.equal(spoken()?.textContent, text, end.kind);
++    buttons()[1].click();
++    assert.equal(spoken(), null, `${end.kind}: the next action empties it`);
++    el.remove();
++  }
++  // Generazione fermata prima di una proposta: nessun esito da dire.
++  const { el } = mount(GENERATING, [], 'generating');
++  el.status = { kind: 'none' };
++  assert.equal(el.querySelector(':scope > .spoken'), null);
 +});
 diff --git a/src/elements/ai/review.dom.test.ts b/src/elements/ai/review.dom.test.ts
 index f703314..b4aad0f 100644
@@ -1861,10 +1997,17 @@ index f703314..b4aad0f 100644
 +  assert.deepEqual(ai.calls, [['discard', 'a.md']]);
 +});
 diff --git a/src/elements/ai/reviewBarView.test.ts b/src/elements/ai/reviewBarView.test.ts
-index 8d28ed7..afa894b 100644
+index 8d28ed7..9622b08 100644
 --- a/src/elements/ai/reviewBarView.test.ts
 +++ b/src/elements/ai/reviewBarView.test.ts
-@@ -10,12 +10,20 @@ const t = (key: string, params?: Params) => translate(EN_MESSAGES, key, params);
+@@ -4,18 +4,26 @@ import assert from 'node:assert/strict';
+ import type { ReviewStatus } from '../../ai/reviewStatus';
+ import { translate, type Params } from '../../i18n/i18n';
+ import { EN_MESSAGES } from '../../i18n/messages';
+-import { actionBlocker, statusLine } from './reviewBarView';
++import { actionBlocker, generationOutcome, statusLine } from './reviewBarView';
+ 
+ const t = (key: string, params?: Params) => translate(EN_MESSAGES, key, params);
  const none: ReviewStatus = { kind: 'none' };
  const generating: ReviewStatus = { kind: 'generating', seconds: 3 };
  
@@ -1887,7 +2030,7 @@ index 8d28ed7..afa894b 100644
  test('Accept all carries the reason of the controller, one key per reason', () => {
    assert.equal(actionBlocker('acceptAll', none, null), null);
    assert.equal(actionBlocker('acceptAll', { kind: 'truncated' }, 'truncated'), 'ai.review.truncated');
-@@ -31,10 +39,13 @@ test('every note key exists in en.json', () => {
+@@ -31,10 +39,21 @@ test('every note key exists in en.json', () => {
  
  test('the status line: nothing, the counter with progress and a live region, partial with Continue, the alert of the lost selection', () => {
    assert.equal(statusLine(none, t), null);
@@ -1905,6 +2048,14 @@ index 8d28ed7..afa894b 100644
 +  assert.deepEqual(statusLine({ kind: 'truncated' }, t), { text: t('ai.status.truncated'), spoken: null, alert: false, withContinue: false });
 +  assert.deepEqual(statusLine({ kind: 'scopeLost' }, t), { text: t('ai.error.scopeLost'), spoken: null, alert: true, withContinue: false });
 +  assert.deepEqual(statusLine({ kind: 'applied' }, t), { text: t('ai.applied'), spoken: null, alert: false, withContinue: false });
++});
++
++test('the outcome of a generation: ready, partial, truncated; nothing without a proposal or for a lost selection (it has its alert)', () => {
++  assert.equal(generationOutcome({ kind: 'none' }, true, t), t('ai.proposalReady'));
++  assert.equal(generationOutcome({ kind: 'partial' }, true, t), t('ai.status.partial'));
++  assert.equal(generationOutcome({ kind: 'truncated' }, true, t), t('ai.status.truncated'));
++  assert.equal(generationOutcome({ kind: 'none' }, false, t), null);
++  assert.equal(generationOutcome({ kind: 'scopeLost' }, true, t), null);
  });
 diff --git a/src/elements/editor/editor.dom.test.ts b/src/elements/editor/editor.dom.test.ts
 index 69fa75c..7c185a1 100644
@@ -1961,9 +2112,9 @@ test('AI mode: the draft of the composer survives going to the editor and back (
 });
 ```
 
-RED atteso: `reviewBarView.test.ts` 2 rossi (Scarta durante la generazione, Continua durante un aggiornamento); `review-bar.dom.test.ts` (la regione nascosta non c'è; il contatore ha ancora `aria-live`; la nota ripetuta non si svuota); `review.dom.test.ts` «Discard while generating, before any proposal» (`ai.calls` vuoto); `composer.dom.test.ts` doppio clic (`['send', 'stop']`), bozza (la casella nasce vuota), nota ripetuta; `editor.dom.test.ts` (nessun `aria-label`); `workspace.dom.test.ts` bozza (casella vuota al ritorno).
+RED atteso: `reviewBarView.test.ts` 3 rossi (Scarta durante la generazione, Continua durante un aggiornamento, l'esito); `review-bar.dom.test.ts` (la regione nascosta non c'è; il contatore ha ancora `aria-live`; la nota ripetuta non si svuota; nessun esito); `review.dom.test.ts` «Discard while generating, before any proposal» (`ai.calls` vuoto); `composer.dom.test.ts` doppio clic (`['send', 'stop']`), bozza (la casella nasce vuota), nota ripetuta; `editor.dom.test.ts` (nessun `aria-label`); `workspace.dom.test.ts` bozza (casella vuota al ritorno).
 
-- [ ] **Step 4: barra della revisione** — regione nascosta della generazione (P1), plurale (P4), nota ri-annunciata (LAB-11), Scarta e Continua:
+- [ ] **Step 4: barra della revisione** — regione nascosta della generazione con l'esito finale (P1, decisione 5), plurale (P4), nota ri-annunciata (LAB-11), Scarta e Continua:
 
 ```diff
 diff --git a/src/elements/ai/review-bar.css b/src/elements/ai/review-bar.css
@@ -1987,10 +2138,10 @@ index 06da740..9cc95a1 100644
    }
  }
 diff --git a/src/elements/ai/review-bar.element.ts b/src/elements/ai/review-bar.element.ts
-index b46548b..f642d6e 100644
+index b46548b..b46c130 100644
 --- a/src/elements/ai/review-bar.element.ts
 +++ b/src/elements/ai/review-bar.element.ts
-@@ -2,10 +2,12 @@ import type { AcceptBlocker } from '../../ai/aiController';
+@@ -2,14 +2,16 @@ import type { AcceptBlocker } from '../../ai/aiController';
  import type { ReviewStatus } from '../../ai/reviewStatus';
  import type { CheckWarning } from '../../ai/types';
  import { HmdElement } from '../../dom/element';
@@ -2003,6 +2154,11 @@ index b46548b..f642d6e 100644
  import type { MessageKey } from '../../i18n/messages';
  import type { I18nStore } from '../../state/i18nStore';
  import { emit } from '../events';
+-import { actionBlocker, statusLine, type ReviewAction, type ReviewBlocker } from './reviewBarView';
++import { actionBlocker, generationOutcome, statusLine, type ReviewAction, type ReviewBlocker } from './reviewBarView';
+ import './review-bar.css';
+ 
+ interface Parts {
 @@ -27,6 +29,8 @@ interface Parts {
    acceptAll: HTMLButtonElement;
    /** Nota sotto la riga dei pulsanti (`role="status"`): perché il pulsante attivato non ha fatto nulla. Vuota di norma. */
@@ -2012,8 +2168,12 @@ index b46548b..f642d6e 100644
  }
  
  /**
-@@ -47,6 +51,8 @@ export class HmdAiReviewBar extends HmdElement {
+@@ -45,8 +49,12 @@ export class HmdAiReviewBar extends HmdElement {
+   #acceptBlocker: AcceptBlocker | null = 'generating';
+   #i18n: I18nStore | null = null;
    #proposalId = '';
++  /** Stato con cui è finita l'ultima generazione: la regione nascosta ne dice l'esito fino alla prossima azione. */
++  #outcome: ReviewStatus | null = null;
    /** Nota mostrata: l'azione che l'ha prodotta e la sua chiave, per sapere quando la causa sparisce. */
    #note: { action: ReviewAction; key: ReviewBlocker } | null = null;
 +  /** Il prossimo render riscrive la nota anche se il testo è lo stesso (un altro clic bloccato). */
@@ -2021,7 +2181,29 @@ index b46548b..f642d6e 100644
  
    #parts: Parts | null = null;
    #loop = new RenderLoop(this, {
-@@ -109,6 +115,7 @@ export class HmdAiReviewBar extends HmdElement {
+@@ -59,7 +67,11 @@ export class HmdAiReviewBar extends HmdElement {
+ 
+   get status(): ReviewStatus { return this.#status; }
+   set status(value: ReviewStatus) {
+-    this.#status = value ?? { kind: 'none' };
++    const next = value ?? { kind: 'none' };
++    // Fine della generazione: la regione nascosta dirà l'esito finché non arriva un'azione (P1, A11y).
++    if (this.#status.kind === 'generating' && next.kind !== 'generating') this.#outcome = next;
++    if (next.kind === 'generating') this.#outcome = null;
++    this.#status = next;
+     this.#loop.update();
+   }
+   get warnings(): CheckWarning[] { return this.#warnings; }
+@@ -74,6 +86,8 @@ export class HmdAiReviewBar extends HmdElement {
+     if (value === this.#proposalId) return;
+     this.#proposalId = value;
+     this.#note = null;
++    // L'esito era della proposta di prima (la prima proposta arrivata durante la generazione non ha esito).
++    if (this.#status.kind !== 'generating') this.#outcome = null;
+     this.#loop.update();
+   }
+   /** Perché Accetta tutto non può (dal controller, `acceptBlocker(p, true)`), o null. */
+@@ -109,6 +123,7 @@ export class HmdAiReviewBar extends HmdElement {
          discard: action('discard', 'secondary'),
          acceptAll: action('acceptAll', 'secondary accept'),
          note: el('p', { class: 'note', role: 'status' }),
@@ -2029,16 +2211,28 @@ index b46548b..f642d6e 100644
        };
        this.#parts = parts;
        parts.bar.append(parts.previous, parts.next, parts.spacer, parts.discard, parts.acceptAll);
-@@ -128,6 +135,8 @@ export class HmdAiReviewBar extends HmdElement {
+@@ -121,14 +136,19 @@ export class HmdAiReviewBar extends HmdElement {
+ 
+   disconnectedCallback(): void {
+     super.disconnectedCallback();
+-    // La barra sparita (proposta scartata o applicata) non ricorda la nota.
++    // La barra sparita (proposta scartata o applicata) non ricorda la nota né l'esito.
+     this.#note = null;
++    this.#outcome = null;
+   }
+ 
    /** Un pulsante attivato: se l'azione non è possibile la nota dice perché, altrimenti l'azione sale e la nota se ne va. */
    #onAction(action: ReviewAction): void {
      const key = actionBlocker(action, this.#status, this.#acceptBlocker);
 +    // La stessa nota di nuovo (Successivo, Scarta, Accetta tutto durante la generazione): si ri-annuncia.
 +    this.#announceAgain = key !== null && this.#note?.key === key;
      this.#note = key ? { action, key } : null;
++    // L'esito della generazione si è detto: alla prossima azione la regione si svuota.
++    this.#outcome = null;
      this.#loop.update();
      if (!key) emit(this, 'hmd-ai-review-action', { action });
-@@ -144,7 +153,6 @@ export class HmdAiReviewBar extends HmdElement {
+   }
+@@ -144,7 +164,6 @@ export class HmdAiReviewBar extends HmdElement {
      const line = statusLine(this.#status, t);
      if (line) {
        setText(parts.status, line.text);
@@ -2046,15 +2240,17 @@ index b46548b..f642d6e 100644
        toggleAttr(parts.status, 'role', line.alert, 'alert');
        if (parts.status.parentNode !== bar) bar.insertBefore(parts.status, parts.spacer);
        if (line.withContinue) {
-@@ -157,10 +165,19 @@ export class HmdAiReviewBar extends HmdElement {
+@@ -157,10 +176,21 @@ export class HmdAiReviewBar extends HmdElement {
        parts.status.remove();
        parts.continue.remove();
      }
-+    // La regione della generazione: entrata nel DOM vuota, il testo arriva al fotogramma dopo (così si annuncia).
-+    if (line?.spoken) {
++    // La regione della generazione: entrata nel DOM vuota, il testo arriva dopo `ANNOUNCE_DELAY_MS` (così si annuncia);
++    // a generazione finita dice l'esito, fino alla prossima azione.
++    const spoken = line?.spoken ?? (this.#outcome ? generationOutcome(this.#outcome, this.#proposalId !== '', t) : null);
++    if (spoken) {
 +      const entering = parts.spoken.parentNode !== this;
 +      if (entering) this.append(parts.spoken);
-+      announce(parts.spoken, line.spoken, entering);
++      announce(parts.spoken, spoken, entering);
 +    } else {
 +      announce(parts.spoken, '');
 +      parts.spoken.remove();
@@ -2067,7 +2263,7 @@ index b46548b..f642d6e 100644
        toggleAttr(parts.warnings, 'aria-label', true, label);
        toggleAttr(parts.warnings, 'data-tooltip', true, label);
        setText(parts.count, ` ${warnings.length}`);
-@@ -181,9 +198,10 @@ export class HmdAiReviewBar extends HmdElement {
+@@ -181,9 +211,10 @@ export class HmdAiReviewBar extends HmdElement {
      }
      setText(parts.discard, t('ai.discard'));
      setText(parts.acceptAll, t('ai.acceptAll'));
@@ -2098,7 +2294,7 @@ index eb75b44..880d708 100644
  
    /**
 diff --git a/src/elements/ai/reviewBarView.ts b/src/elements/ai/reviewBarView.ts
-index 2eeac56..049022f 100644
+index 2eeac56..b1e4d56 100644
 --- a/src/elements/ai/reviewBarView.ts
 +++ b/src/elements/ai/reviewBarView.ts
 @@ -9,22 +9,27 @@ export type ReviewAction = 'previous' | 'next' | 'acceptAll' | 'discard' | 'cont
@@ -2136,7 +2332,7 @@ index 2eeac56..049022f 100644
    /** `role="alert"` solo per la selezione persa. */
    alert: boolean;
    /** Il pulsante «Continua» accanto, solo per una proposta a parti interrotta. */
-@@ -36,14 +41,19 @@ export function statusLine(status: ReviewStatus, t: I18nStore['t']): StatusLine
+@@ -36,14 +41,38 @@ export function statusLine(status: ReviewStatus, t: I18nStore['t']): StatusLine
      case 'none':
        return null;
      case 'generating':
@@ -2159,15 +2355,34 @@ index 2eeac56..049022f 100644
      case 'applied':
 -      return { text: t('ai.applied'), live: false, alert: false, withContinue: false };
 +      return { text: t('ai.applied'), spoken: null, alert: false, withContinue: false };
++  }
++}
++
++/**
++ * Quello che la regione nascosta dice quando la generazione finisce (LAB-42 P1, A11y): proposta pronta, parziale o
++ * troncata. Null se non c'è una proposta (generazione fermata o fallita: lo dicono il registro e i toast) o se
++ * l'esito ha già la sua regione (`scopeLost` è un `role="alert"`).
++ */
++export function generationOutcome(status: ReviewStatus, hasProposal: boolean, t: I18nStore['t']): string | null {
++  if (!hasProposal) return null;
++  switch (status.kind) {
++    case 'none':
++      return t('ai.proposalReady');
++    case 'partial':
++      return t('ai.status.partial');
++    case 'truncated':
++      return t('ai.status.truncated');
++    default:
++      return null;
    }
  }
 ```
 
-- [ ] **Step 5: composer e sidebar** — doppio clic, nota ri-annunciata, bozza; evento nuovo in `events.ts` (sopra il JSDoc di `hmd-ai-manage`):
+- [ ] **Step 5: composer e sidebar** — doppio clic (decisione 16), nota ri-annunciata, bozza; evento nuovo in `events.ts` (sopra il JSDoc di `hmd-ai-manage`):
 
 ```diff
 diff --git a/src/elements/ai/composer.element.ts b/src/elements/ai/composer.element.ts
-index 2a32346..870db13 100644
+index 2a32346..86762da 100644
 --- a/src/elements/ai/composer.element.ts
 +++ b/src/elements/ai/composer.element.ts
 @@ -1,12 +1,14 @@
@@ -2185,15 +2400,17 @@ index 2a32346..870db13 100644
  import type { HmdAiEffortChip } from './effort-chip.element';
  import type { HmdAiModelChip } from './model-chip.element';
  import { CONTROLLER_NOTES, outgoing, selectionChipText, sendBlocker, sendButton, type ComposerController, type SendBlocker } from './composerView';
-@@ -42,6 +44,7 @@ interface Parts {
+@@ -42,6 +44,9 @@ interface Parts {
  export class HmdAiComposer extends HmdElement {
    #controller: ComposerController | null = null;
    #text = '';
 +  #draft = '';
++  /** `detail` del clic che ha inviato (null se l'invio non è venuto da un clic del mouse). */
++  #sendDetail: number | null = null;
    #selection: TextRange | null = null;
    #getSelection: () => SelectionScope | undefined = () => undefined;
    #i18n: I18nStore | null = null;
-@@ -51,6 +54,8 @@ export class HmdAiComposer extends HmdElement {
+@@ -51,6 +56,8 @@ export class HmdAiComposer extends HmdElement {
    #ignored: TextRange | null = null;
    /** Nota mostrata e il profilo di quel momento: un cambio di profilo la toglie. */
    #note: { key: SendBlocker; profileId: string | undefined } | null = null;
@@ -2202,7 +2419,7 @@ index 2a32346..870db13 100644
    #loop = new RenderLoop(this, {
      ready: () => !!this.#parts && !!this.#controller && !!this.#i18n && this.isConnected,
      render: () => this.#render(this.#parts!, this.#controller!, this.#i18n!),
-@@ -67,6 +72,12 @@ export class HmdAiComposer extends HmdElement {
+@@ -67,6 +74,12 @@ export class HmdAiComposer extends HmdElement {
      this.#passDown();
      this.reconnect();
    }
@@ -2215,7 +2432,7 @@ index 2a32346..870db13 100644
    /** Testo del documento aperto, per contare la selezione. */
    get text(): string { return this.#text; }
    set text(value: string) {
-@@ -114,10 +125,11 @@ export class HmdAiComposer extends HmdElement {
+@@ -114,10 +127,11 @@ export class HmdAiComposer extends HmdElement {
          input: el('textarea', { class: 'input', on: { input: () => this.#onInput(), keydown: (event) => this.#onKeyDown(event) } }),
          modelChip: el('hmd-ai-model-chip'),
          effortChip: el('hmd-ai-effort-chip'),
@@ -2228,7 +2445,7 @@ index 2a32346..870db13 100644
        this.#parts = parts;
        // Le proprietà dei chip prima dell'inserimento, come fa React con i tag hmd-*.
        this.#passDown();
-@@ -141,6 +153,7 @@ export class HmdAiComposer extends HmdElement {
+@@ -141,6 +155,7 @@ export class HmdAiComposer extends HmdElement {
    }
  
    #onInput(): void {
@@ -2236,7 +2453,7 @@ index 2a32346..870db13 100644
      this.#note = null;
      this.#loop.update();
    }
-@@ -164,11 +177,14 @@ export class HmdAiComposer extends HmdElement {
+@@ -164,11 +179,20 @@ export class HmdAiComposer extends HmdElement {
      }
    }
  
@@ -2246,15 +2463,30 @@ index 2a32346..870db13 100644
      if (!controller) return;
 -    if (controller.getState().running) controller.stop();
 -    else this.#send();
-+    // Il secondo clic di un doppio clic (detail 2 e oltre) arriva quando il pulsante è già Stop: non ferma la
-+    // richiesta appena partita. Un clic singolo o la tastiera (detail 0) fermano come prima.
 +    if (controller.getState().running) {
-+      if (event.detail < 2) controller.stop();
-+    } else this.#send();
++      // Il clic subito dopo quello che ha inviato, nella stessa sequenza (detail dell'invio + 1), è la seconda metà
++      // di un doppio clic: non ferma la richiesta appena partita. Ogni altro clic ferma, anche una serie rapida
++      // (detail 3, 4…: chi ha un tremore clicca così) e la tastiera (detail 0).
++      const second = this.#sendDetail !== null && event.detail === this.#sendDetail + 1;
++      this.#sendDetail = null;
++      if (!second) controller.stop();
++      return;
++    }
++    this.#send();
++    this.#sendDetail = event.detail > 0 ? event.detail : null;
    }
  
    /**
-@@ -185,6 +201,7 @@ export class HmdAiComposer extends HmdElement {
+@@ -176,6 +200,8 @@ export class HmdAiComposer extends HmdElement {
+    * preset) non può partire, la nota dice perché; la casella e il focus restano come sono.
+    */
+   #send(presetId?: string): void {
++    // Un invio che non viene da un clic (Invio, suggerimento) non ha un secondo clic da ignorare.
++    this.#sendDetail = null;
+     const controller = this.#controller;
+     const parts = this.#parts;
+     const i18n = this.#i18n;
+@@ -185,6 +211,7 @@ export class HmdAiComposer extends HmdElement {
      // Prima la guardia di send() (che altrimenti scarterebbe in silenzio e la bozza andrebbe persa), poi profilo e testo.
      const blocker = sendBlocker(parts.input.value, !!controller.profile(), !!preset, controller.sendBlocker());
      if (blocker) {
@@ -2262,7 +2494,7 @@ index 2a32346..870db13 100644
        this.#note = { key: blocker, profileId: controller.profile()?.id };
        this.#loop.update();
        return;
-@@ -208,6 +225,7 @@ export class HmdAiComposer extends HmdElement {
+@@ -208,6 +235,7 @@ export class HmdAiComposer extends HmdElement {
      }
      // L'unica scrittura della casella: dopo l'invio di un testo scritto si svuota (spec AI UI §4.2).
      parts.input.value = '';
@@ -2270,12 +2502,12 @@ index 2a32346..870db13 100644
      this.#loop.update();
    }
  
-@@ -230,14 +248,15 @@ export class HmdAiComposer extends HmdElement {
+@@ -230,14 +258,15 @@ export class HmdAiComposer extends HmdElement {
      parts.sendIcon.style.setProperty('mask-image', `url("${ICONS[button.icon]}")`);
      // La nota se ne va quando la sua causa sparisce: per le ragioni del controller quando la ragione cambia;
      // per profilo e testo con un cambio di profilo o una generazione partita da qualunque parte (anche «Riprova»
 -    // nel registro). La stessa nota due volte di fila non si ri-annuncia (stesso testo nella regione): accettato.
-+    // nel registro). La stessa nota a un altro Invio si ri-annuncia (svuotata e riscritta al fotogramma dopo).
++    // nel registro). La stessa nota a un altro Invio si ri-annuncia (svuotata e riscritta dopo `ANNOUNCE_DELAY_MS`).
      if (this.#note) {
        const reason = controller.sendBlocker();
        const fromController = (Object.values(CONTROLLER_NOTES) as SendBlocker[]).includes(this.#note.key);
@@ -2513,14 +2745,14 @@ index b2d4648..65ddc84 100644
 
 Controllo: `grep -n " as " src/elements/ai/model-chip.element.ts` → uscita 1 (nessuna occorrenza).
 
-- [ ] **Step 8: e2e.** In `ai-review-bar.spec.ts` il test «while generating nothing is disabled…» si divide in due (il contatore non è più live e la regione nascosta dice l'avvio; Scarta ferma e scarta) e il test LAB-10 vede la bozza al ritorno:
+- [ ] **Step 8: e2e.** In `ai-review-bar.spec.ts` il test «while generating nothing is disabled…» si divide in due (il contatore non è più live e la regione nascosta dice l'avvio; Scarta ferma e scarta); il testo «truncated» compare due volte (stato visibile e regione nascosta dell'esito) e si prende `.first()`; il test LAB-10 vede la bozza al ritorno:
 
 ```diff
 diff --git a/e2e/ai-review-bar.spec.ts b/e2e/ai-review-bar.spec.ts
-index 96d9e44..b0e9d22 100644
+index 96d9e44..2ffcdb8 100644
 --- a/e2e/ai-review-bar.spec.ts
 +++ b/e2e/ai-review-bar.spec.ts
-@@ -31,18 +31,23 @@ test.describe('review bar', () => {
+@@ -31,23 +31,29 @@ test.describe('review bar', () => {
      await enterAi(app);
    });
  
@@ -2534,20 +2766,27 @@ index 96d9e44..b0e9d22 100644
      await expect(counter).toBeVisible();
 -    await expect(counter).toHaveAttribute('aria-live', 'polite');
 +    await expect(counter).not.toHaveAttribute('aria-live');
-+    // La regione nascosta entra vuota e il testo arriva al fotogramma dopo: con l'orologio finto si fa avanzare.
-+    await page.clock.runFor(50);
++    // La regione nascosta entra vuota e il testo arriva dopo `ANNOUNCE_DELAY_MS`: con l'orologio finto si fa avanzare.
++    await page.clock.runFor(200);
 +    await expect(page.getByText(app.t('ai.generatingStarted'), { exact: true })).toHaveAttribute('aria-live', 'polite');
      const note = page.getByRole('status').filter({ hasText: app.t('ai.review.generating') });
 -    for (const button of [previous(app), next(app), discard(app), acceptAll(app)]) {
 +    for (const button of [previous(app), next(app), acceptAll(app)]) {
        await expect(button).toBeEnabled();
        await button.click();
-+      // Dal secondo clic la stessa nota si svuota e torna al fotogramma dopo (ri-annuncio, LAB-11).
-+      await page.clock.runFor(50);
++      // Dal secondo clic la stessa nota si svuota e torna dopo `ANNOUNCE_DELAY_MS` (ri-annuncio, LAB-11).
++      await page.clock.runFor(200);
        await expect(note).toBeVisible();
        await expect(button).toBeFocused();
      }
-@@ -56,6 +61,20 @@ test.describe('review bar', () => {
+     expect(ai.requests).toBe(1);
+-    await page.clock.runFor(2100);
++    // Tre pause di 200 ms già passate: 1,5 s in più portano il contatore a 2 s.
++    await page.clock.runFor(1500);
+     await expect(page.getByText(app.t('ai.generating', { seconds: 2 }))).toBeVisible();
+     ai.release();
+     await proposalShown(app);
+@@ -56,6 +62,20 @@ test.describe('review bar', () => {
      for (const button of [previous(app), next(app), discard(app), acceptAll(app)]) await expect(button).toBeEnabled();
    });
  
@@ -2568,7 +2807,17 @@ index 96d9e44..b0e9d22 100644
    test('the proposal arrives with the focus on Accept all (keyboard): the focus stays on the button, it does not jump into the diff', async ({ app, ai, page }) => {
      ai.hold();
      await composer(app).fill('fix');
-@@ -179,7 +198,7 @@ test.describe('review bar', () => {
+@@ -79,7 +99,8 @@ test.describe('review bar', () => {
+     await composer(app).fill('fix');
+     await composer(app).press('Enter');
+     await proposalShown(app);
+-    await expect(page.getByText(app.t('ai.status.truncated'))).toBeVisible();
++    // Il testo c'è due volte: lo stato visibile e la regione nascosta che annuncia l'esito (P1): il primo è quello visibile.
++    await expect(page.getByText(app.t('ai.status.truncated')).first()).toBeVisible();
+     const note = page.getByRole('status').filter({ hasText: app.t('ai.review.truncated') });
+     await expect(acceptAll(app)).toBeEnabled();
+     await acceptAll(app).click();
+@@ -179,7 +200,7 @@ test.describe('review bar', () => {
  });
  
  test.describe('composer without a document', () => {
@@ -2577,7 +2826,7 @@ index 96d9e44..b0e9d22 100644
      await app.openFolder({ 'a.md': 'A' });
      await enterAi(app);
      await composer(app).fill('fix');
-@@ -189,11 +208,14 @@ test.describe('composer without a document', () => {
+@@ -189,11 +210,14 @@ test.describe('composer without a document', () => {
      await expect(composer(app)).toHaveValue('fix');
      await expect(send(app)).toBeFocused();
      expect(ai.requests).toBe(0);
@@ -2595,7 +2844,7 @@ index 96d9e44..b0e9d22 100644
    test('Enter in the composer during a generation says so and keeps the draft; the note goes when the generation ends', async ({ app, ai, page }) => {
 ```
 
-Nell'audit, lo stato `ai-composer-note-no-document` (`computed-styles.audit.ts:419`) aspettava la nota **per testo**: con il testo nuovo il progetto `baseline` (build vecchia, testo vecchio) cade e il `current` non parte (misurato). Diventa indipendente dal testo:
+`ai-review.spec.ts:222` e `computed-styles.audit.ts:280`: `app.t('ai.warningsCount', { count: 1 })` → `app.t('ai.warningsCount.one', { count: 1 })` (nell'audit il nome «1 warning» trova anche il «1 warnings» della baseline: il nome si confronta per sottostringa). `computed-styles.audit.ts:265`: `page.getByText(app.t('ai.status.truncated')).first()`. Lo stato `ai-composer-note-no-document` (`computed-styles.audit.ts:419`) aspettava la nota **per testo**: con il testo nuovo il progetto `baseline` (build vecchia, testo vecchio) cade e il `current` non parte (misurato). Diventa indipendente dal testo:
 
 ```ts
       // La nota per testo non basta: l'audit prepara lo stato anche sulla baseline, che può avere il testo di prima
@@ -2603,23 +2852,28 @@ Nell'audit, lo stato `ai-composer-note-no-document` (`computed-styles.audit.ts:4
       await expect(page.getByRole('status').filter({ hasText: /\S/ }).first()).toBeVisible();
 ```
 
-`ai-review.spec.ts:222` e `computed-styles.audit.ts:280`: `app.t('ai.warningsCount', { count: 1 })` → `app.t('ai.warningsCount.one', { count: 1 })` (nell'audit il nome «1 warning» trova anche il «1 warnings» della baseline: il nome si confronta per sottostringa). In `ai-composer.spec.ts` il test del doppio clic del Task 1 si rovescia:
+In `ai-composer.spec.ts` il test del doppio clic del Task 1 si rovescia (verde nel prototipo):
 
 ```ts
-  test('a double click on Send sends once and keeps the request going: the second click of the pair is ignored on Stop', async ({ app, ai }) => {
+  test('a double click on Send sends once and keeps the request going; a further click in the same series stops it', async ({ app, ai }) => {
     ai.hold();
     await composer(app).fill('fix');
     await send(app).click();
     await stop(app).dispatchEvent('click', { detail: 2 });
     await expect(stop(app)).toBeVisible();
-    await stop(app).click();
+    await stop(app).dispatchEvent('click', { detail: 3 });
     await expect(send(app)).toBeVisible();
     expect(ai.requests).toBe(1);
     ai.release();
   });
 ```
 
-- [ ] **Step 9: gate e baseline.** `npm test` (atteso **1064** = 1053 + 3 `announce` + 1 `i18n` + 1 `reviewBarView` + 1 `review-bar` + 1 `review` + 2 `composer` + 1 `editor` + 1 `workspace`), `npm run lint`; in build e in sviluppo `ai-review-bar.spec.ts`, `ai-review.spec.ts`, `ai-composer.spec.ts`, `ai-diff.spec.ts`, `editor.spec.ts`, `editor-session.spec.ts`. Audit con `-g "ai-|editor"`: cadono **solo** `ai-review-generating`, `ai-review-note`, `ai-composer-running` (`…>hmd-ai-review-bar:0>span:2: nuovo`), `ai-review-truncated`, `ai-review-warnings` (`content: "1 warnings" → "1 warning"`, `width`/`inline-size`/`*-origin` del `::after`), `ai-composer-note-no-document` (testo e misure della nota); righe incollate nel commento. Poi `npm run build && rm -rf dist-baseline && cp -r dist dist-baseline && git rev-parse HEAD > dist-baseline/BASELINE_SHA` e audit completo verde. Commit piccoli, uno per punto.
+- [ ] **Step 9: gate e baseline.** `npm test` (atteso **1070** = 1057 + 3 `announce` + 1 `i18n` + 2 `reviewBarView` + 2 `review-bar` + 1 `review` + 2 `composer` + 1 `editor` + 1 `workspace`), `npm run lint`; in build e in sviluppo `ai-review-bar.spec.ts`, `ai-review.spec.ts`, `ai-composer.spec.ts`, `ai-diff.spec.ts`, `editor.spec.ts`, `editor-session.spec.ts` (misurato sui primi tre più `startup.spec.ts`: 46 in build, 46 in sviluppo). Audit **solo con `-g "ai-"`** (il progetto `baseline` gira comunque tutto): cadono **solo** questi 10 stati, misurato —
+  - `ai-review`, `ai-review-hover`, `ai-review-conflict`, `ai-chat-summary`, `ai-review-generating`, `ai-review-note`, `ai-composer-running`: `…>hmd-ai-review-bar:0>span:2: nuovo` (la regione nascosta: generazione in corso, o l'esito «Proposal ready» fino alla prossima azione);
+  - `ai-review-truncated`, `ai-review-warnings`: la stessa riga più il tooltip degli avvisi (`content: "1 warnings" → "1 warning"`, `width`/`inline-size`/`*-origin` del `::after`);
+  - `ai-composer-note-no-document`: la nota più lunga va su più righe (12 righe di altezze e origini nella sidebar AI).
+
+  `ai-review-applied` resta verde (Accetta tutto è un'azione: l'esito si svuota). Righe incollate nel commento, poi `dist-baseline/` ricostruita dal commit del task e lo stesso `-g` verde. Commit piccoli, uno per punto.
 
 ### Task 5: Impostazioni — Esc, focus, annunci, nomi delle sezioni, indice (Builder)
 
@@ -2819,7 +3073,7 @@ index 08feb54..66c5889 100644
 +});
 ```
 
-jsdom non restituisce il focus all'apertore quando un `<dialog>` si chiude (lo fa Chrome): i due test di Elimina lo fanno a mano (`remove.focus()`), con il commento. Il test di «Connesso» registra il testo della regione a ogni mutazione (con il ripiego a `setTimeout` di `announce` in jsdom, un `waitFor` arriverebbe dopo il testo). RED atteso (misurato): `settings.dom.test.ts` 3 rossi (Esc non consumato, sezioni senza `aria-labelledby`, focus che resta sul link); `settingsView.test.ts` non compila finché `currentSection` non esiste; `profiles`/`presets.dom.test.ts` «… the focus goes to the first item» (`not body`) e «Connection…» (`[ 'Connection successful' ]` invece di `[ '', 'Connection successful' ]`); `sync.dom.test.ts` 1 rosso (nessun `role`).
+jsdom non restituisce il focus all'apertore quando un `<dialog>` si chiude (lo fa Chrome): i due test di Elimina lo fanno a mano (`remove.focus()`), con il commento. Il test di «Connesso» registra il testo della regione a ogni mutazione (un `waitFor` può arrivare dopo la pausa di `announce` e non vedere la regione vuota). RED atteso (misurato): `settings.dom.test.ts` 3 rossi (Esc non consumato, sezioni senza `aria-labelledby`, focus che resta sul link); `settingsView.test.ts` non compila finché `currentSection` non esiste; `profiles`/`presets.dom.test.ts` «… the focus goes to the first item» (`not body`) e «Connection…» (`[ 'Connection successful' ]` invece di `[ '', 'Connection successful' ]`); `sync.dom.test.ts` 1 rosso (nessun `role`).
 
 - [ ] **Step 2: `currentSection` al posto di `topSection`** in `settingsView.ts` (`sectionOf` resta: lo usa il suo test):
 
@@ -3074,7 +3328,7 @@ index 6c6e794..20cbac6 100644
      setText(d.remove, t('ai.delete'));
      setText(d.save, t('ai.save'));
 -    setText(d.connected, t('ai.connected'));
-+    // «Connesso» entra nel DOM vuoto e si scrive al fotogramma dopo: una regione inserita già piena spesso
++    // «Connesso» entra nel DOM vuoto e si scrive dopo `ANNOUNCE_DELAY_MS`: una regione inserita già piena spesso
 +    // non si annuncia (LAB-42 P8). Il testo cambia solo con la lingua (setText, senza riannunciare).
 +    const entering = this.#connected && d.connected.parentNode !== d.root;
 +    announce(d.connected, this.#connected ? t('ai.connected') : '', entering);
@@ -3187,7 +3441,7 @@ index 663351c..0001138 100644
 
 **Eccezione che resta nell'audit.** `computed-styles.audit.ts:576` (`#settings-ai-presets`) e le posizioni di `:587`, `:673-674` **non** cambiano qui: l'audit esegue la stessa preparazione anche sulla build di `dist-baseline/`, che non ha le sezioni con il nome. Si sostituiscono nel Task 8, il primo che parte da una baseline ricostruita dopo questo task.
 
-- [ ] **Step 6: gate e baseline.** `npm test` (atteso **1069** = 1064 + 3 `settings` + 1 `profiles` + 1 `sync`), `npm run lint`; in build e in sviluppo `settings.spec.ts`, `settings-sections.spec.ts`, `ai-model.spec.ts`, `ai-chips.spec.ts`, `theme-i18n.spec.ts`. Audit con `-g "settings"`: cadono **solo** `settings-preset` (`nav:0>a:2 { background-color: rgb(204, 251, 241) → rgba(0, 0, 0, 0) }`, `nav:0>a:3 { … → rgb(204, 251, 241) }`: la voce corrente è Preset, non Profili) e `settings-sync-folder` (lo stesso con `a:4`, Sync), misurato; righe incollate nel commento, poi baseline ricostruita dal commit del task e audit completo verde. Commit piccoli: `test: …(RED)`, `fix: Esc nelle impostazioni apre la conferma e non la richiude`, `fix: il focus resta nella sezione dopo Elimina e dopo un salto dall'indice`, `feat: sezioni delle impostazioni con un nome accessibile`, `fix: l'indice delle impostazioni arriva alle ultime sezioni`, `fix: stato della sync e «Connesso» annunciati`, `test: e2e per nome di sezione al posto di id e posizione`.
+- [ ] **Step 6: gate e baseline.** `npm test` (atteso **1075** = 1070 + 3 `settings` + 1 `profiles` + 1 `sync`), `npm run lint`; in build e in sviluppo `settings.spec.ts`, `settings-sections.spec.ts`, `ai-model.spec.ts`, `ai-chips.spec.ts`, `theme-i18n.spec.ts`. Audit **solo con `-g "settings"`** (il progetto `baseline` gira comunque tutto): cadono **solo** `settings-preset` (`nav:0>a:2 { background-color: rgb(204, 251, 241) → rgba(0, 0, 0, 0) }`, `nav:0>a:3 { … → rgb(204, 251, 241) }`: la voce corrente è Preset, non Profili) e `settings-sync-folder` (lo stesso con `a:4`, Sync), misurato; righe incollate nel commento, poi baseline ricostruita dal commit del task e lo stesso `-g` verde (mai l'audit completo: Task 7). Commit piccoli: `test: …(RED)`, `fix: Esc nelle impostazioni apre la conferma e non la richiude`, `fix: il focus resta nella sezione dopo Elimina e dopo un salto dall'indice`, `feat: sezioni delle impostazioni con un nome accessibile`, `fix: l'indice delle impostazioni arriva alle ultime sezioni`, `fix: stato della sync e «Connesso» annunciati`, `test: e2e per nome di sezione al posto di id e posizione`.
 
 ### Task 6: I tre `!important` del diff come `StyleModule` (Builder)
 
@@ -3259,7 +3513,7 @@ index 1dde4ac..b4b3743 100644
 
 Il quarto `!important` (`.cm-selectionBackground` in `docExtensions.ts:48`) resta: il commento sopra la regola dice perché (il selettore del tema base di `@codemirror/view`, `&light.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground`, ha specificità più alta; toglierlo vorrebbe dire copiare quel selettore interno).
 
-- [ ] **Step 4: verifiche.** `grep -n "important" src/elements/ai/diff-pane.css` → uscita 1; `grep -rn "important" src --include=*.css --include=*.ts` → solo `docExtensions.ts:48` e il suo commento; gzip del bundle (atteso uguale ±50 B a quello del Task 5); `npm test`, `npm run lint`; e2e `ai-diff.spec.ts`, `ai-review.spec.ts`, `ai-review-bar.spec.ts` in build e in sviluppo; audit con `-g "ai-review"` **verde, nessuna differenza** (misurato). Commit: `refactor: i pulsanti dei blocchi del diff senza !important (StyleModule)`.
+- [ ] **Step 4: verifiche.** `grep -n "important" src/elements/ai/diff-pane.css` → uscita 1; `grep -rn "important" src --include=*.css --include=*.ts` → solo `docExtensions.ts:48` e il suo commento; gzip del bundle (atteso uguale ±50 B a quello del Task 5); `npm test`, `npm run lint`; e2e `ai-diff.spec.ts`, `ai-review.spec.ts`, `ai-review-bar.spec.ts` in build e in sviluppo; audit solo con `-g "ai-review"` **verde, nessuna differenza** contro la baseline del Task 5 (misurato). Commit: `refactor: i pulsanti dei blocchi del diff senza !important (StyleModule)`.
 
 Con l'8b (Task 8) le regole `:disabled` del `StyleModule` e del foglio cambiano con la regola «mai disabled»: il Task 8 le riscrive insieme.
 
@@ -3269,13 +3523,13 @@ Con l'8b (Task 8) le regole `:disabled` del `StyleModule` e del foglio cambiano 
 - Modify: `docs/superpowers/specs/2026-09-27-housemd-web-components-design.md` (§7 «Fase 8», §13), questo piano (paragrafo «Esecuzione 8a»)
 
 - [ ] **Step 1: correzioni della review** (Reviewer e A11y sul diff dell'8a), se ce ne sono, come primo commit.
-- [ ] **Step 2: suite complete, una volta, nel lock**: `npx tsc --noEmit`, `npm run lint`, `npm test` (atteso 1069 più i test delle correzioni), `npm run test:e2e` (atteso **208** = 202 + i 5 del Task 1 + Scarta del Task 4; i rovesciati non aggiungono test; misurato nel prototipo), `npm run test:e2e:dev`, `npm run test:e2e:audit` (atteso **142** = 136 + 6, i tre stati `forced-colors-*` per i due progetti) contro la baseline del Task 5 (`BASELINE_SHA`). Gzip del bundle. Instabilità note ripetute da sole e annotate.
+- [ ] **Step 2: suite complete, una volta, nel lock**: `npx tsc --noEmit`, `npm run lint`, `npm test` (atteso **1075** più i test delle correzioni), `npm run test:e2e` (atteso **210** = 202 + i 5 del Task 1 + i 2 nuovi del Task 2 + Scarta del Task 4; i rovesciati non aggiungono test), `npm run test:e2e:dev` (atteso **195** = 187 + gli stessi 8), `npm run test:e2e:audit` (atteso **152** = (68 + 8 stati) × 2 progetti) contro la baseline del Task 5 (`BASELINE_SHA`). Gzip del bundle. Instabilità note ripetute da sole e annotate.
 - [ ] **Step 3: spec.** §7 «Fase 8»: paragrafo «8a **fatta** (PR #12)» nello stile della 7a/7b (cosa, misure, decisioni che cambiano il contratto: `announce`, `pluralKey`, `currentSection`, `StyleModule`, `style-mod` in `package.json`); §13: questo piano nell'elenco.
 - [ ] **Step 4: PR pronta.** Paragrafo «Esecuzione 8a» in questo piano (misure, deviazioni), `gh pr ready 12`, corpo aggiornato. La PR la mergia il PM nell'epica; da lì nasce il branch dell'8b.
 
 ### Task 8: «Mai disabled» per i pulsanti dei blocchi del diff (Planner)
 
-**Prerequisiti:** 8a mergiata nell'epica; branch `lab/LAB-6-fase-8b` da `epic/LAB-3-web-components`, PR in bozza nuova; `dist-baseline/` copiata dal checkout della chiusura dell'8a (`BASELINE_SHA` = il commit del Task 5) o ricostruita da quello SHA in un worktree separato; proposta di Designer accettata dal PM (punto 7 di «Cambi d'aspetto»).
+**Prerequisiti:** 8a mergiata nell'epica; branch `lab/LAB-6-fase-8b` da `epic/LAB-3-web-components`, PR in bozza nuova; `dist-baseline/` copiata dal checkout della chiusura dell'8a (`BASELINE_SHA` = il commit del Task 5, l'ultimo dell'8a che l'ha rinnovata: il Task 7 non la tocca) o ricostruita da quello SHA in un worktree separato; proposta di Designer accettata dal PM (punto 7 di «Cambi d'aspetto»).
 
 **Files:**
 - Modify: `src/elements/ai/diff-pane.element.ts`, `diffLogic.ts` (+ test), `diff-pane.css`, `review.element.ts`, `review-bar.element.ts` (la nota della barra riceve anche le ragioni dei blocchi), i loro test, `e2e/ai-review-bar.spec.ts`, `e2e/ai-diff.spec.ts`, `e2e/computed-styles.audit.ts` (`:229`, e le eccezioni `#settings-ai-presets` del Task 5 che qui diventano regioni con il nome)
@@ -3403,7 +3657,7 @@ index 97bd567..60f48c7 100644
    ::view-transition-old(root),
 ```
 
-Misurato nel prototipo: icona della barra `rgb(0, 0, 0)` su Canvas bianco e `rgb(255, 255, 255)` su Canvas nero (oggi uguale al Canvas: invisibile), modalità premuta su `Highlight` con l'icona in `HighlightText`, separatore `CanvasText`, voce corrente dell'indice su `Highlight`. Gate: audit, cadono **solo** `focus-search-keyboard-forced-colors` (icona della ricerca) e i tre `forced-colors-*` del Task 1 (rito della baseline); un e2e in `forced-colors` per stato non serve (l'audit confronta gli stili calcolati di ogni nodo, icone comprese). Nessuno snapshot (nessuno è in `forced-colors`). Prova a mano con il contrasto elevato vero di Windows nella sub-issue di Davide.
+**Note per Designer e per questo task (A11y, non bloccanti):** dentro i pulsanti il colore di sistema giusto è `ButtonText` (in alcuni temi a contrasto di Windows è diverso da `CanvasText`), nei link `LinkText`; l'anello del focus in `forced-colors` (`outline` `Highlight`, `outline-offset: 2px`, `global.css:79`) su una voce con sfondo `Highlight` resta distinguibile solo per i 2 px di scostamento: va controllato sul contrasto elevato vero; `forced-color-adjust: none` si eredita, quindi un figlio futuro con un colore d'autore lo mostrerebbe su `Highlight` (oggi `.mode`, `.orphan`, `.navLink`, `.item` hanno solo testo e icona). Misurato nel prototipo: icona della barra `rgb(0, 0, 0)` su Canvas bianco e `rgb(255, 255, 255)` su Canvas nero (oggi uguale al Canvas: invisibile), modalità premuta su `Highlight` con l'icona in `HighlightText`, separatore `CanvasText`, voce corrente dell'indice su `Highlight`. Gate: audit solo con `-g "forced-colors"`, cadono **solo** `focus-search-keyboard-forced-colors` (icona della ricerca) e gli 8 `forced-colors-*` del Task 1 (misurato: tutti e 9 cambiano con queste regole; rito della baseline); un e2e in `forced-colors` per stato non serve (l'audit confronta gli stili calcolati di ogni nodo, icone comprese). Nessuno snapshot (nessuno è in `forced-colors`). Prova a mano con il contrasto elevato vero di Windows nella sub-issue di Davide.
 
 ### Task 11: Documenti, misure, chiusura della migrazione (Builder)
 
@@ -3416,4 +3670,6 @@ Misurato nel prototipo: icona della barra `rgb(0, 0, 0)` su Canvas bianco e `rgb
 - [ ] **Step 3: spec.** §7 «Fase 8»: «8b **fatta**» con misure (bundle e avvio contro la fase 3, nella tabella del paragrafo «Misure» di questo piano); §11: ogni criterio con lo stato (fatto o «resta: Davide»); §13: piano e PR.
 - [ ] **Step 4: `CLAUDE.md` e `README.md`.** In `CLAUDE.md`, «Interfaccia»: la regola «mai disabled» (con la nota `role="status"` e `announce`), le regioni live che entrano vuote, `pluralKey` per i testi con un numero, `forced-colors` (icone in `CanvasText`, voce corrente in `Highlight`), `style-mod` per gli stili che devono stare nell'origine di CodeMirror. Nel `README.md` lo stato della migrazione (finita, in attesa del merge) e il comando della misura dell'avvio.
 - [ ] **Step 5: nota di chiusura** (al posto dell'handover): stato finale (branch, PR, misure delle suite, del bundle e dell'avvio), `dist-baseline/` con la sua provenienza, cosa resta fuori (la rimozione dei toast, A4 se A11y non l'ha riprodotta, le prove a mano), le lezioni della fase 8 (dal paragrafo «Misure» e dall'esecuzione: il focus catturato prima di `busy`; un `dispatch({})` vuoto in CodeMirror passa dalla sessione; l'orologio finto ferma `requestAnimationFrame`; l'audit esegue la preparazione anche sulla baseline), le trappole dell'ambiente.
-- [ ] **Step 6: richiesta di merge a Davide.** Dopo il merge dell'8b nell'epica (lo fa il PM): `gh pr create --base main --head epic/LAB-3-web-components --title "LAB-3: migrazione a Web Components" --body-file <riepilogo>` (fasi 4–8, misure, link ai piani; **mai** merge); sub-issue «[Davide] Checklist §9 in Chrome ed Edge e merge della migrazione in main» assegnata a davidemak, con: il link alla PR, la checklist §9 manuale completa (selettore e permessi veri, popover vicino ai bordi, transizione a pixel e `prefers-reduced-motion`, NVDA o Orca e `aria-live`, contrasto elevato vero di Windows, Edge, PWA installata e offline, AI con un provider vero), le prove ancora aperte (LAB-52, i punti della 7b dell'handover, A4 con lo screen reader), cosa sblocca (il merge in `main`, che fa solo lui).
+
+  La nota contiene la **checklist §9 per Davide**, completa: la parte automatica già verde (con i numeri delle suite), e la parte manuale da fare in Chrome ed Edge stabili — selettore di cartelle e permessi veri; popover e tooltip vicino ai bordi; transizione a pixel e `prefers-reduced-motion`; PWA (installazione, offline, avviso di nuova versione); AI con un provider vero; **screen reader, NVDA con Chrome e Narratore con Edge**: la stessa nota a un secondo clic (barra della revisione, composer, Nuova chat), «Connection successful», avvio, parti ed esito della generazione, lo stato della sync, A4 cambiando lingua dalla select; **contrasto elevato vero di Windows, almeno Acquatico e Deserto**: icone della barra, modalità premuta (anche con il focus), voce corrente dell'indice e di profili e preset, bozza orfana corrente, separatore (anche al passaggio e con il focus); le prove ancora aperte (LAB-52, i punti della 7b dell'handover).
+- [ ] **Step 6: PR dell'8b pronta, e basta.** `gh pr ready` sulla PR dell'8b, corpo aggiornato. La PR `epic/LAB-3-web-components` → `main` e la sub-issue «[Davide] Checklist §9 in Chrome ed Edge e merge della migrazione in main» **non** le apre questo task: le apre il PM dopo il merge dell'8b nell'epica (wakeup già pronta su LAB-6), usando la checklist della nota di chiusura. Mergia solo Davide.
