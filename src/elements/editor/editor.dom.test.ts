@@ -291,3 +291,23 @@ test('replacing the i18n store on a connected editor renames the content and mov
   assert.equal(content.getAttribute('aria-label'), 'B-NAME-it');
   el.remove();
 });
+
+test('focus mode greys everything outside the cursor paragraph, follows the cursor, and leaves the text alone', async () => {
+  const { el, view } = mount('uno\n\ndue\n\ntre');
+  const dimmed = () => [...el.querySelectorAll('.cm-focusDim')].map((n) => n.textContent).join('');
+  assert.equal(dimmed(), '', 'off: nothing is dimmed');
+  el.focusMode = true;
+  await tick();
+  // La selezione di partenza è all'inizio: resta acceso il primo paragrafo.
+  assert.equal(dimmed().replaceAll('\n', ''), 'duetre');
+  view().dispatch({ selection: { anchor: 5 } });
+  assert.equal(dimmed().replaceAll('\n', ''), 'unotre');
+  el.focusUnit = 'sentence';
+  await tick();
+  assert.equal(dimmed().replaceAll('\n', ''), 'unotre');
+  el.focusMode = false;
+  await tick();
+  assert.equal(dimmed(), '');
+  assert.equal(view().state.doc.toString(), 'uno\n\ndue\n\ntre');
+  el.remove();
+});

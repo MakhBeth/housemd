@@ -1,5 +1,5 @@
 import { basicSetup } from 'codemirror';
-import { Compartment, EditorState, type ChangeDesc } from '@codemirror/state';
+import { Compartment, EditorState, type ChangeDesc, type Extension } from '@codemirror/state';
 import { EditorView, ViewPlugin } from '@codemirror/view';
 import { markdown } from '@codemirror/lang-markdown';
 import { autocompletion } from '@codemirror/autocomplete';
@@ -11,6 +11,7 @@ import type { DocTitle } from '../search/searchIndex';
 import { imageFiles, insertImageLinks } from './images';
 import { wikiCompletionSource } from './wikiCompletion';
 import { saveDocSession, type DocSession } from './docSession';
+import { focusCompartment, focusTheme } from './focusMode';
 import { formatToolbar, type Translate } from './formatToolbar';
 
 /**
@@ -109,11 +110,14 @@ export function docAppearance() {
   return [markdown(), syntaxHighlighting(highlight), EditorView.lineWrapping, theme];
 }
 
-export function docExtensions(host: DocHost) {
+/** `focus`: la modalità focus di partenza; solo l'editor principale la passa (il diff della revisione AI no). */
+export function docExtensions(host: DocHost, focus: Extension = []) {
   return [
       basicSetup,
       lifecycle,
       docAppearance(),
+      focusTheme,
+      focusCompartment.of(focus),
       editable.of(readOnlyExtensions(host.readOnly())),
       autocompletion({ override: [wikiCompletionSource(() => host.getDocs())] }),
       formatToolbar(() => host.t()),

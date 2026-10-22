@@ -52,3 +52,17 @@ test('the last file is per workspace', () => {
   assert.equal(readLastFile('a'), 'x.md');
   assert.equal(readLastFile('b'), null);
 });
+
+test('focus preferences default to off and paragraph, survive a reload and reject junk', () => {
+  items.clear();
+  assert.equal(readPref('focusMode'), false);
+  assert.equal(readPref('focusUnit'), 'paragraph');
+  writePref('focusMode', true);
+  writePref('focusUnit', 'sentence');
+  assert.equal(readPref('focusMode'), true);
+  assert.equal(readPref('focusUnit'), 'sentence');
+  items.set('housemd:focusUnit', '"line"');
+  items.set('housemd:focusMode', '"on"');
+  assert.equal(readPref('focusUnit'), 'paragraph');
+  assert.equal(readPref('focusMode'), false);
+});

@@ -2,6 +2,8 @@ import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 
 import { el } from '../../dom/el';
+import { focusCompartment, focusExtensions } from '../../editor/focusMode';
+import type { FocusUnit } from '../../editor/focusRange';
 import { editable, mainSelectionRange, readOnlyExtensions } from '../../editor/docExtensions';
 import { initialRestoreSeq } from '../../editor/restoreCommand';
 import { applyDocRestore } from '../../editor/useDocBinding';
@@ -26,6 +28,47 @@ export class HmdEditor extends HmdDocElement {
   #announce = false;
   #scheduled = false;
   #suppressUntil = 0;
+  #focus = false;
+  #focusUnit: FocusUnit = 'paragraph';
+  #appliedFocus = '';
+
+  /** Modalità focus (grigio fuori dall'unità del cursore) e sua unità: si riconfigurano a caldo. */
+  get focusMode(): boolean { return this.#focus; }
+  set focusMode(value: boolean) {
+    if (!!value === this.#focus) return;
+    this.#focus = !!value;
+    this.#applyFocus();
+  }
+  get focusUnit(): FocusUnit { return this.#focusUnit; }
+  set focusUnit(value: FocusUnit) {
+    if (value === this.#focusUnit) return;
+    this.#focusUnit = value;
+    this.#applyFocus();
+  }
+
+  protected override initialFocus() {
+    this.#appliedFocus = this.#focusKey();
+    return focusExtensions(this.#focusConfig());
+  }
+
+  #focusConfig() {
+    return { enabled: this.#focus, unit: this.#focusUnit, locale: this.i18n?.getState().locale ?? 'en' };
+  }
+
+  #focusKey(): string {
+    const { enabled, unit, locale } = this.#focusConfig();
+    return `${enabled}/${unit}/${locale}`;
+  }
+
+  #applyFocus(): void {
+    const view = this.#view;
+    if (!view || this.#appliedFocus === this.#focusKey()) return;
+    this.#appliedFocus = this.#focusKey();
+    // Mai dentro un aggiornamento di CodeMirror: i setter arrivano dal render, ma una vista può essere in dispatch.
+    queueMicrotask(() => {
+      if (this.#view === view) view.dispatch({ effects: focusCompartment.reconfigure(focusExtensions(this.#focusConfig())) });
+    });
+  }
 
   /** Porta in cima la riga sorgente `line` (0-based, frazionaria); lo scroll che ne segue non torna all'anteprima. */
   scrollToLine(line: number): void {
@@ -64,6 +107,7 @@ export class HmdEditor extends HmdDocElement {
   }
 
   #relabel(): void {
+    this.#applyFocus();
     this.#view?.contentDOM.setAttribute('aria-label', this.docHost.contentLabel());
   }
 

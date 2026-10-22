@@ -12,6 +12,8 @@ export const PREFS = {
   sidebarOpen: { schema: z.boolean(), fallback: true },
   sidebarWidth: { schema: z.number(), fallback: WIDTH_LIMITS.sidebar.initial },
   aiSidebarWidth: { schema: z.number(), fallback: WIDTH_LIMITS.ai.initial },
+  focusMode: { schema: z.boolean(), fallback: false },
+  focusUnit: { schema: z.enum(['paragraph', 'sentence'] as const), fallback: 'paragraph' as 'paragraph' | 'sentence' },
   aiProfile: { schema: z.string(), fallback: '' },
 } as const;
 

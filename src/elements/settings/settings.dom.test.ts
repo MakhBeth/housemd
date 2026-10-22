@@ -47,7 +47,7 @@ function mount(options: { ai?: boolean } = {}) {
   scrolled.length = 0;
   document.body.append(el);
   const events: [string, unknown][] = [];
-  for (const type of ['hmd-settings-section', 'hmd-settings-close', 'hmd-settings-autosave', 'hmd-settings-text-width', 'hmd-settings-save-all'] as const) {
+  for (const type of ['hmd-settings-section', 'hmd-settings-close', 'hmd-settings-autosave', 'hmd-settings-text-width', 'hmd-settings-focus', 'hmd-settings-save-all'] as const) {
     el.addEventListener(type, (event) => events.push([type, event.detail]));
   }
   const field = (label: string) => [...el.querySelectorAll('label')].find((l) => l.querySelector('span')?.textContent === label)!.querySelector('input, select') as HTMLInputElement;
@@ -67,7 +67,7 @@ test('the same DOM as SettingsView.tsx: a region with the index and the general 
   assert.equal(nav.querySelector('a')!.getAttribute('href'), '#settings');
   assert.equal(nav.querySelector('a')!.getAttribute('aria-current'), 'true');
   const general = el.querySelector('#settings-general')!;
-  assert.deepEqual([...general.children].map((c) => c.localName), ['h2', 'label', 'fieldset', 'fieldset', 'fieldset', 'button']);
+  assert.deepEqual([...general.children].map((c) => c.localName), ['h2', 'label', 'fieldset', 'fieldset', 'fieldset', 'fieldset', 'button']);
   assert.ok(document.activeElement === el.querySelector('h1'), 'focus on the title');
 });
 
@@ -190,4 +190,26 @@ test('a link activated from the keyboard scrolls to its section and moves the fo
   const h2 = el.querySelector('#settings-ai-sync h2')!;
   assert.equal(h2.getAttribute('tabindex'), '-1');
   assert.ok(document.activeElement === h2, `the Sync title, not ${document.activeElement?.localName}`);
+});
+
+test('the Writing group: the focus checkbox, two always-active unit radios, the hint that describes the group', () => {
+  const { el, events } = mount();
+  const group = el.querySelector('fieldset[aria-describedby="settings-writing-hint"]')!;
+  assert.equal(group.querySelector('legend')!.textContent, EN_MESSAGES['settings.writing']);
+  assert.equal(document.getElementById('settings-writing-hint')!.textContent, EN_MESSAGES['settings.writing.hint']);
+  const checkbox = group.querySelector<HTMLInputElement>('input[type=checkbox]')!;
+  const radios = [...group.querySelectorAll<HTMLInputElement>('input[name=focusUnit]')];
+  assert.deepEqual(radios.map((r) => r.value), ['paragraph', 'sentence']);
+  assert.equal(checkbox.checked, false);
+  assert.ok(radios.every((r) => !r.disabled), 'the radios are active even when the focus is off');
+  assert.equal(radios[0].checked, true);
+  radios[1].click();
+  checkbox.click();
+  assert.deepEqual(events, [
+    ['hmd-settings-focus', { focus: false, unit: 'sentence' }],
+    ['hmd-settings-focus', { focus: true, unit: 'paragraph' }],
+  ]);
+  el.writing = { focus: true, unit: 'sentence' };
+  assert.equal(checkbox.checked, true);
+  assert.equal(radios[1].checked, true);
 });

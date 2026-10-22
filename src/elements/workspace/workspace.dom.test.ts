@@ -99,7 +99,7 @@ async function mount(options: { files?: Record<string, string>; ai?: boolean; la
 
 test('the same DOM as WorkspaceView.tsx with no file open: layout with sidebar, separator and main, then the toasts', async () => {
   const { el } = await mount();
-  assert.deepEqual([...el.children].map((c) => c.localName), ['div', 'hmd-toasts']);
+  assert.deepEqual([...el.children].map((c) => c.localName), ['div', 'hmd-toasts', 'p']);
   const layout = el.firstElementChild as HTMLElement;
   assert.equal(layout.className, 'layout');
   assert.equal(layout.style.gridTemplateColumns, '280px 5px minmax(0, 1fr)');
@@ -142,7 +142,7 @@ test('the settings come from the route: on top of an inert layout, the title fol
   const settingsButton = button(EN_MESSAGES['toolbar.settings']);
   settingsButton.focus();
   settingsButton.click();
-  assert.deepEqual([...el.children].map((c) => c.localName), ['div', 'hmd-settings', 'hmd-toasts']);
+  assert.deepEqual([...el.children].map((c) => c.localName), ['div', 'hmd-settings', 'hmd-toasts', 'p']);
   assert.equal((el.firstElementChild as HTMLElement).inert, true);
   assert.equal(document.title, `HMD - ${EN_MESSAGES['settings.title']}`);
   el.querySelector<HTMLButtonElement>('hmd-settings .navHeader button')!.click();
@@ -364,4 +364,34 @@ test('the folder during a switch: never disabled, data-busy, the note after the 
   assert.equal(note(), null);
   assert.equal(folder.hasAttribute('data-busy'), false);
   assert.equal(document.activeElement, folder);
+});
+
+test('the focus button sits between Save all and the theme, toggles aria-pressed, is never disabled and keeps the preference', async () => {
+  const { el, workspace, button } = await mount();
+  await workspace.openFile('a.md');
+  const focus = button(EN_MESSAGES['toolbar.focus']);
+  const actions = [...el.querySelectorAll('.actions > *')];
+  assert.equal(actions.indexOf(focus), actions.indexOf(button(EN_MESSAGES['toolbar.saveAll'])) + 1);
+  assert.equal(focus.getAttribute('aria-pressed'), 'false');
+  focus.click();
+  assert.equal(focus.getAttribute('aria-pressed'), 'true');
+  assert.equal(focus.disabled, false);
+  assert.equal(storage.get('housemd:focusMode'), 'true');
+  assert.equal(el.querySelector<HTMLElement & { focusMode: boolean }>('hmd-editor')!.focusMode, true);
+  // In Anteprima il pulsante resta attivo e una nota lo spiega, solo se lo si accende lì.
+  button(EN_MESSAGES['mode.preview']).click();
+  assert.equal(el.querySelectorAll('p.toolbarNote[role=status]:not(:empty)').length, 0, 'already on: no note');
+  focus.click();
+  focus.click();
+  assert.equal(focus.getAttribute('aria-pressed'), 'true');
+  assert.equal(storage.get('housemd:focusMode'), 'true');
+});
+
+test('Ctrl+Shift+F toggles the focus and announces it once in a hidden status region', async () => {
+  const { el, workspace, button } = await mount();
+  await workspace.openFile('a.md');
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F', ctrlKey: true, shiftKey: true, cancelable: true }));
+  assert.equal(button(EN_MESSAGES['toolbar.focus']).getAttribute('aria-pressed'), 'true');
+  await waitFor(() => el.querySelector('p.visually-hidden')!.textContent === EN_MESSAGES['focus.announce.on']);
+  assert.equal(el.querySelector('p.visually-hidden')!.getAttribute('role'), 'status');
 });
