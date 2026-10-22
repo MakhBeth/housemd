@@ -46,3 +46,19 @@ test('clicking a button shows no ring, Tab does', async ({ app, page }) => {
   await expect(settings).toBeFocused();
   expect(await ring(settings)).toBe(true);
 });
+
+test.describe('forced-colors', () => {
+  test.use({ forcedColors: 'active' });
+
+  test('the current settings section keeps no "oreo" shadow with the keyboard focus (the outline carries it)', async ({ app, page }) => {
+    await page.getByRole('button', { name: app.t('toolbar.settings') }).click();
+    const index = page.getByRole('navigation', { name: app.t('settings.sections') });
+    const current = index.locator('a[aria-current="true"]');
+    await expect(current).toBeVisible();
+    // L'ultima interazione è la tastiera: il focus programmatico mostra l'anello.
+    await page.keyboard.press('Tab');
+    await current.focus();
+    await expect(current).toBeFocused();
+    expect(await ring(current)).toBe(false);
+  });
+});

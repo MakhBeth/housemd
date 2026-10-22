@@ -76,11 +76,11 @@ export class App {
     const settings = this.page.getByRole('region', { name: this.t('settings.title') });
     await this.page.getByRole('button', { name: this.t('toolbar.settings') }).click();
     await settings.getByRole('link', { name: this.t('settings.aiProfiles') }).click();
-    // La sezione dei profili è la prima sezione AI: «+ Create» e i campi sono i primi.
-    await settings.getByRole('button', { name: `+ ${this.t('ai.create')}` }).first().click();
-    await settings.getByLabel(this.t('ai.name'), { exact: true }).first().fill(name);
-    await settings.getByRole('combobox', { name: this.t('ai.provider'), exact: true }).first().selectOption(kind);
-    await settings.getByRole('button', { name: this.t('ai.save'), exact: true }).first().click();
+    const profiles = settings.getByRole('region', { name: this.t('settings.aiProfiles') });
+    await profiles.getByRole('button', { name: `+ ${this.t('ai.create')}` }).click();
+    await profiles.getByLabel(this.t('ai.name'), { exact: true }).fill(name);
+    await profiles.getByRole('combobox', { name: this.t('ai.provider'), exact: true }).selectOption(kind);
+    await profiles.getByRole('button', { name: this.t('ai.save'), exact: true }).click();
     await expect(settings.getByRole('button', { name, exact: true })).toBeVisible();
     await settings.getByRole('button', { name: this.t('settings.close') }).click();
     await expect(settings).toHaveCount(0);
@@ -162,7 +162,7 @@ export class App {
 
 /** Opzioni impostabili dalla configurazione (`use`). */
 export interface AppOptions {
-  /** Ogni errore o avviso in console fa fallire il test: per la suite in sviluppo, dove React avvisa lì. */
+  /** Ogni errore o avviso in console fa fallire il test: per la suite in sviluppo, dove gli avvisi compaiono in console. */
   failOnConsole: boolean;
   /**
    * Errori di console attesi dal test (confronto sul testo, solo per i messaggi di tipo `error`). Vuoto per

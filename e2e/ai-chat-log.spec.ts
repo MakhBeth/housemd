@@ -2,7 +2,8 @@ import { expect, test, type App } from './support/app.ts';
 
 const composer = (app: App) => app.page.getByRole('textbox', { name: app.t('ai.request') });
 const log = (app: App) => app.page.getByRole('log');
-const acceptAll = (app: App) => app.page.getByRole('button', { name: app.t('ai.acceptAll'), exact: true });
+/** La proposta è arrivata: il diff è visibile. Non «Accetta tutto attivo»: con i pulsanti mai disattivati (6c) passerebbe subito. */
+const proposalShown = (app: App) => expect(app.page.locator('.cm-mergeView')).toBeVisible();
 
 async function send(app: App, text = 'fix'): Promise<void> {
   await composer(app).fill(text);
@@ -20,7 +21,7 @@ test.beforeEach(async ({ app }) => {
 test('the reply is markdown, the request stays plain text', async ({ app, ai }) => {
   ai.comment = 'Some **bold** words';
   await send(app, 'keep <b>this</b> literal');
-  await expect(acceptAll(app)).toBeEnabled();
+  await proposalShown(app);
   await expect(log(app).getByText('keep <b>this</b> literal', { exact: true })).toBeVisible();
   const bold = log(app).getByText('bold', { exact: true });
   await expect(bold).toBeVisible();
@@ -40,7 +41,7 @@ test.describe('provider errors', () => {
     await expect(retry).toBeVisible();
     ai.status = 200;
     await retry.click();
-    await expect(acceptAll(app)).toBeEnabled();
+    await proposalShown(app);
     expect(ai.requests).toBe(2);
     // Il messaggio fallito tiene il suo errore, ma Riprova si usa una volta sola.
     await expect(log(app).getByText(app.t('ai.error.server'), { exact: true })).toBeVisible();
@@ -60,7 +61,7 @@ test.describe('provider errors', () => {
 
 test('the document button of a message opens that document', async ({ app }) => {
   await send(app);
-  await expect(acceptAll(app)).toBeEnabled();
+  await proposalShown(app);
   // In modalità AI il pannello prende il posto dell'albero: per aprire b.md si esce e si rientra.
   await app.mode('mode.split').click();
   await app.openFile('b.md');
@@ -76,7 +77,7 @@ test('the document button of a message opens that document', async ({ app }) => 
 
 test('reply metadata show on hover and on focus', async ({ app, page }) => {
   await send(app);
-  await expect(acceptAll(app)).toBeEnabled();
+  await proposalShown(app);
   const reply = log(app).getByRole('article').last();
   // Il profilo predefinito si chiama come il suo tipo: «ollama · <modello>».
   const meta = reply.getByText(/^ollama/);

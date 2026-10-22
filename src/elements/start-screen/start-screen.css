@@ -99,10 +99,24 @@
       border: 1px solid var(--c-border);
     }
 
-    .primary:disabled,
-    .secondary:disabled {
-      opacity: 0.6;
+    /* Cambio in corso: stesso aspetto, solo il cursore; la ragione sta nella nota (mai disabled). */
+    .start[data-busy],
+    .start[data-busy] :is(.primary, .secondary) {
       cursor: progress;
+    }
+
+    /* La nota sta fuori dal flusso: il pulsante attivato non si sposta mai (la schermata è centrata in verticale). */
+    .panel:has(> .note) {
+      position: relative;
+    }
+
+    .note {
+      position: absolute;
+      inset-block-start: calc(100% + 12px);
+      inset-inline: 0;
+      margin: 0;
+      color: var(--c-muted);
+      font-size: 12px;
     }
   }
 }

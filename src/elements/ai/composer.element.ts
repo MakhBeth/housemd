@@ -1,15 +1,17 @@
 import { composerAction } from '../../ai/composerKeys';
 import type { TextRange } from '../../ai/selectionChip';
 import type { SelectionScope } from '../../ai/types';
+import { announce } from '../../dom/announce';
 import { HmdElement } from '../../dom/element';
 import { el, setText, toggleAttr } from '../../dom/el';
 import { icon } from '../../dom/icon';
 import { RenderLoop } from '../../dom/renderLoop';
 import type { I18nStore } from '../../state/i18nStore';
 import { ICONS } from '../../ui/icons';
+import { emit } from '../events';
 import type { HmdAiEffortChip } from './effort-chip.element';
 import type { HmdAiModelChip } from './model-chip.element';
-import { outgoing, selectionChipText, sendBlocker, sendButton, type ComposerController, type SendBlocker } from './composerView';
+import { CONTROLLER_NOTES, outgoing, selectionChipText, sendBlocker, sendButton, type ComposerController, type SendBlocker } from './composerView';
 import './composer.css';
 
 interface Parts {
@@ -33,12 +35,18 @@ interface Parts {
  * chip del modello, il chip dell'effort e Invia/Stop. La casella è dell'elemento: si crea una volta e
  * l'elemento la svuota solo dopo l'invio di un testo scritto (nessun eco da fuori la riscrive). Invio
  * invia, Shift+Invio va a capo, Esc ferma (composerKeys.ts). `sendPreset()` per i suggerimenti. Invia
- * non si disattiva mai: senza testo o senza profilo (anche per un suggerimento) la nota sotto il composer
- * dice perché, e si svuota scrivendo, cambiando profilo, con un invio riuscito o quando parte una generazione.
+ * non si disattiva mai: quando il messaggio non può partire (generazione in corso, nessun documento aperto,
+ * aggiornamento in corso: `controller.sendBlocker()`; senza profilo; senza testo) la nota sotto il composer
+ * dice perché e la bozza resta. La nota si svuota quando la sua causa sparisce (la generazione finisce, un
+ * documento si apre, l'aggiornamento finisce; per profilo e testo: scrivendo, cambiando profilo, con un
+ * invio riuscito o quando parte una generazione).
  */
 export class HmdAiComposer extends HmdElement {
   #controller: ComposerController | null = null;
   #text = '';
+  #draft = '';
+  /** `detail` del clic che ha inviato (null se l'invio non è venuto da un clic del mouse). */
+  #sendDetail: number | null = null;
   #selection: TextRange | null = null;
   #getSelection: () => SelectionScope | undefined = () => undefined;
   #i18n: I18nStore | null = null;
@@ -48,6 +56,8 @@ export class HmdAiComposer extends HmdElement {
   #ignored: TextRange | null = null;
   /** Nota mostrata e il profilo di quel momento: un cambio di profilo la toglie. */
   #note: { key: SendBlocker; profileId: string | undefined } | null = null;
+  /** Il prossimo render riscrive la nota anche se il testo è lo stesso (un altro invio bloccato). */
+  #announceAgain = false;
   #loop = new RenderLoop(this, {
     ready: () => !!this.#parts && !!this.#controller && !!this.#i18n && this.isConnected,
     render: () => this.#render(this.#parts!, this.#controller!, this.#i18n!),
@@ -64,6 +74,12 @@ export class HmdAiComposer extends HmdElement {
     this.#passDown();
     this.reconnect();
   }
+  /**
+   * Bozza con cui la casella nasce (la sidebar AI si ricrea a ogni ritorno nella modalità AI: LAB-10). Letta solo
+   * alla costruzione: la casella non si riscrive mai dopo. Ogni cambio della casella esce con `hmd-ai-draft`.
+   */
+  get draft(): string { return this.#draft; }
+  set draft(value: string) { this.#draft = value ?? ''; }
   /** Testo del documento aperto, per contare la selezione. */
   get text(): string { return this.#text; }
   set text(value: string) {
@@ -111,10 +127,11 @@ export class HmdAiComposer extends HmdElement {
         input: el('textarea', { class: 'input', on: { input: () => this.#onInput(), keydown: (event) => this.#onKeyDown(event) } }),
         modelChip: el('hmd-ai-model-chip'),
         effortChip: el('hmd-ai-effort-chip'),
-        send: el('button', { type: 'button', class: 'send tooltip', on: { click: () => this.#onButton() } }, sendIcon),
+        send: el('button', { type: 'button', class: 'send tooltip', on: { click: (event) => this.#onButton(event) } }, sendIcon),
         sendIcon,
         note: el('p', { class: 'note', role: 'status' }),
       };
+      parts.input.value = this.#draft;
       this.#parts = parts;
       // Le proprietà dei chip prima dell'inserimento, come fa React con i tag hmd-*.
       this.#passDown();
@@ -138,6 +155,7 @@ export class HmdAiComposer extends HmdElement {
   }
 
   #onInput(): void {
+    emit(this, 'hmd-ai-draft', { text: this.#parts!.input.value });
     this.#note = null;
     this.#loop.update();
   }
@@ -161,11 +179,20 @@ export class HmdAiComposer extends HmdElement {
     }
   }
 
-  #onButton(): void {
+  #onButton(event: MouseEvent): void {
     const controller = this.#controller;
     if (!controller) return;
-    if (controller.getState().running) controller.stop();
-    else this.#send();
+    if (controller.getState().running) {
+      // Il clic subito dopo quello che ha inviato, nella stessa sequenza (detail dell'invio + 1), è la seconda metà
+      // di un doppio clic: non ferma la richiesta appena partita. Ogni altro clic ferma, anche una serie rapida
+      // (detail 3, 4…: chi ha un tremore clicca così) e la tastiera (detail 0).
+      const second = this.#sendDetail !== null && event.detail === this.#sendDetail + 1;
+      this.#sendDetail = null;
+      if (!second) controller.stop();
+      return;
+    }
+    this.#send();
+    this.#sendDetail = event.detail > 0 ? event.detail : null;
   }
 
   /**
@@ -173,15 +200,18 @@ export class HmdAiComposer extends HmdElement {
    * preset) non può partire, la nota dice perché; la casella e il focus restano come sono.
    */
   #send(presetId?: string): void {
+    // Un invio che non viene da un clic (Invio, suggerimento) non ha un secondo clic da ignorare.
+    this.#sendDetail = null;
     const controller = this.#controller;
     const parts = this.#parts;
     const i18n = this.#i18n;
     if (!controller || !parts || !i18n) return;
     const state = controller.getState();
-    if (state.running) return;
     const preset = presetId ? state.presets.find((p) => p.id === presetId) : undefined;
-    const blocker = sendBlocker(parts.input.value, !!controller.profile(), !!preset);
+    // Prima la guardia di send() (che altrimenti scarterebbe in silenzio e la bozza andrebbe persa), poi profilo e testo.
+    const blocker = sendBlocker(parts.input.value, !!controller.profile(), !!preset, controller.sendBlocker());
     if (blocker) {
+      this.#announceAgain = this.#note?.key === blocker;
       this.#note = { key: blocker, profileId: controller.profile()?.id };
       this.#loop.update();
       return;
@@ -205,6 +235,7 @@ export class HmdAiComposer extends HmdElement {
     }
     // L'unica scrittura della casella: dopo l'invio di un testo scritto si svuota (spec AI UI §4.2).
     parts.input.value = '';
+    emit(this, 'hmd-ai-draft', { text: '' });
     this.#loop.update();
   }
 
@@ -225,10 +256,17 @@ export class HmdAiComposer extends HmdElement {
     toggleAttr(parts.send, 'aria-label', true, t(button.label));
     toggleAttr(parts.send, 'data-tooltip', true, t(button.label));
     parts.sendIcon.style.setProperty('mask-image', `url("${ICONS[button.icon]}")`);
-    // Un cambio di profilo o una generazione partita da qualunque parte (anche «Riprova» nel registro)
-    // toglie la nota; la stessa nota due volte di fila non si ri-annuncia (stesso testo nella regione): accettato.
-    if (this.#note && (this.#note.profileId !== controller.profile()?.id || controller.getState().running)) this.#note = null;
-    setText(parts.note, this.#note ? t(this.#note.key) : '');
+    // La nota se ne va quando la sua causa sparisce: per le ragioni del controller quando la ragione cambia;
+    // per profilo e testo con un cambio di profilo o una generazione partita da qualunque parte (anche «Riprova»
+    // nel registro). La stessa nota a un altro Invio si ri-annuncia (svuotata e riscritta dopo `ANNOUNCE_DELAY_MS`).
+    if (this.#note) {
+      const reason = controller.sendBlocker();
+      const fromController = (Object.values(CONTROLLER_NOTES) as SendBlocker[]).includes(this.#note.key);
+      const stale = fromController ? (reason ? CONTROLLER_NOTES[reason] : null) !== this.#note.key : this.#note.profileId !== controller.profile()?.id || !!reason;
+      if (stale) this.#note = null;
+    }
+    announce(parts.note, this.#note ? t(this.#note.key) : '', this.#announceAgain);
+    this.#announceAgain = false;
   }
 }
 

@@ -1,0 +1,99 @@
+@layer components {
+  @scope (hmd-ai-review-bar) {
+    /* L'host ha un box: il bordo inferiore sta qui, sotto la riga dei pulsanti e la nota (variante A del design 6c). */
+    :scope {
+      display: block;
+      border-bottom: 1px solid var(--c-border);
+    }
+
+    /* Valori copiati dal modulo CSS di ReviewView (.bar, .status, .spacer, .iconButton, .secondary, .accept, .warnings). */
+    .bar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 42px;
+      padding: 6px 12px;
+      font-family: var(--font-pixel);
+    }
+
+    .status {
+      color: var(--c-muted);
+      font-size: 13px;
+    }
+
+    .spacer {
+      flex: 1;
+    }
+
+    .iconButton {
+      display: inline-grid;
+      place-items: center;
+      width: 30px;
+      height: 30px;
+      border: none;
+      border-radius: 6px;
+      background: none;
+      cursor: pointer;
+    }
+
+    .iconButton:hover {
+      background: var(--c-accent-soft);
+    }
+
+    .secondary {
+      padding: 4px 10px;
+      border: 1px solid var(--c-border);
+      border-radius: 8px;
+      background: none;
+      color: var(--c-text);
+      cursor: pointer;
+    }
+
+    .accept {
+      color: var(--c-accent);
+      font-weight: 600;
+    }
+
+    .warnings {
+      position-area: block-end span-inline-start;
+      margin: 6px 0 0;
+      padding: 8px;
+      border: 1px solid var(--c-border);
+      border-radius: 8px;
+      background: var(--c-surface);
+      color: var(--c-text);
+    }
+
+    .warnings button {
+      display: block;
+      width: 100%;
+      padding: 4px;
+      border: none;
+      background: none;
+      text-align: start;
+      cursor: pointer;
+    }
+
+    /* Nota sotto la riga dei pulsanti (come le note della 6b): vuota non occupa spazio, i pixel restano quelli di prima. */
+    .note {
+      margin: 0;
+      padding-inline: 12px;
+      color: var(--c-muted);
+      font-size: 12px;
+    }
+
+    .note:not(:empty) {
+      padding-block: 0 8px;
+    }
+
+    /* Regione live della generazione: letta dallo screen reader, nascosta alla vista (il contatore visibile resta). */
+    .spoken {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+  }
+}

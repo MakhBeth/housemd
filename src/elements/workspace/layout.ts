@@ -36,10 +36,12 @@ export function clampWidth(panel: SidePanel, width: number): number {
   return Math.min(max, Math.max(min, panel === 'sidebar' ? Math.round(width) : width));
 }
 
-/** Nuova larghezza dopo una freccia sinistra/destra, oppure null per gli altri tasti. */
+/** Nuova larghezza dopo una freccia sinistra/destra, Home (minimo) o End (massimo); null per gli altri tasti. */
 export function resizeByKey(panel: SidePanel, width: number, key: string): number | null {
   if (key === 'ArrowLeft') return clampWidth(panel, width - RESIZE_STEP);
   if (key === 'ArrowRight') return clampWidth(panel, width + RESIZE_STEP);
+  if (key === 'Home') return WIDTH_LIMITS[panel].min;
+  if (key === 'End') return WIDTH_LIMITS[panel].max;
   return null;
 }
 

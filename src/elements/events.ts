@@ -1,8 +1,14 @@
 import type { ChangeDesc } from '@codemirror/state';
 
+import type { AcceptBlocker } from '../ai/aiController';
 import type { TextRange } from '../ai/selectionChip';
-import type { GenParams, ModelProfile } from '../ai/types';
+import type { CheckWarning, GenParams, ModelProfile } from '../ai/types';
+import type { SettingsSection } from '../lib/route';
+import type { TextWidth } from '../lib/textWidth';
 import type { TreeNode } from '../ui/tree';
+import type { AutosaveSettings } from '../workspace/autosave';
+import type { ControlAction } from './ai/diffLogic';
+import type { ReviewAction } from './ai/reviewBarView';
 import type { TreeAction } from './workspace/dialogFor';
 
 /**
@@ -12,6 +18,10 @@ import type { TreeAction } from './workspace/dialogFor';
 export interface HmdEvents {
   /** Diff della revisione AI: rifiutato l'ultimo blocco rimasto (equivale a scartare la proposta). */
   'hmd-ai-all-rejected': CustomEvent<null>;
+  /** Diff della revisione AI: «← accetta» o «→ rifiuta» di un blocco attivato quando non può, con la ragione (per la nota della barra). */
+  'hmd-ai-block-blocked': CustomEvent<{ action: ControlAction; reason: AcceptBlocker }>;
+  /** Composer AI: il testo scritto nella casella è cambiato (anche svuotata dopo l'invio), per conservarlo fuori. */
+  'hmd-ai-draft': CustomEvent<{ text: string }>;
   /** Chip del modello: aprire le impostazioni dei profili («Gestisci profili…», o il chip senza profili). */
   'hmd-ai-manage': CustomEvent<null>;
   /** Selettore del modello: modello scelto dall'elenco o scritto in «Altro…», con il suo contesto se noto. */
@@ -22,6 +32,10 @@ export interface HmdEvents {
   'hmd-ai-proposal-edit': CustomEvent<{ text: string }>;
   /** Chat AI: ripetere un messaggio fallito (`removeRejected`: senza i parametri che il provider ha rifiutato). */
   'hmd-ai-retry': CustomEvent<{ id: string; removeRejected: boolean }>;
+  /** Barra della revisione AI: un pulsante attivato (frecce, Accetta tutto, Scarta, Continua). */
+  'hmd-ai-review-action': CustomEvent<{ action: ReviewAction }>;
+  /** Barra della revisione AI: un avviso scelto nel popover (portare in vista la riga). */
+  'hmd-ai-review-warning': CustomEvent<{ warning: CheckWarning }>;
   /** Suggerimento scelto sotto il composer: invia il preset. */
   'hmd-ai-suggestion': CustomEvent<{ presetId: string }>;
   /** Sidebar AI: la cartella di sync ha perso il permesso, aprire le impostazioni della sync per riattivarlo. */
@@ -53,6 +67,18 @@ export interface HmdEvents {
   'hmd-selection': CustomEvent<{ range: TextRange | null }>;
   /** Ricerca: aprire un risultato (clic o Invio sul primo), con i termini da evidenziare nell'anteprima. */
   'hmd-search-open': CustomEvent<{ path: string; terms: string[] }>;
+  /** Impostazioni: il ritardo o la modalità dell'autosalvataggio confermati (da salvare e applicare). */
+  'hmd-settings-autosave': CustomEvent<{ autosave: AutosaveSettings }>;
+  /** Impostazioni: chiuse (con la conferma, se c'erano modifiche aperte). */
+  'hmd-settings-close': CustomEvent<null>;
+  /** Sezione di profili o preset: la bozza aperta è diventata (o non è più) da salvare. */
+  'hmd-settings-dirty': CustomEvent<{ dirty: boolean }>;
+  /** Impostazioni: «Salva tutto». */
+  'hmd-settings-save-all': CustomEvent<null>;
+  /** Impostazioni: voce dell'indice scelta (la rotta passa a quella sezione). */
+  'hmd-settings-section': CustomEvent<{ section: SettingsSection }>;
+  /** Impostazioni: larghezze del testo confermate (da salvare e applicare). */
+  'hmd-settings-text-width': CustomEvent<{ textWidth: TextWidth }>;
   /** Schermata iniziale: scegliere una cartella (anche «Apri un'altra cartella»). */
   'hmd-start-pick': CustomEvent<null>;
   /** Schermata iniziale: riprendere l'accesso alla cartella ricordata. */
@@ -61,6 +87,8 @@ export interface HmdEvents {
   'hmd-tree-action': CustomEvent<{ action: TreeAction; node: TreeNode | null }>;
   /** Chiusura di un toast (dal pulsante o dal timer dei toast informativi). */
   'hmd-toast-dismiss': CustomEvent<{ key: string }>;
+  /** Workspace: cambiare cartella (pulsante con il nome della cartella nella sidebar). */
+  'hmd-workspace-change-folder': CustomEvent<null>;
 }
 
 export function emit<K extends keyof HmdEvents>(target: Element, type: K, detail: HmdEvents[K] extends CustomEvent<infer D> ? D : never): void {

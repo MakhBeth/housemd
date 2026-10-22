@@ -76,8 +76,27 @@ test('only src/ai/providers/ makes network requests', () => {
   assert.deepEqual(offenders(NETWORK, NETWORK_ALLOWED), []);
 });
 
+/**
+ * La sola eccezione: il campo della chiave nella sezione dei profili la passa al controller con
+ * `controller.setSecret(…)` (scritta, mai letta, mai in attributi o `dataset`). Tutto il resto vale anche lì.
+ */
+const SECRET_WRITE_ALLOWED = new Set(['elements/settings/profiles.element.ts']);
+const withoutAllowedSecretWrite = (list: SourceFile[]) =>
+  list.map((file) => (SECRET_WRITE_ALLOWED.has(file.path) ? { ...file, source: file.source.replace(/\bcontroller\.setSecret\s*\(/g, '') } : file));
+
 test('elements reach the AI providers only through the controller and never touch the keys', () => {
-  assert.deepEqual(offenders(ELEMENT_AI, ELEMENT_AI_ALLOWED), []);
+  assert.deepEqual(offenders(ELEMENT_AI, ELEMENT_AI_ALLOWED, withoutAllowedSecretWrite(sources)), []);
+});
+
+/** Fase 7 (spec WC §8.3, §11): React non c'è più, né come import né come file `.tsx`. */
+const REACT = /\bfrom\s+['"](?:react|react-dom)(?:\/[^'"]*)?['"]|\bimport\(\s*['"](?:react|react-dom)(?:\/[^'"]*)?['"]/;
+
+test('no React anywhere in src/: no import of react or react-dom, no .tsx file (tests included)', () => {
+  const all = walk(SRC).map((full) => ({ path: relative(SRC, full).split(sep).join('/'), full }));
+  assert.deepEqual(all.filter(({ path }) => path.endsWith('.tsx')).map(({ path }) => path), []);
+  // Questo file contiene i casi sintetici del controllo: si salta.
+  const ts = all.filter(({ path }) => path.endsWith('.ts') && path !== 'architecture.test.ts').map(({ path, full }) => ({ path, source: readFileSync(full, 'utf8') }));
+  assert.deepEqual(offenders(REACT, () => false, ts), []);
 });
 
 test('customElements.define appears only in elements/define.ts', () => {
@@ -113,6 +132,12 @@ test('the patterns fire on what they must and ignore what they must', () => {
   for (const ok of ["import type { AiController } from '../../ai/aiController';", 'controller.provider(profile)', '// la rete passa da src/ai/providers', 'profile.secretId']) {
     assert.ok(!ELEMENT_AI.test(ok), ok);
   }
+  for (const bad of ["import { useState } from 'react';", "import { createRoot } from 'react-dom/client';", "await import('react')"]) {
+    assert.ok(REACT.test(bad), bad);
+  }
+  for (const ok of ["import { reactive } from './reactive';", '// niente React qui', "import { x } from 'preact'"]) {
+    assert.ok(!REACT.test(ok), ok);
+  }
   assert.ok(DEFINE.test("customElements.define('hmd-file-tree', HmdFileTree)"));
   assert.ok(!DEFINE.test("customElements.get('hmd-file-tree')"));
   for (const bad of ['dialog.showModal()', '<dialog ref={ref}>', "document.createElement('dialog')", "el('dialog', { class: 'x' })"]) {
@@ -136,7 +161,6 @@ test('offending files are reported by path and allowed files are not (synthetic 
     { path: 'ui/Probe.tsx', source: 'ref.current?.showModal();' },
     { path: 'elements/dialogs/modal.ts', source: 'dialog.showModal();' },
     { path: 'elements/ai/probe.element.ts', source: "import { createProvider } from '../../ai/providers';" },
-    { path: 'ui/ai/settings/AiProfilesSection.tsx', source: 'controller.setSecret(draft, key, remember)' },
   ];
   assert.deepEqual(offenders(UNSAFE_DOM, inSet(UNSAFE_DOM_ALLOWED), probes), ['ui/Icon.tsx']);
   assert.deepEqual(offenders(FSA, inSet(FSA_ALLOWED), probes), ['workspace/probe.ts']);
@@ -144,6 +168,15 @@ test('offending files are reported by path and allowed files are not (synthetic 
   assert.deepEqual(offenders(DEFINE, inSet(DEFINE_ALLOWED), probes), ['dom/element.ts']);
   assert.deepEqual(offenders(DIALOG, DIALOG_ALLOWED, probes), ['ui/Probe.tsx']);
   assert.deepEqual(offenders(ELEMENT_AI, ELEMENT_AI_ALLOWED, probes), ['elements/ai/probe.element.ts']);
+
+  // L'eccezione della chiave vale solo per setSecret nella sezione dei profili.
+  const secrets: SourceFile[] = [
+    { path: 'elements/settings/profiles.element.ts', source: 'controller.setSecret(validateProfile(draft), key, remember)' },
+    { path: 'elements/settings/presets.element.ts', source: 'controller.setSecret(draft, key, remember)' },
+    { path: 'elements/settings/sync.element.ts', source: 'await controller.secret(profile)' },
+  ];
+  assert.deepEqual(offenders(ELEMENT_AI, ELEMENT_AI_ALLOWED, withoutAllowedSecretWrite(secrets)), ['elements/settings/presets.element.ts', 'elements/settings/sync.element.ts']);
+  assert.deepEqual(offenders(ELEMENT_AI, ELEMENT_AI_ALLOWED, withoutAllowedSecretWrite([{ path: 'elements/settings/profiles.element.ts', source: 'controller.secret(p); controller.setSecret(p, k, r)' }])), ['elements/settings/profiles.element.ts']);
 });
 
 interface Block {
@@ -204,9 +237,10 @@ function scopeProblems(folder: string, css: string): string[] {
     }
     for (const scope of topLevelBlocks(layer.body)) {
       // Limite inferiore (§4.1): solo elementi figli hmd-*, così lo scope si ferma ai componenti contenuti.
-      const m = /^@scope\s*\(\s*([^)\s]+)\s*\)(?:\s+to\s*\(\s*(hmd-[a-z-]+(?:\s*,\s*hmd-[a-z-]+)*)\s*\))?$/.exec(scope.prelude);
+      // Più radici separate da virgola (sezioni con un foglio comune), ognuna ammessa nella cartella.
+      const m = /^@scope\s*\(\s*([^)\s,]+(?:\s*,\s*[^)\s,]+)*)\s*\)(?:\s+to\s*\(\s*(hmd-[a-z-]+(?:\s*,\s*hmd-[a-z-]+)*)\s*\))?$/.exec(scope.prelude);
       if (!m || scope.body === null) problems.push(`non è un @scope: ${scope.prelude}`);
-      else if (!rootAllowed(folder, m[1])) problems.push(`radice non ammessa in ${folder}/: ${m[1]}`);
+      else for (const root of m[1].split(/\s*,\s*/)) if (!rootAllowed(folder, root)) problems.push(`radice non ammessa in ${folder}/: ${root}`);
     }
   }
   return problems;
@@ -225,6 +259,8 @@ test('the @scope check accepts the allowed shapes and rejects the others (synthe
   assert.deepEqual(scopeProblems('ai', '/* c */ @layer components { @scope (hmd-ai-composer) { :scope { display: block } } @scope (hmd-ai-chat-log) {} }'), []);
   assert.deepEqual(scopeProblems('preview', '@layer components { @scope (hmd-frontmatter-card) {} }'), []);
   assert.deepEqual(scopeProblems('settings', '@layer components { @scope (hmd-settings-profiles) {} }'), []);
+  assert.deepEqual(scopeProblems('settings', '@layer components { @scope (hmd-settings-profiles, hmd-settings-presets) {} }'), []);
+  assert.deepEqual(scopeProblems('settings', '@layer components { @scope (hmd-settings-sync, hmd-preview) {} }'), ['radice non ammessa in settings/: hmd-preview']);
   assert.deepEqual(scopeProblems('dialogs', '@layer components { @scope (dialog.hmd-dialog) { :scope {} } }'), []);
   assert.deepEqual(scopeProblems('file-tree', '.row { color: red }'), ['fuori da @layer components: .row']);
   assert.deepEqual(scopeProblems('file-tree', '@layer base { @scope (hmd-file-tree) {} }'), ['fuori da @layer components: @layer base']);

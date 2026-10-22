@@ -1,0 +1,133 @@
+@layer components {
+  /*
+   * Valori copiati dal vecchio modulo CSS delle sezioni: le tre sezioni AI condividono elenco e dettaglio. Nessun limite
+   * inferiore: oggi `.detail label` e `.detail input` raggiungono anche i campi di hmd-ai-model-select e
+   * hmd-ai-parameters, e lì vincevano perché il modulo stava fuori dai layer. Dentro il layer vincerebbe il
+   * foglio più vicino (prossimità di @scope) a pari specificità: `:scope` davanti alza la specificità di
+   * una classe e tiene il risultato di oggi (misurato con l'audit «settings-profile»).
+   */
+  @scope (hmd-settings-profiles, hmd-settings-presets, hmd-settings-sync) {
+    :scope {
+      display: contents;
+    }
+
+    .split {
+      display: grid;
+      grid-template-columns: 12rem minmax(0, 1fr);
+      gap: 16px;
+      align-items: start;
+    }
+
+    .list {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding: 6px;
+      border: 1px solid var(--c-border);
+      border-radius: 8px;
+    }
+
+    .item,
+    .create {
+      padding: 6px 8px;
+      border: none;
+      border-radius: 6px;
+      background: none;
+      color: var(--c-text);
+      text-align: start;
+      cursor: pointer;
+    }
+
+    .item[aria-current='true'] {
+      background: var(--c-accent-soft);
+    }
+
+    /* In forced-colors la voce corrente si vede solo dallo sfondo, che diventa Canvas (LAB-42 P7). */
+    @media (forced-colors: active) {
+      .item[aria-current='true'] {
+        forced-color-adjust: none;
+        background: Highlight;
+        color: HighlightText;
+      }
+
+      /* Fuori dall'adattamento le ombre dell'anello "oreo" tornerebbero visibili: il focus lo porta il contorno. */
+      .item[aria-current='true']:focus-visible {
+        box-shadow: none;
+      }
+    }
+
+    .create {
+      color: var(--c-accent);
+    }
+
+    .detail {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    :scope .detail label {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    :scope .detail label > span {
+      flex: 0 0 11rem;
+    }
+
+    :scope .detail input:not([type='checkbox']):not([type='radio']),
+    :scope .detail select,
+    :scope .detail textarea {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .detail textarea {
+      min-height: 8rem;
+    }
+
+    .help {
+      margin: 0;
+      color: var(--c-muted);
+      font-size: 13px;
+    }
+
+    /* Nota «mai disabled»: entra solo con una ragione (regione status vuota di norma). */
+    .note {
+      margin: 0;
+      color: var(--c-muted);
+      font-size: 12px;
+    }
+
+    .syncNote {
+      text-align: end;
+    }
+
+    /* Indirizzo fisso (Anthropic): di sola lettura, ma leggibile e copiabile. `input[readonly]`, non `:read-only`. */
+    :scope .detail input[readonly] {
+      background: var(--c-code-bg);
+      border: 1px solid var(--c-border);
+      border-radius: 2px;
+      color: var(--c-text);
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 6px;
+    }
+
+    .actions > :last-child {
+      margin-inline-start: auto;
+    }
+
+    @media (width < 700px) {
+      .split {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+  }
+}

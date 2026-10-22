@@ -1,4 +1,5 @@
 import { HmdElement } from '../../dom/element';
+import { announce } from '../../dom/announce';
 import { el, setText, toggleAttr } from '../../dom/el';
 import { icon } from '../../dom/icon';
 import { emit } from '../events';
@@ -19,6 +20,8 @@ export class HmdNotice extends HmdElement {
   #placement: Placement = 'bottom';
   #parts: { box: HTMLDivElement; text: HTMLParagraphElement; action: HTMLButtonElement; dismiss: HTMLButtonElement } | null = null;
   #open = false;
+  /** L'azione è stata attivata durante `busy`: il messaggio si ri-annuncia (si svuota e torna). */
+  #announceAgain = false;
 
   get message(): string { return this.#message; }
   set message(value: string) { this.#message = value ?? ''; this.#render(); }
@@ -36,7 +39,7 @@ export class HmdNotice extends HmdElement {
   protected connect(_signal: AbortSignal): void {
     if (!this.#parts) {
       const text = el('p');
-      const action = el('button', { class: 'action', on: { click: () => emit(this, 'hmd-notice-action', null) } });
+      const action = el('button', { class: 'action', on: { click: () => this.#activate() } });
       const dismiss = el('button', { class: 'dismiss tooltip', on: { click: () => emit(this, 'hmd-notice-dismiss', null) } }, icon('close', { size: 16 }));
       const box = el('div', { class: 'notice', popover: 'manual', role: 'status' }, text);
       this.append(box);
@@ -56,13 +59,24 @@ export class HmdNotice extends HmdElement {
     this.#open = false;
   }
 
+  /** Con `busy` l'azione è già in corso (mai disabled): niente evento, solo il messaggio di nuovo, e il focus resta. */
+  #activate(): void {
+    if (!this.#busy) {
+      emit(this, 'hmd-notice-action', null);
+      return;
+    }
+    this.#announceAgain = true;
+    this.#render();
+  }
+
   #render(): void {
     if (!this.#parts) return;
     const { box, text, action, dismiss } = this.#parts;
     box.dataset.placement = this.#placement;
-    setText(text, this.#message);
+    announce(text, this.#message, this.#announceAgain);
+    this.#announceAgain = false;
     setText(action, this.#actionLabel);
-    action.disabled = this.#busy;
+    toggleAttr(action, 'data-busy', this.#busy, '');
     toggleAttr(dismiss, 'aria-label', true, this.#dismissLabel);
     toggleAttr(dismiss, 'data-tooltip', true, this.#dismissLabel);
     place(box, action, this.#actionLabel !== '', text);

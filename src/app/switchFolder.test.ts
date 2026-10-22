@@ -234,3 +234,27 @@ test('switchGuard is released when the switch throws', async () => {
   );
   assert.equal(guard.active, false);
 });
+
+test('a switch whose caller goes away stops at the next await: nothing opens, nothing is disposed or saved', async () => {
+  // Interrotto durante ognuno dei quattro await: scelta, prima messa al sicuro, apertura, seconda messa al sicuro.
+  for (const at of ['pick', 'close1', 'open', 'close2'] as const) {
+    const abort = new AbortController();
+    const calls: string[] = [];
+    let closes = 0;
+    const result = await switchFolder({
+      signal: abort.signal,
+      pick: async () => (at === 'pick' && abort.abort(), 'handle'),
+      current: {
+        closeFile: async () => (++closes === (at === 'close1' ? 1 : 2) && at.startsWith('close') && abort.abort(), calls.push('closeFile'), true),
+        dispose: () => void calls.push('dispose'),
+      },
+      open: async () => (calls.push('open'), at === 'open' && abort.abort(), 'nuova'),
+      discard: (value) => void calls.push(`discard ${value}`),
+      persist: (value) => void calls.push(`persist ${value}`),
+    });
+    assert.deepEqual(result, { kind: 'cancelled' }, at);
+    assert.ok(!calls.includes('dispose') && !calls.some((c) => c.startsWith('persist')), `${at}: ${calls.join(', ')}`);
+    assert.equal(calls.includes('discard nuova'), at === 'open' || at === 'close2', `${at}: ${calls.join(', ')}`);
+    assert.equal(calls.includes('open'), at !== 'pick' && at !== 'close1', `${at}: ${calls.join(', ')}`);
+  }
+});

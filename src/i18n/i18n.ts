@@ -43,6 +43,15 @@ export function translate(messages: Messages, key: string, params?: Params): str
   return template.replace(/\{(\w+)\}/g, (match, name: string) => (name in params ? String(params[name]) : match));
 }
 
+/**
+ * Chiave della forma singolare o plurale (`<base>.one` / `<base>.other`) per `count`, con le regole della lingua
+ * (`Intl.PluralRules`): le categorie oltre `one` (few, many, …) usano la forma `other`, che ogni lingua scrive
+ * in modo da valere per tutti i numeri.
+ */
+export function pluralKey<B extends string>(locale: Locale, base: B, count: number): `${B}.one` | `${B}.other` {
+  return new Intl.PluralRules(locale).select(count) === 'one' ? `${base}.one` : `${base}.other`;
+}
+
 export function placeholders(template: string): string[] {
   return [...new Set([...template.matchAll(/\{(\w+)\}/g)].map((m) => m[1]))].sort();
 }

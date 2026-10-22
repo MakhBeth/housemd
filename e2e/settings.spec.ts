@@ -11,10 +11,10 @@ async function openSettings(app: App): Promise<void> {
 async function dirtyProfile(app: App): Promise<void> {
   await settings(app).getByRole('link', { name: app.t('settings.aiProfiles') }).click();
   await expect(app.page).toHaveURL(/#settings\/ai-profiles$/);
-  // "+ Create" e "Name" ci sono in ogni sezione AI, e le sezioni non hanno un nome accessibile: quella
-  // dei profili è la prima, nello stesso ordine dei link di navigazione.
-  await settings(app).getByRole('button', { name: `+ ${app.t('ai.create')}` }).first().click();
-  await settings(app).getByLabel(app.t('ai.name'), { exact: true }).first().fill('Bozza');
+  // "+ Create" e "Name" ci sono in ogni sezione AI: si sceglie la sezione per nome.
+  const profiles = settings(app).getByRole('region', { name: app.t('settings.aiProfiles') });
+  await profiles.getByRole('button', { name: `+ ${app.t('ai.create')}` }).click();
+  await profiles.getByLabel(app.t('ai.name'), { exact: true }).fill('Bozza');
 }
 
 test.beforeEach(async ({ app }) => {
@@ -81,9 +81,10 @@ test('Back again with the confirmation already open keeps a single dialog', asyn
 test('switching profile with unsaved changes asks first; Cancel keeps the draft, Discard switches', async ({ app, page }) => {
   await openSettings(app);
   await dirtyProfile(app);
-  const name = settings(app).getByLabel(app.t('ai.name'), { exact: true }).first();
+  const profiles = settings(app).getByRole('region', { name: app.t('settings.aiProfiles') });
+  const name = profiles.getByLabel(app.t('ai.name'), { exact: true });
   // «+ Create» con una bozza sporca passa da select() come il clic su un altro profilo.
-  const other = settings(app).getByRole('button', { name: `+ ${app.t('ai.create')}` }).first();
+  const other = profiles.getByRole('button', { name: `+ ${app.t('ai.create')}` });
   await other.click();
   const dialog = page.getByRole('dialog', { name: app.t('ai.unsavedTitle') });
   await dialog.getByRole('button', { name: app.t('dialog.cancel') }).click();
@@ -99,15 +100,14 @@ test('switching profile with unsaved changes asks first; Cancel keeps the draft,
 test('deleting a preset asks first; Cancel keeps it, Delete removes it', async ({ app, page }) => {
   await openSettings(app);
   await settings(app).getByRole('link', { name: app.t('settings.aiPresets') }).click();
-  // Seconda sezione AI (profili, preset, sync): stesso ordine dei link di navigazione.
-  await settings(app).getByRole('button', { name: `+ ${app.t('ai.create')}` }).nth(1).click();
-  // Solo la sezione dei preset ha un elemento aperto: un solo campo «Name» e un solo «Save».
-  await settings(app).getByLabel(app.t('ai.name'), { exact: true }).fill('Temporaneo');
-  await settings(app).getByRole('button', { name: app.t('ai.save'), exact: true }).click();
-  const item = settings(app).getByRole('button', { name: 'Temporaneo', exact: true });
+  const presets = settings(app).getByRole('region', { name: app.t('settings.aiPresets') });
+  await presets.getByRole('button', { name: `+ ${app.t('ai.create')}` }).click();
+  await presets.getByLabel(app.t('ai.name'), { exact: true }).fill('Temporaneo');
+  await presets.getByRole('button', { name: app.t('ai.save'), exact: true }).click();
+  const item = presets.getByRole('button', { name: 'Temporaneo', exact: true });
   await expect(item).toBeVisible();
 
-  const remove = settings(app).getByRole('button', { name: app.t('ai.delete'), exact: true });
+  const remove = presets.getByRole('button', { name: app.t('ai.delete'), exact: true });
   await remove.click();
   const dialog = page.getByRole('dialog', { name: app.t('ai.deleteTitle', { name: 'Temporaneo' }) });
   await expect(dialog.getByText(app.t('ai.deleteMessage'))).toBeVisible();
@@ -118,6 +118,7 @@ test('deleting a preset asks first; Cancel keeps it, Delete removes it', async (
   await remove.click();
   await dialog.getByRole('button', { name: app.t('ai.delete'), exact: true }).click();
   await expect(item).toHaveCount(0);
+  await expect(presets.getByRole('button').first()).toBeFocused();
 });
 
 test('text width: editor limited in characters, preview without limit, both remembered', async ({ app, page }) => {
@@ -189,4 +190,20 @@ test('with the settings open the workspace behind is inert: no focus, out of the
   await expect(page.getByRole('region', { name: app.t('settings.title') })).toBeVisible();
   expect(await takesFocus()).toBe(false);
   expect(await treeInAccessibilityTree()).toBe(false);
+});
+
+test('Escape with unsaved changes opens the confirmation once, with the focus on Cancel; Cancel keeps the settings and the draft (P5)', async ({ app, page }) => {
+  await page.getByRole('button', { name: app.t('toolbar.settings') }).click();
+  const settings = page.getByRole('region', { name: app.t('settings.title') });
+  await settings.getByRole('link', { name: app.t('settings.aiPresets') }).click();
+  const presets = settings.getByRole('region', { name: app.t('settings.aiPresets') });
+  await presets.getByRole('button').first().click();
+  await presets.getByRole('textbox').first().fill('Changed');
+  await page.keyboard.press('Escape');
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('button', { name: app.t('dialog.cancel') })).toBeFocused();
+  await dialog.getByRole('button', { name: app.t('dialog.cancel') }).click();
+  await expect(settings).toBeVisible();
+  await expect(presets.getByRole('textbox').first()).toHaveValue('Changed');
 });

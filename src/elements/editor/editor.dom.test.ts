@@ -6,16 +6,12 @@ import assert from 'node:assert/strict';
 import { EditorSelection } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { undo } from '@codemirror/commands';
-import { StrictMode, createElement, useEffect, useRef } from 'react';
-import { flushSync } from 'react-dom';
-import { createRoot } from 'react-dom/client';
 
 import '../define';
 import { createDocSession } from '../../editor/docSession';
 import { EN_MESSAGES } from '../../i18n/messages';
 import { createI18nStore } from '../../state/i18nStore';
 import type { HmdEvents } from '../events';
-import type { HmdEditor } from './editor.element';
 
 // Una vista di CodeMirror rimasta montata (test fallito a metà) tiene vivo il processo: si smonta sempre.
 test.afterEach(() => document.body.replaceChildren());
@@ -40,7 +36,7 @@ function slowSave() {
   return { saveImage, saved, pending };
 }
 
-function mount(text: string, key = 'a.md#1') {
+function mount(text: string, key = 'a.md#1', store = i18n) {
   const session = createDocSession(key, text);
   const el = document.createElement('hmd-editor');
   el.text = text;
@@ -48,7 +44,7 @@ function mount(text: string, key = 'a.md#1') {
   el.session = session;
   el.restore = null;
   el.readOnly = false;
-  el.i18n = i18n;
+  el.i18n = store;
   const events: Recorded[] = [];
   for (const type of ['hmd-doc-change', 'hmd-selection', 'hmd-top-line'] as const) {
     el.addEventListener(type, (event) => events.push([type, (event as CustomEvent).detail]));
@@ -260,23 +256,38 @@ test('a listener that assigns another document while a new one is announced: the
   el.remove();
 });
 
-test('under React StrictMode: properties (also saveImage) set before connecting, the view is never recreated', () => {
-  const host = document.createElement('div');
-  document.body.append(host);
-  const root = createRoot(host);
-  const saveImage = async () => null;
-  let editor: HmdEditor | null = null;
-  function Parent() {
-    const ref = useRef<HmdEditor>(null);
-    // Come ReviewView: il genitore dà il focus all'editor appena montato.
-    useEffect(() => ref.current?.focus(), []);
-    return createElement('hmd-editor', { ref, text: 'abc', resetKey: 'a.md#1', session: createDocSession('a.md#1', 'abc'), saveImage, i18n });
-  }
-  flushSync(() => root.render(createElement(StrictMode, null, createElement(Parent))));
-  editor = host.querySelector('hmd-editor');
-  assert.equal(editor!.saveImage, saveImage);
-  assert.equal(host.querySelectorAll('.cm-editor').length, 1);
-  assert.equal(document.activeElement, editor!.querySelector('.cm-content'));
-  flushSync(() => root.unmount());
-  host.remove();
+test('the content is a textbox named after the document text; a language change renames it', async () => {
+  const store = createI18nStore({ locale: 'en', messages: EN_MESSAGES, load: async (locale) => ({ locale, messages: { ...EN_MESSAGES, 'editor.content': 'TESTO' } }), persist() {} });
+  const { el } = mount('# A', 'a.md#1', store);
+  const content = el.querySelector('.cm-content')!;
+  assert.equal(content.getAttribute('role'), 'textbox');
+  assert.equal(content.getAttribute('aria-label'), EN_MESSAGES['editor.content']);
+  await store.setLocale('it');
+  assert.equal(content.getAttribute('aria-label'), 'TESTO');
+});
+
+test('replacing the i18n store on a connected editor renames the content and moves the subscription', async () => {
+  const counted = (name: string) => {
+    const store = createI18nStore({ locale: 'en', messages: { ...EN_MESSAGES, 'editor.content': name }, load: async (locale) => ({ locale, messages: { ...EN_MESSAGES, 'editor.content': `${name}-${locale}` } }), persist() {} });
+    const subscribe = store.subscribe.bind(store);
+    let active = 0;
+    store.subscribe = (listener) => {
+      active++;
+      const off = subscribe(listener);
+      return () => { active--; off(); };
+    };
+    return { store, active: () => active };
+  };
+  const a = counted('A-NAME');
+  const b = counted('B-NAME');
+  const { el } = mount('# A', 'a.md#1', a.store);
+  const content = el.querySelector('.cm-content')!;
+  assert.equal(content.getAttribute('aria-label'), 'A-NAME');
+  assert.deepEqual([a.active(), b.active()], [1, 0]);
+  el.i18n = b.store;
+  assert.equal(content.getAttribute('aria-label'), 'B-NAME');
+  assert.deepEqual([a.active(), b.active()], [0, 1]);
+  await b.store.setLocale('it');
+  assert.equal(content.getAttribute('aria-label'), 'B-NAME-it');
+  el.remove();
 });

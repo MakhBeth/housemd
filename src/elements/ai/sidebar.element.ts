@@ -2,6 +2,7 @@ import type { AiController, AiWorkspace } from '../../ai/aiController';
 import type { TextRange } from '../../ai/selectionChip';
 import type { SelectionScope } from '../../ai/types';
 import { HmdElement } from '../../dom/element';
+import { announce } from '../../dom/announce';
 import { el, setText, toggleAttr } from '../../dom/el';
 import { icon } from '../../dom/icon';
 import { RenderLoop } from '../../dom/renderLoop';
@@ -40,6 +41,7 @@ interface Parts {
 export class HmdAiSidebar extends HmdElement {
   #controller: SidebarController | null = null;
   #text = '';
+  #draft = '';
   #selection: TextRange | null = null;
   #getSelection: () => SelectionScope | undefined = () => undefined;
   #syncNeedsPermission = false;
@@ -48,6 +50,8 @@ export class HmdAiSidebar extends HmdElement {
   #parts: Parts | null = null;
   /** La nota «la chat è già vuota» è visibile. */
   #note = false;
+  /** Il prossimo render riscrive la nota anche se è già lì (un altro clic su Nuova chat). */
+  #announceAgain = false;
   // Nessun recupero del focus qui: il registro e il composer hanno il loro (come con React).
   #loop = new RenderLoop(this, {
     ready: () => !!this.#parts && !!this.#controller && !!this.#i18n && this.isConnected,
@@ -65,6 +69,12 @@ export class HmdAiSidebar extends HmdElement {
   get text(): string { return this.#text; }
   set text(value: string) {
     this.#text = value ?? '';
+    this.#passDown();
+  }
+  /** Bozza del composer conservata dal workspace (il composer la legge solo nascendo). */
+  get draft(): string { return this.#draft; }
+  set draft(value: string) {
+    this.#draft = value ?? '';
     this.#passDown();
   }
   get selection(): TextRange | null { return this.#selection; }
@@ -132,6 +142,7 @@ export class HmdAiSidebar extends HmdElement {
     // I messaggi arrivano al registro prima dell'inserimento, così lo disegna nella stessa passata (il confronto resta nel render).
     const messages = this.#controller?.getState().chat.messages;
     if (messages && parts.log.messages !== messages) parts.log.messages = messages;
+    parts.composer.draft = this.#draft;
     parts.composer.controller = this.#controller;
     parts.composer.text = this.#text;
     parts.composer.selection = this.#selection;
@@ -146,7 +157,9 @@ export class HmdAiSidebar extends HmdElement {
     if (!controller) return;
     const state = controller.getState();
     // Mai disattivato (decisione 4): con la chat vuota e niente in corso, la nota dice perché non succede nulla.
-    this.#note = state.chat.messages.length === 0 && !state.running;
+    const empty = state.chat.messages.length === 0 && !state.running;
+    this.#announceAgain = empty && this.#note;
+    this.#note = empty;
     if (!this.#note) controller.newChat();
     this.#loop.update();
   }
@@ -159,7 +172,8 @@ export class HmdAiSidebar extends HmdElement {
     toggleAttr(parts.newChat, 'data-tooltip', true, t('ai.newChat'));
     // Qualcosa nella chat (o in corso) toglie la nota.
     if (state.chat.messages.length > 0 || state.running) this.#note = false;
-    setText(parts.note, this.#note ? t('ai.newChat.alreadyEmpty') : '');
+    announce(parts.note, this.#note ? t('ai.newChat.alreadyEmpty') : '', this.#announceAgain);
+    this.#announceAgain = false;
     // Il setter del registro non confronta: assegnare a ogni passata riconcilierebbe tutto il registro a ogni notifica.
     if (parts.log.messages !== state.chat.messages) parts.log.messages = state.chat.messages;
     if (this.#syncNeedsPermission) {

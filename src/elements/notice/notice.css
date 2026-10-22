@@ -41,8 +41,8 @@
       cursor: pointer;
     }
 
-    .action:disabled {
-      opacity: 0.6;
+    /* Aggiornamento in corso: stesso aspetto, solo il cursore; la ragione è il messaggio (mai disabled). */
+    .action[data-busy] {
       cursor: progress;
     }
 

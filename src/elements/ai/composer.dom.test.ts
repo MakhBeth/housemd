@@ -3,9 +3,12 @@ import '../../testing/domEnv';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import { ChangeSet } from '@codemirror/state';
+
 import '../define';
+import { AiController, type AiState } from '../../ai/aiController';
 import { defaultProfile } from '../../ai/profiles';
-import type { AiState } from '../../ai/aiController';
+import { createMemoryAiStores } from '../../ai/stores';
 import type { PromptPreset, SelectionScope } from '../../ai/types';
 import { translate, type Params } from '../../i18n/i18n';
 import { EN_MESSAGES } from '../../i18n/messages';
@@ -13,6 +16,7 @@ import { createI18nStore } from '../../state/i18nStore';
 import { countListeners } from '../../testing/countListeners';
 import { fakeAi } from '../../testing/fakeAi';
 import { installPopoverStub } from '../../testing/popoverStub';
+import { waitFor } from '../../testing/waitFor';
 
 installPopoverStub();
 
@@ -289,4 +293,143 @@ test('language change relabels, the note too; detached, no listener left', async
   el.remove();
   assert.equal(listeners(), 0);
   assert.equal(ai.listeners(), 0);
+});
+
+test('without a document Send says so, keeps the draft and the focus; a document opened clears the note', () => {
+  const { ai, send, type, note, input } = mount();
+  ai.sendBlockerValue = 'noDocument';
+  type('draft');
+  send().focus();
+  send().click();
+  assert.deepEqual(ai.calls, []);
+  assert.equal(input().value, 'draft');
+  assert.equal(note().textContent, EN_MESSAGES['ai.composer.noDocument']);
+  assert.equal(document.activeElement, send());
+  ai.sendBlockerValue = null;
+  ai.set({});
+  assert.equal(note().textContent, '');
+});
+
+test('during an update Send says so; typing clears the note as for the other notes, and so does the end of the update', () => {
+  const { ai, send, type, note } = mount();
+  ai.sendBlockerValue = 'updating';
+  type('draft');
+  send().click();
+  assert.equal(note().textContent, EN_MESSAGES['ai.composer.updating']);
+  type('draft more');
+  assert.equal(note().textContent, '');
+  send().click();
+  assert.equal(note().textContent, EN_MESSAGES['ai.composer.updating']);
+  ai.sendBlockerValue = null;
+  ai.set({});
+  assert.equal(note().textContent, '');
+});
+
+test('a suggestion (or Enter) during a generation says so, the draft stays, the note goes when the generation ends', async () => {
+  const { el, ai, key, note, type, input, running } = mount();
+  running(true);
+  type('draft');
+  el.sendPreset('p1');
+  assert.deepEqual(ai.calls, []);
+  assert.equal(note().textContent, EN_MESSAGES['ai.composer.generating']);
+  assert.equal(input().value, 'draft');
+  key('Enter');
+  // La stessa nota di nuovo: svuotata subito e riscritta dopo `ANNOUNCE_DELAY_MS`, così lo screen reader la rilegge.
+  assert.equal(note().textContent, '');
+  await waitFor(() => note().textContent === EN_MESSAGES['ai.composer.generating']);
+  running(false);
+  assert.equal(note().textContent, '');
+});
+
+test('the order of the reasons: the controller first (generation, document, update), then the profile, then the text', () => {
+  const { ai, send, key, note, running } = mount(false);
+  // Durante la generazione il pulsante è Stop: la ragione si vede con Invio.
+  running(true);
+  key('Enter');
+  assert.equal(note().textContent, EN_MESSAGES['ai.composer.generating']);
+  running(false);
+  ai.sendBlockerValue = 'noDocument';
+  send().click();
+  assert.equal(note().textContent, EN_MESSAGES['ai.composer.noDocument']);
+  ai.sendBlockerValue = null;
+  send().click();
+  assert.equal(note().textContent, EN_MESSAGES['ai.composer.needProfile']);
+  ai.set({ profiles: [defaultProfile('ollama', 'o')], profileId: 'o' });
+  send().click();
+  assert.equal(note().textContent, EN_MESSAGES['ai.composer.needText']);
+});
+
+/** Il controller vero (store in memoria, provider finto mai chiamato) al posto di `fakeAi`: le notifiche arrivano solo da lui. */
+async function realController() {
+  const world = { doc: { path: 'a.md', textLf: 'uno\ndue\ntre', conflict: null as unknown, updating: false } as { path: string; textLf: string; conflict: unknown; updating: boolean } | null };
+  const controller = new AiController(createMemoryAiStores({ writerId: 'test', now: () => 100 }), { getDoc: () => world.doc, snapshotBeforeAi() {}, openFile() {} }, () => ({
+    async listModels() { return []; },
+    async *stream() { throw new Error('mai chiamato'); },
+  }));
+  await controller.initialize();
+  return { controller, world };
+}
+
+test('with the real controller: the updating note goes when cancel() ends the update, the no-document note when a document opens; no other user action', async () => {
+  const { controller, world } = await realController();
+  const { el, send, type, note, input } = mount();
+  el.controller = controller;
+  assert.equal(await controller.prepare(), 'durable');
+  type('draft');
+  send().click();
+  assert.equal(note().textContent, EN_MESSAGES['ai.composer.updating']);
+  assert.equal(input().value, 'draft');
+  controller.cancel();
+  assert.equal(controller.sendBlocker(), null);
+  assert.equal(note().textContent, '');
+  world.doc = null;
+  send().click();
+  assert.equal(note().textContent, EN_MESSAGES['ai.composer.noDocument']);
+  world.doc = { path: 'b.md', textLf: 'B', conflict: null, updating: false };
+  // Come WorkspaceView quando apre un documento: documentChanged con reset.
+  controller.documentChanged('b.md', ChangeSet.empty(1), true);
+  assert.equal(note().textContent, '');
+  assert.equal(input().value, 'draft');
+});
+
+test('a double click on Send sends once and does not stop: only the click right after the sending one (detail + 1) is ignored on Stop', () => {
+  const { ai, send, type, running, key } = mount();
+  const click = (detail: number) => send().dispatchEvent(new MouseEvent('click', { bubbles: true, detail }));
+  const calls = () => ai.calls.map((c) => c[0]);
+  type('fix');
+  click(1);
+  running(true);
+  click(2);
+  assert.deepEqual(calls(), ['send'], 'la seconda metà del doppio clic');
+  // Una serie rapida su Stop (detail 3) ferma: chi ha un tremore clicca così.
+  click(3);
+  assert.deepEqual(calls(), ['send', 'stop']);
+  // Invio dalla tastiera, poi un clic singolo su Stop: ferma.
+  running(false);
+  type('again');
+  key('Enter');
+  running(true);
+  click(1);
+  assert.deepEqual(calls(), ['send', 'stop', 'send', 'stop']);
+});
+
+test('the draft: given before connecting it fills the box; typing and sending tell it out with hmd-ai-draft', () => {
+  const ai = fakeAi({ presets: [PRESET] }, defaultProfile('ollama', 'o'));
+  const el = document.createElement('hmd-ai-composer');
+  el.draft = 'half written';
+  el.controller = ai;
+  el.text = TEXT;
+  el.i18n = createI18nStore({ locale: 'en', messages: EN_MESSAGES, load: async (locale) => ({ locale, messages: EN_MESSAGES }), persist() {} });
+  const drafts: string[] = [];
+  el.addEventListener('hmd-ai-draft', (event) => drafts.push(event.detail.text));
+  document.body.append(el);
+  const input = el.querySelector('textarea')!;
+  assert.equal(input.value, 'half written');
+  input.value = 'half written, done';
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+  assert.deepEqual(drafts, ['half written, done', '']);
+  // Dopo la costruzione la bozza non riscrive più la casella.
+  el.draft = 'other';
+  assert.equal(input.value, '');
 });

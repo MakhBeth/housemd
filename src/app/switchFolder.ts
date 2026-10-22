@@ -28,25 +28,37 @@ export async function switchFolder<H, T>(deps: {
    * cambio bloccato o fallito non fa riaprire al prossimo avvio una cartella mai davvero aperta.
    */
   persist?(value: T): void;
+  /**
+   * Il chiamante non c'è più (per esempio `hmd-app` staccato): ricontrollato dopo ogni `await`. Un cambio
+   * interrotto finisce come annullato, senza effetti: la cartella appena aperta si elimina, quella vecchia
+   * resta com'è e niente si salva.
+   */
+  signal?: AbortSignal;
 }): Promise<FolderSwitch<T>> {
+  const aborted = () => deps.signal?.aborted === true;
   let handle: H | null;
   try {
     handle = await deps.pick();
   } catch (err) {
     return { kind: 'error', detail: errorDetail(err) };
   }
-  if (handle === null) return { kind: 'cancelled' };
+  if (handle === null || aborted()) return { kind: 'cancelled' };
   try {
     // Documento non messo al sicuro: toast draftNotPersisted già mostrato dal Workspace.
     if (deps.current && !(await deps.current.closeFile())) return { kind: 'blocked' };
   } catch (err) {
     return { kind: 'error', detail: errorDetail(err) };
   }
+  if (aborted()) return { kind: 'cancelled' };
   let value: T;
   try {
     value = await deps.open(handle);
   } catch (err) {
     return { kind: 'error', detail: errorDetail(err) };
+  }
+  if (aborted()) {
+    deps.discard?.(value);
+    return { kind: 'cancelled' };
   }
   // Durante l'apertura (anche lunga: si leggono tutti i file) lo workspace vecchio è rimasto usabile:
   // l'utente può aver aperto un file e scritto. Si rimette al sicuro quello che c'è ADESSO; se non si
@@ -59,6 +71,10 @@ export async function switchFolder<H, T>(deps: {
   } catch (err) {
     deps.discard?.(value);
     return { kind: 'error', detail: errorDetail(err) };
+  }
+  if (aborted()) {
+    deps.discard?.(value);
+    return { kind: 'cancelled' };
   }
   deps.current?.dispose();
   deps.persist?.(value);

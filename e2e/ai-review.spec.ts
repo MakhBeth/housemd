@@ -6,6 +6,8 @@ const composer = (app: App) => app.page.getByRole('textbox', { name: app.t('ai.r
 const acceptAll = (app: App) => app.page.getByRole('button', { name: app.t('ai.acceptAll'), exact: true });
 const discard = (app: App) => app.page.getByRole('button', { name: app.t('ai.discard'), exact: true });
 const mergeView = (app: App) => app.page.locator('.cm-mergeView');
+/** La proposta è arrivata: il diff è visibile. Non «Accetta tutto attivo»: con i pulsanti mai disattivati (6c) passerebbe subito. */
+const proposalShown = (app: App) => expect(mergeView(app)).toBeVisible();
 const blockButtons = (app: App, action: 'accept' | 'reject'): Locator =>
   app.page.locator(`.cm-merge-revert button[data-action=${action}]`);
 /** Testo della proposta: l'ultimo editor della MergeView. */
@@ -34,7 +36,7 @@ async function enterAi(app: App): Promise<void> {
 async function request(app: App): Promise<void> {
   await composer(app).fill('fix');
   await composer(app).press('Enter');
-  await expect(acceptAll(app)).toBeEnabled();
+  await proposalShown(app);
 }
 
 test.describe('whole document', () => {
@@ -192,7 +194,7 @@ test.describe('selection', () => {
   });
 });
 
-// React 19 vuole `popoverTarget`: il chip del profilo deve continuare ad aprire il suo popover.
+// Il chip del profilo deve continuare ad aprire il suo popover.
 test('the profile chip opens its popover with the profile choice', async ({ app, page }) => {
   await app.openFolder({ 'a.md': 'A' });
   await app.openFile('a.md');
@@ -207,7 +209,7 @@ test('the profile chip opens its popover with the profile choice', async ({ app,
   await expect(current).toBeHidden();
 });
 
-// Anche il pulsante degli avvisi della revisione apre il suo popover con popovertarget (popoverTarget in React 19).
+// Anche il pulsante degli avvisi della revisione apre il suo popover con popovertarget (prima della fase 7 era `popoverTarget` di React 19).
 test('the warnings button of the review opens its popover', async ({ app, ai, page }) => {
   ai.reply = 'See [[Other]]';
   await app.openFolder({ 'a.md': 'See [[Target]]' });
@@ -217,7 +219,7 @@ test('the warnings button of the review opens its popover', async ({ app, ai, pa
   const composer = page.getByRole('textbox', { name: app.t('ai.request') });
   await composer.fill('fix');
   await composer.press('Enter');
-  const warnings = page.getByRole('button', { name: app.t('ai.warningsCount', { count: 1 }) });
+  const warnings = page.getByRole('button', { name: app.t('ai.warningsCount.one', { count: 1 }) });
   const item = page.getByRole('button', { name: app.t('ai.warning.wikilinks') });
   await expect(warnings).toBeVisible();
   await expect(item).toBeHidden();

@@ -237,3 +237,55 @@ test('Riprova segna il messaggio fallito come già ritentato: un secondo Riprova
   await f.controller.retry(failed.id);
   assert.equal(calls, 2);
 });
+test('sendBlocker: generazione in corso, nessun documento, aggiornamento (app o documento); altrimenti null, e send() scarta negli stessi casi', async () => {
+  const f = await fixture(async function* (_req, signal) { yield { type: 'thinking' }; await untilAbort(signal); });
+  assert.equal(f.controller.sendBlocker(), null);
+  const running = f.controller.send('Prima'); await stateWhen(f.controller, s => !!s.running);
+  assert.equal(f.controller.sendBlocker(), 'running');
+  f.controller.stop(); await running;
+  assert.equal(f.controller.sendBlocker(), null); const sent = f.controller.getState().chat.messages.length;
+  f.world.doc.updating = true; assert.equal(f.controller.sendBlocker(), 'updating'); f.world.doc.updating = false;
+  assert.equal(await f.controller.prepare(), 'durable'); assert.equal(f.controller.sendBlocker(), 'updating');
+  await f.controller.send('Scartata'); assert.equal(f.controller.getState().chat.messages.length, sent);
+  f.controller.cancel(); assert.equal(f.controller.sendBlocker(), null);
+  const doc = f.world.doc; (f.world as { doc: typeof doc | null }).doc = null;
+  assert.equal(f.controller.sendBlocker(), 'noDocument');
+  await f.controller.send('Scartata'); assert.equal(f.controller.getState().chat.messages.length, sent);
+  f.world.doc = doc;
+});
+test('acceptBlocker: una ragione per volta nell\'ordine della barra, e canAccept ne deriva', async () => {
+  const f = await fixture(async function* (_req, signal) { yield { type: 'text', text: '<housemd-proposal>Frammento' }; await untilAbort(signal); });
+  const running = f.controller.send('Prima'); await stateWhen(f.controller, s => !!s.proposals.size);
+  const streaming = f.controller.getState().proposals.get('a.md')!;
+  assert.equal(f.controller.acceptBlocker(streaming), 'generating');
+  f.controller.stop(); await running;
+  const p = f.controller.getState().proposals.get('a.md')!; assert.equal(p.status, 'truncated');
+  assert.equal(f.controller.acceptBlocker(p), null); assert.equal(f.controller.canAccept(p), true);
+  assert.equal(f.controller.acceptBlocker(p, true), 'truncated'); assert.equal(f.controller.canAccept(p, true), false);
+  f.world.doc.conflict = { theirs: 'x' }; assert.equal(f.controller.acceptBlocker(p, true), 'conflict');
+  f.world.doc.updating = true; assert.equal(f.controller.acceptBlocker(p, true), 'updating'); f.world.doc.updating = false;
+  f.world.doc.conflict = null;
+  f.world.doc = { ...f.world.doc, path: 'b.md' }; assert.equal(f.controller.acceptBlocker(p), 'notAcceptable'); assert.equal(f.controller.canAccept(p), false);
+  f.world.doc = { ...f.world.doc, path: 'a.md' };
+  const doc = f.world.doc; (f.world as { doc: typeof doc | null }).doc = null;
+  assert.equal(f.controller.acceptBlocker(p), 'notAcceptable'); f.world.doc = doc;
+});
+test('acceptBlocker: la selezione persa viene prima della proposta troncata', async () => {
+  const scope: SelectionScope = { from: 0, to: 10, originalText: 'Originale ', status: 'valid' };
+  const f = await fixture(async function* (_req, signal) { yield { type: 'text', text: '<housemd-proposal>Nuova ' }; await untilAbort(signal); });
+  const running = f.controller.send('Prima', undefined, scope); await stateWhen(f.controller, s => !!s.proposals.size);
+  f.controller.stop(); await running;
+  const p = f.controller.getState().proposals.get('a.md')!; assert.equal(p.status, 'truncated');
+  assert.equal(f.controller.acceptBlocker(p, true), 'truncated');
+  f.controller.documentChanged('a.md', ChangeSet.of({ from: 0, to: 9, insert: 'Cambiata' }, 'Originale A'.length), false, { before: 'Originale A', after: 'Cambiata A' });
+  const lost = f.controller.getState().proposals.get('a.md')!; assert.equal(lost.scope?.status, 'lost');
+  assert.equal(f.controller.acceptBlocker(lost, true), 'scopeLost'); assert.equal(f.controller.acceptBlocker(lost), 'scopeLost');
+});
+test('prepare(), cancel() e un documento aperto (documentChanged con reset) notificano gli iscritti: la nota del composer si svuota al render', async () => {
+  const f = await fixture();
+  let notified = 0; const off = f.controller.subscribe(() => { notified++; });
+  assert.equal(await f.controller.prepare(), 'durable'); assert.equal(notified, 1);
+  f.controller.cancel(); assert.equal(notified, 2); assert.equal(f.controller.sendBlocker(), null);
+  f.controller.documentChanged('a.md', ChangeSet.empty('Originale A'.length), true); assert.equal(notified, 3);
+  off();
+});

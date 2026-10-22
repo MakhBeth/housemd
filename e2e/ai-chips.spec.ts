@@ -54,7 +54,7 @@ test('profile parameters: the fields follow the provider and a saved temperature
   const temperature = settings(app).getByRole('spinbutton', { name: app.t('ai.param.temperature') });
   await temperature.fill('0.7');
   await expect(temperature).toHaveValue('0.7');
-  await settings(app).getByRole('button', { name: app.t('ai.save'), exact: true }).first().click();
+  await settings(app).getByRole('region', { name: app.t('settings.aiProfiles') }).getByRole('button', { name: app.t('ai.save'), exact: true }).click();
   await settings(app).getByRole('button', { name: app.t('settings.close') }).click();
   await app.page.getByRole('button', { name: app.t('toolbar.settings') }).click();
   await settings(app).getByRole('button', { name: 'ollama', exact: true }).click();

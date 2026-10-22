@@ -76,11 +76,19 @@ export class HmdFileTree extends HmdElement {
     focusScope: () => this.#parts?.nav ?? null,
     // La riga con il focus è sparita (file eliminato o rinominato): il focus va sulla riga col tab stop
     // (il suo focusin ricalcola i tab stop).
-    refocus: () => {
-      const stop = tabStop(this.#items, this.#focused, this.#openPath);
-      if (stop !== null) this.#focusables.get(stop)?.focus();
-    },
+    refocus: () => void this.focusTabStop(),
   });
+
+  /**
+   * Focus sulla riga col tab stop (il file aperto, o la prima riga): l'ingresso nell'albero da fuori. Falso con
+   * l'albero vuoto (nessuna riga da raggiungere): chi chiama sceglie un altro bersaglio.
+   */
+  focusTabStop(): boolean {
+    const stop = tabStop(this.#items, this.#focused, this.#openPath);
+    const row = stop === null ? undefined : this.#focusables.get(stop);
+    row?.focus();
+    return !!row;
+  }
 
   get nodes(): readonly TreeNode[] { return this.#nodes; }
   set nodes(value: readonly TreeNode[]) {
