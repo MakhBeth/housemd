@@ -97,6 +97,7 @@
   "settings.focus": "フォーカスモード (Ctrl+Shift+F)",
   "settings.focus.paragraph": "段落をハイライト",
   "settings.focus.sentence": "文をハイライト",
+  "settings.typewriter": "タイプライター: カーソル行を中央に保つ",
   "settings.writing.hint": "エディターと分割ビューで有効です。",
   "settings.saveAll": "今すぐすべて保存",
   "settings.close": "閉じる",

@@ -292,6 +292,27 @@ test('replacing the i18n store on a connected editor renames the content and mov
   el.remove();
 });
 
+test('typewriter: the root gets the class only while on, and every keyboard move or edit carries the centering', async () => {
+  const { el, view } = mount('uno\n\ndue\n\ntre');
+  const root = () => el.querySelector('.cm-editor')!;
+  assert.equal(root().classList.contains('cm-typewriter'), false, 'off: the DOM is untouched');
+  el.typewriter = true;
+  await tick();
+  assert.equal(root().classList.contains('cm-typewriter'), true);
+  const seen: number[] = [];
+  view().dispatch({ selection: { anchor: 5 }, userEvent: 'select' });
+  view().dispatch({ selection: { anchor: 1 }, userEvent: 'select.pointer' });
+  const keyboard = view().state.update({ selection: { anchor: 5 }, userEvent: 'select' });
+  const mouse = view().state.update({ selection: { anchor: 5 }, userEvent: 'select.pointer' });
+  seen.push(keyboard.effects.length, mouse.effects.length);
+  assert.deepEqual(seen, [1, 0]);
+  el.typewriter = false;
+  await tick();
+  assert.equal(root().classList.contains('cm-typewriter'), false);
+  assert.equal(view().state.update({ selection: { anchor: 5 }, userEvent: 'select' }).effects.length, 0);
+  el.remove();
+});
+
 test('focus mode greys everything outside the cursor paragraph, follows the cursor, and leaves the text alone', async () => {
   const { el, view } = mount('uno\n\ndue\n\ntre');
   const dimmed = () => [...el.querySelectorAll('.cm-focusDim')].map((n) => n.textContent).join('');

@@ -97,6 +97,7 @@
   "settings.focus": "Tryb skupienia (Ctrl+Shift+F)",
   "settings.focus.paragraph": "Wyróżnij akapit",
   "settings.focus.sentence": "Wyróżnij zdanie",
+  "settings.typewriter": "Maszyna do pisania: trzymaj wiersz kursora na środku",
   "settings.writing.hint": "Działają w widokach Edytor i Podział.",
   "settings.saveAll": "Zapisz wszystko teraz",
   "settings.close": "Zamknij",

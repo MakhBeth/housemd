@@ -197,19 +197,25 @@ test('the Writing group: the focus checkbox, two always-active unit radios, the 
   const group = el.querySelector('fieldset[aria-describedby="settings-writing-hint"]')!;
   assert.equal(group.querySelector('legend')!.textContent, EN_MESSAGES['settings.writing']);
   assert.equal(document.getElementById('settings-writing-hint')!.textContent, EN_MESSAGES['settings.writing.hint']);
-  const checkbox = group.querySelector<HTMLInputElement>('input[type=checkbox]')!;
+  const [checkbox, typewriter] = [...group.querySelectorAll<HTMLInputElement>('input[type=checkbox]')];
   const radios = [...group.querySelectorAll<HTMLInputElement>('input[name=focusUnit]')];
   assert.deepEqual(radios.map((r) => r.value), ['paragraph', 'sentence']);
   assert.equal(checkbox.checked, false);
   assert.ok(radios.every((r) => !r.disabled), 'the radios are active even when the focus is off');
   assert.equal(radios[0].checked, true);
+  assert.equal(typewriter.closest('label')!.textContent, EN_MESSAGES['settings.typewriter']);
+  assert.ok(radios[1].compareDocumentPosition(typewriter) & Node.DOCUMENT_POSITION_FOLLOWING, 'after the unit radios');
+  assert.ok(typewriter.compareDocumentPosition(document.getElementById('settings-writing-hint')!) & Node.DOCUMENT_POSITION_FOLLOWING, 'before the hint');
   radios[1].click();
   checkbox.click();
+  typewriter.click();
   assert.deepEqual(events, [
-    ['hmd-settings-focus', { focus: false, unit: 'sentence' }],
-    ['hmd-settings-focus', { focus: true, unit: 'paragraph' }],
+    ['hmd-settings-focus', { focus: false, unit: 'sentence', typewriter: false }],
+    ['hmd-settings-focus', { focus: true, unit: 'paragraph', typewriter: false }],
+    ['hmd-settings-focus', { focus: false, unit: 'paragraph', typewriter: true }],
   ]);
-  el.writing = { focus: true, unit: 'sentence' };
+  el.writing = { focus: true, unit: 'sentence', typewriter: true };
   assert.equal(checkbox.checked, true);
+  assert.equal(typewriter.checked, true);
   assert.equal(radios[1].checked, true);
 });

@@ -387,6 +387,28 @@ test('the focus button sits between Save all and the theme, toggles aria-pressed
   assert.equal(storage.get('housemd:focusMode'), 'true');
 });
 
+test('settings: changing only the unit does not rewrite the focus note, and the typewriter is saved and reaches the editor', async () => {
+  const { el, workspace, button } = await mount();
+  await workspace.openFile('a.md');
+  button(EN_MESSAGES['mode.preview']).click();
+  button(EN_MESSAGES['toolbar.focus']).click();
+  const note = () => el.querySelector('p.toolbarNote')!;
+  await waitFor(() => note().textContent === EN_MESSAGES['toolbar.focus.elsewhere']);
+  button(EN_MESSAGES['toolbar.settings']).click();
+  const settings = el.querySelector('hmd-settings')!;
+  const send = (detail: { focus: boolean; unit: 'paragraph' | 'sentence'; typewriter: boolean }) => settings.dispatchEvent(new CustomEvent('hmd-settings-focus', { bubbles: true, detail }));
+  // Solo l'unità: l'annuncio non riparte (con la nota svuotata e riscritta dopo il ritardo il testo sparirebbe).
+  send({ focus: true, unit: 'sentence', typewriter: false });
+  await Promise.resolve();
+  assert.equal(note().textContent, EN_MESSAGES['toolbar.focus.elsewhere'], 'unit only: the note is not rewritten');
+  send({ focus: true, unit: 'sentence', typewriter: true });
+  assert.equal(storage.get('housemd:typewriter'), 'true');
+  assert.equal(storage.get('housemd:focusUnit'), '"sentence"');
+  el.querySelector<HTMLButtonElement>('hmd-settings .navHeader button')!.click();
+  button(EN_MESSAGES['mode.split']).click();
+  assert.equal(el.querySelector<HTMLElement & { typewriter: boolean }>('hmd-editor')!.typewriter, true);
+});
+
 test('Ctrl+Shift+F toggles the focus and announces it once in a hidden status region', async () => {
   const { el, workspace, button } = await mount();
   await workspace.openFile('a.md');

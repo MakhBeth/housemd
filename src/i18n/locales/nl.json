@@ -97,6 +97,7 @@
   "settings.focus": "Focusmodus (Ctrl+Shift+F)",
   "settings.focus.paragraph": "Alinea markeren",
   "settings.focus.sentence": "Zin markeren",
+  "settings.typewriter": "Typemachine: houd de cursorregel in het midden",
   "settings.writing.hint": "Geldt in de weergaven Editor en Gesplitst.",
   "settings.saveAll": "Nu alles opslaan",
   "settings.close": "Sluiten",

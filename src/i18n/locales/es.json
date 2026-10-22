@@ -97,6 +97,7 @@
   "settings.focus": "Modo concentración (Ctrl+Mayús+F)",
   "settings.focus.paragraph": "Resaltar el párrafo",
   "settings.focus.sentence": "Resaltar la frase",
+  "settings.typewriter": "Máquina de escribir: mantener la línea del cursor centrada",
   "settings.writing.hint": "Se aplican en las vistas Editor y Dividido.",
   "settings.saveAll": "Guardar todo ahora",
   "settings.close": "Cerrar",

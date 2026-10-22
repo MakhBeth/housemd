@@ -97,6 +97,7 @@
   "settings.focus": "Modo foco (Ctrl+Shift+F)",
   "settings.focus.paragraph": "Destacar o parágrafo",
   "settings.focus.sentence": "Destacar a frase",
+  "settings.typewriter": "Máquina de escrever: manter a linha do cursor ao centro",
   "settings.writing.hint": "Valem nas vistas Editor e Dividido.",
   "settings.saveAll": "Guardar tudo agora",
   "settings.close": "Fechar",

@@ -97,6 +97,7 @@
   "settings.focus": "Modalità focus (Ctrl+Shift+F)",
   "settings.focus.paragraph": "Evidenzia il paragrafo",
   "settings.focus.sentence": "Evidenzia la frase",
+  "settings.typewriter": "Typewriter: tieni la riga del cursore al centro",
   "settings.writing.hint": "Valgono nelle viste Editor e Affiancati.",
   "settings.saveAll": "Salva tutto adesso",
   "settings.close": "Chiudi",

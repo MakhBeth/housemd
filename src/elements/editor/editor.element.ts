@@ -4,6 +4,7 @@ import { EditorView } from '@codemirror/view';
 import { el } from '../../dom/el';
 import { focusCompartment, focusExtensions } from '../../editor/focusMode';
 import type { FocusUnit } from '../../editor/focusRange';
+import { centerEffect, typewriterCompartment, typewriterExtensions } from '../../editor/typewriter';
 import { editable, mainSelectionRange, readOnlyExtensions } from '../../editor/docExtensions';
 import { initialRestoreSeq } from '../../editor/restoreCommand';
 import { applyDocRestore } from '../../editor/useDocBinding';
@@ -31,6 +32,7 @@ export class HmdEditor extends HmdDocElement {
   #focus = false;
   #focusUnit: FocusUnit = 'paragraph';
   #appliedFocus = '';
+  #typewriter = false;
 
   /** Modalità focus (grigio fuori dall'unità del cursore) e sua unità: si riconfigurano a caldo. */
   get focusMode(): boolean { return this.#focus; }
@@ -38,12 +40,40 @@ export class HmdEditor extends HmdDocElement {
     if (!!value === this.#focus) return;
     this.#focus = !!value;
     this.#applyFocus();
+    this.#recenter();
   }
   get focusUnit(): FocusUnit { return this.#focusUnit; }
   set focusUnit(value: FocusUnit) {
     if (value === this.#focusUnit) return;
     this.#focusUnit = value;
     this.#applyFocus();
+    this.#recenter();
+  }
+
+  /** Typewriter: la riga del cursore resta al centro; si riconfigura a caldo e ricentra una volta. */
+  get typewriter(): boolean { return this.#typewriter; }
+  set typewriter(value: boolean) {
+    if (!!value === this.#typewriter) return;
+    this.#typewriter = !!value;
+    const view = this.#view;
+    if (!view) return;
+    queueMicrotask(() => {
+      if (this.#view !== view) return;
+      view.dispatch({ effects: [typewriterCompartment.reconfigure(typewriterExtensions(this.#typewriter)), ...(this.#typewriter ? [centerEffect(view.state)] : [])] });
+    });
+  }
+
+  protected override initialTypewriter() {
+    return typewriterExtensions(this.#typewriter);
+  }
+
+  /** Una volta, senza animazione: apertura di un documento, cambio di unità o di modalità. */
+  #recenter(): void {
+    const view = this.#view;
+    if (!view || !this.#typewriter) return;
+    queueMicrotask(() => {
+      if (this.#view === view && this.#typewriter) view.dispatch({ effects: centerEffect(view.state) });
+    });
   }
 
   protected override initialFocus() {
@@ -93,6 +123,7 @@ export class HmdEditor extends HmdDocElement {
       // La selezione della sessione si annuncia in un microtask, non qui: siamo dentro il commit di React.
       this.#announce = true;
       this.docInputChanged();
+      this.#recenter();
     }
     this.#view.scrollDOM.addEventListener('scroll', () => this.#onScroll(), { passive: true, signal });
     // Una lingua nuova: il nome del contenuto subito (contentAttributes lo rilegge solo al prossimo aggiornamento,
@@ -140,6 +171,7 @@ export class HmdEditor extends HmdDocElement {
       this.#applied.resetKey = this.resetKey;
       this.#applied.readOnly = this.readOnly;
       this.#announce = true;
+      this.#recenter();
     }
     if (this.#announce) {
       this.#announce = false;

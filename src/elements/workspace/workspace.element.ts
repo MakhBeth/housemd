@@ -146,6 +146,7 @@ export class HmdWorkspace extends HmdElement {
   #historyNote = false;
   #focusMode = false;
   #focusUnit: FocusUnit = 'paragraph';
+  #typewriter = false;
   #focusNote = false;
   /** Testo dell'ultimo annuncio della scorciatoia (vuoto dopo un clic sul pulsante). */
   #focusSaid = '';
@@ -249,6 +250,7 @@ export class HmdWorkspace extends HmdElement {
       this.#sidebarOpen = readPref('sidebarOpen');
       this.#focusMode = readPref('focusMode');
       this.#focusUnit = readPref('focusUnit');
+      this.#typewriter = readPref('typewriter');
       this.#sidebarWidth = clampWidth('sidebar', readPref('sidebarWidth'));
       this.#aiWidth = clampWidth('ai', readPref('aiSidebarWidth'));
       this.#textWidth = readValidPref('textWidth', parseTextWidth);
@@ -887,6 +889,7 @@ export class HmdWorkspace extends HmdElement {
       assign(editor, 'readOnly', state.updating);
       assign(editor, 'focusMode', this.#focusMode);
       assign(editor, 'focusUnit', this.#focusUnit);
+      assign(editor, 'typewriter', this.#typewriter);
       assign(editor, 'getDocs', this.#getDocs);
       assign(editor, 'saveImage', this.#saveImage);
       assign(editor, 'i18n', i18n);
@@ -966,7 +969,13 @@ export class HmdWorkspace extends HmdElement {
           this.#loop.update();
         },
         'hmd-settings-focus': (event) => {
-          this.#setFocus(event.detail.focus);
+          // Solo se cambia davvero: con le impostazioni aperte sopra la vista senza editor, cambiare l'unità non rimostra la nota.
+          if (event.detail.focus !== this.#focusMode) this.#setFocus(event.detail.focus);
+          if (event.detail.typewriter !== this.#typewriter) {
+            this.#typewriter = event.detail.typewriter;
+            writePref('typewriter', event.detail.typewriter);
+            this.#loop.update();
+          }
           if (event.detail.unit !== this.#focusUnit) {
             this.#focusUnit = event.detail.unit;
             writePref('focusUnit', event.detail.unit);
@@ -986,7 +995,7 @@ export class HmdWorkspace extends HmdElement {
     assign(settings, 'theme', this.#theme);
     assign(settings, 'autosave', state.autosave);
     assign(settings, 'textWidth', this.#textWidth);
-    assign(settings, 'writing', { focus: this.#focusMode, unit: this.#focusUnit });
+    assign(settings, 'writing', { focus: this.#focusMode, unit: this.#focusUnit, typewriter: this.#typewriter });
     assign(settings, 'i18n', i18n);
   }
 

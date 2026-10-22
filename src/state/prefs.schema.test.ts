@@ -65,4 +65,9 @@ test('focus preferences default to off and paragraph, survive a reload and rejec
   items.set('housemd:focusMode', '"on"');
   assert.equal(readPref('focusUnit'), 'paragraph');
   assert.equal(readPref('focusMode'), false);
+  assert.equal(readPref('typewriter'), false);
+  writePref('typewriter', true);
+  assert.equal(readPref('typewriter'), true);
+  items.set('housemd:typewriter', '"on"');
+  assert.equal(readPref('typewriter'), false);
 });

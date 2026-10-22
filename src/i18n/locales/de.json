@@ -97,6 +97,7 @@
   "settings.focus": "Fokusmodus (Strg+Umschalt+F)",
   "settings.focus.paragraph": "Absatz hervorheben",
   "settings.focus.sentence": "Satz hervorheben",
+  "settings.typewriter": "Schreibmaschine: Cursorzeile in der Mitte halten",
   "settings.writing.hint": "Gilt in den Ansichten Editor und Geteilt.",
   "settings.saveAll": "Jetzt alle speichern",
   "settings.close": "Schließen",

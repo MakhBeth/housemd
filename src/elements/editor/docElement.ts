@@ -116,12 +116,17 @@ export abstract class HmdDocElement extends HmdElement {
     const session = this.#session;
     this.#shownSession = session;
     if (session) adoptResetKey(session, this.#resetKey, this.#text);
-    const extensions = docExtensions(this.docHost, this.initialFocus());
+    const extensions = docExtensions(this.docHost, this.initialFocus(), this.initialTypewriter());
     return session ? docStateConfig(session, extensions) : { doc: this.#text, extensions };
   }
 
   /** Modalità focus con cui nasce la vista: nessuna di default (il diff della revisione AI non la usa). */
   protected initialFocus(): Extension {
+    return [];
+  }
+
+  /** Typewriter con cui nasce la vista: nessuno di default. */
+  protected initialTypewriter(): Extension {
     return [];
   }
 

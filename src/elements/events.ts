@@ -70,8 +70,8 @@ export interface HmdEvents {
   'hmd-search-open': CustomEvent<{ path: string; terms: string[] }>;
   /** Impostazioni: il ritardo o la modalità dell'autosalvataggio confermati (da salvare e applicare). */
   'hmd-settings-autosave': CustomEvent<{ autosave: AutosaveSettings }>;
-  /** Impostazioni: modalità focus o sua unità cambiate (da salvare e applicare). */
-  'hmd-settings-focus': CustomEvent<{ focus: boolean; unit: FocusUnit }>;
+  /** Impostazioni: modalità focus, sua unità o typewriter cambiati (da salvare e applicare). */
+  'hmd-settings-focus': CustomEvent<{ focus: boolean; unit: FocusUnit; typewriter: boolean }>;
   /** Impostazioni: chiuse (con la conferma, se c'erano modifiche aperte). */
   'hmd-settings-close': CustomEvent<null>;
   /** Sezione di profili o preset: la bozza aperta è diventata (o non è più) da salvare. */

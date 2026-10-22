@@ -23,6 +23,9 @@ import './settings.css';
 /** Quello che le impostazioni usano del controller AI: quello delle tre sezioni. */
 export type SettingsController = ProfilesController & PresetsController & SyncController;
 
+/** Modalità di scrittura delle impostazioni: focus, sua unità e typewriter. */
+interface Writing { focus: boolean; unit: FocusUnit; typewriter: boolean }
+
 interface Parts {
   view: HTMLDivElement;
   nav: HTMLElement;
@@ -50,6 +53,8 @@ interface Parts {
   focus: HTMLInputElement;
   focusText: Text;
   focusUnits: Map<FocusUnit, { input: HTMLInputElement; text: Text }>;
+  typewriter: HTMLInputElement;
+  typewriterText: Text;
   writingHint: HTMLParagraphElement;
   saveAll: HTMLButtonElement;
   ai: { profiles: HTMLElement; presets: HTMLElement; sync: HTMLElement; titles: HTMLHeadingElement[] };
@@ -73,7 +78,7 @@ export class HmdSettings extends HmdElement {
   #theme: ThemeStore | null = null;
   #autosave: AutosaveSettings = DEFAULT_AUTOSAVE;
   #textWidth: TextWidth = { editor: null, preview: null };
-  #focus: { focus: boolean; unit: FocusUnit } = { focus: false, unit: 'paragraph' };
+  #focus: Writing = { focus: false, unit: 'paragraph', typewriter: false };
   #i18n: I18nStore | null = null;
 
   #parts: Parts | null = null;
@@ -136,9 +141,9 @@ export class HmdSettings extends HmdElement {
     this.#loop.update();
   }
   /** Modalità focus e unità, come le conserva l'area di lavoro. */
-  get writing(): { focus: boolean; unit: FocusUnit } { return this.#focus; }
-  set writing(value: { focus: boolean; unit: FocusUnit }) {
-    this.#focus = value ?? { focus: false, unit: 'paragraph' };
+  get writing(): Writing { return this.#focus; }
+  set writing(value: Writing) {
+    this.#focus = value ?? { focus: false, unit: 'paragraph', typewriter: false };
     this.#loop.update();
   }
   get i18n(): I18nStore | null { return this.#i18n; }
@@ -279,9 +284,10 @@ export class HmdSettings extends HmdElement {
     const autosaves = new Map(AUTOSAVE_MODES.map((mode) => [mode, radio('autosave', mode, () => emit(this, 'hmd-settings-autosave', { autosave: { ...this.#autosave, mode } }))]));
     const FOCUS_UNITS = ['paragraph', 'sentence'] as const;
     const focusUnits = new Map<FocusUnit, { input: HTMLInputElement; text: Text }>(
-      FOCUS_UNITS.map((unit) => [unit, radio('focusUnit', unit, () => emit(this, 'hmd-settings-focus', { focus: this.#focus.focus, unit }))]),
+      FOCUS_UNITS.map((unit) => [unit, radio('focusUnit', unit, () => emit(this, 'hmd-settings-focus', { ...this.#focus, unit }))]),
     );
-    const focus = el('input', { type: 'checkbox', on: { change: () => emit(this, 'hmd-settings-focus', { focus: focus.checked, unit: this.#focus.unit }) } });
+    const focus = el('input', { type: 'checkbox', on: { change: () => emit(this, 'hmd-settings-focus', { ...this.#focus, focus: focus.checked }) } });
+    const typewriter = el('input', { type: 'checkbox', on: { change: () => emit(this, 'hmd-settings-focus', { ...this.#focus, typewriter: typewriter.checked }) } });
     const option = (r: { input: HTMLInputElement; text: Text }) => el('label', { class: 'option' }, r.input, r.text);
     const delayCaption = el('span');
     const delay = el('input', {
@@ -346,6 +352,8 @@ export class HmdSettings extends HmdElement {
       focus,
       focusText: document.createTextNode(''),
       focusUnits,
+      typewriter,
+      typewriterText: document.createTextNode(''),
       writingHint: el('p', { class: 'hint', id: 'settings-writing-hint' }),
       saveAll: el('button', { type: 'button', class: 'secondary', on: { click: () => emit(this, 'hmd-settings-save-all', null) } }),
       ai: { profiles: el('section'), presets: el('section'), sync: el('section'), titles },
@@ -373,6 +381,7 @@ export class HmdSettings extends HmdElement {
       parts.writingLegend,
       el('label', { class: 'option' }, parts.focus, parts.focusText),
       ...[...focusUnits.values()].map((r) => el('label', { class: 'option indented' }, r.input, r.text)),
+      el('label', { class: 'option' }, parts.typewriter, parts.typewriterText),
       parts.writingHint,
     );
     parts.content.append(parts.general);
@@ -443,6 +452,8 @@ export class HmdSettings extends HmdElement {
       setText(r.text, t(`settings.focus.${unit}`));
       if (r.input.checked !== (this.#focus.unit === unit)) r.input.checked = this.#focus.unit === unit;
     }
+    setText(parts.typewriterText, t('settings.typewriter'));
+    if (parts.typewriter.checked !== this.#focus.typewriter) parts.typewriter.checked = this.#focus.typewriter;
     setText(parts.writingHint, t('settings.writing.hint'));
     setText(parts.saveAll, t('settings.saveAll'));
     // Sezioni AI: proprietà prima dell'inserimento, solo se cambiano.

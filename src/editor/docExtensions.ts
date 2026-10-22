@@ -12,6 +12,7 @@ import { imageFiles, insertImageLinks } from './images';
 import { wikiCompletionSource } from './wikiCompletion';
 import { saveDocSession, type DocSession } from './docSession';
 import { focusCompartment, focusTheme } from './focusMode';
+import { typewriterCompartment } from './typewriter';
 import { formatToolbar, type Translate } from './formatToolbar';
 
 /**
@@ -110,14 +111,15 @@ export function docAppearance() {
   return [markdown(), syntaxHighlighting(highlight), EditorView.lineWrapping, theme];
 }
 
-/** `focus`: la modalità focus di partenza; solo l'editor principale la passa (il diff della revisione AI no). */
-export function docExtensions(host: DocHost, focus: Extension = []) {
+/** `focus` e `typewriter`: le modalità di partenza; solo l'editor principale la passa (il diff della revisione AI no). */
+export function docExtensions(host: DocHost, focus: Extension = [], typewriter: Extension = []) {
   return [
       basicSetup,
       lifecycle,
       docAppearance(),
       focusTheme,
       focusCompartment.of(focus),
+      typewriterCompartment.of(typewriter),
       editable.of(readOnlyExtensions(host.readOnly())),
       autocompletion({ override: [wikiCompletionSource(() => host.getDocs())] }),
       formatToolbar(() => host.t()),

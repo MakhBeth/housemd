@@ -97,6 +97,7 @@
   "settings.focus": "Mode concentration (Ctrl+Maj+F)",
   "settings.focus.paragraph": "Mettre en évidence le paragraphe",
   "settings.focus.sentence": "Mettre en évidence la phrase",
+  "settings.typewriter": "Machine à écrire : garder la ligne du curseur au centre",
   "settings.writing.hint": "S'appliquent dans les vues Éditeur et Côte à côte.",
   "settings.saveAll": "Tout enregistrer maintenant",
   "settings.close": "Fermer",
