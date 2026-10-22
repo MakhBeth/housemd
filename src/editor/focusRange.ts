@@ -12,7 +12,7 @@ export interface Span {
 }
 
 /** Blocchi che si accendono interi anche in modalità frase. */
-const WHOLE = new Set(['FencedCode', 'CodeBlock', 'HTMLBlock', 'CommentBlock', 'ProcessingInstructionBlock', 'HorizontalRule', 'LinkReference', 'SetextHeading1', 'SetextHeading2']);
+const WHOLE = new Set(['FencedCode', 'CodeBlock', 'HTMLBlock', 'CommentBlock', 'ProcessingInstructionBlock', 'HorizontalRule', 'LinkReference']);
 const LISTS = new Set(['BulletList', 'OrderedList']);
 const FIRST_LINE_PREFIX = {
   paragraph: /^\s*/,
@@ -46,6 +46,8 @@ interface Block {
   span: Span;
   /** Come togliere i marcatori dalla prima riga; null = blocco intero, anche in modalità frase. */
   prefix: RegExp | null;
+  /** Fine del testo da segmentare in frasi, se il blocco ha righe che non ne fanno parte (la sottolineatura Setext). */
+  textEnd?: number;
 }
 
 /** Il blocco più interno che contiene la riga di `pos`, secondo la tabella del design; null su una riga vuota. */
@@ -67,9 +69,15 @@ function blockAt(state: EditorState, pos: number): Block | null {
   if (whole) return { span: lineSpan(doc, whole.from, whole.to), prefix: null };
   if (BLANK.test(line.text)) return null;
   for (; node; node = node.parent) {
+    if (/^SetextHeading/.test(node.name)) {
+      const mark = node.getChild('HeaderMark');
+      const textEnd = mark ? doc.line(Math.max(1, doc.lineAt(mark.from).number - 1)).to : node.to;
+      return { span: lineSpan(doc, node.from, node.to), prefix: FIRST_LINE_PREFIX.paragraph, textEnd };
+    }
     if (/^ATXHeading/.test(node.name)) return { span: lineSpan(doc, node.from, node.to), prefix: FIRST_LINE_PREFIX.heading };
     if (node.name === 'ListItem') return { span: itemSpan(doc, node), prefix: FIRST_LINE_PREFIX.item };
-    if (node.name === 'Paragraph') {
+    // Il paragrafo di una voce di elenco non conta da solo: vince la voce (marcatore, continuazioni, senza sottovoci).
+    if (node.name === 'Paragraph' && node.parent?.name !== 'ListItem') {
       const span = lineSpan(doc, node.from, node.to);
       if (isTable(doc, span)) return { span, prefix: null };
       return { span, prefix: node.parent?.name === 'Blockquote' ? FIRST_LINE_PREFIX.quote : FIRST_LINE_PREFIX.paragraph };
@@ -95,7 +103,7 @@ function itemSpan(doc: Text, item: SyntaxNode): Span {
 function sentenceAt(doc: Text, block: Block, pos: number, locale: string): Span {
   const { from, to } = block.span;
   const firstLine = doc.lineAt(from).number;
-  const lastLine = doc.lineAt(to).number;
+  const lastLine = doc.lineAt(block.textEnd ?? to).number;
   let text = '';
   // Posizione nel documento del primo carattere di ogni riga (dopo i marcatori) e di inizio riga.
   const starts: { stripped: number; raw: number; rawLine: number }[] = [];
@@ -140,13 +148,18 @@ export function unitAt(state: EditorState, pos: number, unit: FocusUnit, locale:
  */
 export function focusSpans(state: EditorState, unit: FocusUnit, locale: string): Span[] {
   const spans: Span[] = [];
+  const doc = state.doc;
   for (const range of state.selection.ranges) {
     // Una selezione che finisce all'inizio di una riga non tocca quella riga.
-    const end = range.empty ? range.head : range.to - 1;
-    const a = unitAt(state, range.from, unit, locale);
-    const b = unitAt(state, Math.max(range.from, end), unit, locale);
-    if (a && b) spans.push({ from: Math.min(a.from, b.from), to: Math.max(a.to, b.to) });
-    else if (a || b) spans.push((a ?? b)!);
+    const end = range.empty ? range.head : Math.max(range.from, range.to - 1);
+    const lastLine = doc.lineAt(end).number;
+    // Estremi su righe vuote (o senza unità): si cerca la prima e l'ultima unità dentro la selezione.
+    let first: Span | null = null;
+    for (let n = doc.lineAt(range.from).number; n <= lastLine && !first; n++) first = unitAt(state, n === doc.lineAt(range.from).number ? range.from : doc.line(n).from, unit, locale);
+    let last: Span | null = null;
+    for (let n = lastLine; n >= doc.lineAt(range.from).number && !last; n--) last = unitAt(state, n === lastLine ? end : doc.line(n).to, unit, locale);
+    if (first && last) spans.push({ from: Math.min(first.from, last.from), to: Math.max(first.to, last.to) });
+    else if (first || last) spans.push((first ?? last)!);
   }
   spans.sort((x, y) => x.from - y.from);
   const merged: Span[] = [];

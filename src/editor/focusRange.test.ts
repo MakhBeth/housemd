@@ -128,3 +128,32 @@ test('the dimmed spans are what the lit ones leave out of the visible ranges', (
   assert.deepEqual(dimSpans([], [{ from: 0, to: 8 }]), [{ from: 0, to: 8 }]);
   assert.deepEqual(dimSpans([{ from: 0, to: 8 }], [{ from: 0, to: 8 }]), []);
 });
+
+test('F1: a selection with empty lines at one or both ends lights every unit it crosses, in both directions', () => {
+  const doc = '\nuno\n\ndue\n\n';
+  const text = (spans: { from: number; to: number }[]) => spans.map((s) => doc.slice(s.from, s.to));
+  for (const [a, b] of [[0, doc.length], [doc.length, 0]]) {
+    assert.deepEqual(text(focusSpans(make(doc, EditorSelection.single(a, b)), 'paragraph', 'it')), ['uno\n\ndue'], 'both ends empty');
+  }
+  const oneEmpty = doc.slice(0, doc.indexOf('due') + 1);
+  assert.deepEqual(text(focusSpans(make(doc, EditorSelection.single(0, oneEmpty.length)), 'paragraph', 'it')), ['uno\n\ndue'], 'start empty');
+  assert.deepEqual(text(focusSpans(make(doc, EditorSelection.single(oneEmpty.length, 0)), 'paragraph', 'it')), ['uno\n\ndue'], 'start empty, reversed');
+  assert.deepEqual(text(focusSpans(make(doc, EditorSelection.single(doc.indexOf('uno') + 1, doc.length)), 'paragraph', 'it')), ['uno\n\ndue'], 'end empty');
+  assert.deepEqual(text(focusSpans(make(doc, EditorSelection.single(doc.length, 0)), 'sentence', 'it')), ['uno\n\ndue'], 'sentence mode');
+});
+
+test('F2: a list item wins over its paragraph: the marker belongs to the first sentence, the continuation after a blank line stays in the item', () => {
+  assert.equal(unit('1. Prima| frase. Seconda frase.', 'sentence'), '1. Prima frase. ');
+  assert.equal(unit('1. Prima frase. Second|a frase.', 'sentence'), 'Seconda frase.');
+  assert.equal(unit('- [ ] Fare| questo. Poi quello.', 'sentence'), '- [ ] Fare questo. ');
+  assert.equal(unit('- primo\n\n  sec|ondo\n- altro', 'paragraph'), '- primo\n\n  secondo');
+  assert.equal(unit('- pri|mo\n\n  secondo\n- altro', 'paragraph'), '- primo\n\n  secondo');
+  assert.equal(unit('- pri|mo\n  - sotto\n- altro', 'paragraph'), '- primo');
+});
+
+test('F3: a Setext heading is one block in paragraph mode and is segmented into sentences in sentence mode, underline included in the last one', () => {
+  assert.equal(unit('Titolo. Sec|onda.\n================\n\ntesto', 'paragraph'), 'Titolo. Seconda.\n================');
+  assert.equal(unit('Titolo. Sec|onda.\n================\n\ntesto', 'sentence'), 'Seconda.\n================');
+  assert.equal(unit('Tit|olo. Seconda.\n================\n\ntesto', 'sentence'), 'Titolo. ');
+  assert.equal(unit('Titolo. Seconda.\n====|============\n\ntesto', 'sentence'), 'Seconda.\n================');
+});

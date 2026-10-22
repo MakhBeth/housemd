@@ -44,7 +44,12 @@ export function focusExtensions(config: FocusConfig): Extension {
   return config.enabled ? focusPlugin(config.unit, config.locale) : [];
 }
 
+const MATCHES = ['.cm-selectionMatch', '.cm-searchMatch'];
+
 /** Senza `!important`: il prefisso del tema dà specificità (0,2,0), più alta delle classi di HighlightStyle. */
 export const focusTheme = EditorView.theme({
   '& .cm-focusDim, & .cm-focusDim *': { color: 'var(--c-muted)' },
+  // Le corrispondenze (occorrenze della selezione, ricerca) hanno uno sfondo chiaro anche in scuro: restano a
+  // `--c-text`, in tutti e due gli ordini di annidamento con il grigio (specificità 0,3,0).
+  [MATCHES.flatMap((m) => [`& .cm-focusDim ${m}`, `& .cm-focusDim ${m} *`, `& ${m} .cm-focusDim`, `& ${m} .cm-focusDim *`, `& .cm-focusDim${m}`, `& .cm-focusDim${m} *`]).join(', ')]: { color: 'var(--c-text)' },
 });

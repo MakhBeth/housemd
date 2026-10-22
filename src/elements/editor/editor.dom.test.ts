@@ -313,6 +313,30 @@ test('typewriter: the root gets the class only while on, and every keyboard move
   el.remove();
 });
 
+test('focus mode: search and selection matches keep the full text colour, whichever way they nest with the grey', async () => {
+  const { el } = mount('uno');
+  const root = el.querySelector('.cm-editor')!;
+  const colorOf = (outer: string, inner: string) => {
+    const a = document.createElement('span');
+    a.className = outer;
+    const b = document.createElement('span');
+    b.className = inner;
+    const c = document.createElement('span');
+    b.append(c);
+    a.append(b);
+    root.querySelector('.cm-line')!.append(a);
+    return [window.getComputedStyle(a).color, window.getComputedStyle(b).color, window.getComputedStyle(c).color];
+  };
+  assert.deepEqual(colorOf('cm-focusDim', 'x'), ['var(--c-muted)', 'var(--c-muted)', 'var(--c-muted)'], 'plain dimmed text is grey');
+  for (const match of ['cm-searchMatch', 'cm-selectionMatch']) {
+    const [, inner, deep] = colorOf('cm-focusDim', match);
+    assert.deepEqual([inner, deep], ['var(--c-text)', 'var(--c-text)'], `${match} inside the grey`);
+    const [outer, inside, deepest] = colorOf(match, 'cm-focusDim');
+    assert.ok(outer !== 'var(--c-muted)' && inside === 'var(--c-text)' && deepest === 'var(--c-text)', `the grey inside ${match}`);
+  }
+  el.remove();
+});
+
 test('focus mode greys everything outside the cursor paragraph, follows the cursor, and leaves the text alone', async () => {
   const { el, view } = mount('uno\n\ndue\n\ntre');
   const dimmed = () => [...el.querySelectorAll('.cm-focusDim')].map((n) => n.textContent).join('');

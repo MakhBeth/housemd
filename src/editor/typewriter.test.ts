@@ -18,6 +18,8 @@ test('the transaction extender adds the centering in the same transaction', () =
   assert.equal(key.effects.length, 1, 'arrow key');
   assert.equal(on.update({ changes: { from: 0, insert: 'x' }, userEvent: 'input.type' }).effects.length, 1, 'typing');
   assert.equal(on.update({ selection: EditorSelection.cursor(2), userEvent: 'select.pointer' }).effects.length, 0, 'mouse');
+  assert.equal(on.update({ changes: { from: 0, insert: 'x' }, selection: EditorSelection.cursor(1), userEvent: 'input.drop' }).effects.length, 0, 'text dropped with the mouse');
+  assert.equal(on.update({ changes: { from: 0, to: 1 }, userEvent: 'move.drop' }).effects.length, 0, 'text moved with the mouse');
   assert.equal(on.update({}).effects.length, 0, 'empty transaction');
   const off = EditorState.create({ doc: 'a\nb\nc', extensions: typewriterExtensions(false) });
   assert.equal(off.update({ selection: EditorSelection.cursor(2), userEvent: 'select' }).effects.length, 0, 'off');

@@ -179,6 +179,10 @@
       overflow: hidden;
       clip-path: inset(50%);
       white-space: nowrap;
+      /* Il pattern completo: il margine del `p` (15px) farebbe scorrere la pagina di 16px. */
+      margin: -1px;
+      padding: 0;
+      border: 0;
     }
 
     .saveState {

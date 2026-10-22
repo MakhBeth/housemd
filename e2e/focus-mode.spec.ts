@@ -55,3 +55,11 @@ test('turning it on in the preview view explains where it shows, and the button 
   await page.getByRole('button', { name: app.t('mode.split') }).click();
   await expect(page.getByText(app.t('toolbar.focus.elsewhere'))).toHaveCount(0);
 });
+
+test('the hidden status region does not make the page scroll', async ({ page }) => {
+  const extra = await page.evaluate(() => document.scrollingElement!.scrollHeight - innerHeight);
+  expect(extra).toBe(0);
+  await page.mouse.move(640, 20);
+  await page.mouse.wheel(0, 200);
+  expect(await page.evaluate(() => scrollY)).toBe(0);
+});

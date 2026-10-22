@@ -381,7 +381,8 @@ export class HmdWorkspace extends HmdElement {
     this.#announceAgain.focusNote = on && hidden && this.#focusNote;
     this.#focusNote = on && hidden;
     const t = this.#i18n?.t;
-    this.#focusSaid = said && t ? t(on ? 'focus.announce.on' : 'focus.announce.off') : '';
+    // Dove compare la nota, contiene già lo stato: un secondo annuncio sarebbe un doppione.
+    this.#focusSaid = said && t && !this.#focusNote ? t(on ? 'focus.announce.on' : 'focus.announce.off') : '';
     this.#announceAgain.focusSaid = said;
     this.#loop.update();
   }

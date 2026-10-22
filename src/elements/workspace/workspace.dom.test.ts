@@ -409,6 +409,16 @@ test('settings: changing only the unit does not rewrite the focus note, and the 
   assert.equal(el.querySelector<HTMLElement & { typewriter: boolean }>('hmd-editor')!.typewriter, true);
 });
 
+test('Ctrl+Shift+F over the preview writes only the note: the hidden status stays empty (no double announcement)', async () => {
+  const { el, workspace, button } = await mount();
+  await workspace.openFile('a.md');
+  button(EN_MESSAGES['mode.preview']).click();
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F', ctrlKey: true, shiftKey: true, cancelable: true }));
+  await waitFor(() => el.querySelector('p.toolbarNote')!.textContent === EN_MESSAGES['toolbar.focus.elsewhere']);
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  assert.equal(el.querySelector('p.visually-hidden')!.textContent, '');
+});
+
 test('Ctrl+Shift+F toggles the focus and announces it once in a hidden status region', async () => {
   const { el, workspace, button } = await mount();
   await workspace.openFile('a.md');

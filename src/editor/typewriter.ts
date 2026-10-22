@@ -5,7 +5,7 @@ import { EditorView } from '@codemirror/view';
 export interface CenterInput {
   selection: boolean;
   docChanged: boolean;
-  /** Clic o trascinamento col mouse (`select.pointer`): la vista non salta mai sotto il puntatore. */
+  /** Clic, trascinamento della selezione o del testo col mouse (`select.pointer`, `move.drop`, `input.drop`): la vista non salta mai sotto il puntatore. */
   pointer: boolean;
 }
 
@@ -15,7 +15,7 @@ export function shouldCenter({ selection, docChanged, pointer }: CenterInput): b
 }
 
 export function centerInput(tr: Transaction): CenterInput {
-  return { selection: tr.selection !== undefined, docChanged: tr.docChanged, pointer: tr.isUserEvent('select.pointer') };
+  return { selection: tr.selection !== undefined, docChanged: tr.docChanged, pointer: tr.isUserEvent('select.pointer') || tr.isUserEvent('move.drop') || tr.isUserEvent('input.drop') };
 }
 
 /** Centra `head` della selezione principale; nessuna animazione (lo scorrimento di CodeMirror è istantaneo). */
