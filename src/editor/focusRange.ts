@@ -48,6 +48,8 @@ interface Block {
   prefix: RegExp | null;
   /** Fine del testo da segmentare in frasi, se il blocco ha righe che non ne fanno parte (la sottolineatura Setext). */
   textEnd?: number;
+  /** Voce di elenco con sottoliste: i tratti che le sottoliste lasciano (il blocco non è contiguo); `span` li racchiude. */
+  parts?: Span[];
 }
 
 /** Il blocco più interno che contiene la riga di `pos`, secondo la tabella del design; null su una riga vuota. */
@@ -75,7 +77,10 @@ function blockAt(state: EditorState, pos: number): Block | null {
       return { span: lineSpan(doc, node.from, node.to), prefix: FIRST_LINE_PREFIX.paragraph, textEnd };
     }
     if (/^ATXHeading/.test(node.name)) return { span: lineSpan(doc, node.from, node.to), prefix: FIRST_LINE_PREFIX.heading };
-    if (node.name === 'ListItem') return { span: itemSpan(doc, node), prefix: FIRST_LINE_PREFIX.item };
+    if (node.name === 'ListItem') {
+      const parts = itemParts(doc, node);
+      return { span: { from: parts[0].from, to: parts[parts.length - 1].to }, prefix: FIRST_LINE_PREFIX.item, parts };
+    }
     // Il paragrafo di una voce di elenco non conta da solo: vince la voce (marcatore, continuazioni, senza sottovoci).
     if (node.name === 'Paragraph' && node.parent?.name !== 'ListItem') {
       const span = lineSpan(doc, node.from, node.to);
@@ -87,16 +92,23 @@ function blockAt(state: EditorState, pos: number): Block | null {
   return { span: { from: line.from, to: line.to }, prefix: FIRST_LINE_PREFIX.paragraph };
 }
 
-/** Voce di elenco con le righe di continuazione, senza le sottovoci annidate. */
-function itemSpan(doc: Text, item: SyntaxNode): Span {
-  const first = doc.lineAt(item.from);
-  let to = item.to;
+/**
+ * Voce di elenco: tutti i figli tranne le sottoliste (righe di continuazione e paragrafi anche dopo una sottovoce),
+ * in tratti separati da ogni sottolista.
+ */
+function itemParts(doc: Text, item: SyntaxNode): Span[] {
+  const parts: Span[] = [];
+  let current: Span | null = null;
   for (let child = item.firstChild; child; child = child.nextSibling) {
-    if (!LISTS.has(child.name)) continue;
-    to = Math.max(first.to, doc.lineAt(child.from).from - 1);
-    break;
+    if (LISTS.has(child.name)) {
+      current = null;
+      continue;
+    }
+    const span = lineSpan(doc, child.from, child.to);
+    if (current) current.to = Math.max(current.to, span.to);
+    else parts.push((current = span));
   }
-  return lineSpan(doc, item.from, to);
+  return parts.length > 0 ? parts : [lineSpan(doc, item.from, item.to)];
 }
 
 /** Frasi del blocco: segmenti semiaperti, il marcatore di riga sta con la frase che inizia su quella riga. */
@@ -134,12 +146,24 @@ function sentenceAt(doc: Text, block: Block, pos: number, locale: string): Span 
   return last;
 }
 
-/** Unità che contiene `pos`, null su una riga vuota (non si accende niente). */
-export function unitAt(state: EditorState, pos: number, unit: FocusUnit, locale: string): Span | null {
+/** Tratti dell'unità che contiene `pos` (più d'uno solo per una voce con sottoliste), null su una riga vuota. */
+function unitParts(state: EditorState, pos: number, unit: FocusUnit, locale: string): Span[] | null {
   const block = blockAt(state, pos);
   if (!block) return null;
-  if (unit === 'paragraph' || !block.prefix) return block.span;
-  return sentenceAt(state.doc, block, Math.min(Math.max(pos, block.span.from), block.span.to), locale);
+  if (unit === 'paragraph' || !block.prefix) return block.parts ?? [block.span];
+  let target: Block = block;
+  if (block.parts) {
+    // La frase non attraversa una sottolista: si segmenta il tratto che contiene il cursore.
+    const index = Math.max(0, block.parts.findIndex((part) => pos >= part.from && pos <= part.to));
+    target = { span: block.parts[index], prefix: index === 0 ? block.prefix : FIRST_LINE_PREFIX.paragraph };
+  }
+  return [sentenceAt(state.doc, target, Math.min(Math.max(pos, target.span.from), target.span.to), locale)];
+}
+
+/** Unità che contiene `pos` (il tratto che racchiude tutti i suoi pezzi), null su una riga vuota (non si accende niente). */
+export function unitAt(state: EditorState, pos: number, unit: FocusUnit, locale: string): Span | null {
+  const parts = unitParts(state, pos, unit, locale);
+  return parts && { from: parts[0].from, to: parts[parts.length - 1].to };
 }
 
 /**
@@ -154,12 +178,17 @@ export function focusSpans(state: EditorState, unit: FocusUnit, locale: string):
     const end = range.empty ? range.head : Math.max(range.from, range.to - 1);
     const lastLine = doc.lineAt(end).number;
     // Estremi su righe vuote (o senza unità): si cerca la prima e l'ultima unità dentro la selezione.
-    let first: Span | null = null;
-    for (let n = doc.lineAt(range.from).number; n <= lastLine && !first; n++) first = unitAt(state, n === doc.lineAt(range.from).number ? range.from : doc.line(n).from, unit, locale);
-    let last: Span | null = null;
-    for (let n = lastLine; n >= doc.lineAt(range.from).number && !last; n--) last = unitAt(state, n === lastLine ? end : doc.line(n).to, unit, locale);
-    if (first && last) spans.push({ from: Math.min(first.from, last.from), to: Math.max(first.to, last.to) });
-    else if (first || last) spans.push((first ?? last)!);
+    let first: Span[] | null = null;
+    for (let n = doc.lineAt(range.from).number; n <= lastLine && !first; n++) first = unitParts(state, n === doc.lineAt(range.from).number ? range.from : doc.line(n).from, unit, locale);
+    let last: Span[] | null = null;
+    for (let n = lastLine; n >= doc.lineAt(range.from).number && !last; n--) last = unitParts(state, n === lastLine ? end : doc.line(n).to, unit, locale);
+    if (first && last) {
+      // Stessa unità: i suoi tratti (una voce con sottoliste non è contigua). Unità diverse: tutto ciò che sta in mezzo.
+      const same = first.length === last.length && first.every((part, i) => part.from === last![i].from && part.to === last![i].to);
+      // Il testo selezionato non è mai spento, nemmeno una sottovoce attraversata dalla selezione.
+      if (same) spans.push(...first, ...(range.empty ? [] : [{ from: range.from, to: range.to }]));
+      else spans.push({ from: Math.min(first[0].from, last[0].from), to: Math.max(first[first.length - 1].to, last[last.length - 1].to) });
+    } else if (first || last) spans.push(...(first ?? last)!);
   }
   spans.sort((x, y) => x.from - y.from);
   const merged: Span[] = [];

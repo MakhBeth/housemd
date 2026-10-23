@@ -157,3 +157,29 @@ test('F3: a Setext heading is one block in paragraph mode and is segmented into 
   assert.equal(unit('Tit|olo. Seconda.\n================\n\ntesto', 'sentence'), 'Titolo. ');
   assert.equal(unit('Titolo. Seconda.\n====|============\n\ntesto', 'sentence'), 'Seconda.\n================');
 });
+
+test('F2 (turn 3): a continuation after a sub-list belongs to the item; the unit is not contiguous and the untouched sub-item stays dim', () => {
+  const doc = '- prima\n  - figlia\n\n  continuazione\n- altra';
+  const first = { from: 0, to: 7 };
+  const cont = { from: doc.indexOf('  continuazione'), to: doc.indexOf('continuazione') + 'continuazione'.length };
+  const at = (pos: number, kind: FocusUnit) => focusSpans(make(doc, EditorSelection.single(pos)), kind, 'it');
+  // Cursore su «prima» e su «continuazione»: stessa voce, due tratti; la figlia resta spenta.
+  assert.deepEqual(at(3, 'paragraph'), [first, cont]);
+  assert.deepEqual(at(doc.indexOf('continuazione') + 3, 'paragraph'), [first, cont]);
+  // Modalità frase: la frase non attraversa la sottolista, si accende quella del tratto con il cursore.
+  assert.deepEqual(at(3, 'sentence'), [first]);
+  assert.deepEqual(at(doc.indexOf('continuazione') + 3, 'sentence'), [cont]);
+  // Selezione dentro «continuazione» (i primi cinque caratteri): resta acceso, anche inversa.
+  const from = doc.indexOf('continuazione');
+  for (const [a, b] of [[from, from + 5], [from + 5, from]]) {
+    for (const kind of ['paragraph', 'sentence'] as const) {
+      const lit = focusSpans(make(doc, EditorSelection.single(a, b)), kind, 'it');
+      assert.ok(lit.some((s) => s.from <= from && s.to >= from + 5), `${kind}: the selected text is lit`);
+      assert.ok(!lit.some((s) => s.from <= doc.indexOf('figlia') && s.to > doc.indexOf('figlia')), `${kind}: the sub-item stays dim`);
+    }
+  }
+  // Una selezione che attraversa la sottovoce accende tutto ciò che sta in mezzo.
+  assert.deepEqual(focusSpans(make(doc, EditorSelection.single(2, from + 3)), 'paragraph', 'it'), [{ from: 0, to: cont.to }]);
+  // Il cursore nella sottovoce accende solo lei.
+  assert.deepEqual(at(doc.indexOf('figlia'), 'paragraph'), [{ from: 8, to: 18 }]);
+});
