@@ -1,6 +1,6 @@
 /** Scorciatoie da tastiera globali (puro): evento → azione. */
 
-export type Shortcut = 'save' | 'saveAll' | 'search' | 'toggleAi' | 'toggleSidebar' | 'cycleMode';
+export type Shortcut = 'save' | 'saveAll' | 'search' | 'toggleAi' | 'toggleSidebar' | 'cycleMode' | 'toggleFocus';
 
 export interface KeyInput {
   key: string;
@@ -16,6 +16,7 @@ export function shortcutFor(event: KeyInput): Shortcut | null {
   // Con Alt il carattere dipende dal layout (su macOS Alt+S dà "ß"): conta il tasto fisico.
   if (event.altKey) return event.code === 'KeyS' ? 'saveAll' : null;
   if (event.shiftKey && event.key.toLowerCase() === 'e') return 'toggleAi';
+  if (event.shiftKey && event.key.toLowerCase() === 'f') return 'toggleFocus';
   switch (event.key.toLowerCase()) {
     case 's':
       return 'save';

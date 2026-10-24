@@ -173,5 +173,10 @@
       gap: 8px;
       cursor: pointer;
     }
+
+    /* Sotto la casella a cui appartengono (checkbox 16px + gap 8px + 2px). */
+    .indented {
+      margin-inline-start: 26px;
+    }
   }
 }

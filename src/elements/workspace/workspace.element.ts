@@ -8,6 +8,7 @@ import { HmdElement } from '../../dom/element';
 import { el, setText, toggleAttr } from '../../dom/el';
 import { icon } from '../../dom/icon';
 import { RenderLoop } from '../../dom/renderLoop';
+import type { FocusUnit } from '../../editor/focusRange';
 import { createDocSession, type DocSession } from '../../editor/docSession';
 import { requestAccess } from '../../fs/access';
 import { APP_TITLE, pageTitle } from '../../lib/pageTitle';
@@ -60,6 +61,11 @@ interface Parts {
   history: HTMLButtonElement;
   /** Nota di Cronologia senza documento: nel DOM solo con una ragione (vuota, il testo arriva dopo `ANNOUNCE_DELAY_MS`). */
   historyNote: HTMLParagraphElement;
+  focus: HTMLButtonElement;
+  /** Nota «mai disabled»: la modalità focus si accende dove non si vede (Anteprima, AI). */
+  focusNote: HTMLParagraphElement;
+  /** Annuncio della scorciatoia (il pulsante non ha il focus): visivamente nascosto. */
+  focusAnnounce: HTMLParagraphElement;
   saveAll: HTMLButtonElement;
   settings: HTMLButtonElement;
   toolbar: HTMLElement;
@@ -138,8 +144,14 @@ export class HmdWorkspace extends HmdElement {
   #historyOpen = false;
   /** Cronologia attivata senza documento / cartella attivata durante un cambio: la nota resta finché la causa c'è. */
   #historyNote = false;
+  #focusMode = false;
+  #focusUnit: FocusUnit = 'paragraph';
+  #typewriter = false;
+  #focusNote = false;
+  /** Testo dell'ultimo annuncio della scorciatoia (vuoto dopo un clic sul pulsante). */
+  #focusSaid = '';
   #folderNote = false;
-  #announceAgain = { history: false, folder: false };
+  #announceAgain = { history: false, folder: false, focusNote: false, focusSaid: false };
   #historyPath = '';
   #queuedRestore: { id: number; path: string } | null = null;
   #aiSelection: TextRange | null = null;
@@ -236,6 +248,9 @@ export class HmdWorkspace extends HmdElement {
       this.#mode = readPref('mode');
       this.#lastPane = this.#mode === 'ai' ? 'split' : this.#mode;
       this.#sidebarOpen = readPref('sidebarOpen');
+      this.#focusMode = readPref('focusMode');
+      this.#focusUnit = readPref('focusUnit');
+      this.#typewriter = readPref('typewriter');
       this.#sidebarWidth = clampWidth('sidebar', readPref('sidebarWidth'));
       this.#aiWidth = clampWidth('ai', readPref('aiSidebarWidth'));
       this.#textWidth = readValidPref('textWidth', parseTextWidth);
@@ -347,12 +362,28 @@ export class HmdWorkspace extends HmdElement {
       })
       .with('toggleSidebar', () => this.#setSidebar(!this.#sidebarOpen))
       .with('cycleMode', () => this.#changeMode(nextPaneMode(shown)))
+      .with('toggleFocus', () => this.#setFocus(!this.#focusMode, true))
       .exhaustive();
   }
 
   #setSidebar(open: boolean): void {
     this.#sidebarOpen = open;
     writePref('sidebarOpen', open);
+    this.#loop.update();
+  }
+
+  /** Accende o spegne la modalità focus; dalla scorciatoia (`said`) il pulsante non ha il focus e si annuncia il nuovo stato. */
+  #setFocus(on: boolean, said = false): void {
+    this.#focusMode = on;
+    writePref('focusMode', on);
+    // Spegnendo non serve nessuna nota; accendendo dove non si vede, la nota ricorda dove si vede.
+    const hidden = this.#shown === 'preview' || this.#shown === 'ai';
+    this.#announceAgain.focusNote = on && hidden && this.#focusNote;
+    this.#focusNote = on && hidden;
+    const t = this.#i18n?.t;
+    // Dove compare la nota, contiene già lo stato: un secondo annuncio sarebbe un doppione.
+    this.#focusSaid = said && t && !this.#focusNote ? t(on ? 'focus.announce.on' : 'focus.announce.off') : '';
+    this.#announceAgain.focusSaid = said;
     this.#loop.update();
   }
 
@@ -480,6 +511,9 @@ export class HmdWorkspace extends HmdElement {
         icon('history'),
       ),
       historyNote: el('p', { class: 'note toolbarNote', role: 'status' }),
+      focus: el('button', { class: 'iconButton focusToggle tooltip', on: { click: () => this.#setFocus(!this.#focusMode) } }, icon('focus')),
+      focusNote: el('p', { class: 'note toolbarNote', role: 'status' }),
+      focusAnnounce: el('p', { class: 'visually-hidden', role: 'status' }),
       saveAll: el('button', { class: 'iconButton tooltip', on: { click: () => void this.#workspace?.saveAll() } }, icon('save')),
       settings: el('button', { class: 'iconButton tooltip', on: { click: () => this.#openSettings() } }, icon('settings')),
       toolbar: el('header', { class: 'toolbar' }),
@@ -499,7 +533,7 @@ export class HmdWorkspace extends HmdElement {
     parts.toolbar.append(
       el('div', { class: 'lead' }, parts.toggle, parts.path),
       parts.modes,
-      el('div', { class: 'actions' }, parts.saveState, parts.history, parts.saveAll, themeSwitcher, parts.settings),
+      el('div', { class: 'actions' }, parts.saveState, parts.history, parts.saveAll, parts.focus, themeSwitcher, parts.settings),
     );
     parts.main.append(parts.toolbar);
     return parts;
@@ -623,6 +657,15 @@ export class HmdWorkspace extends HmdElement {
     this.#announceAgain.history = false;
     toggleAttr(parts.history, 'aria-label', true, t('toolbar.history'));
     toggleAttr(parts.history, 'data-tooltip', true, t('toolbar.history'));
+    toggleAttr(parts.focus, 'aria-pressed', true, String(this.#focusMode));
+    toggleAttr(parts.focus, 'aria-label', true, t('toolbar.focus'));
+    toggleAttr(parts.focus, 'data-tooltip', true, t('toolbar.focus'));
+    // Tornando a Editor o Affiancati (o spegnendo) la nota non serve più.
+    if (shown === 'editor' || shown === 'split' || !this.#focusMode) this.#focusNote = false;
+    announce(parts.focusNote, this.#focusNote ? t('toolbar.focus.elsewhere') : '', this.#focusNote && (this.#announceAgain.focusNote || !parts.focusNote.isConnected));
+    this.#announceAgain.focusNote = false;
+    announce(parts.focusAnnounce, this.#focusSaid, this.#focusSaid !== '' && this.#announceAgain.focusSaid);
+    this.#announceAgain.focusSaid = false;
     toggleAttr(parts.saveAll, 'aria-label', true, t('toolbar.saveAll'));
     toggleAttr(parts.saveAll, 'data-tooltip', true, t('toolbar.saveAll'));
     toggleAttr(parts.settings, 'aria-label', true, t('toolbar.settings'));
@@ -648,12 +691,12 @@ export class HmdWorkspace extends HmdElement {
       setText(empty.firstElementChild!, t('empty.hint'));
       setText(empty.lastElementChild!, t('file.new'));
     }
-    place(parts.main, [parts.toolbar, ...(this.#historyNote ? [parts.historyNote] : []), ...(conflict ? [conflict] : []), (review ?? panes ?? empty)!]);
+    place(parts.main, [parts.toolbar, ...(this.#historyNote ? [parts.historyNote] : []), ...(this.#focusNote ? [parts.focusNote] : []), ...(conflict ? [conflict] : []), (review ?? panes ?? empty)!]);
 
     // Impostazioni sopra l'area di lavoro, e i toast.
     const settings = this.#slot('settings', settingsOpen, () => this.#createSettings());
     if (settings) this.#renderSettings(settings, state, i18n);
-    place(this, [parts.layout, ...(settings ? [settings] : []), parts.toasts]);
+    place(this, [parts.layout, ...(settings ? [settings] : []), parts.toasts, parts.focusAnnounce]);
     assign(parts.toasts, 'i18n', i18n);
     // Un array nuovo solo quando cambiano toast, errore AI o lingua (lo useMemo di React); i timer sono per chiave in hmd-toasts.
     const toastKey = [state.toasts, aiState?.error, i18n.getState()];
@@ -845,6 +888,9 @@ export class HmdWorkspace extends HmdElement {
       assign(editor, 'session', this.#session);
       assign(editor, 'restore', doc.restore);
       assign(editor, 'readOnly', state.updating);
+      assign(editor, 'focusMode', this.#focusMode);
+      assign(editor, 'focusUnit', this.#focusUnit);
+      assign(editor, 'typewriter', this.#typewriter);
       assign(editor, 'getDocs', this.#getDocs);
       assign(editor, 'saveImage', this.#saveImage);
       assign(editor, 'i18n', i18n);
@@ -923,6 +969,20 @@ export class HmdWorkspace extends HmdElement {
           this.#applyTextWidth();
           this.#loop.update();
         },
+        'hmd-settings-focus': (event) => {
+          // Solo se cambia davvero: con le impostazioni aperte sopra la vista senza editor, cambiare l'unità non rimostra la nota.
+          if (event.detail.focus !== this.#focusMode) this.#setFocus(event.detail.focus);
+          if (event.detail.typewriter !== this.#typewriter) {
+            this.#typewriter = event.detail.typewriter;
+            writePref('typewriter', event.detail.typewriter);
+            this.#loop.update();
+          }
+          if (event.detail.unit !== this.#focusUnit) {
+            this.#focusUnit = event.detail.unit;
+            writePref('focusUnit', event.detail.unit);
+            this.#loop.update();
+          }
+        },
         'hmd-settings-save-all': () => void this.#workspace?.saveAll(),
       },
     });
@@ -936,6 +996,7 @@ export class HmdWorkspace extends HmdElement {
     assign(settings, 'theme', this.#theme);
     assign(settings, 'autosave', state.autosave);
     assign(settings, 'textWidth', this.#textWidth);
+    assign(settings, 'writing', { focus: this.#focusMode, unit: this.#focusUnit, typewriter: this.#typewriter });
     assign(settings, 'i18n', i18n);
   }
 

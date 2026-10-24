@@ -35,6 +35,7 @@ import settingsCog from 'pixelarticons/svg/settings-cog.svg?url';
 import sparkles from 'pixelarticons/svg/sparkles.svg?url';
 import stopSolid from 'pixelarticons/svg/stop-solid.svg?url';
 import sun from 'pixelarticons/svg/sun.svg?url';
+import target from 'pixelarticons/svg/target.svg?url';
 import textColumns from 'pixelarticons/svg/text-colums.svg?url';
 import warningDiamond from 'pixelarticons/svg/warning-diamond.svg?url';
 
@@ -57,6 +58,7 @@ export const ICONS = {
   themeLight: sun,
   themeDark: moon,
   history: clock,
+  focus: target,
   close,
   warning: warningDiamond,
   save,

@@ -1,6 +1,7 @@
 import type { ChangeDesc } from '@codemirror/state';
 
 import type { AcceptBlocker } from '../ai/aiController';
+import type { FocusUnit } from '../editor/focusRange';
 import type { TextRange } from '../ai/selectionChip';
 import type { CheckWarning, GenParams, ModelProfile } from '../ai/types';
 import type { SettingsSection } from '../lib/route';
@@ -69,6 +70,8 @@ export interface HmdEvents {
   'hmd-search-open': CustomEvent<{ path: string; terms: string[] }>;
   /** Impostazioni: il ritardo o la modalità dell'autosalvataggio confermati (da salvare e applicare). */
   'hmd-settings-autosave': CustomEvent<{ autosave: AutosaveSettings }>;
+  /** Impostazioni: modalità focus, sua unità o typewriter cambiati (da salvare e applicare). */
+  'hmd-settings-focus': CustomEvent<{ focus: boolean; unit: FocusUnit; typewriter: boolean }>;
   /** Impostazioni: chiuse (con la conferma, se c'erano modifiche aperte). */
   'hmd-settings-close': CustomEvent<null>;
   /** Sezione di profili o preset: la bozza aperta è diventata (o non è più) da salvare. */
