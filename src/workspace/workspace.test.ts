@@ -1075,3 +1075,14 @@ test('[LAB-405] the manual origin belongs to the event: overlapping automatic ch
   await ws.listHistory('a.md');
   assert.notEqual(ws.getState().toasts.find((t) => t.code === 'historyFailed')!.id, first, 'explicit history read renews the notice');
 });
+
+test('[LAB-405] every explicit file command renews an identical error: opening a file that cannot be read', async () => {
+  const { ws } = await setup({ 'a.md': 'A', 'b.md': 'B' });
+  await ws.openFile('a.md');
+  await ws.openFile('missing.md');
+  const first = ws.getState().toasts.map((t) => t.id);
+  await ws.openFile('missing.md');
+  const second = ws.getState().toasts.map((t) => t.id);
+  assert.ok(first.length > 0, 'the failed open is reported');
+  assert.notDeepEqual(first, second, 'a second identical failure is a new, announced event');
+});

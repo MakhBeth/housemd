@@ -475,7 +475,7 @@ export class Workspace {
         this.toast('info', 'restoredDraft', { path });
         this.schedule('restoredDraft');
       }
-    });
+    }, true);
   }
 
   /** Esiste una bozza nel buffer di emergenza per `path`? (anche se il file non è più su disco) */
@@ -993,7 +993,7 @@ export class Workspace {
     const doc = this.state.doc;
     if (!doc?.conflict) return;
     if (choice === 'overwrite') {
-      await this.run(() => this.overwrite(doc.path));
+      await this.run(() => this.overwrite(doc.path), true);
       return;
     }
     await this.run(async () => {
@@ -1015,7 +1015,7 @@ export class Workspace {
       this.bumpIndex();
       // Il buffer si scarta solo DOPO aver applicato la ricarica (nessuna await in mezzo al controllo).
       await this.clearBuffer(doc.path);
-    });
+    }, true);
   }
 
   /**
@@ -1056,7 +1056,7 @@ export class Workspace {
     try {
       version = await history.get(id);
     } catch (err) {
-      this.historyError(err);
+      this.historyError(err, true);
       return;
     }
     const current = this.state.doc;
