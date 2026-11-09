@@ -10,6 +10,7 @@ import { translate, type Params } from '../../i18n/i18n';
 import { EN_MESSAGES } from '../../i18n/messages';
 import { createI18nStore } from '../../state/i18nStore';
 import { countListeners } from '../../testing/countListeners';
+import { aiErrorItems } from '../workspace/workspaceView';
 import { fakeAi, withRealErrors } from '../../testing/fakeAi';
 import { installPopoverStub } from '../../testing/popoverStub';
 
@@ -250,7 +251,7 @@ test('language change relabels the chip and the popover; detached, no listener l
 });
 
 test('[LAB-409] a failed Save profile is an alert under the popover actions; closing the popover hands the error to the banner', async () => {
-  const { el, ai, button, toggle } = mount();
+  const { el, ai, i18n, button, toggle } = mount();
   withRealErrors(ai);
   (ai as unknown as { saveOverrides: () => Promise<void> }).saveOverrides = async () => Promise.reject({ code: 'server' });
   toggle('open');
@@ -260,13 +261,16 @@ test('[LAB-409] a failed Save profile is an alert under the popover actions; clo
   assert.equal(note.textContent, EN_MESSAGES['ai.error.server']);
   assert.ok(button('ai.saveProfile').getAttribute('aria-describedby')?.includes(note.id));
   assert.equal(ai.getState().errorOrigin?.anchor, el);
+  const bannerItems = () => aiErrorItems(ai.getState().error, ai.getState().errorOrigin, i18n.t);
+  assert.equal(bannerItems().length, 0, 'popover open: local note, no banner');
   toggle('closed');
+  assert.equal(bannerItems().length, 1, 'popover closed after the failure: the banner takes it');
   assert.equal(ai.getState().errorOrigin, null);
   assert.equal(ai.getState().error, 'server');
 });
 
 test('[LAB-409] a Save profile that fails after the popover closed goes straight to the banner, not nowhere', async () => {
-  const { el, ai, button, toggle } = mount();
+  const { el, ai, i18n, button, toggle } = mount();
   withRealErrors(ai);
   let fail: (error: unknown) => void = () => undefined;
   (ai as unknown as { saveOverrides: () => Promise<void> }).saveOverrides = () => new Promise<void>((_resolve, reject) => (fail = reject));
@@ -278,4 +282,6 @@ test('[LAB-409] a Save profile that fails after the popover closed goes straight
   assert.equal(el.querySelector('small[role="alert"]'), null);
   assert.equal(ai.getState().error, 'server');
   assert.equal(ai.getState().errorOrigin?.anchor, undefined, 'no anchor: the workspace banner shows it');
+  assert.equal(aiErrorItems(ai.getState().error, ai.getState().errorOrigin, i18n.t).length, 1, 'bannerItems: 1');
+  assert.equal(el.querySelectorAll('small[role]').length, 0, 'localNotes: 0');
 });
