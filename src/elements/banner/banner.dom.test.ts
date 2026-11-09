@@ -112,3 +112,11 @@ test('singular forms for one file / one change', () => {
   const skipped = bannerItems([{ id: 1, kind: 'info', code: 'saveAllSkipped', params: { count: 1 } }] as unknown as WorkspaceState['toasts'], null, t, 'en');
   assert.match(skipped.workspace[0]!.text, /^1 change not saved/);
 });
+
+test('a quiet row is visible but outside every live region', () => {
+  const banner = mount();
+  banner.items = [{ key: 'q', kind: 'alert', text: 'Quiet one', quiet: true }];
+  assert.equal(banner.querySelector('[role="status"]')!.textContent, '');
+  assert.equal(banner.querySelector('[role="alert"]'), null);
+  assert.equal(banner.querySelector('.quiet')!.textContent, 'Quiet one');
+});

@@ -936,3 +936,63 @@ test('[codex F9 round 2] orphanDrafts lists buffered paths that are no longer on
   await ws.saveNow();
   assert.deepEqual(await ws.orphanDrafts(), ['n/a.md']);
 });
+
+test('[LAB-405] notices are per document: a second deletion keeps the first, recreating the file resolves its own', async () => {
+  const { ops, ws } = await setup({ 'a.md': 'A', 'b.md': 'B' });
+  await ws.openFile('a.md');
+  await ops.removeEntry('a.md', false);
+  await ws.checkExternal();
+  await ws.openFile('b.md');
+  await ops.removeEntry('b.md', false);
+  await ws.checkExternal();
+  const gone = () => ws.getState().toasts.filter((t) => t.code === 'deletedOutside').map((t) => t.path);
+  assert.deepEqual(gone(), ['a.md', 'b.md']);
+  ws.edit('B2');
+  await ws.flush();
+  assert.deepEqual(gone(), ['a.md'], 'saving b.md resolves only its own notice');
+});
+
+test('[LAB-405] a late write error stays attached to the document that was written', async () => {
+  let fail!: (err: Error) => void;
+  const ops = memoryOps();
+  ops.setFile('a.md', 'A');
+  ops.setFile('b.md', 'B');
+  const real = createWorkspaceFS(ops);
+  let deferred = false;
+  const fs = {
+    ...real,
+    write: (path: string, text: string, ...rest: unknown[]) =>
+      deferred && path === 'a.md'
+        ? new Promise<never>((_, reject) => (fail = reject))
+        : (real.write as (...args: unknown[]) => Promise<never>)(path, text, ...rest),
+  } as typeof real;
+  const ws = new Workspace({ fs, workspaceId: 'ws-1', name: 't', buffers: memoryBufferStore(), scheduler: manualScheduler(), now: () => new Date(2026, 8, 27) });
+  await ws.load();
+  await ws.openFile('a.md');
+  ws.edit('A2');
+  deferred = true;
+  const saving = ws.flush();
+  await new Promise((r) => setTimeout(r, 0));
+  void ws.openFile('b.md');
+  await new Promise((r) => setTimeout(r, 0));
+  fail(new Error('ENOSPC'));
+  await saving;
+  const failed = ws.getState().toasts.filter((t) => t.code === 'saveFailed');
+  assert.ok(failed.length > 0 && failed.every((t) => t.path === 'a.md'), `attributed to a.md, got ${failed.map((t) => t.path)}`);
+});
+
+test('[LAB-405] a successful save resolves the data-risk errors of that document, new edits drop «all saved»', async () => {
+  let failing = true;
+  const { ws } = await setup({ 'a.md': 'A' }, { failWrite: () => failing });
+  await ws.openFile('a.md');
+  ws.edit('x');
+  await ws.flush();
+  assert.ok(ws.getState().toasts.some((t) => t.code === 'saveFailed'));
+  failing = false;
+  await ws.flush();
+  assert.ok(!ws.getState().toasts.some((t) => t.code === 'saveFailed'));
+  await ws.saveAll();
+  assert.ok(ws.getState().toasts.some((t) => t.code === 'saveAllDone'));
+  ws.edit('y');
+  assert.ok(!ws.getState().toasts.some((t) => t.code === 'saveAllDone'));
+});

@@ -180,17 +180,34 @@ export class Workspace {
   }
 
   private setDoc(patch: Partial<OpenDoc>): void {
-    if (this.state.doc) this.set({ doc: { ...this.state.doc, ...patch } });
+    const doc = this.state.doc;
+    if (!doc) return;
+    this.set({ doc: { ...doc, ...patch } });
+    // Gli esiti si risolvono per documento: il file è tornato, il testo è al sicuro; nuove modifiche invalidano «Salva tutto».
+    if (patch.deletedOnDisk === false) this.resolvePath(doc.path, 'deletedOutside');
+    if (patch.saveState === 'saved') this.resolvePath(doc.path, 'saveFailed', 'bufferFailed', 'draftNotPersisted');
+    if (patch.saveState === 'dirty') this.resolveToasts('saveAllDone');
   }
 
   private bumpIndex(): void {
     this.set({ indexRevision: this.state.indexRevision + 1 });
   }
 
-  private toast(kind: Toast['kind'], code: ToastCode, params?: ToastParams): void {
-    const path = NOTICE_CHANNEL[code] === 'document' ? String(params?.path ?? this.state.doc?.path ?? '') || undefined : undefined;
-    // Un nuovo tentativo sostituisce l'esito del precedente (stesso codice); gli altri problemi restano.
-    this.set({ toasts: [...this.state.toasts.filter((t) => t.code !== code), { id: ++this.toastSeq, kind, code, params, path }] });
+  /**
+   * `path` è il documento di origine, catturato dal produttore prima di ogni `await`: mai ricavato dal documento
+   * attivo al momento dell'errore. Un nuovo tentativo sostituisce l'esito dello stesso codice e dello stesso
+   * documento; i problemi di altri documenti restano.
+   */
+  private toast(kind: Toast['kind'], code: ToastCode, params?: ToastParams, origin?: string): void {
+    const path = NOTICE_CHANNEL[code] === 'document' ? origin ?? (params?.path === undefined ? this.state.doc?.path : String(params.path)) : undefined;
+    this.set({ toasts: [...this.state.toasts.filter((t) => !(t.code === code && t.path === path)), { id: ++this.toastSeq, kind, code, params, path }] });
+  }
+
+  /** Toglie gli esiti di un documento risolti (salvataggio riuscito, file tornato, bozza messa al sicuro). */
+  private resolvePath(path: string, ...codes: ToastCode[]): void {
+    if (this.state.toasts.some((t) => t.path === path && codes.includes(t.code))) {
+      this.set({ toasts: this.state.toasts.filter((t) => !(t.path === path && codes.includes(t.code))) });
+    }
   }
 
   /** Il successo di un'operazione toglie solo gli esiti che la riguardano. */
@@ -566,7 +583,7 @@ export class Workspace {
     try {
       await this.saveBuffer(doc.path, doc.text, this.bufferBase);
     } catch (err) {
-      this.toast('error', 'bufferFailed', { detail: errorDetail(err) });
+      this.toast('error', 'bufferFailed', { detail: errorDetail(err) }, doc.path);
     }
   }
 
@@ -748,14 +765,14 @@ export class Workspace {
       try {
         await this.saveBuffer(current.path, text, this.bufferBase);
       } catch {
-        this.toast('error', 'draftNotPersisted');
+        this.toast('error', 'draftNotPersisted', undefined, current.path);
         return 'failed';
       }
       const after = this.state.doc;
       if (!after || (after.path === current.path && after.text === text)) return 'durable';
       // Modifiche arrivate mentre il buffer si scriveva: si ripete.
     }
-    this.toast('error', 'draftNotPersisted');
+    this.toast('error', 'draftNotPersisted', undefined, this.state.doc?.path);
     return 'failed';
   }
 
@@ -779,7 +796,7 @@ export class Workspace {
         this.set({ status: 'access-lost' });
         return;
       }
-      this.toast('error', 'saveFailed', { detail: errorDetail(err) });
+      this.toast('error', 'saveFailed', { detail: errorDetail(err) }, path);
       return;
     }
     // La scrittura è riuscita: quel che segue è manutenzione best-effort e non deve far
@@ -792,7 +809,7 @@ export class Workspace {
       this.bufferBase = text;
       this.knownVersion = version;
     }
-    if (this.state.toasts.some((t) => t.code === 'saveFailed' && t.path === path)) this.set({ toasts: this.state.toasts.filter((t) => !(t.code === 'saveFailed' && t.path === path)) });
+    this.resolvePath(path, 'saveFailed', 'bufferFailed', 'draftNotPersisted');
     this.versions.set(path, version);
     this.search.upsert(path, text);
     this.snapshot(path, text, 'save');
@@ -1065,6 +1082,7 @@ export class Workspace {
         const recent = await history.list(workspaceId, path);
         if (!shouldSnapshot(recent, { text, reason }, now)) return;
         await history.add({ workspaceId, path, savedAt: now, text, reason });
+        this.resolveHistory();
         // Subito dopo l'aggiunta, con lo stesso `now`: lo snapshot appena scritto è sempre il più fresco.
         await history.prune(workspaceId, path, now);
       } catch (err) {
@@ -1078,6 +1096,12 @@ export class Workspace {
     if (!history) return;
     const workspaceId = this.deps.workspaceId;
     this.historyChain = this.historyChain.then(() => history.move(workspaceId, from, to).catch((err) => this.historyError(err)));
+  }
+
+  /** Un'operazione di cronologia riuscita toglie l'errore e riarma l'annuncio per il prossimo episodio. */
+  private resolveHistory(): void {
+    this.historyErrorShown = false;
+    this.resolveToasts('historyFailed');
   }
 
   /** Al massimo un toast: la cronologia è un di più, non deve disturbare a ogni salvataggio. */

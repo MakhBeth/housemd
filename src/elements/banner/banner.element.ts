@@ -11,6 +11,8 @@ export interface BannerItem {
   /** `status` (polite, nel contenitore sempre montato) o `alert` (riga assertiva accanto ad esso). */
   kind: 'status' | 'alert';
   text: string;
+  /** Riga visibile ma non parlante: un altro canale (l'indicatore di salvataggio) annuncia già lo stesso evento. */
+  quiet?: boolean;
   /** Pulsante di azione accanto al messaggio (es. «Aggiorna»). */
   actionLabel?: string;
   /** Azione in corso: un secondo clic rilegge il messaggio (WCAG 4.1.3), non avvia altro. */
@@ -32,6 +34,7 @@ export class HmdBanner extends HmdElement {
   #items: readonly BannerItem[] = [];
   #live: HTMLDivElement | null = null;
   #alerts: HTMLDivElement | null = null;
+  #quiet: HTMLDivElement | null = null;
   #actions: HTMLDivElement | null = null;
   #ids = new Map<string, string>();
   /** Dove va il focus se il pulsante che lo ha sparisce chiudendo il messaggio (mai sul body). */
@@ -47,8 +50,9 @@ export class HmdBanner extends HmdElement {
     if (!this.#live) {
       this.#live = el('div', { class: 'live', role: 'status' });
       this.#alerts = el('div', { class: 'alerts' });
+      this.#quiet = el('div', { class: 'quiet' });
       this.#actions = el('div', { class: 'actions' });
-      this.append(this.#live, this.#alerts, this.#actions);
+      this.append(this.#live, this.#alerts, this.#quiet, this.#actions);
     }
     this.#render();
   }
@@ -62,13 +66,15 @@ export class HmdBanner extends HmdElement {
   #render(): void {
     if (!this.#live) return;
     const items = this.#items;
-    const status = items.filter((item) => item.kind === 'status');
-    const alerts = items.filter((item) => item.kind === 'alert');
+    const status = items.filter((item) => item.kind === 'status' && !item.quiet);
+    const alerts = items.filter((item) => item.kind === 'alert' && !item.quiet);
+    const quiet = items.filter((item) => item.quiet);
     const message = (item: BannerItem) => (node: HTMLParagraphElement) => {
       node.id = this.#idOf(item.key);
       setText(node, item.text);
     };
     reconcileList(this.#live, status, (item) => item.key, () => el('p', { class: 'message' }), (node, item) => message(item)(node));
+    reconcileList(this.#quiet!, quiet, (item) => item.key, () => el('p', { class: 'message' }), (node, item) => message(item)(node));
     reconcileList(this.#alerts!, alerts, (item) => item.key, () => el('p', { class: 'message', role: 'alert' }), (node, item) => message(item)(node));
     const actionable = items.filter((item) => item.actionLabel !== undefined || item.closeLabel !== undefined);
     reconcileList(

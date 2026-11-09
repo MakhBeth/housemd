@@ -32,6 +32,8 @@ export function bannerItems(
   docPath: string | null,
   t: (key: MessageKey, params?: Params) => string,
   locale: Locale,
+  /** L'indicatore di salvataggio annuncia già `save.error`/`save.deleted`: le due righe corrispondenti restano visibili ma mute. */
+  indicatorSpeaks = false,
 ): { document: BannerItem[]; workspace: BannerItem[] } {
   const out = { document: [] as BannerItem[], workspace: [] as BannerItem[] };
   for (const toast of toasts) {
@@ -44,6 +46,7 @@ export function bannerItems(
       kind: toast.kind === 'error' ? 'alert' : 'status',
       text: channel === 'document' && !here && toast.path ? `${toast.path}: ${text}` : text,
       closeLabel: isClosable(toast.code) ? t('toast.close') : undefined,
+      quiet: here && indicatorSpeaks && (toast.code === 'saveFailed' || toast.code === 'deletedOutside'),
     });
   }
   return out;

@@ -49,7 +49,7 @@ test('conflict: overwrite writes the local text', async ({ app, page }) => {
 test('the open file deleted outside: toast and "deleted on disk" state', async ({ app }) => {
   await app.removeExternal('note.md');
   await app.windowFocus();
-  await expect(app.toast(app.t('toast.deletedOutside', { path: 'note.md' }))).toBeVisible();
+  await expect(app.page.getByText(app.t('toast.deletedOutside', { path: 'note.md' }))).toBeVisible();
   await expect(app.saveState('save.deleted')).toBeVisible();
 });
 

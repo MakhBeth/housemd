@@ -717,7 +717,7 @@ export class HmdWorkspace extends HmdElement {
     if (!toastKey.every((v, i) => v === this.#toastKey[i])) {
       this.#toastKey = toastKey;
       parts.toasts.items = toastItems(aiState?.error, t);
-      const banners = bannerItems(state.toasts, state.doc?.path ?? null, t, i18n.getState().locale);
+      const banners = bannerItems(state.toasts, state.doc?.path ?? null, t, i18n.getState().locale, true);
       parts.docBanner.items = banners.document;
       parts.wsBanner.items = banners.workspace;
     }
