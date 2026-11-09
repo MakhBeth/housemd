@@ -1,0 +1,64 @@
+@layer components {
+  @scope (hmd-banner) {
+    :scope {
+      display: block;
+    }
+
+    /* Vuoti non hanno ingombro: padding e bordo stanno sulle righe, mai sul contenitore. */
+    .message {
+      margin: 0;
+      padding: 8px 12px;
+      background: var(--c-warning-bg);
+      color: var(--c-text);
+      border-bottom: 1px solid var(--c-border);
+      line-height: 1.4;
+      overflow-wrap: anywhere;
+    }
+
+    .message[role='alert'] {
+      border-left: 4px solid var(--c-danger);
+    }
+
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--c-border);
+      background: var(--c-warning-bg);
+    }
+
+    .row button {
+      border: 1px solid var(--c-border);
+      background: var(--c-surface);
+      color: var(--c-text);
+      border-radius: 6px;
+      padding: 4px 10px;
+      cursor: pointer;
+    }
+
+    .row button[hidden] {
+      display: none;
+    }
+
+    .row button[data-busy] {
+      cursor: progress;
+    }
+
+    @media (forced-colors: active) {
+      .message,
+      .row {
+        background: Canvas;
+        color: CanvasText;
+        border-color: CanvasText;
+      }
+
+      .row button {
+        color: ButtonText;
+        background: ButtonFace;
+        border-color: ButtonText;
+        box-shadow: none;
+      }
+    }
+  }
+}

@@ -33,6 +33,7 @@ import type { HmdHistoryPanel } from '../history-panel/history-panel.element';
 import type { HmdPreview } from '../preview/preview.element';
 import type { HmdSearchPanel } from '../search-panel/search-panel.element';
 import type { HmdSettings } from '../settings/settings.element';
+import type { HmdBanner } from '../banner/banner.element';
 import type { HmdToasts } from '../toasts/toasts.element';
 import { openAiSession, browserAiSessionDeps, type AiSessionWorkspace } from './aiSession';
 import { dialogFor, type TreeAction } from './dialogFor';
@@ -40,7 +41,7 @@ import { allowedInSettings } from './keymap';
 import { clampWidth, gridColumns, MODES, nextPaneMode, PANE_MODES, panesMode, resizeByKey, sidePanel, WIDTH_LIMITS, type Mode, type PaneMode } from './layout';
 import { saveIndicator } from './saveIndicator';
 import { runTreeDialog } from './treeDialogs';
-import { docKey, folderBlocker, historyBlocker, reopenPlan, shownMode, toastItems, toastTarget, unloadNeedsConfirm } from './workspaceView';
+import { bannerItems, docKey, folderBlocker, historyBlocker, reopenPlan, shownMode, toastItems, toastTarget, unloadNeedsConfirm } from './workspaceView';
 import { announce } from '../../dom/announce';
 import './workspace.css';
 
@@ -70,6 +71,9 @@ interface Parts {
   settings: HTMLButtonElement;
   toolbar: HTMLElement;
   toasts: HmdToasts;
+  /** Banner di workspace (sotto la toolbar) e di documento (sopra l'editor): sempre montati, vuoti finché non c'è un messaggio. */
+  wsBanner: HmdBanner;
+  docBanner: HmdBanner;
 }
 
 /** Nodi che compaiono e spariscono con lo stato (come i rami condizionali di WorkspaceView.tsx): ricreati a ogni ricomparsa. */
@@ -169,6 +173,14 @@ export class HmdWorkspace extends HmdElement {
   #focusBeforeSettings: HTMLElement | null = null;
   #memo: { treeEntries?: WorkspaceState['entries']; filesEntries?: WorkspaceState['entries']; locale?: string; tree?: TreeNode[]; files?: string[]; drafts?: readonly string[]; draftSet?: ReadonlySet<string> } = {};
   #toastKey: unknown[] = [];
+
+  /** «Chiudi» di un messaggio: se il focus era sul suo pulsante, che sparisce, passa alla toolbar (mai al body). */
+  #closeBanner(key: string): void {
+    const active = document.activeElement;
+    if (active && (this.#parts?.docBanner.contains(active) || this.#parts?.wsBanner.contains(active))) this.#parts?.toolbar.querySelector('button')?.focus();
+    const target = toastTarget(key);
+    if (target.kind === 'workspace') this.#workspace?.dismissToast(target.id);
+  }
   // Sessione AI e sync: vivono con l'elemento collegato.
   #ai: AiController | null = null;
   #aiSession: { close(): void } | null = null;
@@ -517,6 +529,8 @@ export class HmdWorkspace extends HmdElement {
       saveAll: el('button', { class: 'iconButton tooltip', on: { click: () => void this.#workspace?.saveAll() } }, icon('save')),
       settings: el('button', { class: 'iconButton tooltip', on: { click: () => this.#openSettings() } }, icon('settings')),
       toolbar: el('header', { class: 'toolbar' }),
+      wsBanner: el('hmd-banner', { class: 'wsBanner', on: { 'hmd-banner-close': (event) => this.#closeBanner(event.detail.key) } }),
+      docBanner: el('hmd-banner', { class: 'docBanner', on: { 'hmd-banner-close': (event) => this.#closeBanner(event.detail.key) } }),
       toasts: el('hmd-toasts', {
         on: {
           'hmd-toast-dismiss': (event) => {
@@ -691,7 +705,7 @@ export class HmdWorkspace extends HmdElement {
       setText(empty.firstElementChild!, t('empty.hint'));
       setText(empty.lastElementChild!, t('file.new'));
     }
-    place(parts.main, [parts.toolbar, ...(this.#historyNote ? [parts.historyNote] : []), ...(this.#focusNote ? [parts.focusNote] : []), ...(conflict ? [conflict] : []), (review ?? panes ?? empty)!]);
+    place(parts.main, [parts.toolbar, ...(this.#historyNote ? [parts.historyNote] : []), ...(this.#focusNote ? [parts.focusNote] : []), parts.wsBanner, parts.docBanner, ...(conflict ? [conflict] : []), (review ?? panes ?? empty)!]);
 
     // Impostazioni sopra l'area di lavoro, e i toast.
     const settings = this.#slot('settings', settingsOpen, () => this.#createSettings());
@@ -699,10 +713,13 @@ export class HmdWorkspace extends HmdElement {
     place(this, [parts.layout, ...(settings ? [settings] : []), parts.toasts, parts.focusAnnounce]);
     assign(parts.toasts, 'i18n', i18n);
     // Un array nuovo solo quando cambiano toast, errore AI o lingua (lo useMemo di React); i timer sono per chiave in hmd-toasts.
-    const toastKey = [state.toasts, aiState?.error, i18n.getState()];
+    const toastKey = [state.toasts, state.doc?.path, aiState?.error, i18n.getState()];
     if (!toastKey.every((v, i) => v === this.#toastKey[i])) {
       this.#toastKey = toastKey;
-      parts.toasts.items = toastItems(state.toasts, aiState?.error, t);
+      parts.toasts.items = toastItems(aiState?.error, t);
+      const banners = bannerItems(state.toasts, state.doc?.path ?? null, t, i18n.getState().locale);
+      parts.docBanner.items = banners.document;
+      parts.wsBanner.items = banners.workspace;
     }
 
     // Chiuse le impostazioni, il focus torna dove era prima di aprirle.

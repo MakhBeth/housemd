@@ -88,6 +88,10 @@ export interface HmdEvents {
   'hmd-start-resume': CustomEvent<null>;
   /** Albero dei file: voce del menu ⋯ scelta (`node`: la riga del menu; null solo prima di aprirlo). */
   'hmd-tree-action': CustomEvent<{ action: TreeAction; node: TreeNode | null }>;
+  /** Banner: pulsante di azione di una riga (es. «Aggiorna»). */
+  'hmd-banner-action': CustomEvent<{ key: string }>;
+  /** Banner: «Chiudi» di una riga. */
+  'hmd-banner-close': CustomEvent<{ key: string }>;
   /** Chiusura di un toast (dal pulsante o dal timer dei toast informativi). */
   'hmd-toast-dismiss': CustomEvent<{ key: string }>;
   /** Workspace: cambiare cartella (pulsante con il nome della cartella nella sidebar). */

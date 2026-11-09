@@ -107,7 +107,7 @@ test('the same DOM as WorkspaceView.tsx with no file open: layout with sidebar, 
   const aside = layout.firstElementChild!;
   assert.deepEqual([...aside.children].map((c) => c.localName), ['div', 'hmd-search-panel', 'hmd-file-tree']);
   const main = layout.lastElementChild!;
-  assert.deepEqual([...main.children].map((c) => `${c.localName}.${c.className}`), ['header.toolbar', 'div.empty']);
+  assert.deepEqual([...main.children].map((c) => `${c.localName}.${c.className}`), ['header.toolbar', 'hmd-banner.wsBanner', 'hmd-banner.docBanner', 'div.empty']);
   const toolbar = main.firstElementChild!;
   assert.deepEqual([...toolbar.children].map((c) => c.className), ['lead', 'modes', 'actions']);
   assert.deepEqual([...toolbar.querySelectorAll('.modes button')].map((b) => b.getAttribute('aria-label')), [EN_MESSAGES['mode.editor'], EN_MESSAGES['mode.split'], EN_MESSAGES['mode.preview']]);

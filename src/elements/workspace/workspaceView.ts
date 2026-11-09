@@ -1,7 +1,9 @@
 import type { AiErrorCode } from '../../ai/types';
 import type { MessageKey } from '../../i18n/messages';
-import type { Params } from '../../i18n/i18n';
+import type { Locale, Params } from '../../i18n/i18n';
+import { isClosable, NOTICE_CHANNEL, noticeKey } from '../../workspace/toasts';
 import type { WorkspaceState } from '../../workspace/workspace';
+import type { BannerItem } from '../banner/banner.element';
 import type { ToastItem } from '../toasts/toasts.element';
 import type { Mode } from './layout';
 
@@ -15,15 +17,39 @@ export function docKey(doc: Pick<NonNullable<WorkspaceState['doc']>, 'path' | 'r
   return `${doc?.path}#${doc?.revision}`;
 }
 
-/** Toast del workspace più l'errore AI non legato a un messaggio (sync, chiave, selezione persa), nello stesso contenitore. */
-export function toastItems(toasts: WorkspaceState['toasts'], aiError: AiErrorCode | null | undefined, t: (key: MessageKey, params?: Params) => string): ToastItem[] {
-  return [
-    ...toasts.map((toast) => ({ key: `ws-${toast.id}`, kind: toast.kind, text: t(`toast.${toast.code}` as MessageKey, toast.params) })),
-    ...(aiError ? [{ key: 'ai-error', kind: 'error' as const, text: t(`ai.error.${aiError}` as MessageKey) }] : []),
-  ];
+/** Errore AI non legato a un messaggio (sync, chiave, selezione persa): l'unico canale ancora in un toast. */
+export function toastItems(aiError: AiErrorCode | null | undefined, t: (key: MessageKey, params?: Params) => string): ToastItem[] {
+  return aiError ? [{ key: 'ai-error', kind: 'error', text: t(`ai.error.${aiError}` as MessageKey) }] : [];
 }
 
-/** Chiusura di un toast: l'errore AI si toglie dal controller, gli altri dallo workspace. */
+/**
+ * Righe dei banner dal registro del workspace. Il canale documento mostra solo gli esiti del documento attivo;
+ * se il documento non è più quello, l'esito passa al banner del workspace con il percorso (mai attribuito al
+ * nuovo documento). I messaggi senza «Chiudi» sono quelli a rischio dati.
+ */
+export function bannerItems(
+  toasts: WorkspaceState['toasts'],
+  docPath: string | null,
+  t: (key: MessageKey, params?: Params) => string,
+  locale: Locale,
+): { document: BannerItem[]; workspace: BannerItem[] } {
+  const out = { document: [] as BannerItem[], workspace: [] as BannerItem[] };
+  for (const toast of toasts) {
+    const channel = NOTICE_CHANNEL[toast.code];
+    if (channel === 'app') continue;
+    const here = channel === 'document' && toast.path === docPath;
+    const text = t(noticeKey(toast.code, toast.params, locale) as MessageKey, toast.params);
+    out[here ? 'document' : 'workspace'].push({
+      key: `ws-${toast.id}`,
+      kind: toast.kind === 'error' ? 'alert' : 'status',
+      text: channel === 'document' && !here && toast.path ? `${toast.path}: ${text}` : text,
+      closeLabel: isClosable(toast.code) ? t('toast.close') : undefined,
+    });
+  }
+  return out;
+}
+
+/** Chiusura di un messaggio: l'errore AI si toglie dal controller, gli altri dallo workspace. */
 export function toastTarget(key: string): { kind: 'ai' } | { kind: 'workspace'; id: number } {
   return key === 'ai-error' ? { kind: 'ai' } : { kind: 'workspace', id: Number(key.slice('ws-'.length)) };
 }

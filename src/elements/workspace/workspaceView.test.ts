@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { translate } from '../../i18n/i18n';
 import { EN_MESSAGES } from '../../i18n/messages';
 import type { WorkspaceState } from '../../workspace/workspace';
-import { docKey, folderBlocker, historyBlocker, reopenPlan, shownMode, toastItems, toastTarget, unloadNeedsConfirm } from './workspaceView';
+import { bannerItems, docKey, folderBlocker, historyBlocker, reopenPlan, shownMode, toastItems, toastTarget, unloadNeedsConfirm } from './workspaceView';
 
 const t = (key: string, params?: Record<string, string | number>) => translate(EN_MESSAGES, key, params);
 
@@ -19,15 +19,25 @@ test('the document key follows path and revision (no document: undefined#undefin
   assert.equal(docKey(null), 'undefined#undefined');
 });
 
-test('toasts: the workspace ones keyed ws-<id>, then the AI error; dismissing goes back to the right owner', () => {
-  const toasts = [{ id: 7, kind: 'info', code: 'saveAllDone' }] as unknown as WorkspaceState['toasts'];
-  assert.deepEqual(toastItems(toasts, 'server', t), [
-    { key: 'ws-7', kind: 'info', text: EN_MESSAGES['toast.saveAllDone'] },
-    { key: 'ai-error', kind: 'error', text: EN_MESSAGES['ai.error.server'] },
-  ]);
-  assert.deepEqual(toastItems([], null, t), []);
+test('toast: only the AI error, keyed ai-error; dismissing goes back to the right owner', () => {
+  assert.deepEqual(toastItems('server', t), [{ key: 'ai-error', kind: 'error', text: EN_MESSAGES['ai.error.server'] }]);
+  assert.deepEqual(toastItems(null, t), []);
   assert.deepEqual(toastTarget('ai-error'), { kind: 'ai' });
   assert.deepEqual(toastTarget('ws-7'), { kind: 'workspace', id: 7 });
+});
+
+test('banners: document messages follow their document, the others go to the workspace banner with the path', () => {
+  const toasts = [
+    { id: 1, kind: 'error', code: 'saveFailed', params: { detail: 'x' }, path: 'a.md' },
+    { id: 2, kind: 'info', code: 'saveAllDone' },
+    { id: 3, kind: 'info', code: 'restoredDraft', params: { path: 'a.md' }, path: 'a.md' },
+  ] as unknown as WorkspaceState['toasts'];
+  const here = bannerItems(toasts, 'a.md', t, 'en');
+  assert.deepEqual(here.document.map((i) => [i.key, i.kind, i.closeLabel]), [['ws-1', 'alert', undefined], ['ws-3', 'status', 'Close']]);
+  assert.deepEqual(here.workspace.map((i) => i.key), ['ws-2']);
+  const other = bannerItems(toasts, 'b.md', t, 'en');
+  assert.deepEqual(other.document, []);
+  assert.equal(other.workspace[0]!.text, 'a.md: Save failed: x');
 });
 
 test('beforeunload asks only when text is in memory, unless the protected update reload is ready', () => {

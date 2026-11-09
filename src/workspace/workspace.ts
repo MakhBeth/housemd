@@ -15,7 +15,7 @@ import {
   type AutosaveTrigger,
 } from './autosave';
 import { decideExternal, diffScan } from './external';
-import { errorDetail, sameToast, type Toast, type ToastCode, type ToastParams } from './toasts';
+import { errorDetail, NOTICE_CHANNEL, type Toast, type ToastCode, type ToastParams } from './toasts';
 import type { HistoryStore, Snapshot, SnapshotReason } from '../history/historyStore';
 import { shouldSnapshot } from '../history/policy';
 
@@ -188,10 +188,14 @@ export class Workspace {
   }
 
   private toast(kind: Toast['kind'], code: ToastCode, params?: ToastParams): void {
-    const next = { kind, code, params };
-    const last = this.state.toasts.at(-1);
-    if (last && sameToast(last, next)) return;
-    this.set({ toasts: [...this.state.toasts, { id: ++this.toastSeq, ...next }] });
+    const path = NOTICE_CHANNEL[code] === 'document' ? String(params?.path ?? this.state.doc?.path ?? '') || undefined : undefined;
+    // Un nuovo tentativo sostituisce l'esito del precedente (stesso codice); gli altri problemi restano.
+    this.set({ toasts: [...this.state.toasts.filter((t) => t.code !== code), { id: ++this.toastSeq, kind, code, params, path }] });
+  }
+
+  /** Il successo di un'operazione toglie solo gli esiti che la riguardano. */
+  private resolveToasts(...codes: ToastCode[]): void {
+    if (this.state.toasts.some((t) => codes.includes(t.code))) this.set({ toasts: this.state.toasts.filter((t) => !codes.includes(t.code)) });
   }
 
   dismissToast(id: number): void {
@@ -307,6 +311,7 @@ export class Workspace {
 
   async load(): Promise<void> {
     this.set({ status: 'loading' });
+    this.resolveToasts('configInvalidJson', 'configInvalidSaveTo', 'configInvalidLinkPrefix', 'unreadableFiles');
     await this.run(async () => {
       const entries = await this.deps.fs.list();
       const configText = await this.deps.fs.read(CONFIG_FILE).then((r) => r.text, (err) => {
@@ -652,6 +657,7 @@ export class Workspace {
     // Ciclo interrotto (accesso perso, gestito da run()): le bozze non elaborate restano tutte.
     left += paths.length - processed;
     if (written > 0) this.bumpIndex();
+    this.resolveToasts('saveAllSkipped', 'saveAllDone');
     if (left > 0) this.toast('info', 'saveAllSkipped', { count: left });
     else if (!this.state.doc || this.state.doc.saveState === 'saved') this.toast('info', 'saveAllDone');
   }
@@ -786,6 +792,7 @@ export class Workspace {
       this.bufferBase = text;
       this.knownVersion = version;
     }
+    if (this.state.toasts.some((t) => t.code === 'saveFailed' && t.path === path)) this.set({ toasts: this.state.toasts.filter((t) => !(t.code === 'saveFailed' && t.path === path)) });
     this.versions.set(path, version);
     this.search.upsert(path, text);
     this.snapshot(path, text, 'save');
@@ -1077,7 +1084,7 @@ export class Workspace {
   private historyError(err: unknown): void {
     if (this.historyErrorShown) return;
     this.historyErrorShown = true;
-    this.toast('info', 'historyFailed', { detail: errorDetail(err) });
+    this.toast('error', 'historyFailed', { detail: errorDetail(err) });
   }
 
   /** Si risolve quando le scritture della cronologia già lanciate sono finite. */

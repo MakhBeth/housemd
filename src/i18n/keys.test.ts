@@ -13,7 +13,10 @@ import { FORMAT_ACTIONS } from '../editor/formatting';
 const keys = new Set(Object.keys(en));
 
 test('every toast code has a message in en.json', () => {
-  for (const code of TOAST_CODES) assert.ok(keys.has(`toast.${code}`), `manca toast.${code}`);
+  for (const code of TOAST_CODES) {
+    const counted = code === 'unreadableFiles' || code === 'saveAllSkipped';
+    for (const key of counted ? [`toast.${code}.one`, `toast.${code}.other`] : [`toast.${code}`]) assert.ok(keys.has(key), `manca ${key}`);
+  }
 });
 
 test('every name validation error has a message in en.json', () => {
