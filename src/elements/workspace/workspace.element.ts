@@ -43,7 +43,7 @@ import { allowedInSettings } from './keymap';
 import { clampWidth, gridColumns, MODES, nextPaneMode, PANE_MODES, panesMode, resizeByKey, sidePanel, WIDTH_LIMITS, type Mode, type PaneMode } from './layout';
 import { saveIndicator } from './saveIndicator';
 import { runTreeDialog } from './treeDialogs';
-import { aiErrorItems, docKey, folderBlocker, historyBlocker, noticeRoutes, reopenPlan, shownMode, toastTarget, unloadNeedsConfirm } from './workspaceView';
+import { AI_ERROR_PREFIX, aiErrorItems, docKey, folderBlocker, historyBlocker, noticeRoutes, reopenPlan, shownMode, toastTarget, unloadNeedsConfirm } from './workspaceView';
 import { noticeKey } from '../../workspace/toasts';
 import { announce, ANNOUNCE_DELAY_MS } from '../../dom/announce';
 import './workspace.css';
@@ -196,6 +196,9 @@ export class HmdWorkspace extends HmdElement {
   }
   /** Eventi già annunciati nel dialog o riepilogati alla chiusura: le loro righe restano visibili ma mute. */
   #folderButton: HTMLButtonElement | null = null;
+  #lastModal: HTMLDialogElement | null = null;
+  #known: ReadonlySet<number> = new Set();
+  #aiKnown: string | null = null;
   #aiSilenced: string | null = null;
   #aiDeferred = '';
   #silenced = new Set<number>();
@@ -737,7 +740,13 @@ export class HmdWorkspace extends HmdElement {
     if (!noticeKeyNow.every((v, i) => v === this.#toastKey[i])) {
       this.#toastKey = noticeKeyNow;
       const locale = i18n.getState().locale;
-      const routes = noticeRoutes(state.toasts, state.doc?.path ?? null, t, locale, true, { sidebarOpen: !!sidebarBanner, dialogOpen: !!modal, silenced: this.#silenced });
+      // All'apertura di un dialog si fotografa ciò che c'è già: è stato annunciato prima, non si ripete né si riepiloga.
+      if (modal && !this.#lastModal) {
+        this.#known = new Set(state.toasts.map((toast) => toast.id));
+        this.#aiKnown = aiState?.error ? `${AI_ERROR_PREFIX}${aiState.error}` : null;
+      }
+      this.#lastModal = modal;
+      const routes = noticeRoutes(state.toasts, state.doc?.path ?? null, t, locale, true, { sidebarOpen: !!sidebarBanner, dialogOpen: !!modal, silenced: this.#silenced, known: this.#known });
       for (const id of routes.announcedInDialog) this.#silenced.add(id);
       for (const id of routes.deferred) {
         this.#silenced.add(id);
@@ -751,7 +760,7 @@ export class HmdWorkspace extends HmdElement {
       parts.docBanner.items = routes.document;
       // Un errore AI arrivato col dialog aperto è differito come gli altri eventi non a rischio dati: muto, riepilogato alla chiusura.
       const aiItems = aiErrorItems(aiState?.error, t);
-      if (modal && aiItems[0] && this.#aiSilenced !== aiItems[0].key) {
+      if (modal && aiItems[0] && this.#aiSilenced !== aiItems[0].key && this.#aiKnown !== aiItems[0].key) {
         this.#aiSilenced = aiItems[0].key;
         this.#aiDeferred = aiItems[0].text;
       } else if (!aiItems[0]) this.#aiSilenced = null;

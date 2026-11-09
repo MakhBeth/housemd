@@ -60,6 +60,8 @@ export interface NoticeContext {
   dialogOpen: boolean;
   /** ID già annunciati nel dialog o riepilogati: righe mute. */
   silenced: ReadonlySet<number>;
+  /** ID già presenti all'apertura del dialog: già annunciati, né riga nel dialog né riepilogo. */
+  known?: ReadonlySet<number>;
 }
 
 const DIALOG_ALERT: ReadonlySet<ToastCode> = new Set<ToastCode>(['saveFailed', 'bufferFailed', 'draftNotPersisted', 'deletedOutside', 'restoredDraftDeleted']);
@@ -93,8 +95,9 @@ export function noticeRoutes(
     else if (context.sidebarOpen && (toast.code === 'openFolderFailed' || toast.code === 'alreadyExists' || toast.code === 'notFound')) slot = 'sidebar';
     else if (toast.code === 'historyFailed' || toast.code === 'restoreCancelled') slot = 'history';
     const shown = slot === 'workspace' && channel === 'document' && toast.path ? `${toast.path}: ${text}` : text;
-    const toDialog = context.dialogOpen && DIALOG_ALERT.has(toast.code);
-    const deferred = context.dialogOpen && !toDialog && !context.silenced.has(toast.id);
+    const known = context.known?.has(toast.id) ?? false;
+    const toDialog = context.dialogOpen && !known && DIALOG_ALERT.has(toast.code);
+    const deferred = context.dialogOpen && !known && !toDialog && !context.silenced.has(toast.id);
     if (toDialog) {
       out.dialog.push({ key: `ws-${toast.id}`, kind: 'alert', text: shown });
       out.announcedInDialog.push(toast.id);

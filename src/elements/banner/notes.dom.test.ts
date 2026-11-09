@@ -148,3 +148,19 @@ test('closing a local note with the focus on its Close returns the focus to the 
   close.click();
   assert.ok(document.activeElement === control, 'focus on the described control');
 });
+
+test('opening, closing and reopening a dialog without registry changes announces nothing again', () => {
+  const toasts = [
+    { id: 1, kind: 'info', code: 'configInvalidJson', params: { file: 'c.json', detail: 'x' } },
+    { id: 2, kind: 'error', code: 'draftNotPersisted' },
+  ];
+  const known = new Set([1, 2]);
+  for (const silenced of [new Set<number>(), new Set([2])]) {
+    const open = routes(toasts, { ...CONTEXT, dialogOpen: true, silenced, known });
+    assert.deepEqual(open.dialog, [], 'no alert row for an event already announced');
+    assert.deepEqual(open.deferred, [], 'no summary for an event already shown');
+    assert.equal(open.workspace[0]!.quiet, false, 'the visible state is kept as it was');
+  }
+  const fresh = routes([...toasts, { id: 3, kind: 'info', code: 'unreadableFiles', params: { count: 2, paths: 'a, b' } }], { ...CONTEXT, dialogOpen: true, silenced: new Set(), known });
+  assert.deepEqual(fresh.deferred, [3], 'only the new event is deferred');
+});
