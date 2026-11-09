@@ -117,6 +117,7 @@ export class Workspace {
   private timer: unknown = null;
   private saving: Promise<void> | null = null;
   private toastSeq = 0;
+  private explicit = 0;
   /**
    * Contatore di sospensione dell'autosalvataggio (rinomina/eliminazione in corso): mentre è > 0,
    * `flush()` non scrive su disco, ma le modifiche continuano a essere segnalate come da salvare.
@@ -202,7 +203,7 @@ export class Workspace {
     const path = NOTICE_CHANNEL[code] === 'document' ? origin ?? (params?.path === undefined ? this.state.doc?.path : String(params.path)) : undefined;
     const same = this.state.toasts.find((t) => t.code === code && t.path === path);
     // Evento automatico identico (stesso codice, contesto, tipo e dettagli): stesso nodo e stesso ID, nessun nuovo allarme.
-    if (same && same.kind === kind && JSON.stringify(same.params ?? {}) === JSON.stringify(params ?? {})) return;
+    if (!this.explicit && same && same.kind === kind && JSON.stringify(same.params ?? {}) === JSON.stringify(params ?? {})) return;
     this.set({ toasts: [...this.state.toasts.filter((t) => t !== same), { id: ++this.toastSeq, kind, code, params, path }] });
   }
 
@@ -302,7 +303,17 @@ export class Workspace {
   }
 
   saveAll(): Promise<void> {
-    return this.runExclusive(() => this.doSaveAll());
+    return this.explicitAttempt(() => this.runExclusive(() => this.doSaveAll()));
+  }
+
+  /** Tentativo esplicito dell'utente (Ctrl+S, Salva tutto): un esito identico a quello già mostrato si riannuncia. */
+  private async explicitAttempt(action: () => Promise<void>): Promise<void> {
+    this.explicit++;
+    try {
+      await action();
+    } finally {
+      this.explicit--;
+    }
   }
 
   restoreVersion(id: number): Promise<void> {
@@ -612,7 +623,11 @@ export class Workspace {
    * da HouseMD (in quel caso `flush()` da solo sarebbe un no-op): usato da Ctrl+S per poter
    * ricreare il file.
    */
-  async saveNow(): Promise<void> {
+  saveNow(): Promise<void> {
+    return this.explicitAttempt(() => this.doSaveNow());
+  }
+
+  private async doSaveNow(): Promise<void> {
     const doc = this.state.doc;
     if (doc?.deletedOnDisk && doc.saveState === 'saved') {
       this.setDoc({ saveState: 'dirty' });

@@ -1023,3 +1023,17 @@ test('[LAB-405] a buffer write that succeeds resolves bufferFailed; a history re
   await ws.listHistory('a.md');
   assert.deepEqual(codes(), []);
 });
+
+test('[LAB-405] an explicit retry with the same failure renews the notice; an automatic one does not', async () => {
+  const { ws } = await setup({ 'a.md': 'A' }, { failWrite: () => true });
+  await ws.openFile('a.md');
+  ws.edit('x');
+  await ws.flush();
+  await ws.flush();
+  const ids = () => ws.getState().toasts.filter((t) => t.code === 'saveFailed').map((t) => t.id);
+  const first = ids();
+  assert.equal(first.length, 1);
+  await ws.saveNow();
+  assert.equal(ids().length, 1);
+  assert.notDeepEqual(ids(), first, 'explicit retry: new node, announced again');
+});
