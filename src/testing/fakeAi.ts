@@ -32,6 +32,8 @@ export function fakeAi(initial: Partial<AiState> = {}, profile?: ModelProfile) {
     },
     saveOverrides: async (asNew = false) => void calls.push(['saveOverrides', asNew]),
     report: (error: unknown) => void reports.push(error),
+    clearError: () => undefined,
+    orphanError: () => undefined,
     models: null as ModelOption[] | null,
     provider: async () => ({ listModels: async () => controller.models }) as unknown as ChatProvider,
     send: async (...args: unknown[]) => void calls.push(['send', ...args]),

@@ -1,13 +1,16 @@
 import { modelSelection } from '../../ai/profiles';
-import type { ModelOption, ModelProfile } from '../../ai/types';
+import type { AiErrorCode, ModelOption, ModelProfile } from '../../ai/types';
 import { HmdElement } from '../../dom/element';
 import { el, setText, toggleAttr } from '../../dom/el';
 import { reconcileList } from '../../dom/list';
 import { RenderLoop } from '../../dom/renderLoop';
+import type { MessageKey } from '../../i18n/messages';
 import type { I18nStore } from '../../state/i18nStore';
 import { emit } from '../events';
 import { CUSTOM, modelListKey, modelSelectOptions, selectValue, type ModelSelectController, type SelectOption } from './modelSelectView';
 import './model-select.css';
+
+let noteSeq = 0;
 
 interface Parts {
   section: HTMLDivElement;
@@ -36,7 +39,12 @@ export class HmdAiModelSelect extends HmdElement {
 
   #parts: Parts | null = null;
   #models: ModelOption[] | null = null;
-  #error = false;
+  /** Esito della richiesta: null = nessun errore, altrimenti il codice AI da mostrare nella nota locale. */
+  #error: AiErrorCode | null = null;
+  /** L'ultima richiesta l'ha chiesta l'utente con «Aggiorna»: la nota è un errore (`alert`), altrimenti uno stato (`status`). */
+  #manual = false;
+  #errorManual = false;
+  #noteId = `model-select-note-${++noteSeq}`;
   #custom = false;
   #revision = 0;
   /** Richiesta dell'elenco (in corso o finita) e il suo abort; null = da fare (anche dopo il distacco). */
@@ -104,6 +112,8 @@ export class HmdAiModelSelect extends HmdElement {
     // Solo al distacco: la risposta in arrivo non tocca più nulla; ricollegato, l'elenco si richiede.
     this.#request?.abort.abort();
     this.#request = null;
+    // Senza più la nota locale l'errore, se c'è ancora, passa al banner workspace.
+    this.#controller?.orphanError(this);
   }
 
   /** Chiede l'elenco se la chiave (provider, indirizzo, chiave salvata, «Aggiorna») è cambiata. Non disegna. */
@@ -117,7 +127,10 @@ export class HmdAiModelSelect extends HmdElement {
     const abort = new AbortController();
     this.#request = { key, abort };
     this.#models = null;
-    this.#error = false;
+    // «Aggiorna» vale per la sola richiesta che parte ora.
+    const manual = this.#manual;
+    this.#manual = false;
+    this.#clearError(controller);
     void controller
       .provider(profile)
       .then((provider) => provider.listModels(abort.signal))
@@ -125,19 +138,33 @@ export class HmdAiModelSelect extends HmdElement {
         (list) => {
           if (abort.signal.aborted) return;
           this.#models = list;
-          this.#error = !list;
+          this.#clearError(controller);
+          if (!list) {
+            this.#error = 'unreachable';
+            this.#errorManual = manual;
+          }
           this.#loop.update();
         },
         (error: unknown) => {
           if (abort.signal.aborted) return;
-          this.#error = true;
-          controller.report(error);
+          const code = error && typeof error === 'object' && 'code' in error ? String(error.code) : 'unreachable';
+          this.#error = code as AiErrorCode;
+          this.#errorManual = manual;
+          // L'errore ha qui la sua nota: il banner workspace tace finché questo elemento è nel documento.
+          controller.report(error, { trigger: manual ? 'models-refresh' : 'models-load', anchor: this });
           this.#loop.update();
         },
       );
   }
 
+  /** Un nuovo tentativo (o un elenco arrivato) toglie l'esito precedente, anche dall'errore AI condiviso. */
+  #clearError(controller: ModelSelectController | null): void {
+    this.#error = null;
+    controller?.clearError(this);
+  }
+
   #refresh(): void {
+    this.#manual = true;
     this.#revision++;
     this.#load();
     this.#loop.update();
@@ -194,10 +221,16 @@ export class HmdAiModelSelect extends HmdElement {
     }
     setText(parts.refresh, t('ai.refresh'));
     if (this.#error) {
-      setText(parts.error, t('ai.error.unreachable'));
-      if (parts.error.parentNode !== parts.section) parts.section.append(parts.error);
+      // Il ruolo cambia con il trigger: un nodo nuovo ogni volta che compare, così `alert` si annuncia anche inserito dopo.
+      if (parts.error.parentNode !== parts.section) {
+        parts.error = el('small', { id: this.#noteId, role: this.#errorManual ? 'alert' : 'status' });
+        parts.section.append(parts.error);
+      }
+      setText(parts.error, t(`ai.error.${this.#error}` as MessageKey));
+      parts.refresh.setAttribute('aria-describedby', this.#noteId);
     } else {
       parts.error.remove();
+      parts.refresh.removeAttribute('aria-describedby');
     }
   }
 }

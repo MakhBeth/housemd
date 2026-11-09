@@ -15,7 +15,7 @@ import {
   type AutosaveTrigger,
 } from './autosave';
 import { decideExternal, diffScan } from './external';
-import { errorDetail, NOTICE_CHANNEL, type Toast, type ToastCode, type ToastParams } from './toasts';
+import { errorDetail, NOTICE_CHANNEL, type Toast, type ToastAction, type ToastCode, type ToastParams } from './toasts';
 import type { HistoryStore, Snapshot, SnapshotReason } from '../history/historyStore';
 import { shouldSnapshot } from '../history/policy';
 
@@ -198,12 +198,13 @@ export class Workspace {
    * attivo al momento dell'errore. Un nuovo tentativo sostituisce l'esito dello stesso codice e dello stesso
    * documento; i problemi di altri documenti restano.
    */
-  private toast(kind: Toast['kind'], code: ToastCode, params?: ToastParams, origin?: string, manual = false): void {
-    const path = NOTICE_CHANNEL[code] === 'document' ? origin ?? (params?.path === undefined ? this.state.doc?.path : String(params.path)) : undefined;
+  private toast(kind: Toast['kind'], code: ToastCode, params?: ToastParams, origin?: string, manual = false, action?: ToastAction): void {
+    // Un'immagine fallita è un problema del documento in cui la si inseriva, anche se `operationFailed` è un messaggio di workspace.
+    const path = NOTICE_CHANNEL[code] === 'document' || action === 'image' ? origin ?? (params?.path === undefined ? this.state.doc?.path : String(params.path)) : undefined;
     const same = this.state.toasts.find((t) => t.code === code && t.path === path);
     // Evento automatico identico (stesso codice, contesto, tipo e dettagli): stesso nodo e stesso ID, nessun nuovo allarme.
     if (!manual && same && same.kind === kind && JSON.stringify(same.params ?? {}) === JSON.stringify(params ?? {})) return;
-    this.set({ toasts: [...this.state.toasts.filter((t) => t !== same), { id: ++this.toastSeq, kind, code, params, path }] });
+    this.set({ toasts: [...this.state.toasts.filter((t) => t !== same), { id: ++this.toastSeq, kind, code, params, path, ...(action ? { origin: { action, path: origin } } : {}) }] });
   }
 
   /** Toglie gli esiti di un documento risolti (salvataggio riuscito, file tornato, bozza messa al sicuro). */
@@ -232,16 +233,16 @@ export class Workspace {
   }
 
   /** Esegue un'operazione mostrando gli errori come toast; accesso revocato → schermata "Riprendi accesso". */
-  private async run(action: () => Promise<void>, manual = false): Promise<void> {
+  private async run(action: () => Promise<void>, manual = false, origin?: { action: ToastAction; path: string }): Promise<void> {
     try {
       await action();
     } catch (err) {
-      await this.handleError(err, manual);
+      await this.handleError(err, manual, origin);
     }
   }
 
   /** `manual`: l'errore nasce da un comando dell'utente su file (crea, rinomina, elimina): un esito identico si riannuncia. */
-  private async handleError(err: unknown, manual = false): Promise<void> {
+  private async handleError(err: unknown, manual = false, origin?: { action: ToastAction; path: string }): Promise<void> {
     if (isAccessError(err)) {
       const doc = this.state.doc;
       if (doc && doc.saveState !== 'saved') {
@@ -252,7 +253,7 @@ export class Workspace {
     }
     if (err instanceof FsExistsError) this.toast('error', 'alreadyExists', { path: err.path }, undefined, manual);
     else if (err instanceof FsNotFoundError) this.toast('error', 'notFound', { path: err.path }, undefined, manual);
-    else this.toast('error', 'operationFailed', { detail: errorDetail(err) }, undefined, manual);
+    else this.toast('error', 'operationFailed', { detail: errorDetail(err) }, origin?.path, manual, origin?.action);
   }
 
   /**
@@ -302,8 +303,9 @@ export class Workspace {
     return this.runExclusive(() => this.doResolveConflict(choice));
   }
 
-  saveAll(): Promise<void> {
-    return this.runExclusive(() => this.doSaveAll());
+  /** `source`: il pulsante da cui parte (toolbar o impostazioni); l'esito si descrive lì. */
+  saveAll(source: 'toolbar' | 'settings' = 'toolbar'): Promise<void> {
+    return this.runExclusive(() => this.doSaveAll(source === 'settings' ? 'saveAllSettings' : 'saveAll'));
   }
 
   restoreVersion(id: number): Promise<void> {
@@ -633,7 +635,7 @@ export class Workspace {
    * poi le bozze degli altri file, con l'autosalvataggio sospeso. Una bozza si scrive solo se il disco
    * coincide ancora con la sua base; altrimenti resta dov'è (è un conflitto da aprire a mano).
    */
-  private async doSaveAll(): Promise<void> {
+  private async doSaveAll(action: 'saveAll' | 'saveAllSettings'): Promise<void> {
     while (this.checking) await this.checking;
     /** Modifiche che dopo "Salva tutto" restano non salvate su disco (documento aperto compreso). */
     let left = 0;
@@ -685,8 +687,8 @@ export class Workspace {
     left += paths.length - processed;
     if (written > 0) this.bumpIndex();
     this.resolveToasts('saveAllSkipped', 'saveAllDone');
-    if (left > 0) this.toast('info', 'saveAllSkipped', { count: left }, undefined, true);
-    else if (!this.state.doc || this.state.doc.saveState === 'saved') this.toast('info', 'saveAllDone', undefined, undefined, true);
+    if (left > 0) this.toast('info', 'saveAllSkipped', { count: left }, undefined, true, action);
+    else if (!this.state.doc || this.state.doc.saveState === 'saved') this.toast('info', 'saveAllDone', undefined, undefined, true, action);
   }
 
   /** Scrive la bozza di un file non aperto se il disco coincide ancora con la sua base. */
@@ -1046,7 +1048,7 @@ export class Workspace {
     try {
       version = await history.get(id);
     } catch (err) {
-      this.historyError(err, true);
+      this.historyError(err, true, path);
       return;
     }
     const current = this.state.doc;
@@ -1061,7 +1063,7 @@ export class Workspace {
       // comunque il testo del ripristino, che il modello non ha.
       this.state.updating
     ) {
-      this.toast('info', 'restoreCancelled');
+      this.toast('info', 'restoreCancelled', undefined, path, false, 'restore');
       return;
     }
     // Da qui niente await: snapshot del testo corrente (fire-and-forget) e sostituzione.
@@ -1115,10 +1117,10 @@ export class Workspace {
   }
 
   /** Al massimo un toast: la cronologia è un di più, non deve disturbare a ogni salvataggio. */
-  private historyError(err: unknown, manual = false): void {
+  private historyError(err: unknown, manual = false, path?: string): void {
     if (this.historyErrorShown && !manual) return;
     this.historyErrorShown = true;
-    this.toast('error', 'historyFailed', { detail: errorDetail(err) }, undefined, manual);
+    this.toast('error', 'historyFailed', { detail: errorDetail(err) }, path, manual, path === undefined ? undefined : 'history');
   }
 
   /** Si risolve quando le scritture della cronologia già lanciate sono finite. */
@@ -1137,7 +1139,7 @@ export class Workspace {
       return list;
     } catch (err) {
       // Manuale solo se lo dice il chiamante (apertura del pannello, cambio di file); le riletture dopo un salvataggio no.
-      this.historyError(err, opts.manual === true);
+      this.historyError(err, opts.manual === true, path);
       return [];
     }
   }
@@ -1297,7 +1299,7 @@ export class Workspace {
       const path = await uniquePath(saveTo, name, async (p) => (await this.deps.fs.stat(p)) !== null);
       await this.deps.fs.write(path, data);
       link = imageLink(path, doc.path, this.state.config);
-    });
+    }, false, { action: 'image', path: doc.path });
     return link;
   }
 

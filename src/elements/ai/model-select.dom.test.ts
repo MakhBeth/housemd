@@ -20,6 +20,9 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 function fakeController() {
   const requests: { profile: ModelProfile; signal: AbortSignal; answer(list: ModelOption[] | null): void; fail(error: unknown): void }[] = [];
   const reports: unknown[] = [];
+  const origins: unknown[] = [];
+  const cleared: unknown[] = [];
+  const orphaned: unknown[] = [];
   const controller = {
     async provider(profile: ModelProfile) {
       return {
@@ -27,9 +30,11 @@ function fakeController() {
           new Promise<ModelOption[] | null>((resolve, reject) => requests.push({ profile, signal, answer: resolve, fail: reject })),
       } as unknown as ChatProvider;
     },
-    report: (error: unknown) => void reports.push(error),
+    report: (error: unknown, origin?: unknown) => void (reports.push(error), origins.push(origin)),
+    clearError: (anchor: unknown) => void cleared.push(anchor),
+    orphanError: (anchor: unknown) => void orphaned.push(anchor),
   } as unknown as ModelSelectController;
-  return { controller, requests, reports };
+  return { controller, requests, reports, origins, cleared, orphaned };
 }
 
 /**
@@ -209,13 +214,49 @@ test('an unreachable server (null) shows the error under Refresh; asking again h
   assert.equal(error(), null);
 });
 
-test('a failure is reported to the controller and shown as unreachable', async () => {
-  const { el, requests, reports } = await mount();
+test('a failure is reported with its origin and shown with its own text, as a status for the automatic load', async () => {
+  const { el, requests, reports, origins } = await mount();
   const failure = { code: 'unauthorized' };
   requests[0].fail(failure);
   await tick();
   assert.deepEqual(reports, [failure]);
-  assert.equal(el.querySelector('small')!.textContent, EN_MESSAGES['ai.error.unreachable']);
+  assert.deepEqual(origins, [{ trigger: 'models-load', anchor: el }]);
+  const note = el.querySelector('small')!;
+  assert.equal(note.textContent, EN_MESSAGES['ai.error.unauthorized']);
+  assert.equal(note.getAttribute('role'), 'status');
+  assert.equal(el.querySelector('button.link')!.getAttribute('aria-describedby'), note.id);
+});
+
+test('a failure of the Refresh models button is an alert under the selector, replaced by a retry', async () => {
+  const { el, requests, origins, cleared } = await mount();
+  requests[0].answer([{ value: 'a', label: 'a' }]);
+  await tick();
+  const refresh = () => el.querySelector<HTMLButtonElement>('button.link')!;
+  refresh().click();
+  await tick();
+  requests[1].fail({ code: 'rateLimited' });
+  await tick();
+  assert.deepEqual(origins.at(-1), { trigger: 'models-refresh', anchor: el });
+  const first = el.querySelector('small')!;
+  assert.equal(first.getAttribute('role'), 'alert');
+  assert.equal(first.textContent, EN_MESSAGES['ai.error.rateLimited']);
+  // Un nuovo tentativo identico toglie l'esito e, fallendo ancora, lo riinserisce come riga nuova (riannunciata).
+  refresh().click();
+  assert.equal(el.querySelector('small'), null);
+  assert.equal(refresh().hasAttribute('aria-describedby'), false);
+  assert.ok(cleared.includes(el));
+  await tick();
+  requests[2].fail({ code: 'rateLimited' });
+  await tick();
+  const second = el.querySelector('small')!;
+  assert.notEqual(second, first);
+  assert.equal(second.getAttribute('role'), 'alert');
+});
+
+test('detaching the selector hands the error back to the workspace banner', async () => {
+  const { el, orphaned } = await mount();
+  el.remove();
+  assert.deepEqual(orphaned, [el]);
 });
 
 test('an answer superseded by a newer request is discarded', async () => {

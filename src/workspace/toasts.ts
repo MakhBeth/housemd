@@ -31,6 +31,9 @@ export const TOAST_CODES = [
 export type ToastCode = (typeof TOAST_CODES)[number];
 export type ToastParams = Readonly<Record<string, string | number>>;
 
+/** Azione da cui nasce un messaggio, per metterlo dove l'utente l'ha avviata (pannello cronologia, impostazioni, documento). */
+export type ToastAction = 'restore' | 'history' | 'saveAll' | 'saveAllSettings' | 'image';
+
 export interface Toast {
   id: number;
   /** `error` → riga `alert`, `info` → riga `status`. */
@@ -39,6 +42,8 @@ export interface Toast {
   params?: ToastParams;
   /** Documento di origine (solo i messaggi del canale documento): un altro documento attivo non se li prende. */
   path?: string;
+  /** Azione di origine e documento su cui è partita (catturato prima di ogni `await`), se serve alla destinazione. */
+  origin?: { action: ToastAction; path?: string };
 }
 
 /** Dove compare un messaggio: sopra il documento, sotto la toolbar del workspace, in cima all'app. */

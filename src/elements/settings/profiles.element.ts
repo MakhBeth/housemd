@@ -19,7 +19,7 @@ import { renderItemList } from './itemList';
 import './sections.css';
 
 /** Quello che la sezione dei profili usa del controller (il selettore del modello compreso). */
-export type ProfilesController = Pick<AiController, 'subscribe' | 'getState' | 'report' | 'provider' | 'saveProfile' | 'deleteProfile' | 'setSecret'>;
+export type ProfilesController = Pick<AiController, 'subscribe' | 'getState' | 'report' | 'provider' | 'clearError' | 'orphanError' | 'saveProfile' | 'deleteProfile' | 'setSecret'>;
 
 let helpCount = 0;
 

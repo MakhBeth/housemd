@@ -1,4 +1,5 @@
 import type { AiErrorCode } from '../../ai/types';
+import type { AiErrorOrigin } from '../../ai/aiController';
 import type { MessageKey } from '../../i18n/messages';
 import type { Locale, Params } from '../../i18n/i18n';
 import { isClosable, NOTICE_CHANNEL, noticeKey, type ToastCode } from '../../workspace/toasts';
@@ -28,11 +29,17 @@ export const AI_ERROR_PREFIX = 'ai-error-';
 
 /**
  * Errore AI non legato a un messaggio (sync, chiave, selezione persa, inizializzazione): riga del banner workspace,
- * chiudibile. Il ponte `AiState.error` non conosce l'azione di origine, quindi la destinazione è il banner; i
- * messaggi in chat restano nel registro della chat.
+ * chiudibile. `AiState.errorOrigin` dice da quale azione nasce e quale elemento ne mostra la nota: finché è nel documento
+ * il banner tace. Gli errori senza nota locale (sync in background, inizializzazione) vanno qui; i messaggi in chat
+ * restano nel registro della chat.
  */
-export function aiErrorItems(aiError: AiErrorCode | null | undefined, t: (key: MessageKey, params?: Params) => string): BannerItem[] {
-  return aiError
+export function aiErrorItems(
+  aiError: AiErrorCode | null | undefined,
+  origin: AiErrorOrigin | null | undefined,
+  t: (key: MessageKey, params?: Params) => string,
+): BannerItem[] {
+  // Con l'origine visibile l'errore sta nella sua nota locale: il banner è solo il ripiego per l'origine nascosta.
+  return aiError && !origin?.anchor?.isConnected
     ? [{ key: `${AI_ERROR_PREFIX}${aiError}`, kind: aiErrorKind(aiError), text: t(`ai.error.${aiError}` as MessageKey), closeLabel: t('toast.close') }]
     : [];
 }
@@ -47,6 +54,10 @@ export interface NoticeRoutes {
   sidebar: BannerItem[];
   /** Cronologia e Ripristina. */
   history: BannerItem[];
+  /** Dentro il pannello cronologia aperto: esiti di lettura e ripristino del suo documento. */
+  historyPanel: BannerItem[];
+  /** Nelle impostazioni aperte: esito di Salva tutto partito da lì. */
+  settings: BannerItem[];
   /** Eventi a rischio dati con un dialog modale aperto: riga `alert` dentro il dialog. */
   dialog: BannerItem[];
   /** ID già annunciati nel dialog: le loro righe restano visibili ma mute. */
@@ -62,6 +73,9 @@ export interface NoticeContext {
   silenced: ReadonlySet<number>;
   /** ID già presenti all'apertura del dialog: già annunciati, né riga nel dialog né riepilogo. */
   known?: ReadonlySet<number>;
+  /** Documento di cui il pannello cronologia è aperto (null = chiuso). */
+  historyPath?: string | null;
+  settingsOpen?: boolean;
 }
 
 const DIALOG_ALERT: ReadonlySet<ToastCode> = new Set<ToastCode>(['saveFailed', 'bufferFailed', 'draftNotPersisted', 'deletedOutside', 'restoredDraftDeleted']);
@@ -84,17 +98,23 @@ export function noticeRoutes(
   indicatorSpeaks: boolean,
   context: NoticeContext,
 ): NoticeRoutes {
-  const out: NoticeRoutes = { document: [], workspace: [], saveAll: [], sidebar: [], history: [], dialog: [], announcedInDialog: [], deferred: [] };
+  const out: NoticeRoutes = { document: [], workspace: [], saveAll: [], sidebar: [], history: [], historyPanel: [], settings: [], dialog: [], announcedInDialog: [], deferred: [] };
   for (const toast of toasts) {
     const channel = NOTICE_CHANNEL[toast.code];
     if (channel === 'app') continue;
     const text = t(noticeKey(toast.code, toast.params, locale) as MessageKey, toast.params);
-    const here = channel === 'document' && toast.path === docPath;
-    let slot: 'document' | 'workspace' | 'saveAll' | 'sidebar' | 'history' = here ? 'document' : 'workspace';
+    const origin = toast.origin;
+    // Un'immagine fallita appartiene al documento in cui la si inseriva, non al messaggio di workspace che la descrive.
+    const documentBound = channel === 'document' || origin?.action === 'image';
+    const here = documentBound && toast.path === docPath;
+    let slot: 'document' | 'workspace' | 'saveAll' | 'sidebar' | 'history' | 'historyPanel' | 'settings' = here ? 'document' : 'workspace';
     if (toast.code === 'saveAllSkipped' || toast.code === 'saveAllDone' || (toast.code === 'bufferFailed' && toast.path === undefined)) slot = 'saveAll';
     else if (context.sidebarOpen && (toast.code === 'openFolderFailed' || toast.code === 'alreadyExists' || toast.code === 'notFound')) slot = 'sidebar';
     else if (toast.code === 'historyFailed' || toast.code === 'restoreCancelled') slot = 'history';
-    const shown = slot === 'workspace' && channel === 'document' && toast.path ? `${toast.path}: ${text}` : text;
+    // L'azione di origine decide dove l'esito si legge: nel pannello cronologia aperto sul suo documento, accanto al Salva tutto delle impostazioni.
+    if ((origin?.action === 'history' || origin?.action === 'restore') && origin.path === context.historyPath) slot = 'historyPanel';
+    else if (origin?.action === 'saveAllSettings' && context.settingsOpen) slot = 'settings';
+    const shown = slot === 'workspace' && documentBound && toast.path ? `${toast.path}: ${text}` : text;
     const known = context.known?.has(toast.id) ?? false;
     const toDialog = context.dialogOpen && !known && DIALOG_ALERT.has(toast.code);
     const deferred = context.dialogOpen && !known && !toDialog && !context.silenced.has(toast.id);

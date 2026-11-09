@@ -36,7 +36,7 @@ test('all 27 AI error codes are covered', () => {
 
 for (const code of AI_CODES) {
   test(`AI ${code}: ARIA role and text in the workspace banner`, () => {
-    const items = aiErrorItems(code, t);
+    const items = aiErrorItems(code, null, t);
     assert.equal(items.length, 1);
     const banner = mount();
     banner.items = items;

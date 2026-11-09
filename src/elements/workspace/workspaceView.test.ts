@@ -21,8 +21,8 @@ test('the document key follows path and revision (no document: undefined#undefin
 });
 
 test('the AI error is a closable workspace banner row; closing goes back to the right owner', () => {
-  assert.deepEqual(aiErrorItems('server', t), [{ key: 'ai-error-server', kind: 'alert', text: EN_MESSAGES['ai.error.server'], closeLabel: 'Close' }]);
-  assert.deepEqual(aiErrorItems(null, t), []);
+  assert.deepEqual(aiErrorItems('server', null, t), [{ key: 'ai-error-server', kind: 'alert', text: EN_MESSAGES['ai.error.server'], closeLabel: 'Close' }]);
+  assert.deepEqual(aiErrorItems(null, null, t), []);
   assert.deepEqual(toastTarget('ai-error-server'), { kind: 'ai' });
   assert.deepEqual(toastTarget('ws-7'), { kind: 'workspace', id: 7 });
 });

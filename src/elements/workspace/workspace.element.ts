@@ -155,6 +155,7 @@ export class HmdWorkspace extends HmdElement {
   #textWidth: TextWidth = { editor: null, preview: null };
   #highlight: string[] = NO_TERMS;
   #historyOpen = false;
+  #historyPanelBanner: HmdBanner | null = null;
   /** Cronologia attivata senza documento / cartella attivata durante un cambio: la nota resta finché la causa c'è. */
   #historyNote = false;
   #focusMode = false;
@@ -187,7 +188,7 @@ export class HmdWorkspace extends HmdElement {
   #closeBanner(key: string): void {
     const active = document.activeElement;
     const parts = this.#parts;
-    if (active && parts && [parts.docBanner, parts.wsBanner, parts.saveAllBanner, parts.historyBanner, this.#slots.sidebarBanner].some((banner) => banner?.contains(active))) {
+    if (active && parts && [parts.docBanner, parts.wsBanner, parts.saveAllBanner, parts.historyBanner, this.#historyPanelBanner, this.#slots.sidebarBanner].some((banner) => banner?.contains(active))) {
       parts.toolbar.querySelector('button')?.focus();
     }
     const target = toastTarget(key);
@@ -736,7 +737,9 @@ export class HmdWorkspace extends HmdElement {
     // Righe nuove solo quando cambiano messaggi, errore AI, lingua, sidebar o dialog (lo useMemo di React).
     const modal = activeModal();
     const sidebarBanner = this.#slots.sidebarBanner ?? null;
-    const noticeKeyNow = [state.toasts, state.doc?.path, aiState?.error, i18n.getState(), this.#sidebarOpen && !!sidebarBanner, modal];
+    // Il pannello cronologia aperto (non in modalità AI, dove la cronologia non si vede) e il suo documento.
+    const historyPath = this.#historyOpen && shown !== 'ai' && this.#slots.historyPane ? this.#historyPath : null;
+    const noticeKeyNow = [state.toasts, state.doc?.path, aiState?.error, aiState?.errorOrigin, i18n.getState(), this.#sidebarOpen && !!sidebarBanner, modal, historyPath, !!settings];
     if (!noticeKeyNow.every((v, i) => v === this.#toastKey[i])) {
       this.#toastKey = noticeKeyNow;
       const locale = i18n.getState().locale;
@@ -746,7 +749,7 @@ export class HmdWorkspace extends HmdElement {
         this.#aiKnown = aiState?.error ? `${AI_ERROR_PREFIX}${aiState.error}` : null;
       }
       this.#lastModal = modal;
-      const routes = noticeRoutes(state.toasts, state.doc?.path ?? null, t, locale, true, { sidebarOpen: !!sidebarBanner, dialogOpen: !!modal, silenced: this.#silenced, known: this.#known });
+      const routes = noticeRoutes(state.toasts, state.doc?.path ?? null, t, locale, true, { sidebarOpen: !!sidebarBanner, dialogOpen: !!modal, silenced: this.#silenced, known: this.#known, historyPath, settingsOpen: !!settings });
       for (const id of routes.announcedInDialog) this.#silenced.add(id);
       for (const id of routes.deferred) {
         this.#silenced.add(id);
@@ -759,7 +762,7 @@ export class HmdWorkspace extends HmdElement {
       const describe = (items: BannerItem[], control: HTMLElement | null | undefined) => items.map((item) => ({ ...item, describes: control ?? undefined }));
       parts.docBanner.items = routes.document;
       // Un errore AI arrivato col dialog aperto è differito come gli altri eventi non a rischio dati: muto, riepilogato alla chiusura.
-      const aiItems = aiErrorItems(aiState?.error, t);
+      const aiItems = aiErrorItems(aiState?.error, aiState?.errorOrigin, t);
       if (modal && aiItems[0] && this.#aiSilenced !== aiItems[0].key && this.#aiKnown !== aiItems[0].key) {
         this.#aiSilenced = aiItems[0].key;
         this.#aiDeferred = aiItems[0].text;
@@ -767,6 +770,8 @@ export class HmdWorkspace extends HmdElement {
       parts.wsBanner.items = [...routes.workspace, ...aiItems.map((item) => ({ ...item, quiet: item.key === this.#aiSilenced }))];
       parts.saveAllBanner.items = describe(routes.saveAll, parts.saveAll);
       parts.historyBanner.items = describe(routes.history, parts.history);
+      this.#renderHistoryPanelBanner(routes.historyPanel);
+      if (settings) settings.saveAllNote = routes.settings;
       if (sidebarBanner) sidebarBanner.items = describe(routes.sidebar, this.#folderButton);
       this.#renderDialogBanner(modal, routes.dialog);
       if (!modal && (this.#deferred.size > 0 || this.#aiDeferred)) this.#publishDeferred(state, t, locale);
@@ -787,6 +792,19 @@ export class HmdWorkspace extends HmdElement {
       // Nel frattempo si è passati a un altro file: quella versione non riguarda più il documento.
       if (doc?.path === queued.path) queueMicrotask(() => void workspace.restoreVersion(queued.id));
     }
+  }
+
+  /** Esiti della cronologia dentro il pannello aperto: sopra il pannello, «Ripristina» (se c'è) li descrive. */
+  #renderHistoryPanelBanner(items: BannerItem[]): void {
+    const pane = this.#slots.historyPane;
+    if (!pane || items.length === 0) {
+      this.#historyPanelBanner?.remove();
+      return;
+    }
+    if (!this.#historyPanelBanner) this.#historyPanelBanner = el('hmd-banner', { class: 'noteBanner', on: { 'hmd-banner-close': (event) => this.#closeBanner(event.detail.key) } });
+    if (this.#historyPanelBanner.parentElement !== pane) pane.prepend(this.#historyPanelBanner);
+    const restore = pane.querySelector<HTMLElement>('button.restore') ?? this.#parts?.history;
+    this.#historyPanelBanner.items = items.map((item) => ({ ...item, describes: restore ?? undefined }));
   }
 
   /** Riga `alert` dentro il dialog modale attivo: nessun focus spostato, è l'unico canale live dell'evento. */
@@ -1014,7 +1032,7 @@ export class HmdWorkspace extends HmdElement {
     if (historyPane) {
       this.#historyPath = doc.path;
       toggleAttr(historyPane, 'aria-label', true, t('toolbar.history'));
-      const history = historyPane.firstElementChild as HmdHistoryPanel;
+      const history = historyPane.querySelector('hmd-history-panel') as HmdHistoryPanel;
       assign(history, 'workspace', workspace);
       assign(history, 'path', doc.path);
       assign(history, 'currentText', doc.text);
@@ -1082,7 +1100,8 @@ export class HmdWorkspace extends HmdElement {
             this.#loop.update();
           }
         },
-        'hmd-settings-save-all': () => void this.#workspace?.saveAll(),
+        'hmd-settings-save-all': () => void this.#workspace?.saveAll('settings'),
+        'hmd-banner-close': (event) => this.#closeBanner(event.detail.key),
       },
     });
   }

@@ -1,6 +1,7 @@
 import type { SyncBinding } from '../../ai/syncBinding';
 import type { FocusUnit } from '../../editor/focusRange';
 import { HmdElement } from '../../dom/element';
+import type { BannerItem } from '../banner/banner.element';
 import { el, setText, toggleAttr } from '../../dom/el';
 import { icon } from '../../dom/icon';
 import { RenderLoop } from '../../dom/renderLoop';
@@ -82,6 +83,7 @@ export class HmdSettings extends HmdElement {
   #i18n: I18nStore | null = null;
 
   #parts: Parts | null = null;
+  #saveAllNote = el('hmd-banner', { class: 'noteBanner' });
   /** Testi dei campi numerici: si confermano al blur, a Invio e alla chiusura (come lo stato di SettingsView.tsx). */
   #delayText = '';
   #widthTexts: Record<TextWidthPane, string> = { editor: '', preview: '' };
@@ -152,6 +154,12 @@ export class HmdSettings extends HmdElement {
     if (value === this.#i18n) return;
     this.#i18n = value;
     this.reconnect();
+  }
+  /** Esito di Salva tutto partito da questo pulsante (riga nel flusso sotto di esso, che lo descrive). */
+  get saveAllNote(): readonly BannerItem[] { return this.#saveAllNote.items; }
+  set saveAllNote(value: readonly BannerItem[]) {
+    const items = (value ?? []).map((item) => ({ ...item, describes: this.#parts?.saveAll }));
+    this.#saveAllNote.items = items;
   }
   /** Qualche sezione ha bozze non salvate: la guardia della rotta blocca Indietro. */
   get dirty(): boolean { return this.#dirty.size > 0; }
@@ -376,6 +384,7 @@ export class HmdSettings extends HmdElement {
       el('fieldset', { class: 'group' }, parts.widthLegend, ...TEXT_WIDTH_PANES.map((pane) => el('label', { class: 'field' }, widths[pane].caption, widths[pane].input)), parts.widthHint),
       parts.writingGroup,
       parts.saveAll,
+      this.#saveAllNote,
     );
     parts.writingGroup.append(
       parts.writingLegend,

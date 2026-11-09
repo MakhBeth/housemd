@@ -67,7 +67,7 @@ test('the same DOM as SettingsView.tsx: a region with the index and the general 
   assert.equal(nav.querySelector('a')!.getAttribute('href'), '#settings');
   assert.equal(nav.querySelector('a')!.getAttribute('aria-current'), 'true');
   const general = el.querySelector('#settings-general')!;
-  assert.deepEqual([...general.children].map((c) => c.localName), ['h2', 'label', 'fieldset', 'fieldset', 'fieldset', 'fieldset', 'button']);
+  assert.deepEqual([...general.children].map((c) => c.localName), ['h2', 'label', 'fieldset', 'fieldset', 'fieldset', 'fieldset', 'button', 'hmd-banner']);
   assert.ok(document.activeElement === el.querySelector('h1'), 'focus on the title');
 });
 

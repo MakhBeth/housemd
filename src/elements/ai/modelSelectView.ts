@@ -10,7 +10,7 @@ export const CUSTOM = '__custom';
  * Quello che il selettore usa del controller: il provider del profilo, che è l'unico a fare la richiesta
  * di rete (src/ai/providers, CLAUDE.md §AI), e la segnalazione degli errori. Le chiavi non passano di qui.
  */
-export type ModelSelectController = Pick<AiController, 'provider' | 'report'>;
+export type ModelSelectController = Pick<AiController, 'provider' | 'report' | 'clearError' | 'orphanError'>;
 
 export interface SelectOption {
   value: string;

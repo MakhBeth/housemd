@@ -59,10 +59,10 @@ function routeWindow(): RouteWindow & { hashValue: string } {
   return win;
 }
 
-async function mount(options: { files?: Record<string, string>; ai?: boolean; lastFile?: string } = {}) {
-  const ops = memoryOps();
+async function mount(options: { files?: Record<string, string>; ai?: boolean; lastFile?: string; failWrite?: (path: string) => boolean; history?: object } = {}) {
+  const ops = memoryOps({ failWrite: options.failWrite });
   for (const [path, text] of Object.entries(options.files ?? { 'a.md': '# A', 'b.md': '# B' })) ops.setFile(path, text);
-  const workspace = new Workspace({ fs: createWorkspaceFS(ops), workspaceId: 'ws', name: 'notes', buffers: memoryBufferStore() });
+  const workspace = new Workspace({ fs: createWorkspaceFS(ops), workspaceId: 'ws', name: 'notes', buffers: memoryBufferStore(), history: options.history as never });
   await workspace.load();
   if (options.lastFile) storage.set('housemd:lastFile:ws', JSON.stringify(options.lastFile));
   const counted = countListeners(createI18nStore({ locale: 'en', messages: EN_MESSAGES, load: async (locale) => ({ locale, messages: EN_MESSAGES }), persist() {} }));
@@ -426,4 +426,126 @@ test('Ctrl+Shift+F toggles the focus and announces it once in a hidden status re
   assert.equal(button(EN_MESSAGES['toolbar.focus']).getAttribute('aria-pressed'), 'true');
   await waitFor(() => el.querySelector('p.visually-hidden')!.textContent === EN_MESSAGES['focus.announce.on']);
   assert.equal(el.querySelector('p.visually-hidden')!.getAttribute('role'), 'status');
+});
+
+
+// --- [LAB-409] origine degli esiti: AI e note workspace -----------------------------------------------------
+
+/** Come AiController: l'errore porta la sua origine, `clearError(anchor)` e `orphanError(anchor)` la rispettano. */
+function realErrors(ai: Awaited<ReturnType<typeof mount>>['ai']) {
+  const origin = () => ai.getState().errorOrigin;
+  Object.assign(ai, {
+    report: (error: { code?: string }, o?: unknown) => ai.set({ error: (error.code ?? 'server') as never, errorOrigin: (o ?? null) as never }),
+    clearError: (anchor?: object) => {
+      if (anchor && origin()?.anchor !== anchor) return;
+      ai.set({ error: null, errorOrigin: null } as never);
+    },
+    orphanError: (anchor: object) => {
+      if (origin()?.anchor === anchor) ai.set({ errorOrigin: null } as never);
+    },
+  });
+}
+
+const rows = (el: HTMLElement) => [...el.querySelectorAll('main hmd-banner')].map((b) => b.textContent).join('|');
+
+test('[LAB-409] Refresh models fails: the error sits under the selector (alert), not in the workspace banner; the banner takes it only when the selector is gone', async () => {
+  const { el, workspace, ai, button } = await mount({ ai: true });
+  realErrors(ai);
+  Object.assign(ai, { provider: async () => ({ listModels: async () => Promise.reject({ code: 'rateLimited' }) }) });
+  await workspace.openFile('a.md');
+  button(EN_MESSAGES['mode.ai']).click();
+  const popover = el.querySelector<HTMLElement>('hmd-ai-model-chip [popover]')!;
+  popover.showPopover();
+  popover.dispatchEvent(Object.assign(new Event('toggle'), { newState: 'open' }));
+  await waitFor(() => !!popover.querySelector('hmd-ai-model-select small'));
+  // Caricamento automatico: stato, in locale; il banner tace.
+  assert.equal(popover.querySelector('hmd-ai-model-select small')!.getAttribute('role'), 'status');
+  popover.querySelector<HTMLButtonElement>('hmd-ai-model-select button.link')!.click();
+  await waitFor(() => popover.querySelector('hmd-ai-model-select small')?.getAttribute('role') === 'alert');
+  const note = popover.querySelector('hmd-ai-model-select small')!;
+  assert.equal(note.textContent, EN_MESSAGES['ai.error.rateLimited']);
+  assert.notEqual(note.textContent, EN_MESSAGES['ai.error.unreachable']);
+  assert.ok(!rows(el).includes(EN_MESSAGES['ai.error.rateLimited']), 'nothing in the workspace banner while the origin is visible');
+  // Popover chiuso: il selettore sparisce e l'errore ripiega sul banner.
+  popover.hidePopover();
+  popover.dispatchEvent(Object.assign(new Event('toggle'), { newState: 'closed' }));
+  await waitFor(() => rows(el).includes(EN_MESSAGES['ai.error.rateLimited']));
+});
+
+const liveTexts = (el: HTMLElement) => [...el.querySelectorAll('[role="alert"], [role="status"]')].map((n) => n.textContent);
+
+test('[LAB-409] an AI error with a hidden origin and a dialog open is deferred and announced once, after the dialog closes', async () => {
+  const { el, ai, workspace } = await mount({ ai: true });
+  realErrors(ai);
+  await workspace.openFile('a.md');
+  const text = EN_MESSAGES['ai.error.server'];
+  const dialog = document.createElement('dialog');
+  dialog.className = 'hmd-dialog';
+  document.body.append(dialog);
+  dialog.showModal();
+  // Il dialog è già aperto quando l'errore arriva (altrimenti l'apertura lo fotografa come già annunciato).
+  workspace.dismissToast(-1);
+  ai.set({ error: 'server', errorOrigin: null } as never);
+  await waitFor(() => rows(el).includes(text));
+  // Con il dialog aperto la riga è visibile ma muta: nessuna regione live la dice.
+  assert.ok(!liveTexts(el).includes(text), 'quiet while the dialog is open');
+  dialog.close();
+  dialog.remove();
+  workspace.dismissToast(-1);
+  await waitFor(() => [...el.querySelectorAll('p.visually-hidden[role="status"]')].some((n) => n.textContent === text));
+  assert.equal([...el.querySelectorAll('[role="status"], [role="alert"]')].filter((n) => n.textContent === text).length, 1, 'said exactly once');
+});
+
+const snapshot = { id: 1, workspaceId: 'ws', path: 'a.md', savedAt: 1, text: '# old', reason: 'manual' };
+const historyOf = (extra: object) => ({ list: async () => [snapshot], get: async () => null, add: async () => {}, prune: async () => {}, move: async () => {}, ...extra });
+
+test('[LAB-409] restoreCancelled describes Restore in the open history panel, not the toolbar', async () => {
+  const { el, workspace, button } = await mount({ history: historyOf({}) });
+  await workspace.openFile('a.md');
+  button(EN_MESSAGES['toolbar.history']).click();
+  await waitFor(() => !!el.querySelector('hmd-history-panel li button'));
+  el.querySelector<HTMLButtonElement>('hmd-history-panel li button')!.click();
+  await waitFor(() => !!el.querySelector('button.restore'));
+  await workspace.restoreVersion(1);
+  const panelBanner = () => el.querySelector('section.pane > hmd-banner');
+  await waitFor(() => !!panelBanner()?.textContent?.includes(EN_MESSAGES['toast.restoreCancelled']));
+  const row = panelBanner()!;
+  const message = row.querySelector('p.message')!;
+  assert.equal(el.querySelector('button.restore')!.getAttribute('aria-describedby'), message.id);
+  assert.ok(!el.querySelector('main > hmd-banner.noteBanner')?.textContent?.includes(EN_MESSAGES['toast.restoreCancelled']));
+});
+
+test('[LAB-409] historyFailed enters the open history panel', async () => {
+  const { el, workspace, button } = await mount({ history: historyOf({ list: async () => Promise.reject(new Error('idb')) }) });
+  await workspace.openFile('a.md');
+  button(EN_MESSAGES['toolbar.history']).click();
+  await waitFor(() => !!el.querySelector('section.pane > hmd-banner')?.textContent?.includes('idb'));
+  assert.ok(![...el.querySelectorAll('main > hmd-banner')].some((b) => b.textContent?.includes('idb')), 'not in the toolbar or workspace banners');
+  assert.equal(el.querySelector('section.pane > hmd-banner [role="alert"]')?.textContent?.includes('idb'), true);
+});
+
+test('[LAB-409] Save all from the settings describes the settings button, not the toolbar', async () => {
+  const { el, win } = await mount();
+  win.setHash('#settings');
+  await waitFor(() => !!el.querySelector('hmd-settings button.secondary'));
+  el.querySelector<HTMLButtonElement>('hmd-settings button.secondary')!.click();
+  await waitFor(() => !!el.querySelector('hmd-settings hmd-banner')?.textContent?.includes(EN_MESSAGES['toast.saveAllDone']));
+  const message = el.querySelector('hmd-settings hmd-banner p.message')!;
+  assert.equal(el.querySelector('hmd-settings button.secondary')!.getAttribute('aria-describedby'), message.id);
+  assert.ok(![...el.querySelectorAll('main > hmd-banner')].some((b) => b.textContent?.includes(EN_MESSAGES['toast.saveAllDone'])), 'not under the toolbar button');
+});
+
+test('[LAB-409] a failed image goes to the banner of the document it was pasted in, not the workspace banner', async () => {
+  let failing = false;
+  const { el, workspace } = await mount({ failWrite: () => failing });
+  await workspace.openFile('a.md');
+  failing = true;
+  await workspace.saveImage(new Blob(['x'], { type: 'image/png' }), 'p.png');
+  const documentBanner = () => [...el.querySelectorAll<HTMLElement>('main hmd-banner')].find((b) => b.textContent?.includes('ENOSPC'));
+  await waitFor(() => !!documentBanner());
+  assert.ok(!documentBanner()!.textContent!.includes('a.md: '), 'no path prefix: it is the document banner');
+  assert.equal(documentBanner()!.nextElementSibling?.localName === 'hmd-banner', false, 'the document banner is the last one before the panes');
+  await workspace.openFile('b.md');
+  // Altro documento attivo: l'esito resta, col suo percorso, nel banner workspace.
+  await waitFor(() => documentBanner()?.textContent?.includes('a.md: ') === true);
 });
