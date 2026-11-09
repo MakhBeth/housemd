@@ -592,3 +592,33 @@ test('[LAB-409] a profile save that fails with the detail open stays under its a
   win.setHash('');
   await waitFor(() => rows(el).includes(EN_MESSAGES['ai.error.server']));
 });
+
+test('[LAB-409] a dialog that closes while another opens in the same update: the photograph is retaken, the deferred events are still summarized once', async () => {
+  const { el, ai, workspace } = await mount({ ai: true });
+  realErrors(ai);
+  await workspace.openFile('a.md');
+  const text = EN_MESSAGES['ai.error.server'];
+  const open = () => {
+    const dialog = document.createElement('dialog');
+    dialog.className = 'hmd-dialog';
+    document.body.append(dialog);
+    dialog.showModal();
+    return dialog;
+  };
+  const first = open();
+  workspace.dismissToast(-1);
+  ai.set({ error: 'server', errorOrigin: null } as never);
+  await waitFor(() => rows(el).includes(text));
+  assert.ok(!liveTexts(el).includes(text), 'deferred while the first dialog is open');
+  // Uno si chiude, l'altro si apre, nello stesso aggiornamento.
+  first.removeAttribute('open');
+  first.remove();
+  const second = open();
+  workspace.dismissToast(-1);
+  assert.ok(!liveTexts(el).includes(text), 'still deferred under the second dialog');
+  second.close();
+  second.remove();
+  workspace.dismissToast(-1);
+  await waitFor(() => [...el.querySelectorAll('p.visually-hidden[role="status"]')].some((n) => n.textContent === text));
+  assert.equal([...el.querySelectorAll('[role="status"], [role="alert"]')].filter((n) => n.textContent === text).length, 1, 'summarized exactly once');
+});

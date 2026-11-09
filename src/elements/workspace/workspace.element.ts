@@ -744,9 +744,11 @@ export class HmdWorkspace extends HmdElement {
       this.#toastKey = noticeKeyNow;
       const locale = i18n.getState().locale;
       // All'apertura di un dialog si fotografa ciò che c'è già: è stato annunciato prima, non si ripete né si riepiloga.
-      if (modal && !this.#lastModal) {
-        this.#known = new Set(state.toasts.map((toast) => toast.id));
-        this.#aiKnown = aiState?.error ? `${AI_ERROR_PREFIX}${aiState.error}` : null;
+      // Vale anche quando un dialog si chiude e un altro si apre nello stesso aggiornamento; gli eventi già differiti
+      // restano da riepilogare alla chiusura (non diventano «già annunciati»).
+      if (modal && modal !== this.#lastModal) {
+        this.#known = new Set(state.toasts.map((toast) => toast.id).filter((id) => !this.#deferred.has(id)));
+        this.#aiKnown = aiState?.error && !this.#aiDeferred ? `${AI_ERROR_PREFIX}${aiState.error}` : null;
       }
       this.#lastModal = modal;
       const routes = noticeRoutes(state.toasts, state.doc?.path ?? null, t, locale, true, { sidebarOpen: !!sidebarBanner, dialogOpen: !!modal, silenced: this.#silenced, known: this.#known, historyPath, settingsOpen: !!settings });
