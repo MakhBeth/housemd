@@ -117,7 +117,6 @@ export class Workspace {
   private timer: unknown = null;
   private saving: Promise<void> | null = null;
   private toastSeq = 0;
-  private explicit = 0;
   /**
    * Contatore di sospensione dell'autosalvataggio (rinomina/eliminazione in corso): mentre è > 0,
    * `flush()` non scrive su disco, ma le modifiche continuano a essere segnalate come da salvare.
@@ -203,7 +202,7 @@ export class Workspace {
     const path = NOTICE_CHANNEL[code] === 'document' ? origin ?? (params?.path === undefined ? this.state.doc?.path : String(params.path)) : undefined;
     const same = this.state.toasts.find((t) => t.code === code && t.path === path);
     // Evento automatico identico (stesso codice, contesto, tipo e dettagli): stesso nodo e stesso ID, nessun nuovo allarme.
-    if (!manual && !this.explicit && same && same.kind === kind && JSON.stringify(same.params ?? {}) === JSON.stringify(params ?? {})) return;
+    if (!manual && same && same.kind === kind && JSON.stringify(same.params ?? {}) === JSON.stringify(params ?? {})) return;
     this.set({ toasts: [...this.state.toasts.filter((t) => t !== same), { id: ++this.toastSeq, kind, code, params, path }] });
   }
 
@@ -304,17 +303,7 @@ export class Workspace {
   }
 
   saveAll(): Promise<void> {
-    return this.explicitAttempt(() => this.runExclusive(() => this.doSaveAll()));
-  }
-
-  /** Tentativo esplicito dell'utente (Ctrl+S): un esito identico a quello già mostrato si riannuncia. */
-  private async explicitAttempt(action: () => Promise<void>): Promise<void> {
-    this.explicit++;
-    try {
-      await action();
-    } finally {
-      this.explicit--;
-    }
+    return this.runExclusive(() => this.doSaveAll());
   }
 
   restoreVersion(id: number): Promise<void> {
@@ -592,13 +581,14 @@ export class Workspace {
     await this.flush();
   }
 
-  private async bufferCurrentDoc(): Promise<void> {
+  /** `manual`: lo chiede un tentativo esplicito dell'utente (Ctrl+S, Salva tutto): un esito identico si riannuncia. */
+  private async bufferCurrentDoc(manual = false): Promise<void> {
     const doc = this.state.doc;
     if (!doc || doc.saveState === 'saved') return;
     try {
       await this.saveBuffer(doc.path, doc.text, this.bufferBase);
     } catch (err) {
-      this.toast('error', 'bufferFailed', { detail: errorDetail(err) }, doc.path);
+      this.toast('error', 'bufferFailed', { detail: errorDetail(err) }, doc.path, manual);
     }
   }
 
@@ -625,7 +615,7 @@ export class Workspace {
    * ricreare il file.
    */
   saveNow(): Promise<void> {
-    return this.explicitAttempt(() => this.doSaveNow());
+    return this.doSaveNow();
   }
 
   private async doSaveNow(): Promise<void> {
@@ -633,7 +623,7 @@ export class Workspace {
     if (doc?.deletedOnDisk && doc.saveState === 'saved') {
       this.setDoc({ saveState: 'dirty' });
     }
-    await this.flush();
+    await this.flush(true);
   }
 
   /**
@@ -653,12 +643,12 @@ export class Workspace {
       // tempo), come per le bozze orfane non aperte. Se ha modifiche restano nel buffer; lo ricrea
       // solo Ctrl+S (saveNow), esplicitamente. Documento pulito: nulla da salvare.
       if (open.saveState !== 'saved') {
-        await this.bufferCurrentDoc();
+        await this.bufferCurrentDoc(true);
         left++;
       }
     } else if (open) {
       // flush e non saveNow: saveNow ricreerebbe un file eliminato fuori da HouseMD.
-      await this.flush();
+      await this.flush(true);
       const after = this.state.doc;
       // Scrittura non riuscita (errore, conflitto, accesso perso): il testo è al sicuro nel buffer
       // ma non su disco. Battute arrivate durante la scrittura, invece, non sono un fallimento.
@@ -669,7 +659,7 @@ export class Workspace {
     try {
       paths = (await this.draftPaths()).filter((path) => path !== openPath);
     } catch (err) {
-      this.toast('error', 'bufferFailed', { detail: errorDetail(err) });
+      this.toast('error', 'bufferFailed', { detail: errorDetail(err) }, undefined, true);
       return;
     }
     let written = 0;
@@ -695,8 +685,8 @@ export class Workspace {
     left += paths.length - processed;
     if (written > 0) this.bumpIndex();
     this.resolveToasts('saveAllSkipped', 'saveAllDone');
-    if (left > 0) this.toast('info', 'saveAllSkipped', { count: left });
-    else if (!this.state.doc || this.state.doc.saveState === 'saved') this.toast('info', 'saveAllDone');
+    if (left > 0) this.toast('info', 'saveAllSkipped', { count: left }, undefined, true);
+    else if (!this.state.doc || this.state.doc.saveState === 'saved') this.toast('info', 'saveAllDone', undefined, undefined, true);
   }
 
   /** Scrive la bozza di un file non aperto se il disco coincide ancora con la sua base. */
@@ -726,7 +716,7 @@ export class Workspace {
     }
   }
 
-  async flush(): Promise<void> {
+  async flush(manual = false): Promise<void> {
     if (this.timer !== null) this.scheduler.clear(this.timer);
     this.timer = null;
     while (this.saving) await this.saving;
@@ -734,7 +724,7 @@ export class Workspace {
       // Scritture su disco sospese (controllo esterno, "Salva tutto"): il timer è appena stato
       // cancellato, quindi il testo va nel buffer. Non durante rinomina/eliminazione (`moving`): il
       // percorso è in transizione e sarà rename()/remove() a ripianificare.
-      if (this.moving === 0) await this.bufferCurrentDoc();
+      if (this.moving === 0) await this.bufferCurrentDoc(manual);
       return;
     }
     const doc = this.state.doc;
@@ -742,11 +732,11 @@ export class Workspace {
     if (doc.conflict || this.state.status === 'access-lost') {
       // Su disco non si può scrivere, ma il timer è appena stato cancellato: senza questo buffer le
       // modifiche fatte dall'ultimo salvataggio del buffer resterebbero solo in memoria.
-      await this.bufferCurrentDoc();
+      await this.bufferCurrentDoc(manual);
       return;
     }
     if (doc.saveState !== 'dirty' && doc.saveState !== 'error') return;
-    this.saving = this.writeDoc(doc.path, doc.text).finally(() => {
+    this.saving = this.writeDoc(doc.path, doc.text, manual).finally(() => {
       this.saving = null;
     });
     await this.saving;
@@ -796,7 +786,7 @@ export class Workspace {
     return 'failed';
   }
 
-  private async writeDoc(path: string, text: string): Promise<void> {
+  private async writeDoc(path: string, text: string, manual = false): Promise<void> {
     this.setDoc({ saveState: 'saving' });
     let version: Version;
     try {
@@ -816,7 +806,7 @@ export class Workspace {
         this.set({ status: 'access-lost' });
         return;
       }
-      this.toast('error', 'saveFailed', { detail: errorDetail(err) }, path);
+      this.toast('error', 'saveFailed', { detail: errorDetail(err) }, path, manual);
       return;
     }
     // La scrittura è riuscita: quel che segue è manutenzione best-effort e non deve far

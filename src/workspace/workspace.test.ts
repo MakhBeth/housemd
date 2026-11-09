@@ -1089,3 +1089,28 @@ test('[LAB-405] every explicit file command renews an identical error: opening a
   assert.ok(first.length > 0, 'the failed open is reported');
   assert.notDeepEqual(first, second, 'a second identical failure is a new, announced event');
 });
+
+test('[LAB-408] a pending saveNow does not make concurrent automatic checkpoints manual', async () => {
+  const ops = memoryOps();
+  ops.setFile('a.md', 'A');
+  const buffers = { ...memoryBufferStore(), save: async () => Promise.reject(new Error('quota')) };
+  let releaseWrite!: () => void;
+  const fs = { ...createWorkspaceFS(ops), write: () => new Promise<never>((_, reject) => (releaseWrite = () => reject(new Error('disk')))) } as unknown as ReturnType<typeof createWorkspaceFS>;
+  const ws = new Workspace({ fs, workspaceId: 'ws-1', name: 't', buffers, scheduler: manualScheduler(), now: () => new Date(2026, 8, 27) });
+  await ws.load();
+  await ws.openFile('a.md');
+  ws.edit('x');
+  const pending = ws.saveNow();
+  await new Promise((r) => setTimeout(r, 0));
+  const buffer = () => (ws as unknown as { bufferCurrentDoc(): Promise<void> }).bufferCurrentDoc();
+  const ids = () => ws.getState().toasts.filter((t) => t.code === 'bufferFailed').map((t) => t.id);
+  const seen = new Set<number>();
+  for (const text of ['1', '2', '3']) {
+    ws.edit(text);
+    await buffer();
+    for (const id of ids()) seen.add(id);
+  }
+  assert.equal(seen.size, 1, 'identical automatic checkpoints keep one ID while saveNow is pending');
+  releaseWrite();
+  await pending;
+});
