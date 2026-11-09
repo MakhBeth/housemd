@@ -1,10 +1,9 @@
 import type { AiErrorCode } from '../../ai/types';
 import type { MessageKey } from '../../i18n/messages';
 import type { Locale, Params } from '../../i18n/i18n';
-import { isClosable, NOTICE_CHANNEL, noticeKey } from '../../workspace/toasts';
+import { isClosable, NOTICE_CHANNEL, noticeKey, type ToastCode } from '../../workspace/toasts';
 import type { WorkspaceState } from '../../workspace/workspace';
 import type { BannerItem } from '../banner/banner.element';
-import type { ToastItem } from '../toasts/toasts.element';
 import type { Mode } from './layout';
 
 /** La vista mostrata: con la preferenza «AI» ma il controller non ancora pronto (IndexedDB lento), la divisa. */
@@ -17,36 +16,100 @@ export function docKey(doc: Pick<NonNullable<WorkspaceState['doc']>, 'path' | 'r
   return `${doc?.path}#${doc?.revision}`;
 }
 
-/** Errore AI non legato a un messaggio (sync, chiave, selezione persa): l'unico canale ancora in un toast. */
-export function toastItems(aiError: AiErrorCode | null | undefined, t: (key: MessageKey, params?: Params) => string): ToastItem[] {
-  return aiError ? [{ key: 'ai-error', kind: 'error', text: t(`ai.error.${aiError}` as MessageKey) }] : [];
+/** Esiti AI «preventivi» o volontari: il comando non è partito o è stato annullato dall'utente (`status`); gli altri sono errori effettivi (`alert`). */
+const AI_STATUS: ReadonlySet<AiErrorCode> = new Set<AiErrorCode>(['aborted', 'scopeLost', 'aiPendingUpdate', 'syncLocked']);
+
+export function aiErrorKind(code: AiErrorCode): BannerItem['kind'] {
+  return AI_STATUS.has(code) ? 'status' : 'alert';
 }
 
+/** Chiave del banner per l'errore AI: un altro codice sostituisce la riga, lo stesso non la ricrea. */
+export const AI_ERROR_PREFIX = 'ai-error-';
+
 /**
- * Righe dei banner dal registro del workspace. Il canale documento mostra solo gli esiti del documento attivo;
- * se il documento non è più quello, l'esito passa al banner del workspace con il percorso (mai attribuito al
- * nuovo documento). I messaggi senza «Chiudi» sono quelli a rischio dati.
+ * Errore AI non legato a un messaggio (sync, chiave, selezione persa, inizializzazione): riga del banner workspace,
+ * chiudibile. Il ponte `AiState.error` non conosce l'azione di origine, quindi la destinazione è il banner; i
+ * messaggi in chat restano nel registro della chat.
  */
-export function bannerItems(
+export function aiErrorItems(aiError: AiErrorCode | null | undefined, t: (key: MessageKey, params?: Params) => string): BannerItem[] {
+  return aiError
+    ? [{ key: `${AI_ERROR_PREFIX}${aiError}`, kind: aiErrorKind(aiError), text: t(`ai.error.${aiError}` as MessageKey), closeLabel: t('toast.close') }]
+    : [];
+}
+
+/** Dove sta un messaggio: i banner di documento e workspace, le note locali accanto all'azione, la riga nel dialog attivo. */
+export interface NoticeRoutes {
+  document: BannerItem[];
+  workspace: BannerItem[];
+  /** Salva tutto: esiti del lotto. */
+  saveAll: BannerItem[];
+  /** Albero e Apri cartella (solo con la sidebar aperta). */
+  sidebar: BannerItem[];
+  /** Cronologia e Ripristina. */
+  history: BannerItem[];
+  /** Eventi a rischio dati con un dialog modale aperto: riga `alert` dentro il dialog. */
+  dialog: BannerItem[];
+  /** ID già annunciati nel dialog: le loro righe restano visibili ma mute. */
+  announcedInDialog: number[];
+  /** ID degli eventi differiti (non a rischio dati, arrivati con un dialog aperto): un solo riepilogo polite alla chiusura. */
+  deferred: number[];
+}
+
+export interface NoticeContext {
+  sidebarOpen: boolean;
+  dialogOpen: boolean;
+  /** ID già annunciati nel dialog o riepilogati: righe mute. */
+  silenced: ReadonlySet<number>;
+}
+
+const DIALOG_ALERT: ReadonlySet<ToastCode> = new Set<ToastCode>(['saveFailed', 'bufferFailed', 'draftNotPersisted', 'deletedOutside', 'restoredDraftDeleted']);
+
+/**
+ * Destinazione di ogni messaggio del registro del workspace. Il canale documento mostra solo gli esiti del
+ * documento attivo; se il documento non è più quello, l'esito passa al banner del workspace con il percorso
+ * (mai attribuito al nuovo documento). Le note locali stanno accanto all'azione: Salva tutto (esiti del lotto e
+ * copia d'emergenza del lotto), albero e Apri cartella (solo con la sidebar aperta, altrimenti il banner del
+ * workspace), Cronologia e Ripristina. Con un dialog modale aperto gli eventi a rischio dati sono una riga
+ * `alert` nel dialog, l'unico canale live dell'evento: il banner conserva la riga ma muta; gli altri eventi
+ * si differiscono in un solo riepilogo alla chiusura. I messaggi senza «Chiudi» sono quelli a rischio dati.
+ */
+export function noticeRoutes(
   toasts: WorkspaceState['toasts'],
   docPath: string | null,
   t: (key: MessageKey, params?: Params) => string,
   locale: Locale,
   /** L'indicatore di salvataggio annuncia già `save.error`/`save.deleted`: le due righe corrispondenti restano visibili ma mute. */
-  indicatorSpeaks = false,
-): { document: BannerItem[]; workspace: BannerItem[] } {
-  const out = { document: [] as BannerItem[], workspace: [] as BannerItem[] };
+  indicatorSpeaks: boolean,
+  context: NoticeContext,
+): NoticeRoutes {
+  const out: NoticeRoutes = { document: [], workspace: [], saveAll: [], sidebar: [], history: [], dialog: [], announcedInDialog: [], deferred: [] };
   for (const toast of toasts) {
     const channel = NOTICE_CHANNEL[toast.code];
     if (channel === 'app') continue;
-    const here = channel === 'document' && toast.path === docPath;
     const text = t(noticeKey(toast.code, toast.params, locale) as MessageKey, toast.params);
-    out[here ? 'document' : 'workspace'].push({
+    const here = channel === 'document' && toast.path === docPath;
+    let slot: 'document' | 'workspace' | 'saveAll' | 'sidebar' | 'history' = here ? 'document' : 'workspace';
+    if (toast.code === 'saveAllSkipped' || toast.code === 'saveAllDone' || (toast.code === 'bufferFailed' && toast.path === undefined)) slot = 'saveAll';
+    else if (context.sidebarOpen && (toast.code === 'openFolderFailed' || toast.code === 'alreadyExists' || toast.code === 'notFound')) slot = 'sidebar';
+    else if (toast.code === 'historyFailed' || toast.code === 'restoreCancelled') slot = 'history';
+    const shown = slot === 'workspace' && channel === 'document' && toast.path ? `${toast.path}: ${text}` : text;
+    const toDialog = context.dialogOpen && DIALOG_ALERT.has(toast.code);
+    const deferred = context.dialogOpen && !toDialog && !context.silenced.has(toast.id);
+    if (toDialog) {
+      out.dialog.push({ key: `ws-${toast.id}`, kind: 'alert', text: shown });
+      out.announcedInDialog.push(toast.id);
+    }
+    if (deferred) out.deferred.push(toast.id);
+    out[slot].push({
       key: `ws-${toast.id}`,
       kind: toast.kind === 'error' ? 'alert' : 'status',
-      text: channel === 'document' && !here && toast.path ? `${toast.path}: ${text}` : text,
+      text: shown,
       closeLabel: isClosable(toast.code) ? t('toast.close') : undefined,
-      quiet: here && indicatorSpeaks && (toast.code === 'saveFailed' || toast.code === 'deletedOutside'),
+      quiet:
+        toDialog ||
+        deferred ||
+        context.silenced.has(toast.id) ||
+        (here && indicatorSpeaks && (toast.code === 'saveFailed' || toast.code === 'deletedOutside')),
     });
   }
   return out;
@@ -54,7 +117,7 @@ export function bannerItems(
 
 /** Chiusura di un messaggio: l'errore AI si toglie dal controller, gli altri dallo workspace. */
 export function toastTarget(key: string): { kind: 'ai' } | { kind: 'workspace'; id: number } {
-  return key === 'ai-error' ? { kind: 'ai' } : { kind: 'workspace', id: Number(key.slice('ws-'.length)) };
+  return key.startsWith(AI_ERROR_PREFIX) ? { kind: 'ai' } : { kind: 'workspace', id: Number(key.slice('ws-'.length)) };
 }
 
 /**

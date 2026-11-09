@@ -8,7 +8,7 @@ import { translate } from '../../i18n/i18n';
 import { EN_MESSAGES } from '../../i18n/messages';
 import { NOTICE_CHANNEL, TOAST_CODES, type ToastCode } from '../../workspace/toasts';
 import type { WorkspaceState } from '../../workspace/workspace';
-import { bannerItems } from '../workspace/workspaceView';
+import { noticeRoutes, type NoticeContext } from '../workspace/workspaceView';
 
 const t = (key: string, params?: Record<string, string | number>) => translate(EN_MESSAGES, key, params);
 
@@ -87,15 +87,19 @@ const CASES: Record<ToastCode, { kind: 'error' | 'info'; role: 'alert' | 'status
   openFolderFailed: { kind: 'error', role: 'alert', params: { detail: 'denied' } },
 };
 
+const SLOTS = ['document', 'workspace', 'saveAll', 'sidebar', 'history'] as const;
+const CONTEXT: NoticeContext = { sidebarOpen: true, dialogOpen: false, silenced: new Set() };
+const bannerItems = (toasts: WorkspaceState['toasts'], docPath: string | null) => noticeRoutes(toasts, docPath, t, 'en', false, CONTEXT);
+
 for (const code of TOAST_CODES.filter((c) => NOTICE_CHANNEL[c] !== 'app')) {
   test(`${code}: ARIA role and text in its banner`, () => {
     const { kind, role, params } = CASES[code];
     const toasts = [{ id: 1, kind, code, params, path: NOTICE_CHANNEL[code] === 'document' ? 'a.md' : undefined }] as unknown as WorkspaceState['toasts'];
-    const banners = bannerItems(toasts, 'a.md', t, 'en');
-    const channel = NOTICE_CHANNEL[code];
-    assert.equal(banners[channel as 'document' | 'workspace'].length, 1, `${code} goes to the ${channel} banner`);
+    const banners = bannerItems(toasts, 'a.md');
+    const slots = SLOTS.filter((slot) => banners[slot].length > 0);
+    assert.equal(slots.length, 1, `${code} goes to exactly one banner`);
     const banner = mount();
-    banner.items = banners[channel as 'document' | 'workspace'];
+    banner.items = banners[slots[0]!];
     const expected = translate(EN_MESSAGES, code === 'unreadableFiles' || code === 'saveAllSkipped' ? `toast.${code}.other` : `toast.${code}`, params);
     const node = banner.querySelector(`[role="${role}"] p, p[role="${role}"]`) ?? banner.querySelector(`p[role="${role}"]`);
     assert.ok(node, `a ${role} row`);
@@ -107,10 +111,10 @@ for (const code of TOAST_CODES.filter((c) => NOTICE_CHANNEL[c] !== 'app')) {
 }
 
 test('singular forms for one file / one change', () => {
-  const one = bannerItems([{ id: 1, kind: 'info', code: 'unreadableFiles', params: { count: 1, paths: 'x.md' } }] as unknown as WorkspaceState['toasts'], null, t, 'en');
+  const one = bannerItems([{ id: 1, kind: 'info', code: 'unreadableFiles', params: { count: 1, paths: 'x.md' } }] as unknown as WorkspaceState['toasts'], null);
   assert.equal(one.workspace[0]!.text, 'Could not read 1 file: x.md');
-  const skipped = bannerItems([{ id: 1, kind: 'info', code: 'saveAllSkipped', params: { count: 1 } }] as unknown as WorkspaceState['toasts'], null, t, 'en');
-  assert.match(skipped.workspace[0]!.text, /^1 change not saved/);
+  const skipped = bannerItems([{ id: 1, kind: 'info', code: 'saveAllSkipped', params: { count: 1 } }] as unknown as WorkspaceState['toasts'], null);
+  assert.match(skipped.saveAll[0]!.text, /^1 change not saved/);
 });
 
 test('a quiet row is visible but outside every live region', () => {

@@ -4,8 +4,9 @@ import assert from 'node:assert/strict';
 import { translate } from '../../i18n/i18n';
 import { EN_MESSAGES } from '../../i18n/messages';
 import type { WorkspaceState } from '../../workspace/workspace';
-import { bannerItems, docKey, folderBlocker, historyBlocker, reopenPlan, shownMode, toastItems, toastTarget, unloadNeedsConfirm } from './workspaceView';
+import { aiErrorItems, docKey, folderBlocker, historyBlocker, noticeRoutes, reopenPlan, shownMode, toastTarget, unloadNeedsConfirm } from './workspaceView';
 
+const CTX = { sidebarOpen: false, dialogOpen: false, silenced: new Set<number>() };
 const t = (key: string, params?: Record<string, string | number>) => translate(EN_MESSAGES, key, params);
 
 test('AI mode without the controller shows the split view; the others stay', () => {
@@ -19,10 +20,10 @@ test('the document key follows path and revision (no document: undefined#undefin
   assert.equal(docKey(null), 'undefined#undefined');
 });
 
-test('toast: only the AI error, keyed ai-error; dismissing goes back to the right owner', () => {
-  assert.deepEqual(toastItems('server', t), [{ key: 'ai-error', kind: 'error', text: EN_MESSAGES['ai.error.server'] }]);
-  assert.deepEqual(toastItems(null, t), []);
-  assert.deepEqual(toastTarget('ai-error'), { kind: 'ai' });
+test('the AI error is a closable workspace banner row; closing goes back to the right owner', () => {
+  assert.deepEqual(aiErrorItems('server', t), [{ key: 'ai-error-server', kind: 'alert', text: EN_MESSAGES['ai.error.server'], closeLabel: 'Close' }]);
+  assert.deepEqual(aiErrorItems(null, t), []);
+  assert.deepEqual(toastTarget('ai-error-server'), { kind: 'ai' });
   assert.deepEqual(toastTarget('ws-7'), { kind: 'workspace', id: 7 });
 });
 
@@ -32,10 +33,10 @@ test('banners: document messages follow their document, the others go to the wor
     { id: 2, kind: 'info', code: 'saveAllDone' },
     { id: 3, kind: 'info', code: 'restoredDraft', params: { path: 'a.md' }, path: 'a.md' },
   ] as unknown as WorkspaceState['toasts'];
-  const here = bannerItems(toasts, 'a.md', t, 'en');
+  const here = noticeRoutes(toasts, 'a.md', t, 'en', false, CTX);
   assert.deepEqual(here.document.map((i) => [i.key, i.kind, i.closeLabel]), [['ws-1', 'alert', undefined], ['ws-3', 'status', 'Close']]);
-  assert.deepEqual(here.workspace.map((i) => i.key), ['ws-2']);
-  const other = bannerItems(toasts, 'b.md', t, 'en');
+  assert.deepEqual(here.saveAll.map((i) => i.key), ['ws-2']);
+  const other = noticeRoutes(toasts, 'b.md', t, 'en', false, CTX);
   assert.deepEqual(other.document, []);
   assert.equal(other.workspace[0]!.text, 'a.md: Save failed: x');
 });

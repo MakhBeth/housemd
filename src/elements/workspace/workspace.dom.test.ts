@@ -97,17 +97,17 @@ async function mount(options: { files?: Record<string, string>; ai?: boolean; la
   return { el, workspace, ops, ai, route, win, documents, button, listeners, closed: () => closed };
 }
 
-test('the same DOM as WorkspaceView.tsx with no file open: layout with sidebar, separator and main, then the toasts', async () => {
+test('the same DOM as WorkspaceView.tsx with no file open: layout with sidebar, separator and main, then the live announcers', async () => {
   const { el } = await mount();
-  assert.deepEqual([...el.children].map((c) => c.localName), ['div', 'hmd-toasts', 'p']);
+  assert.deepEqual([...el.children].map((c) => c.localName), ['div', 'p', 'p']);
   const layout = el.firstElementChild as HTMLElement;
   assert.equal(layout.className, 'layout');
   assert.equal(layout.style.gridTemplateColumns, '280px 5px minmax(0, 1fr)');
   assert.deepEqual([...layout.children].map((c) => `${c.localName}.${c.className}`), ['aside.sidebar', 'div.resizer', 'main.main']);
   const aside = layout.firstElementChild!;
-  assert.deepEqual([...aside.children].map((c) => c.localName), ['div', 'hmd-search-panel', 'hmd-file-tree']);
+  assert.deepEqual([...aside.children].map((c) => c.localName), ['div', 'hmd-banner', 'hmd-search-panel', 'hmd-file-tree']);
   const main = layout.lastElementChild!;
-  assert.deepEqual([...main.children].map((c) => `${c.localName}.${c.className}`), ['header.toolbar', 'hmd-banner.wsBanner', 'hmd-banner.docBanner', 'div.empty']);
+  assert.deepEqual([...main.children].map((c) => `${c.localName}.${c.className}`), ['header.toolbar', 'hmd-banner.noteBanner', 'hmd-banner.noteBanner', 'hmd-banner.wsBanner', 'hmd-banner.docBanner', 'div.empty']);
   const toolbar = main.firstElementChild!;
   assert.deepEqual([...toolbar.children].map((c) => c.className), ['lead', 'modes', 'actions']);
   assert.deepEqual([...toolbar.querySelectorAll('.modes button')].map((b) => b.getAttribute('aria-label')), [EN_MESSAGES['mode.editor'], EN_MESSAGES['mode.split'], EN_MESSAGES['mode.preview']]);
@@ -142,7 +142,7 @@ test('the settings come from the route: on top of an inert layout, the title fol
   const settingsButton = button(EN_MESSAGES['toolbar.settings']);
   settingsButton.focus();
   settingsButton.click();
-  assert.deepEqual([...el.children].map((c) => c.localName), ['div', 'hmd-settings', 'hmd-toasts', 'p']);
+  assert.deepEqual([...el.children].map((c) => c.localName), ['div', 'hmd-settings', 'p', 'p']);
   assert.equal((el.firstElementChild as HTMLElement).inert, true);
   assert.equal(document.title, `HMD - ${EN_MESSAGES['settings.title']}`);
   el.querySelector<HTMLButtonElement>('hmd-settings .navHeader button')!.click();

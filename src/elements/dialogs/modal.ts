@@ -54,3 +54,9 @@ export function openModal(options: ModalOptions, ...children: Child[]): { dialog
   dialog.showModal();
   return { dialog, closed };
 }
+
+/** Il dialog modale aperto più in alto (l'ultimo inserito), o null: qui entra la riga `alert` degli eventi a rischio dati. */
+export function activeModal(): HTMLDialogElement | null {
+  const open = document.querySelectorAll<HTMLDialogElement>('dialog.hmd-dialog[open]');
+  return open[open.length - 1] ?? null;
+}

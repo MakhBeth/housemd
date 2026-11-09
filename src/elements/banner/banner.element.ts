@@ -17,6 +17,8 @@ export interface BannerItem {
   actionLabel?: string;
   /** Azione in corso: un secondo clic rilegge il messaggio (WCAG 4.1.3), non avvia altro. */
   busy?: boolean;
+  /** Controllo che ha avviato l'operazione (nota locale): rimanda al messaggio con `aria-describedby` finché la riga esiste. */
+  describes?: HTMLElement;
   /** Etichetta di «Chiudi»; senza, il messaggio non si chiude a mano. */
   closeLabel?: string;
 }
@@ -37,6 +39,8 @@ export class HmdBanner extends HmdElement {
   #quiet: HTMLDivElement | null = null;
   #actions: HTMLDivElement | null = null;
   #ids = new Map<string, string>();
+  /** Chiave → controllo descritto dal messaggio, con l'ID aggiunto ai riferimenti già presenti. */
+  #described = new Map<string, { control: HTMLElement; id: string }>();
   /** Dove va il focus se il pulsante che lo ha sparisce chiudendo il messaggio (mai sul body). */
   focusFallback: (() => HTMLElement | null) | null = null;
 
@@ -102,6 +106,18 @@ export class HmdBanner extends HmdElement {
         setText(context, actionable.length > 1 ? (item.text.length > 48 ? `${item.text.slice(0, 48)}…` : item.text) : '');
       },
     );
+    for (const [key, entry] of [...this.#described]) {
+      const item = items.find((candidate) => candidate.key === key);
+      if (item?.describes === entry.control) continue;
+      unreference(entry.control, entry.id);
+      this.#described.delete(key);
+    }
+    for (const item of items) {
+      if (!item.describes || this.#described.has(item.key)) continue;
+      const id = this.#idOf(item.key);
+      reference(item.describes, id);
+      this.#described.set(item.key, { control: item.describes, id });
+    }
     for (const key of [...this.#ids.keys()]) if (!items.some((item) => item.key === key)) this.#ids.delete(key);
   }
 
@@ -119,6 +135,17 @@ export class HmdBanner extends HmdElement {
     }
     emit(this, 'hmd-banner-action', { key });
   }
+}
+
+function reference(control: HTMLElement, id: string): void {
+  const ids = (control.getAttribute('aria-describedby') ?? '').split(' ').filter(Boolean);
+  if (!ids.includes(id)) control.setAttribute('aria-describedby', [...ids, id].join(' '));
+}
+
+function unreference(control: HTMLElement, id: string): void {
+  const ids = (control.getAttribute('aria-describedby') ?? '').split(' ').filter((value) => value && value !== id);
+  if (ids.length > 0) control.setAttribute('aria-describedby', ids.join(' '));
+  else control.removeAttribute('aria-describedby');
 }
 
 declare global {
