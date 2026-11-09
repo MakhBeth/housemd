@@ -1037,3 +1037,14 @@ test('[LAB-405] an explicit retry with the same failure renews the notice; an au
   assert.equal(ids().length, 1);
   assert.notDeepEqual(ids(), first, 'explicit retry: new node, announced again');
 });
+
+test('[LAB-405] manual commands renew an identical error (two createFile on an existing file), automatic ones keep the ID', async () => {
+  const { ws } = await setup({ 'a.md': 'A' });
+  await ws.createFile('a.md', '');
+  const first = ws.getState().toasts.filter((t) => t.code === 'alreadyExists').map((t) => t.id);
+  await ws.createFile('a.md', '');
+  const second = ws.getState().toasts.filter((t) => t.code === 'alreadyExists').map((t) => t.id);
+  assert.equal(first.length, 1);
+  assert.equal(second.length, 1);
+  assert.notDeepEqual(first, second, 'a new ID: the banner is renewed and announced again');
+});

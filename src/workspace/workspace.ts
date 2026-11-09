@@ -275,38 +275,44 @@ export class Workspace {
   // --- operazioni in coda ---------------------------------------------------------
 
   openFile(path: string): Promise<void> {
-    return this.runExclusive(() => this.doOpenFile(path));
+    return this.command(() => this.doOpenFile(path));
   }
 
   closeFile(): Promise<boolean> {
-    return this.runExclusive(() => this.doCloseFile());
+    return this.command(() => this.doCloseFile());
   }
 
   createFile(path: string, text = ''): Promise<void> {
-    return this.runExclusive(() => this.doCreateFile(path, text));
+    return this.command(() => this.doCreateFile(path, text));
   }
 
   createFolder(path: string): Promise<void> {
-    return this.runExclusive(() => this.doCreateFolder(path));
+    return this.command(() => this.doCreateFolder(path));
   }
 
   rename(from: string, to: string): Promise<void> {
-    return this.runExclusive(() => this.doRename(from, to));
+    return this.command(() => this.doRename(from, to));
   }
 
   remove(path: string): Promise<void> {
-    return this.runExclusive(() => this.doRemove(path));
+    return this.command(() => this.doRemove(path));
   }
 
   resolveConflict(choice: 'reload' | 'overwrite'): Promise<void> {
-    return this.runExclusive(() => this.doResolveConflict(choice));
+    return this.command(() => this.doResolveConflict(choice));
   }
 
   saveAll(): Promise<void> {
-    return this.explicitAttempt(() => this.runExclusive(() => this.doSaveAll()));
+    return this.command(() => this.doSaveAll());
   }
 
-  /** Tentativo esplicito dell'utente (Ctrl+S, Salva tutto): un esito identico a quello già mostrato si riannuncia. */
+  /** Comando dell'utente (aprire, creare, rinominare, eliminare, Salva tutto…): in coda come `runExclusive`, ma i suoi esiti sono `manual`. */
+  private command<T>(action: () => Promise<T>): Promise<T> {
+    this.explicit++;
+    return this.runExclusive(action).finally(() => this.explicit--);
+  }
+
+  /** Tentativo esplicito dell'utente (Ctrl+S): un esito identico a quello già mostrato si riannuncia. */
   private async explicitAttempt(action: () => Promise<void>): Promise<void> {
     this.explicit++;
     try {
@@ -317,7 +323,7 @@ export class Workspace {
   }
 
   restoreVersion(id: number): Promise<void> {
-    return this.runExclusive(() => this.doRestoreVersion(id));
+    return this.command(() => this.doRestoreVersion(id));
   }
 
   /**
