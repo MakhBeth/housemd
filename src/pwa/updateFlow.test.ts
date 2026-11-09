@@ -114,7 +114,7 @@ test('needReload reloads only when the workspace is durable', async () => {
   const flow = createUpdateFlow(failed.host, async () => undefined);
   await flow.needReload();
   assert.deepEqual(failed.calls, ['prepare', 'cancel'], 'nessun reload: resta sulla versione vecchia');
-  assert.deepEqual(flow.getState(), { available: true, busy: false }, 'con l'avviso per riprovare');
+  assert.deepEqual(flow.getState(), { available: true, busy: false }, "con l'avviso per riprovare");
 });
 
 test('after a failed needReload, "Update" retries only the guarded reload (no second updateSW)', async () => {
@@ -149,7 +149,7 @@ test('without a controlling event after apply, the update gives the document bac
   assert.deepEqual([...timer.pending.values()].map((t) => t.ms), [UPDATE_TIMEOUT_MS]);
   timer.fire();
   assert.deepEqual(calls, ['prepare', 'updateSW', 'cancel']);
-  assert.deepEqual(flow.getState(), { available: true, busy: false }, 'l'avviso resta per riprovare');
+  assert.deepEqual(flow.getState(), { available: true, busy: false }, "l'avviso resta per riprovare");
   await flow.apply(); // riprova: di nuovo SKIP_WAITING
   assert.deepEqual(calls, ['prepare', 'updateSW', 'cancel', 'prepare', 'updateSW']);
 });
@@ -201,7 +201,7 @@ test('if the page survives the reload, the document is given back after a short 
   assert.equal(flow.getState().busy, true, 'in sola lettura mentre la pagina si ricarica');
   timer.fire(); // la pagina è ancora viva: il reload è stato annullato (es. "Esci dal sito?")
   assert.deepEqual(calls, ['prepare', 'reload', 'cancel']);
-  assert.deepEqual(flow.getState(), { available: true, busy: false }, 'l'avviso resta per riprovare');
+  assert.deepEqual(flow.getState(), { available: true, busy: false }, "l'avviso resta per riprovare");
   await flow.apply(); // non bloccato da un `reloading` rimasto a true
   assert.deepEqual(calls, ['prepare', 'reload', 'cancel', 'prepare', 'reload']);
 });
