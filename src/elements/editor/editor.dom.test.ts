@@ -291,3 +291,68 @@ test('replacing the i18n store on a connected editor renames the content and mov
   assert.equal(content.getAttribute('aria-label'), 'B-NAME-it');
   el.remove();
 });
+
+test('typewriter: the root gets the class only while on, and every keyboard move or edit carries the centering', async () => {
+  const { el, view } = mount('uno\n\ndue\n\ntre');
+  const root = () => el.querySelector('.cm-editor')!;
+  assert.equal(root().classList.contains('cm-typewriter'), false, 'off: the DOM is untouched');
+  el.typewriter = true;
+  await tick();
+  assert.equal(root().classList.contains('cm-typewriter'), true);
+  const seen: number[] = [];
+  view().dispatch({ selection: { anchor: 5 }, userEvent: 'select' });
+  view().dispatch({ selection: { anchor: 1 }, userEvent: 'select.pointer' });
+  const keyboard = view().state.update({ selection: { anchor: 5 }, userEvent: 'select' });
+  const mouse = view().state.update({ selection: { anchor: 5 }, userEvent: 'select.pointer' });
+  seen.push(keyboard.effects.length, mouse.effects.length);
+  assert.deepEqual(seen, [1, 0]);
+  el.typewriter = false;
+  await tick();
+  assert.equal(root().classList.contains('cm-typewriter'), false);
+  assert.equal(view().state.update({ selection: { anchor: 5 }, userEvent: 'select' }).effects.length, 0);
+  el.remove();
+});
+
+test('focus mode: search and selection matches keep the full text colour, whichever way they nest with the grey', async () => {
+  const { el } = mount('uno');
+  const root = el.querySelector('.cm-editor')!;
+  const colorOf = (outer: string, inner: string) => {
+    const a = document.createElement('span');
+    a.className = outer;
+    const b = document.createElement('span');
+    b.className = inner;
+    const c = document.createElement('span');
+    b.append(c);
+    a.append(b);
+    root.querySelector('.cm-line')!.append(a);
+    return [window.getComputedStyle(a).color, window.getComputedStyle(b).color, window.getComputedStyle(c).color];
+  };
+  assert.deepEqual(colorOf('cm-focusDim', 'x'), ['var(--c-muted)', 'var(--c-muted)', 'var(--c-muted)'], 'plain dimmed text is grey');
+  for (const match of ['cm-searchMatch', 'cm-selectionMatch']) {
+    const [, inner, deep] = colorOf('cm-focusDim', match);
+    assert.deepEqual([inner, deep], ['var(--c-text)', 'var(--c-text)'], `${match} inside the grey`);
+    const [outer, inside, deepest] = colorOf(match, 'cm-focusDim');
+    assert.ok(outer !== 'var(--c-muted)' && inside === 'var(--c-text)' && deepest === 'var(--c-text)', `the grey inside ${match}`);
+  }
+  el.remove();
+});
+
+test('focus mode greys everything outside the cursor paragraph, follows the cursor, and leaves the text alone', async () => {
+  const { el, view } = mount('uno\n\ndue\n\ntre');
+  const dimmed = () => [...el.querySelectorAll('.cm-focusDim')].map((n) => n.textContent).join('');
+  assert.equal(dimmed(), '', 'off: nothing is dimmed');
+  el.focusMode = true;
+  await tick();
+  // La selezione di partenza è all'inizio: resta acceso il primo paragrafo.
+  assert.equal(dimmed().replaceAll('\n', ''), 'duetre');
+  view().dispatch({ selection: { anchor: 5 } });
+  assert.equal(dimmed().replaceAll('\n', ''), 'unotre');
+  el.focusUnit = 'sentence';
+  await tick();
+  assert.equal(dimmed().replaceAll('\n', ''), 'unotre');
+  el.focusMode = false;
+  await tick();
+  assert.equal(dimmed(), '');
+  assert.equal(view().state.doc.toString(), 'uno\n\ndue\n\ntre');
+  el.remove();
+});

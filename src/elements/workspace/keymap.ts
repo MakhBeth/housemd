@@ -6,6 +6,6 @@ import type { Shortcut } from '../../ui/shortcuts';
 export function allowedInSettings(shortcut: Shortcut): boolean {
   return match(shortcut)
     .with('save', 'saveAll', () => true)
-    .with('search', 'toggleAi', 'toggleSidebar', 'cycleMode', () => false)
+    .with('search', 'toggleAi', 'toggleSidebar', 'cycleMode', 'toggleFocus', () => false)
     .exhaustive();
 }

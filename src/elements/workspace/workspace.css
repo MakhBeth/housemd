@@ -165,6 +165,26 @@
       color: light-dark(#fff, #042f2e);
     }
 
+    /* Stato premuto della modalità focus: come .mode. Solo qui, non su .iconButton[aria-pressed] (cronologia, sidebar). */
+    .focusToggle[aria-pressed='true'] {
+      background: var(--c-accent);
+      color: light-dark(#fff, #042f2e);
+    }
+
+    /* Annuncio della scorciatoia: nel DOM per lo screen reader, mai visibile. */
+    .visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+      /* Il pattern completo: il margine del `p` (15px) farebbe scorrere la pagina di 16px. */
+      margin: -1px;
+      padding: 0;
+      border: 0;
+    }
+
     .saveState {
       min-width: 11ch;
       display: inline-flex;
@@ -265,18 +285,21 @@
      */
     @media (forced-colors: active) {
       .mode[aria-pressed='true'],
+      .focusToggle[aria-pressed='true'],
       .orphan[aria-current='true'] {
         forced-color-adjust: none;
         background: Highlight;
         color: HighlightText;
       }
 
-      .mode[aria-pressed='true'] .icon {
+      .mode[aria-pressed='true'] .icon,
+      .focusToggle[aria-pressed='true'] .icon {
         background-color: HighlightText;
       }
 
       /* `forced-color-adjust: none` si eredita: i tooltip di questi pulsanti restano nei colori di sistema. */
       .mode[aria-pressed='true']::after,
+      .focusToggle[aria-pressed='true']::after,
       .orphan[aria-current='true']::after {
         forced-color-adjust: auto;
       }
@@ -286,7 +309,8 @@
       }
 
       /* Fuori dall'adattamento le ombre dell'anello "oreo" tornerebbero visibili: il focus lo porta il contorno. */
-      .mode[aria-pressed='true']:focus-visible {
+      .mode[aria-pressed='true']:focus-visible,
+      .focusToggle[aria-pressed='true']:focus-visible {
         outline-color: HighlightText;
         box-shadow: none;
       }

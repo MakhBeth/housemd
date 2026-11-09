@@ -32,3 +32,9 @@ test('without Ctrl or Cmd nothing is a shortcut', () => {
   assert.equal(shortcutFor(key('s', { ctrlKey: false })), null);
   assert.equal(shortcutFor(key('b', { ctrlKey: false })), null);
 });
+
+test('Ctrl or Cmd+Shift+F toggles the focus mode; Ctrl+F alone is not ours', () => {
+  assert.equal(shortcutFor(key('F', { shiftKey: true })), 'toggleFocus');
+  assert.equal(shortcutFor(key('f', { shiftKey: true, ctrlKey: false, metaKey: true })), 'toggleFocus');
+  assert.equal(shortcutFor(key('f')), null);
+});
