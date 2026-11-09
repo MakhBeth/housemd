@@ -200,7 +200,10 @@ export class Workspace {
    */
   private toast(kind: Toast['kind'], code: ToastCode, params?: ToastParams, origin?: string): void {
     const path = NOTICE_CHANNEL[code] === 'document' ? origin ?? (params?.path === undefined ? this.state.doc?.path : String(params.path)) : undefined;
-    this.set({ toasts: [...this.state.toasts.filter((t) => !(t.code === code && t.path === path)), { id: ++this.toastSeq, kind, code, params, path }] });
+    const same = this.state.toasts.find((t) => t.code === code && t.path === path);
+    // Evento automatico identico (stesso codice, contesto, tipo e dettagli): stesso nodo e stesso ID, nessun nuovo allarme.
+    if (same && same.kind === kind && JSON.stringify(same.params ?? {}) === JSON.stringify(params ?? {})) return;
+    this.set({ toasts: [...this.state.toasts.filter((t) => t !== same), { id: ++this.toastSeq, kind, code, params, path }] });
   }
 
   /** Toglie gli esiti di un documento risolti (salvataggio riuscito, file tornato, bozza messa al sicuro). */
@@ -590,6 +593,7 @@ export class Workspace {
   /** Scrive il buffer di emergenza e tiene aggiornato `drafts`. Gli errori risalgono a chi chiama. */
   private async saveBuffer(path: string, text: string, base: string): Promise<void> {
     await this.deps.buffers.save(this.deps.workspaceId, path, text, base);
+    this.resolvePath(path, 'bufferFailed', 'draftNotPersisted');
     if (!this.state.drafts.includes(path)) this.set({ drafts: [...this.state.drafts, path].sort() });
   }
 
@@ -1122,7 +1126,9 @@ export class Workspace {
     if (!history) return [];
     await this.historyChain;
     try {
-      return await history.list(this.deps.workspaceId, path);
+      const list = await history.list(this.deps.workspaceId, path);
+      this.resolveHistory();
+      return list;
     } catch (err) {
       this.historyError(err);
       return [];

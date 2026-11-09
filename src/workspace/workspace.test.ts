@@ -996,3 +996,30 @@ test('[LAB-405] a successful save resolves the data-risk errors of that document
   ws.edit('y');
   assert.ok(!ws.getState().toasts.some((t) => t.code === 'saveAllDone'));
 });
+
+test('[LAB-405] a buffer write that succeeds resolves bufferFailed; a history read that succeeds resolves historyFailed', async () => {
+  const ops = memoryOps();
+  ops.setFile('a.md', 'A');
+  const real = memoryBufferStore();
+  let failBuffer = true;
+  let failList = true;
+  const buffers = { ...real, save: async (...args: Parameters<typeof real.save>) => (failBuffer ? Promise.reject(new Error('quota')) : real.save(...args)) };
+  const history = { list: async () => (failList ? Promise.reject(new Error('idb')) : []), add: async () => {}, prune: async () => {}, move: async () => {} };
+  const ws = new Workspace({ fs: createWorkspaceFS(ops), workspaceId: 'ws-1', name: 't', buffers, history: history as never, scheduler: manualScheduler(), now: () => new Date(2026, 8, 27) });
+  await ws.load();
+  await ws.openFile('a.md');
+  ws.edit('B');
+  const buffer = () => (ws as unknown as { bufferCurrentDoc(): Promise<void> }).bufferCurrentDoc();
+  await buffer();
+  await buffer();
+  const codes = () => ws.getState().toasts.map((t) => `${t.code}#${t.id}`);
+  assert.deepEqual(codes(), ['bufferFailed#1'], 'the identical automatic failure keeps its node and ID');
+  failBuffer = false;
+  await buffer();
+  assert.deepEqual(codes(), []);
+  await ws.listHistory('a.md');
+  assert.deepEqual(codes(), ['historyFailed#2']);
+  failList = false;
+  await ws.listHistory('a.md');
+  assert.deepEqual(codes(), []);
+});
