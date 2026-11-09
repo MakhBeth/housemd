@@ -199,11 +199,11 @@ export class Workspace {
    * attivo al momento dell'errore. Un nuovo tentativo sostituisce l'esito dello stesso codice e dello stesso
    * documento; i problemi di altri documenti restano.
    */
-  private toast(kind: Toast['kind'], code: ToastCode, params?: ToastParams, origin?: string): void {
+  private toast(kind: Toast['kind'], code: ToastCode, params?: ToastParams, origin?: string, manual = false): void {
     const path = NOTICE_CHANNEL[code] === 'document' ? origin ?? (params?.path === undefined ? this.state.doc?.path : String(params.path)) : undefined;
     const same = this.state.toasts.find((t) => t.code === code && t.path === path);
     // Evento automatico identico (stesso codice, contesto, tipo e dettagli): stesso nodo e stesso ID, nessun nuovo allarme.
-    if (!this.explicit && same && same.kind === kind && JSON.stringify(same.params ?? {}) === JSON.stringify(params ?? {})) return;
+    if (!manual && !this.explicit && same && same.kind === kind && JSON.stringify(same.params ?? {}) === JSON.stringify(params ?? {})) return;
     this.set({ toasts: [...this.state.toasts.filter((t) => t !== same), { id: ++this.toastSeq, kind, code, params, path }] });
   }
 
@@ -233,15 +233,16 @@ export class Workspace {
   }
 
   /** Esegue un'operazione mostrando gli errori come toast; accesso revocato → schermata "Riprendi accesso". */
-  private async run(action: () => Promise<void>): Promise<void> {
+  private async run(action: () => Promise<void>, manual = false): Promise<void> {
     try {
       await action();
     } catch (err) {
-      await this.handleError(err);
+      await this.handleError(err, manual);
     }
   }
 
-  private async handleError(err: unknown): Promise<void> {
+  /** `manual`: l'errore nasce da un comando dell'utente su file (crea, rinomina, elimina): un esito identico si riannuncia. */
+  private async handleError(err: unknown, manual = false): Promise<void> {
     if (isAccessError(err)) {
       const doc = this.state.doc;
       if (doc && doc.saveState !== 'saved') {
@@ -250,9 +251,9 @@ export class Workspace {
       this.set({ status: 'access-lost' });
       return;
     }
-    if (err instanceof FsExistsError) this.toast('error', 'alreadyExists', { path: err.path });
-    else if (err instanceof FsNotFoundError) this.toast('error', 'notFound', { path: err.path });
-    else this.toast('error', 'operationFailed', { detail: errorDetail(err) });
+    if (err instanceof FsExistsError) this.toast('error', 'alreadyExists', { path: err.path }, undefined, manual);
+    else if (err instanceof FsNotFoundError) this.toast('error', 'notFound', { path: err.path }, undefined, manual);
+    else this.toast('error', 'operationFailed', { detail: errorDetail(err) }, undefined, manual);
   }
 
   /**
@@ -275,41 +276,35 @@ export class Workspace {
   // --- operazioni in coda ---------------------------------------------------------
 
   openFile(path: string): Promise<void> {
-    return this.command(() => this.doOpenFile(path));
+    return this.runExclusive(() => this.doOpenFile(path));
   }
 
   closeFile(): Promise<boolean> {
-    return this.command(() => this.doCloseFile());
+    return this.runExclusive(() => this.doCloseFile());
   }
 
   createFile(path: string, text = ''): Promise<void> {
-    return this.command(() => this.doCreateFile(path, text));
+    return this.runExclusive(() => this.doCreateFile(path, text));
   }
 
   createFolder(path: string): Promise<void> {
-    return this.command(() => this.doCreateFolder(path));
+    return this.runExclusive(() => this.doCreateFolder(path));
   }
 
   rename(from: string, to: string): Promise<void> {
-    return this.command(() => this.doRename(from, to));
+    return this.runExclusive(() => this.doRename(from, to));
   }
 
   remove(path: string): Promise<void> {
-    return this.command(() => this.doRemove(path));
+    return this.runExclusive(() => this.doRemove(path));
   }
 
   resolveConflict(choice: 'reload' | 'overwrite'): Promise<void> {
-    return this.command(() => this.doResolveConflict(choice));
+    return this.runExclusive(() => this.doResolveConflict(choice));
   }
 
   saveAll(): Promise<void> {
-    return this.command(() => this.doSaveAll());
-  }
-
-  /** Comando dell'utente (aprire, creare, rinominare, eliminare, Salva tutto…): in coda come `runExclusive`, ma i suoi esiti sono `manual`. */
-  private command<T>(action: () => Promise<T>): Promise<T> {
-    this.explicit++;
-    return this.runExclusive(action).finally(() => this.explicit--);
+    return this.explicitAttempt(() => this.runExclusive(() => this.doSaveAll()));
   }
 
   /** Tentativo esplicito dell'utente (Ctrl+S): un esito identico a quello già mostrato si riannuncia. */
@@ -323,7 +318,7 @@ export class Workspace {
   }
 
   restoreVersion(id: number): Promise<void> {
-    return this.command(() => this.doRestoreVersion(id));
+    return this.runExclusive(() => this.doRestoreVersion(id));
   }
 
   /**
@@ -1130,10 +1125,10 @@ export class Workspace {
   }
 
   /** Al massimo un toast: la cronologia è un di più, non deve disturbare a ogni salvataggio. */
-  private historyError(err: unknown): void {
-    if (this.historyErrorShown) return;
+  private historyError(err: unknown, manual = false): void {
+    if (this.historyErrorShown && !manual) return;
     this.historyErrorShown = true;
-    this.toast('error', 'historyFailed', { detail: errorDetail(err) });
+    this.toast('error', 'historyFailed', { detail: errorDetail(err) }, undefined, manual);
   }
 
   /** Si risolve quando le scritture della cronologia già lanciate sono finite. */
@@ -1151,7 +1146,8 @@ export class Workspace {
       this.resolveHistory();
       return list;
     } catch (err) {
-      this.historyError(err);
+      // Letture del pannello Cronologia: tentativo esplicito dell'utente.
+      this.historyError(err, true);
       return [];
     }
   }
@@ -1175,7 +1171,7 @@ export class Workspace {
       await this.refreshEntries();
       this.bumpIndex();
       created = true;
-    });
+    }, true);
     if (created) await this.doOpenFile(path);
   }
 
@@ -1183,7 +1179,7 @@ export class Workspace {
     await this.run(async () => {
       await this.deps.fs.mkdir(path);
       await this.refreshEntries();
-    });
+    }, true);
   }
 
   private async doRename(from: string, to: string): Promise<void> {
@@ -1236,7 +1232,7 @@ export class Workspace {
           await this.refreshEntries();
           this.bumpIndex();
         }
-      });
+      }, true);
     } finally {
       this.suspended--;
       this.moving--;
@@ -1280,7 +1276,7 @@ export class Workspace {
         for (const p of this.state.drafts.filter((d) => inside(d, path))) await this.clearBuffer(p);
         await this.refreshEntries();
         this.bumpIndex();
-      });
+      }, true);
     } finally {
       if (closing) {
         this.suspended--;

@@ -1048,3 +1048,30 @@ test('[LAB-405] manual commands renew an identical error (two createFile on an e
   assert.equal(second.length, 1);
   assert.notDeepEqual(first, second, 'a new ID: the banner is renewed and announced again');
 });
+
+test('[LAB-405] the manual origin belongs to the event: overlapping automatic checkpoints keep their ID, explicit history reads renew', async () => {
+  const ops = memoryOps();
+  ops.setFile('a.md', 'A');
+  const real = memoryBufferStore();
+  const buffers = { ...real, save: async () => Promise.reject(new Error('quota')) };
+  let releaseMkdir!: () => void;
+  const fs = { ...createWorkspaceFS(ops), mkdir: () => new Promise<void>((r) => (releaseMkdir = r)) } as ReturnType<typeof createWorkspaceFS>;
+  const history = { list: async () => Promise.reject(new Error('idb')), add: async () => {}, prune: async () => {}, move: async () => {} };
+  const ws = new Workspace({ fs, workspaceId: 'ws-1', name: 't', buffers, history: history as never, scheduler: manualScheduler(), now: () => new Date(2026, 8, 27) });
+  await ws.load();
+  await ws.openFile('a.md');
+  const pending = ws.createFolder('x');
+  await new Promise((r) => setTimeout(r, 0));
+  const buffer = () => (ws as unknown as { bufferCurrentDoc(): Promise<void> }).bufferCurrentDoc();
+  for (const text of ['1', '2', '3']) {
+    ws.edit(text);
+    await buffer();
+  }
+  assert.deepEqual(ws.getState().toasts.filter((t) => t.code === 'bufferFailed').map((t) => t.id), [1], 'same ID while a command is pending');
+  releaseMkdir();
+  await pending;
+  await ws.listHistory('a.md');
+  const first = ws.getState().toasts.find((t) => t.code === 'historyFailed')!.id;
+  await ws.listHistory('a.md');
+  assert.notEqual(ws.getState().toasts.find((t) => t.code === 'historyFailed')!.id, first, 'explicit history read renews the notice');
+});
