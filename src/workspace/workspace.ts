@@ -1137,7 +1137,7 @@ export class Workspace {
   }
 
   /** Versioni di un file, dalla più recente (vuoto senza cronologia o se non è leggibile). */
-  async listHistory(path: string): Promise<Snapshot[]> {
+  async listHistory(path: string, opts: { manual?: boolean } = {}): Promise<Snapshot[]> {
     const history = this.deps.history;
     if (!history) return [];
     await this.historyChain;
@@ -1146,8 +1146,8 @@ export class Workspace {
       this.resolveHistory();
       return list;
     } catch (err) {
-      // Letture del pannello Cronologia: tentativo esplicito dell'utente.
-      this.historyError(err, true);
+      // Manuale solo se lo dice il chiamante (apertura del pannello, cambio di file); le riletture dopo un salvataggio no.
+      this.historyError(err, opts.manual === true);
       return [];
     }
   }

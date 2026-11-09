@@ -14,7 +14,7 @@ import './history-panel.css';
 export interface HistorySource {
   subscribe(listener: () => void): () => void;
   getState(): { indexRevision: number };
-  listHistory(path: string): Promise<Snapshot[]>;
+  listHistory(path: string, opts?: { manual?: boolean }): Promise<Snapshot[]>;
 }
 
 interface Parts {
@@ -155,9 +155,11 @@ export class HmdHistoryPanel extends HmdElement {
     const path = this.#path;
     const revision = workspace.getState().indexRevision;
     if (this.#loaded?.path === path && this.#loaded.revision === revision) return;
+    // Esplicita solo all'apertura o al cambio di file: le riletture per indexRevision sono automatiche.
+    const manual = this.#loaded?.path !== path;
     this.#loaded = { path, revision };
     const request = ++this.#request;
-    void workspace.listHistory(path).then((list) => {
+    void workspace.listHistory(path, { manual }).then((list) => {
       if (request !== this.#request) return;
       this.#versions = list;
       this.#update();

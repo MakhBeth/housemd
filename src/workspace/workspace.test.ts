@@ -1070,9 +1070,12 @@ test('[LAB-405] the manual origin belongs to the event: overlapping automatic ch
   assert.deepEqual(ws.getState().toasts.filter((t) => t.code === 'bufferFailed').map((t) => t.id), [1], 'same ID while a command is pending');
   releaseMkdir();
   await pending;
-  await ws.listHistory('a.md');
+  await ws.listHistory('a.md', { manual: true });
   const first = ws.getState().toasts.find((t) => t.code === 'historyFailed')!.id;
+  await ws.listHistory('a.md', { manual: false });
   await ws.listHistory('a.md');
+  assert.equal(ws.getState().toasts.find((t) => t.code === 'historyFailed')!.id, first, 'automatic reloads keep the ID');
+  await ws.listHistory('a.md', { manual: true });
   assert.notEqual(ws.getState().toasts.find((t) => t.code === 'historyFailed')!.id, first, 'explicit history read renews the notice');
 });
 
