@@ -48,7 +48,7 @@ for (const code of AI_CODES) {
     assert.equal(row.textContent, expected);
     assert.equal(banner.querySelector('.alerts [role="status"]'), null);
     assert.ok(banner.querySelector('button.close:not([hidden])'), 'Close available');
-    assert.equal(document.querySelector('hmd-notices'), null, 'no notice');
+    assert.equal(document.querySelector('[popover][role="status"], [popover][role="alert"]'), null, 'no popover live region');
   });
 }
 
@@ -57,7 +57,7 @@ test('only preventive or voluntary AI outcomes are status rows', () => {
 });
 
 test('PWA progress and notices are banner rows (no popover, no notice)', () => {
-  assert.equal(document.querySelector('hmd-notices, hmd-notice'), null);
+  assert.equal(document.querySelector('[popover][role="status"], [popover][role="alert"]'), null);
 });
 
 const CONTEXT: NoticeContext = { sidebarOpen: true, dialogOpen: false, silenced: new Set() };
