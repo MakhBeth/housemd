@@ -137,3 +137,14 @@ test('non data-risk events during a dialog are deferred, and only summarised onc
   assert.equal(open.workspace[0]!.quiet, true);
   assert.deepEqual(routes(toasts, { ...CONTEXT, dialogOpen: true, silenced: new Set([9]) }).deferred, [], 'not deferred twice');
 });
+
+test('closing a local note with the focus on its Close returns the focus to the described control', () => {
+  const control = document.createElement('button');
+  document.body.append(control);
+  const banner = mount();
+  banner.items = [{ key: 'ws-1', kind: 'status', text: 'Saved', closeLabel: 'Close', describes: control }];
+  const close = banner.querySelector<HTMLButtonElement>('button.close')!;
+  close.focus();
+  close.click();
+  assert.ok(document.activeElement === control, 'focus on the described control');
+});

@@ -196,6 +196,8 @@ export class HmdWorkspace extends HmdElement {
   }
   /** Eventi già annunciati nel dialog o riepilogati alla chiusura: le loro righe restano visibili ma mute. */
   #folderButton: HTMLButtonElement | null = null;
+  #aiSilenced: string | null = null;
+  #aiDeferred = '';
   #silenced = new Set<number>();
   #deferred = new Set<number>();
   #dialogBanner: HmdBanner | null = null;
@@ -747,12 +749,18 @@ export class HmdWorkspace extends HmdElement {
       for (const id of [...this.#deferred]) if (!live.has(id)) this.#deferred.delete(id);
       const describe = (items: BannerItem[], control: HTMLElement | null | undefined) => items.map((item) => ({ ...item, describes: control ?? undefined }));
       parts.docBanner.items = routes.document;
-      parts.wsBanner.items = [...routes.workspace, ...aiErrorItems(aiState?.error, t)];
+      // Un errore AI arrivato col dialog aperto è differito come gli altri eventi non a rischio dati: muto, riepilogato alla chiusura.
+      const aiItems = aiErrorItems(aiState?.error, t);
+      if (modal && aiItems[0] && this.#aiSilenced !== aiItems[0].key) {
+        this.#aiSilenced = aiItems[0].key;
+        this.#aiDeferred = aiItems[0].text;
+      } else if (!aiItems[0]) this.#aiSilenced = null;
+      parts.wsBanner.items = [...routes.workspace, ...aiItems.map((item) => ({ ...item, quiet: item.key === this.#aiSilenced }))];
       parts.saveAllBanner.items = describe(routes.saveAll, parts.saveAll);
       parts.historyBanner.items = describe(routes.history, parts.history);
       if (sidebarBanner) sidebarBanner.items = describe(routes.sidebar, this.#folderButton);
       this.#renderDialogBanner(modal, routes.dialog);
-      if (!modal && this.#deferred.size > 0) this.#publishDeferred(state, t, locale);
+      if (!modal && (this.#deferred.size > 0 || this.#aiDeferred)) this.#publishDeferred(state, t, locale);
     }
 
     // Chiuse le impostazioni, il focus torna dove era prima di aprirle.
@@ -780,7 +788,12 @@ export class HmdWorkspace extends HmdElement {
       return;
     }
     if (!this.#dialogBanner) this.#dialogBanner = el('hmd-banner', { class: 'dialogBanner' });
-    if (this.#dialogBanner.parentElement !== modal) modal.append(this.#dialogBanner);
+    if (this.#dialogBanner.parentElement !== modal) {
+      // Subito dopo il titolo, prima dei pulsanti: chi naviga col cursore virtuale la trova subito.
+      const title = modal.querySelector(`[id="${modal.getAttribute('aria-labelledby') ?? ''}"]`);
+      if (title) title.after(this.#dialogBanner);
+      else modal.prepend(this.#dialogBanner);
+    }
     this.#dialogBanner.items = items;
   }
 
@@ -789,8 +802,10 @@ export class HmdWorkspace extends HmdElement {
     const text = state.toasts
       .filter((toast) => this.#deferred.has(toast.id))
       .map((toast) => t(noticeKey(toast.code, toast.params, locale) as MessageKey, toast.params))
+      .concat(this.#aiDeferred ? [this.#aiDeferred] : [])
       .join(' ');
     this.#deferred.clear();
+    this.#aiDeferred = '';
     const node = this.#parts?.deferredAnnounce;
     if (text && node) setTimeout(() => announce(node, text, true), ANNOUNCE_DELAY_MS);
   }

@@ -123,7 +123,11 @@ export class HmdBanner extends HmdElement {
 
   #close(key: string): void {
     const active = document.activeElement;
-    if (active && this.contains(active)) this.focusFallback?.()?.focus();
+    if (active && this.contains(active)) {
+      // Una nota locale restituisce il focus al controllo che descrive; altrimenti il ripiego del proprietario.
+      const control = this.#items.find((item) => item.key === key)?.describes;
+      (control?.isConnected ? control : this.focusFallback?.())?.focus();
+    }
     emit(this, 'hmd-banner-close', { key });
   }
 
