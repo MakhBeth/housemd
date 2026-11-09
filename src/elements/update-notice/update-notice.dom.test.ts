@@ -87,3 +87,32 @@ test('app banner: newVersion and update.applying are status rows with Update, re
   assert.equal(el.querySelector('[role="alert"]'), null);
   assert.equal(el.querySelectorAll('[role="status"] button').length, 0, 'buttons outside the live text');
 });
+
+test('Later removes the focused button: the focus goes to the app content, not the body', () => {
+  const host = document.createElement('div');
+  const content = document.createElement('main');
+  const first = document.createElement('button');
+  content.append(first);
+  const { el, set } = mount();
+  host.append(el, content);
+  document.body.append(host);
+  set({ available: true, busy: false });
+  const later = el.querySelector('button.close') as HTMLButtonElement;
+  later.focus();
+  later.click();
+  assert.ok(document.activeElement === first, 'focus on the first control of the content');
+  host.remove();
+});
+
+test('with two messages each button row shows which message it belongs to', () => {
+  const banner = document.createElement('hmd-banner');
+  document.body.append(banner);
+  banner.items = [
+    { key: 'a', kind: 'status', text: 'First message', closeLabel: 'Close' },
+    { key: 'b', kind: 'status', text: 'Second message', closeLabel: 'Close' },
+  ];
+  assert.deepEqual([...banner.querySelectorAll('.context')].map((n) => n.textContent), ['First message', 'Second message']);
+  banner.items = [{ key: 'b', kind: 'status', text: 'Second message', closeLabel: 'Close' }];
+  assert.equal(banner.querySelector('.context')!.textContent, '');
+  banner.remove();
+});

@@ -34,6 +34,8 @@ export class HmdBanner extends HmdElement {
   #alerts: HTMLDivElement | null = null;
   #actions: HTMLDivElement | null = null;
   #ids = new Map<string, string>();
+  /** Dove va il focus se il pulsante che lo ha sparisce chiudendo il messaggio (mai sul body). */
+  focusFallback: (() => HTMLElement | null) | null = null;
 
   get items(): readonly BannerItem[] { return this.#items; }
   set items(value: readonly BannerItem[]) {
@@ -68,16 +70,18 @@ export class HmdBanner extends HmdElement {
     };
     reconcileList(this.#live, status, (item) => item.key, () => el('p', { class: 'message' }), (node, item) => message(item)(node));
     reconcileList(this.#alerts!, alerts, (item) => item.key, () => el('p', { class: 'message', role: 'alert' }), (node, item) => message(item)(node));
+    const actionable = items.filter((item) => item.actionLabel !== undefined || item.closeLabel !== undefined);
     reconcileList(
       this.#actions!,
-      items.filter((item) => item.actionLabel !== undefined || item.closeLabel !== undefined),
+      actionable,
       (item) => item.key,
       (item) =>
         el(
           'div',
           { class: 'row' },
           el('button', { class: 'action', on: { click: () => this.#act(item.key) } }),
-          el('button', { class: 'close', on: { click: () => emit(this, 'hmd-banner-close', { key: item.key }) } }),
+          el('button', { class: 'close', on: { click: () => this.#close(item.key) } }),
+          el('span', { class: 'context', 'aria-hidden': 'true' }),
         ),
       (node, item) => {
         const [action, close] = node.querySelectorAll('button');
@@ -87,9 +91,18 @@ export class HmdBanner extends HmdElement {
         setText(action, item.actionLabel ?? '');
         setText(close, item.closeLabel ?? '');
         toggleAttr(action, 'data-busy', !!item.busy);
+        // Con più messaggi il pulsante dice a vista a quale appartiene (il nome accessibile non cambia: aria-describedby).
+        const context = node.querySelector('.context')!;
+        setText(context, actionable.length > 1 ? (item.text.length > 48 ? `${item.text.slice(0, 48)}…` : item.text) : '');
       },
     );
     for (const key of [...this.#ids.keys()]) if (!items.some((item) => item.key === key)) this.#ids.delete(key);
+  }
+
+  #close(key: string): void {
+    const active = document.activeElement;
+    if (active && this.contains(active)) this.focusFallback?.()?.focus();
+    emit(this, 'hmd-banner-close', { key });
   }
 
   #act(key: string): void {

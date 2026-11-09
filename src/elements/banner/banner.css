@@ -37,6 +37,17 @@
       cursor: pointer;
     }
 
+    .row .context {
+      align-self: center;
+      color: var(--c-muted);
+      font-size: 0.9em;
+      overflow-wrap: anywhere;
+    }
+
+    .row .context:empty {
+      display: none;
+    }
+
     .row button[hidden] {
       display: none;
     }

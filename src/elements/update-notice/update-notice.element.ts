@@ -74,6 +74,8 @@ export class HmdUpdateNotice extends HmdElement {
       });
     }
     if (this.#dbBlocked) items.push({ key: 'reloadOtherTabs', kind: 'status', text: t('toast.reloadOtherTabs'), closeLabel: t('toast.close') });
+    // Se il pulsante che chiude sparisce col focus, il focus va al primo controllo del contenuto dell'app.
+    banner.focusFallback = () => this.parentElement?.querySelector<HTMLElement>(':scope > :not(hmd-update-notice) button') ?? null;
     banner.items = items;
   }
 }
