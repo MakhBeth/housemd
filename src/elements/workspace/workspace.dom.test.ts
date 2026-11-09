@@ -549,3 +549,31 @@ test('[LAB-409] a failed image goes to the banner of the document it was pasted 
   // Altro documento attivo: l'esito resta, col suo percorso, nel banner workspace.
   await waitFor(() => documentBanner()?.textContent?.includes('a.md: ') === true);
 });
+
+test('[LAB-409] closing the Save all note in the settings, or the note in the history panel, keeps the focus on the described control; there is one Restore button', async () => {
+  const settings = await mount();
+  settings.win.setHash('#settings');
+  await waitFor(() => !!settings.el.querySelector('hmd-settings button.secondary'));
+  const saveAll = settings.el.querySelector<HTMLButtonElement>('hmd-settings button.secondary')!;
+  saveAll.click();
+  await waitFor(() => !!settings.el.querySelector('hmd-settings hmd-banner button.close:not([hidden])'));
+  const noteClose = settings.el.querySelector<HTMLButtonElement>('hmd-settings hmd-banner button.close')!;
+  noteClose.focus();
+  noteClose.click();
+  assert.equal(document.activeElement, saveAll);
+  document.body.replaceChildren();
+
+  const { el, workspace, button } = await mount({ history: historyOf({ list: async () => [snapshot, { ...snapshot, id: 2, savedAt: 2 }] }) });
+  await workspace.openFile('a.md');
+  button(EN_MESSAGES['toolbar.history']).click();
+  await waitFor(() => el.querySelectorAll('hmd-history-panel li button').length === 2);
+  el.querySelector<HTMLButtonElement>('hmd-history-panel li button')!.click();
+  await waitFor(() => !!el.querySelector('button.restore'));
+  assert.equal(el.querySelectorAll('button.restore').length, 1);
+  await workspace.restoreVersion(1);
+  await waitFor(() => !!el.querySelector('section.pane > hmd-banner button.close:not([hidden])'));
+  const close = el.querySelector<HTMLButtonElement>('section.pane > hmd-banner button.close')!;
+  close.focus();
+  close.click();
+  assert.equal(document.activeElement, el.querySelector('button.restore'));
+});
