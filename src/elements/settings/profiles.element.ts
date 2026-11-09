@@ -82,7 +82,7 @@ export class HmdSettingsProfiles extends HmdElement {
   #announceKey = false;
   #dialogs: AbortController | null = null;
   /** Esito di un'operazione sul dettaglio aperto: nota sotto le sue azioni; chiuso il dettaglio passa al banner workspace. */
-  #errorNote = new OriginNote(this, () => this.#controller);
+  #errorNote = new OriginNote(this, () => this.#controller, () => !!this.#draft.draft);
   readonly #helpId = `profile-help-${++helpCount}`;
   #loop = new RenderLoop(this, {
     ready: () => !!this.#list && !!this.#controller && !!this.#i18n && this.isConnected,

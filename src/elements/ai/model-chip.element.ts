@@ -70,7 +70,7 @@ export class HmdAiModelChip extends HmdElement {
   /** Il selettore del modello dell'apertura corrente (uno nuovo a ogni apertura del popover). */
   #modelSelect: HmdAiModelSelect | null = null;
   /** Errore del salvataggio dei parametri: nota sotto le azioni del popover; a popover chiuso passa al banner workspace. */
-  #errorNote = new OriginNote(this, () => this.#controller);
+  #errorNote = new OriginNote(this, () => this.#controller, () => this.#open);
   #loop = new RenderLoop(this, {
     ready: () => !!this.#parts && !!this.#controller && !!this.#i18n && this.isConnected,
     render: () => this.#render(this.#parts!, this.#controller!, this.#i18n!),

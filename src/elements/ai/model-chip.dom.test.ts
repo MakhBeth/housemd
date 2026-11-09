@@ -264,3 +264,18 @@ test('[LAB-409] a failed Save profile is an alert under the popover actions; clo
   assert.equal(ai.getState().errorOrigin, null);
   assert.equal(ai.getState().error, 'server');
 });
+
+test('[LAB-409] a Save profile that fails after the popover closed goes straight to the banner, not nowhere', async () => {
+  const { el, ai, button, toggle } = mount();
+  withRealErrors(ai);
+  let fail: (error: unknown) => void = () => undefined;
+  (ai as unknown as { saveOverrides: () => Promise<void> }).saveOverrides = () => new Promise<void>((_resolve, reject) => (fail = reject));
+  toggle('open');
+  button('ai.saveProfile').click();
+  toggle('closed');
+  fail({ code: 'server' });
+  await tick();
+  assert.equal(el.querySelector('small[role="alert"]'), null);
+  assert.equal(ai.getState().error, 'server');
+  assert.equal(ai.getState().errorOrigin?.anchor, undefined, 'no anchor: the workspace banner shows it');
+});

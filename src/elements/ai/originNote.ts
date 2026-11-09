@@ -30,10 +30,14 @@ export class OriginNote {
   constructor(
     private readonly host: HTMLElement,
     private readonly controller: () => OriginController | null,
+    /** Il contesto della nota è visibile adesso (es. popover aperto)? Se no, l'errore va subito al banner workspace. */
+    private readonly visible: () => boolean = () => true,
   ) {}
 
   /** `.catch(note.report('trigger'))`: l'errore porta azione e elemento d'origine. */
-  report = (trigger: string) => (error: unknown) => this.controller()?.report(error, { trigger, anchor: this.host });
+  report = (trigger: string) => (error: unknown) =>
+    // Verificato all'arrivo dell'esito: una risposta tardiva a contesto chiuso non resta senza destinazione.
+    this.controller()?.report(error, this.visible() ? { trigger, anchor: this.host } : { trigger });
 
   /** Un nuovo tentativo toglie l'esito precedente, anche dall'errore condiviso. */
   begin(): void {
