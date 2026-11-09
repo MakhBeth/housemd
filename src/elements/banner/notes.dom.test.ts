@@ -48,7 +48,7 @@ for (const code of AI_CODES) {
     assert.equal(row.textContent, expected);
     assert.equal(banner.querySelector('.alerts [role="status"]'), null);
     assert.ok(banner.querySelector('button.close:not([hidden])'), 'Close available');
-    assert.equal(document.querySelector('hmd-toasts'), null, 'no toast');
+    assert.equal(document.querySelector('hmd-notices'), null, 'no notice');
   });
 }
 
@@ -56,13 +56,13 @@ test('only preventive or voluntary AI outcomes are status rows', () => {
   assert.deepEqual(AI_CODES.filter((code) => aiErrorKind(code) === 'status'), ['scopeLost', 'aborted', 'syncLocked', 'aiPendingUpdate']);
 });
 
-test('PWA progress and notices are banner rows (no popover, no toast)', () => {
-  assert.equal(document.querySelector('hmd-toasts, hmd-notice'), null);
+test('PWA progress and notices are banner rows (no popover, no notice)', () => {
+  assert.equal(document.querySelector('hmd-notices, hmd-notice'), null);
 });
 
 const CONTEXT: NoticeContext = { sidebarOpen: true, dialogOpen: false, silenced: new Set() };
-const routes = (toasts: unknown[], context: NoticeContext = CONTEXT, docPath: string | null = 'a.md') =>
-  noticeRoutes(toasts as WorkspaceState['toasts'], docPath, t, 'en', false, context);
+const routes = (notices: unknown[], context: NoticeContext = CONTEXT, docPath: string | null = 'a.md') =>
+  noticeRoutes(notices as WorkspaceState['notices'], docPath, t, 'en', false, context);
 
 test('local notes: Salva tutto, folder, history and restore leave the workspace banner', () => {
   const r = routes([
@@ -102,13 +102,13 @@ test('a local note describes its control while it holds an outcome, and gives th
 });
 
 test('data-risk events with a modal open: one alert row inside the dialog, the banner row stays silent', () => {
-  const toasts = [{ id: 1, kind: 'error', code: 'saveFailed', params: { detail: 'x' }, path: 'a.md' }];
-  const open = routes(toasts, { ...CONTEXT, dialogOpen: true });
+  const notices = [{ id: 1, kind: 'error', code: 'saveFailed', params: { detail: 'x' }, path: 'a.md' }];
+  const open = routes(notices, { ...CONTEXT, dialogOpen: true });
   assert.deepEqual(open.dialog.map((i) => [i.kind, i.text, i.closeLabel]), [['alert', 'Save failed: x', undefined]]);
   assert.deepEqual(open.announcedInDialog, [1]);
   assert.equal(open.document[0]!.quiet, true, 'banner keeps the state without announcing');
   // Dopo la chiusura l'ID resta silenziato: nessun secondo annuncio.
-  const closed = routes(toasts, { ...CONTEXT, silenced: new Set([1]) });
+  const closed = routes(notices, { ...CONTEXT, silenced: new Set([1]) });
   assert.deepEqual(closed.dialog, []);
   assert.equal(closed.document[0]!.quiet, true);
 });
@@ -123,19 +123,19 @@ test('the alert row in the dialog has role alert and does not move the focus', (
   banner.items = routes([{ id: 1, kind: 'error', code: 'draftNotPersisted' }], { ...CONTEXT, dialogOpen: true }).dialog;
   const row = dialog.querySelector('p[role="alert"]');
   assert.ok(row, 'alert row inside the dialog');
-  assert.equal(row.textContent, EN_MESSAGES['toast.draftNotPersisted']);
+  assert.equal(row.textContent, EN_MESSAGES['notice.draftNotPersisted']);
   assert.ok(document.activeElement === input, 'focus did not move');
   dialog.close('');
   return closed.then(() => assert.equal(activeModal(), null));
 });
 
 test('non data-risk events during a dialog are deferred, and only summarised once', () => {
-  const toasts = [{ id: 9, kind: 'info', code: 'configInvalidJson', params: { file: 'c.json', detail: 'x' } }];
-  const open = routes(toasts, { ...CONTEXT, dialogOpen: true });
+  const notices = [{ id: 9, kind: 'info', code: 'configInvalidJson', params: { file: 'c.json', detail: 'x' } }];
+  const open = routes(notices, { ...CONTEXT, dialogOpen: true });
   assert.deepEqual(open.deferred, [9]);
   assert.deepEqual(open.dialog, []);
   assert.equal(open.workspace[0]!.quiet, true);
-  assert.deepEqual(routes(toasts, { ...CONTEXT, dialogOpen: true, silenced: new Set([9]) }).deferred, [], 'not deferred twice');
+  assert.deepEqual(routes(notices, { ...CONTEXT, dialogOpen: true, silenced: new Set([9]) }).deferred, [], 'not deferred twice');
 });
 
 test('closing a local note with the focus on its Close returns the focus to the described control', () => {
@@ -150,17 +150,17 @@ test('closing a local note with the focus on its Close returns the focus to the 
 });
 
 test('opening, closing and reopening a dialog without registry changes announces nothing again', () => {
-  const toasts = [
+  const notices = [
     { id: 1, kind: 'info', code: 'configInvalidJson', params: { file: 'c.json', detail: 'x' } },
     { id: 2, kind: 'error', code: 'draftNotPersisted' },
   ];
   const known = new Set([1, 2]);
   for (const silenced of [new Set<number>(), new Set([2])]) {
-    const open = routes(toasts, { ...CONTEXT, dialogOpen: true, silenced, known });
+    const open = routes(notices, { ...CONTEXT, dialogOpen: true, silenced, known });
     assert.deepEqual(open.dialog, [], 'no alert row for an event already announced');
     assert.deepEqual(open.deferred, [], 'no summary for an event already shown');
     assert.equal(open.workspace[0]!.quiet, false, 'the visible state is kept as it was');
   }
-  const fresh = routes([...toasts, { id: 3, kind: 'info', code: 'unreadableFiles', params: { count: 2, paths: 'a, b' } }], { ...CONTEXT, dialogOpen: true, silenced: new Set(), known });
+  const fresh = routes([...notices, { id: 3, kind: 'info', code: 'unreadableFiles', params: { count: 2, paths: 'a, b' } }], { ...CONTEXT, dialogOpen: true, silenced: new Set(), known });
   assert.deepEqual(fresh.deferred, [3], 'only the new event is deferred');
 });

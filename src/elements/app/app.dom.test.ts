@@ -116,7 +116,7 @@ test('a blocked database shows a status row in the app banner, before the conten
   await waitFor(() => el.screen === 'start');
   block();
   const banner = el.querySelector('hmd-update-notice hmd-banner')!;
-  assert.equal(banner.querySelector('[role="status"]')!.textContent, EN_MESSAGES['toast.reloadOtherTabs']);
+  assert.equal(banner.querySelector('[role="status"]')!.textContent, EN_MESSAGES['notice.reloadOtherTabs']);
   assert.ok(el.firstElementChild === el.querySelector('hmd-update-notice'), 'app banner first');
   (banner.querySelector('button.close') as HTMLButtonElement).click();
   assert.equal(banner.querySelector('[role="status"]')!.textContent, '');

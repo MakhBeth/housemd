@@ -117,7 +117,7 @@ test('an offending file is reported by path (sensitivity check on synthetic sour
   const probes: SourceFile[] = [
     { path: 'ui/Probe.tsx', source: "const probe = { title: 'Prova' };" },
     { path: 'elements/probe/probe.element.ts', source: "el('button', {}, 'Annulla')" },
-    { path: 'ui/Clean.tsx', source: "<button aria-label={t('toast.close')} data-tooltip={t('toast.close')} />" },
+    { path: 'ui/Clean.tsx', source: "<button aria-label={t('notice.close')} data-tooltip={t('notice.close')} />" },
   ];
   assert.deepEqual(findLiteralLabels(probes), ["ui/Probe.tsx: title: 'Prova'"]);
   assert.deepEqual(findLegacyTexts(probes), ['elements/probe/probe.element.ts: Annulla']);
@@ -143,8 +143,8 @@ test('the checks fire on every supported form (guard against silent regex rot)',
 
 test('the checks ignore translated and non-textual values', () => {
   const negatives = [
-    "<button title={t('toast.close')}>",
-    "el.setAttribute('aria-label', t('toast.close'))",
+    "<button title={t('notice.close')}>",
+    "el.setAttribute('aria-label', t('notice.close'))",
     "button.dataset.tooltip = label",
     "p.textContent = ''",
     'node.title = `${path}`',

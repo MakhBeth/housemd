@@ -36,7 +36,7 @@ test('when the document cannot be secured, endUpdate gives editing back', async 
   };
   ws.edit('importante');
   assert.equal(await ws.beginUpdate(), 'failed');
-  assert.equal(ws.getState().toasts.at(-1)?.code, 'draftNotPersisted');
+  assert.equal(ws.getState().notices.at(-1)?.code, 'draftNotPersisted');
   ws.endUpdate();
   assert.equal(ws.getState().updating, false);
   ws.edit('ancora');
@@ -66,7 +66,7 @@ test('a restore still loading when the update begins is cancelled', async () => 
   assert.equal(await updating, 'durable');
   assert.equal(doc(ws).text, 'v2', 'l’editor è in sola lettura: niente testo che il modello non ha');
   assert.equal(doc(ws).restore, null);
-  assert.equal(ws.getState().toasts.at(-1)?.code, 'restoreCancelled');
+  assert.equal(ws.getState().notices.at(-1)?.code, 'restoreCancelled');
 });
 
 test('updateReady turns true only once the document is durable, and endUpdate resets it', async () => {

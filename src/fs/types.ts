@@ -60,7 +60,7 @@ export class FsExistsError extends Error {
 
 /**
  * Il browser ha revocato l'accesso alla cartella (o la cartella non è più raggiungibile).
- * Solo NotAllowedError significa questo: SecurityError è un errore normale (mostrato come toast),
+ * Solo NotAllowedError significa questo: SecurityError è un errore normale (mostrato come notice),
  * non implica che l'accesso alla cartella sia perso.
  */
 export function isAccessError(err: unknown): boolean {

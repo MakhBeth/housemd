@@ -16,7 +16,7 @@ export type SwitchOutcome<S, W> =
   | { kind: 'stay' };
 
 /**
- * Esito di un cambio cartella. Con una cartella aperta un errore resta lì come toast; dall'avvio
+ * Esito di un cambio cartella. Con una cartella aperta un errore resta lì come notice; dall'avvio
  * torna alla schermata iniziale con l'errore.
  */
 export function afterSwitch<S, W>(

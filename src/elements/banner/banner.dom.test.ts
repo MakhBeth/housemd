@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import '../define';
 import { translate } from '../../i18n/i18n';
 import { EN_MESSAGES } from '../../i18n/messages';
-import { NOTICE_CHANNEL, TOAST_CODES, type ToastCode } from '../../workspace/toasts';
+import { NOTICE_CHANNEL, NOTICE_CODES, type NoticeCode } from '../../workspace/notices';
 import type { WorkspaceState } from '../../workspace/workspace';
 import { noticeRoutes, type NoticeContext } from '../workspace/workspaceView';
 
@@ -64,7 +64,7 @@ test('Close and the action emit their events with the row key', () => {
 });
 
 /** Un esempio per codice: parametri, ruolo atteso e percorso del documento di origine. */
-const CASES: Record<ToastCode, { kind: 'error' | 'info'; role: 'alert' | 'status'; params?: Record<string, string | number> }> = {
+const CASES: Record<NoticeCode, { kind: 'error' | 'info'; role: 'alert' | 'status'; params?: Record<string, string | number> }> = {
   saveFailed: { kind: 'error', role: 'alert', params: { detail: 'ENOSPC' } },
   configInvalidJson: { kind: 'info', role: 'status', params: { file: '.housemd.json', detail: 'Unexpected token' } },
   configInvalidSaveTo: { kind: 'info', role: 'status', params: { file: '.housemd.json' } },
@@ -89,18 +89,18 @@ const CASES: Record<ToastCode, { kind: 'error' | 'info'; role: 'alert' | 'status
 
 const SLOTS = ['document', 'workspace', 'saveAll', 'sidebar', 'history'] as const;
 const CONTEXT: NoticeContext = { sidebarOpen: true, dialogOpen: false, silenced: new Set() };
-const bannerItems = (toasts: WorkspaceState['toasts'], docPath: string | null) => noticeRoutes(toasts, docPath, t, 'en', false, CONTEXT);
+const bannerItems = (notices: WorkspaceState['notices'], docPath: string | null) => noticeRoutes(notices, docPath, t, 'en', false, CONTEXT);
 
-for (const code of TOAST_CODES.filter((c) => NOTICE_CHANNEL[c] !== 'app')) {
+for (const code of NOTICE_CODES.filter((c) => NOTICE_CHANNEL[c] !== 'app')) {
   test(`${code}: ARIA role and text in its banner`, () => {
     const { kind, role, params } = CASES[code];
-    const toasts = [{ id: 1, kind, code, params, path: NOTICE_CHANNEL[code] === 'document' ? 'a.md' : undefined }] as unknown as WorkspaceState['toasts'];
-    const banners = bannerItems(toasts, 'a.md');
+    const notices = [{ id: 1, kind, code, params, path: NOTICE_CHANNEL[code] === 'document' ? 'a.md' : undefined }] as unknown as WorkspaceState['notices'];
+    const banners = bannerItems(notices, 'a.md');
     const slots = SLOTS.filter((slot) => banners[slot].length > 0);
     assert.equal(slots.length, 1, `${code} goes to exactly one banner`);
     const banner = mount();
     banner.items = banners[slots[0]!];
-    const expected = translate(EN_MESSAGES, code === 'unreadableFiles' || code === 'saveAllSkipped' ? `toast.${code}.other` : `toast.${code}`, params);
+    const expected = translate(EN_MESSAGES, code === 'unreadableFiles' || code === 'saveAllSkipped' ? `notice.${code}.other` : `notice.${code}`, params);
     const node = banner.querySelector(`[role="${role}"] p, p[role="${role}"]`) ?? banner.querySelector(`p[role="${role}"]`);
     assert.ok(node, `a ${role} row`);
     assert.equal(node.textContent, expected);
@@ -111,9 +111,9 @@ for (const code of TOAST_CODES.filter((c) => NOTICE_CHANNEL[c] !== 'app')) {
 }
 
 test('singular forms for one file / one change', () => {
-  const one = bannerItems([{ id: 1, kind: 'info', code: 'unreadableFiles', params: { count: 1, paths: 'x.md' } }] as unknown as WorkspaceState['toasts'], null);
+  const one = bannerItems([{ id: 1, kind: 'info', code: 'unreadableFiles', params: { count: 1, paths: 'x.md' } }] as unknown as WorkspaceState['notices'], null);
   assert.equal(one.workspace[0]!.text, 'Could not read 1 file: x.md');
-  const skipped = bannerItems([{ id: 1, kind: 'info', code: 'saveAllSkipped', params: { count: 1 } }] as unknown as WorkspaceState['toasts'], null);
+  const skipped = bannerItems([{ id: 1, kind: 'info', code: 'saveAllSkipped', params: { count: 1 } }] as unknown as WorkspaceState['notices'], null);
   assert.match(skipped.saveAll[0]!.text, /^1 change not saved/);
 });
 

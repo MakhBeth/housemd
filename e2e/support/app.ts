@@ -134,7 +134,7 @@ export class App {
     return this.page.getByText(this.t(key), { exact: true });
   }
 
-  toast(text: string): Locator {
+  notice(text: string): Locator {
     return this.page.getByRole('status').filter({ hasText: text });
   }
 

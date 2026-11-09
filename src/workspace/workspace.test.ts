@@ -60,8 +60,8 @@ test('load lists entries, builds the search index and is ready', async () => {
 test('a broken .housemd.json shows a non-blocking warning', async () => {
   const { ws } = await setup({ '.housemd.json': '{ rotto', 'a.md': 'A' });
   assert.equal(ws.getState().status, 'ready');
-  assert.equal(ws.getState().toasts[0]?.code, 'configInvalidJson');
-  assert.equal(ws.getState().toasts[0]?.params?.file, '.housemd.json');
+  assert.equal(ws.getState().notices[0]?.code, 'configInvalidJson');
+  assert.equal(ws.getState().notices[0]?.params?.file, '.housemd.json');
 });
 
 test('edits are saved automatically after the debounce', async () => {
@@ -120,7 +120,7 @@ test('a failed write keeps the text in the emergency buffer and retries on the n
   ws.edit('bozza');
   await ws.flush();
   assert.equal(doc(ws).saveState, 'error');
-  assert.equal(ws.getState().toasts.at(-1)?.code, 'saveFailed');
+  assert.equal(ws.getState().notices.at(-1)?.code, 'saveFailed');
   assert.equal((await buffers.load('ws-1', 'a.md'))?.text, 'bozza');
 
   failing = false;
@@ -150,7 +150,7 @@ test('opening a file restores its emergency buffer, only for the same workspace'
   await ws.openFile('a.md');
   assert.equal(doc(ws).text, 'non salvato');
   assert.equal(doc(ws).saveState, 'dirty');
-  assert.equal(ws.getState().toasts.at(-1)?.code, 'restoredDraft');
+  assert.equal(ws.getState().notices.at(-1)?.code, 'restoredDraft');
   await ws.openFile('b.md');
   assert.equal(doc(ws).text, 'disco b');
 });
@@ -187,8 +187,8 @@ test('a failed removal keeps the open file and its unsaved text', async () => {
   await ws.remove('n');
   assert.equal(doc(ws).path, 'n/a.md');
   assert.equal(doc(ws).text, 'modificato');
-  assert.equal(ws.getState().toasts.at(-1)?.code, 'operationFailed');
-  assert.match(String(ws.getState().toasts.at(-1)?.params?.detail), /EBUSY/);
+  assert.equal(ws.getState().notices.at(-1)?.code, 'operationFailed');
+  assert.match(String(ws.getState().notices.at(-1)?.params?.detail), /EBUSY/);
   assert.equal(scheduler.pending(), 1, 'il salvataggio automatico riprende');
 });
 
@@ -318,8 +318,8 @@ test('createFile creates and opens; existing names are refused', async () => {
   assert.equal(doc(ws).path, 'notes/nuova.md');
   assert.ok(ws.files().includes('notes/nuova.md'));
   await ws.createFile('a.md');
-  assert.equal(ws.getState().toasts.at(-1)?.code, 'alreadyExists');
-  assert.equal(ws.getState().toasts.at(-1)?.params?.path, 'a.md');
+  assert.equal(ws.getState().notices.at(-1)?.code, 'alreadyExists');
+  assert.equal(ws.getState().notices.at(-1)?.params?.path, 'a.md');
 });
 
 test('followWikiLink opens existing notes and creates missing ones next to the current file', async () => {
@@ -460,7 +460,7 @@ test('[finding 6] an edit typed during checkExternal is not overwritten by a rel
   assert.equal(doc(ws).conflict, true, 'diventa un conflitto invece di essere sovrascritto');
 });
 
-test('[finding 7] load finishes even if reading one file fails, with a warning toast', async () => {
+test('[finding 7] load finishes even if reading one file fails, with a warning notice', async () => {
   const ops = memoryOps();
   ops.setFile('a.md', 'A');
   ops.setFile('b.md', 'B');
@@ -473,8 +473,8 @@ test('[finding 7] load finishes even if reading one file fails, with a warning t
   const ws = new Workspace({ fs, workspaceId: 'w', name: 't', buffers: memoryBufferStore(), scheduler: manualScheduler() });
   await ws.load();
   assert.equal(ws.getState().status, 'ready');
-  assert.equal(ws.getState().toasts.at(-1)?.code, 'unreadableFiles');
-  assert.deepEqual(ws.getState().toasts.at(-1)?.params, { count: 1, paths: 'b.md' });
+  assert.equal(ws.getState().notices.at(-1)?.code, 'unreadableFiles');
+  assert.deepEqual(ws.getState().notices.at(-1)?.params, { count: 1, paths: 'b.md' });
   assert.equal(ws.search.search('A')[0]?.path, 'a.md');
 });
 
@@ -489,8 +489,8 @@ test('[finding 7] load still becomes ready if listing the folder fails outright'
   await ws.load();
   assert.equal(ws.getState().status, 'ready');
   assert.deepEqual(ws.getState().entries, []);
-  assert.equal(ws.getState().toasts.at(-1)?.code, 'operationFailed');
-  assert.match(String(ws.getState().toasts.at(-1)?.params?.detail), /EIO listing/);
+  assert.equal(ws.getState().notices.at(-1)?.code, 'operationFailed');
+  assert.match(String(ws.getState().notices.at(-1)?.params?.detail), /EIO listing/);
 });
 
 test('[finding 8] a rename updates the open file immediately even if reindexing another file fails', async () => {
@@ -522,18 +522,18 @@ test('[minor] a successful write is not reported as failed if a post-save cleanu
   await ws.flush();
   assert.equal(await ops.textOf('a.md'), 'nuovo');
   assert.equal(doc(ws).saveState, 'saved');
-  assert.ok(!ws.getState().toasts.some((t) => t.code === 'saveFailed'));
+  assert.ok(!ws.getState().notices.some((t) => t.code === 'saveFailed'));
 });
 
-test('[minor] identical error toasts are not stacked', async () => {
+test('[minor] identical error notices are not stacked', async () => {
   const { ws } = await setup({ 'a.md': 'A' }, { failWrite: () => true });
   await ws.openFile('a.md');
   ws.edit('uno');
   await ws.flush();
   ws.edit('due');
   await ws.flush();
-  const errorToasts = ws.getState().toasts.filter((t) => t.code === 'saveFailed');
-  assert.equal(errorToasts.length, 1);
+  const errorNotices = ws.getState().notices.filter((t) => t.code === 'saveFailed');
+  assert.equal(errorNotices.length, 1);
 });
 
 // --- fix round 2: re-review of 36a1805 (see task-10-fix2.md) --------------------------
@@ -611,8 +611,8 @@ test('[minor round 2] rename always refreshes entries even if reindexing hits a 
   assert.deepEqual(ws.files().sort(), ['new/a.md', 'new/b.md'], 'refreshEntries gira comunque');
   assert.equal(ws.search.search('alfa')[0]?.path, 'new/a.md');
   assert.equal(ws.search.search('beta')[0]?.path, 'old/b.md', 'non confermato mancante: resta nel vecchio indice');
-  assert.equal(ws.getState().toasts.at(-1)?.code, 'operationFailed');
-  assert.match(String(ws.getState().toasts.at(-1)?.params?.detail), /EIO transitorio/);
+  assert.equal(ws.getState().notices.at(-1)?.code, 'operationFailed');
+  assert.match(String(ws.getState().notices.at(-1)?.params?.detail), /EIO transitorio/);
 });
 
 test('[final fix 5] opening the already-open file (clean, no conflict) is a no-op', async () => {
@@ -698,7 +698,7 @@ test('[minor round 2] checkExternal is a no-op while a rename/remove is in progr
   await ws.rename('old', 'new');
   assert.equal(doc(ws).path, 'new/a.md');
   assert.deepEqual(ws.files(), ['new/a.md']);
-  assert.equal(ws.getState().toasts.length, 0);
+  assert.equal(ws.getState().notices.length, 0);
 });
 
 // --- codex review (gpt-6-astra), see codex-fix1.md --------------------------
@@ -895,7 +895,7 @@ test('[codex F9] a buffered draft is recovered even if the file was deleted from
   assert.equal(doc(ws).deletedOnDisk, true);
   assert.equal(doc(ws).saveState, 'dirty');
   assert.equal(doc(ws).conflict, false);
-  assert.equal(ws.getState().toasts.at(-1)?.code, 'restoredDraftDeleted');
+  assert.equal(ws.getState().notices.at(-1)?.code, 'restoredDraftDeleted');
 
   await ws.saveNow(); // l'utente salva: il file viene ricreato
   assert.equal(await ops.textOf('a.md'), 'bozza salvata');
@@ -909,8 +909,8 @@ test('[codex F9] opening a missing file without a draft still reports it as not 
   await ws.openFile('b.md');
   await ws.openFile('a.md');
   assert.equal(doc(ws).path, 'b.md');
-  assert.equal(ws.getState().toasts.at(-1)?.code, 'notFound');
-  assert.equal(ws.getState().toasts.at(-1)?.params?.path, 'a.md');
+  assert.equal(ws.getState().notices.at(-1)?.code, 'notFound');
+  assert.equal(ws.getState().notices.at(-1)?.params?.path, 'a.md');
 });
 
 test('[codex F9] a recovered draft of a deleted file is saved (re-creating the file) when switching to another file', async () => {
@@ -945,7 +945,7 @@ test('[LAB-405] notices are per document: a second deletion keeps the first, rec
   await ws.openFile('b.md');
   await ops.removeEntry('b.md', false);
   await ws.checkExternal();
-  const gone = () => ws.getState().toasts.filter((t) => t.code === 'deletedOutside').map((t) => t.path);
+  const gone = () => ws.getState().notices.filter((t) => t.code === 'deletedOutside').map((t) => t.path);
   assert.deepEqual(gone(), ['a.md', 'b.md']);
   ws.edit('B2');
   await ws.flush();
@@ -977,7 +977,7 @@ test('[LAB-405] a late write error stays attached to the document that was writt
   await new Promise((r) => setTimeout(r, 0));
   fail(new Error('ENOSPC'));
   await saving;
-  const failed = ws.getState().toasts.filter((t) => t.code === 'saveFailed');
+  const failed = ws.getState().notices.filter((t) => t.code === 'saveFailed');
   assert.ok(failed.length > 0 && failed.every((t) => t.path === 'a.md'), `attributed to a.md, got ${failed.map((t) => t.path)}`);
 });
 
@@ -987,14 +987,14 @@ test('[LAB-405] a successful save resolves the data-risk errors of that document
   await ws.openFile('a.md');
   ws.edit('x');
   await ws.flush();
-  assert.ok(ws.getState().toasts.some((t) => t.code === 'saveFailed'));
+  assert.ok(ws.getState().notices.some((t) => t.code === 'saveFailed'));
   failing = false;
   await ws.flush();
-  assert.ok(!ws.getState().toasts.some((t) => t.code === 'saveFailed'));
+  assert.ok(!ws.getState().notices.some((t) => t.code === 'saveFailed'));
   await ws.saveAll();
-  assert.ok(ws.getState().toasts.some((t) => t.code === 'saveAllDone'));
+  assert.ok(ws.getState().notices.some((t) => t.code === 'saveAllDone'));
   ws.edit('y');
-  assert.ok(!ws.getState().toasts.some((t) => t.code === 'saveAllDone'));
+  assert.ok(!ws.getState().notices.some((t) => t.code === 'saveAllDone'));
 });
 
 test('[LAB-405] a buffer write that succeeds resolves bufferFailed; a history read that succeeds resolves historyFailed', async () => {
@@ -1012,7 +1012,7 @@ test('[LAB-405] a buffer write that succeeds resolves bufferFailed; a history re
   const buffer = () => (ws as unknown as { bufferCurrentDoc(): Promise<void> }).bufferCurrentDoc();
   await buffer();
   await buffer();
-  const codes = () => ws.getState().toasts.map((t) => `${t.code}#${t.id}`);
+  const codes = () => ws.getState().notices.map((t) => `${t.code}#${t.id}`);
   assert.deepEqual(codes(), ['bufferFailed#1'], 'the identical automatic failure keeps its node and ID');
   failBuffer = false;
   await buffer();
@@ -1030,7 +1030,7 @@ test('[LAB-405] an explicit retry with the same failure renews the notice; an au
   ws.edit('x');
   await ws.flush();
   await ws.flush();
-  const ids = () => ws.getState().toasts.filter((t) => t.code === 'saveFailed').map((t) => t.id);
+  const ids = () => ws.getState().notices.filter((t) => t.code === 'saveFailed').map((t) => t.id);
   const first = ids();
   assert.equal(first.length, 1);
   await ws.saveNow();
@@ -1041,9 +1041,9 @@ test('[LAB-405] an explicit retry with the same failure renews the notice; an au
 test('[LAB-405] manual commands renew an identical error (two createFile on an existing file), automatic ones keep the ID', async () => {
   const { ws } = await setup({ 'a.md': 'A' });
   await ws.createFile('a.md', '');
-  const first = ws.getState().toasts.filter((t) => t.code === 'alreadyExists').map((t) => t.id);
+  const first = ws.getState().notices.filter((t) => t.code === 'alreadyExists').map((t) => t.id);
   await ws.createFile('a.md', '');
-  const second = ws.getState().toasts.filter((t) => t.code === 'alreadyExists').map((t) => t.id);
+  const second = ws.getState().notices.filter((t) => t.code === 'alreadyExists').map((t) => t.id);
   assert.equal(first.length, 1);
   assert.equal(second.length, 1);
   assert.notDeepEqual(first, second, 'a new ID: the banner is renewed and announced again');
@@ -1067,25 +1067,25 @@ test('[LAB-405] the manual origin belongs to the event: overlapping automatic ch
     ws.edit(text);
     await buffer();
   }
-  assert.deepEqual(ws.getState().toasts.filter((t) => t.code === 'bufferFailed').map((t) => t.id), [1], 'same ID while a command is pending');
+  assert.deepEqual(ws.getState().notices.filter((t) => t.code === 'bufferFailed').map((t) => t.id), [1], 'same ID while a command is pending');
   releaseMkdir();
   await pending;
   await ws.listHistory('a.md', { manual: true });
-  const first = ws.getState().toasts.find((t) => t.code === 'historyFailed')!.id;
+  const first = ws.getState().notices.find((t) => t.code === 'historyFailed')!.id;
   await ws.listHistory('a.md', { manual: false });
   await ws.listHistory('a.md');
-  assert.equal(ws.getState().toasts.find((t) => t.code === 'historyFailed')!.id, first, 'automatic reloads keep the ID');
+  assert.equal(ws.getState().notices.find((t) => t.code === 'historyFailed')!.id, first, 'automatic reloads keep the ID');
   await ws.listHistory('a.md', { manual: true });
-  assert.notEqual(ws.getState().toasts.find((t) => t.code === 'historyFailed')!.id, first, 'explicit history read renews the notice');
+  assert.notEqual(ws.getState().notices.find((t) => t.code === 'historyFailed')!.id, first, 'explicit history read renews the notice');
 });
 
 test('[LAB-405] every explicit file command renews an identical error: opening a file that cannot be read', async () => {
   const { ws } = await setup({ 'a.md': 'A', 'b.md': 'B' });
   await ws.openFile('a.md');
   await ws.openFile('missing.md');
-  const first = ws.getState().toasts.map((t) => t.id);
+  const first = ws.getState().notices.map((t) => t.id);
   await ws.openFile('missing.md');
-  const second = ws.getState().toasts.map((t) => t.id);
+  const second = ws.getState().notices.map((t) => t.id);
   assert.ok(first.length > 0, 'the failed open is reported');
   assert.notDeepEqual(first, second, 'a second identical failure is a new, announced event');
 });
@@ -1103,7 +1103,7 @@ test('[LAB-408] a pending saveNow does not make concurrent automatic checkpoints
   const pending = ws.saveNow();
   await new Promise((r) => setTimeout(r, 0));
   const buffer = () => (ws as unknown as { bufferCurrentDoc(): Promise<void> }).bufferCurrentDoc();
-  const ids = () => ws.getState().toasts.filter((t) => t.code === 'bufferFailed').map((t) => t.id);
+  const ids = () => ws.getState().notices.filter((t) => t.code === 'bufferFailed').map((t) => t.id);
   const seen = new Set<number>();
   for (const text of ['1', '2', '3']) {
     ws.edit(text);

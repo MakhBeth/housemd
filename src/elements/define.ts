@@ -24,7 +24,6 @@ import { HmdSettings } from './settings/settings.element';
 import { HmdSettingsSync } from './settings/sync.element';
 import { HmdStartScreen } from './start-screen/start-screen.element';
 import { HmdBanner } from './banner/banner.element';
-import { HmdToasts } from './toasts/toasts.element';
 import { HmdThemeSwitcher } from './theme-switcher/theme-switcher.element';
 import { HmdUpdateNotice } from './update-notice/update-notice.element';
 import { HmdWorkspace } from './workspace/workspace.element';
@@ -64,7 +63,6 @@ const ELEMENTS: Definitions = [
   ['hmd-start-screen', HmdStartScreen],
   ['hmd-theme-switcher', HmdThemeSwitcher],
   ['hmd-banner', HmdBanner],
-  ['hmd-toasts', HmdToasts],
   ['hmd-update-notice', HmdUpdateNotice],
   ['hmd-workspace', HmdWorkspace],
 ];

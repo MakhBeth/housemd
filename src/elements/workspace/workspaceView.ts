@@ -2,7 +2,7 @@ import type { AiErrorCode } from '../../ai/types';
 import type { AiErrorOrigin } from '../../ai/aiController';
 import type { MessageKey } from '../../i18n/messages';
 import type { Locale, Params } from '../../i18n/i18n';
-import { isClosable, NOTICE_CHANNEL, noticeKey, type ToastCode } from '../../workspace/toasts';
+import { isClosable, NOTICE_CHANNEL, noticeKey, type NoticeCode } from '../../workspace/notices';
 import type { WorkspaceState } from '../../workspace/workspace';
 import type { BannerItem } from '../banner/banner.element';
 import type { Mode } from './layout';
@@ -40,7 +40,7 @@ export function aiErrorItems(
 ): BannerItem[] {
   // Con l'origine visibile l'errore sta nella sua nota locale: il banner è solo il ripiego per l'origine nascosta.
   return aiError && !origin?.anchor?.isConnected
-    ? [{ key: `${AI_ERROR_PREFIX}${aiError}`, kind: aiErrorKind(aiError), text: t(`ai.error.${aiError}` as MessageKey), closeLabel: t('toast.close') }]
+    ? [{ key: `${AI_ERROR_PREFIX}${aiError}`, kind: aiErrorKind(aiError), text: t(`ai.error.${aiError}` as MessageKey), closeLabel: t('notice.close') }]
     : [];
 }
 
@@ -78,7 +78,7 @@ export interface NoticeContext {
   settingsOpen?: boolean;
 }
 
-const DIALOG_ALERT: ReadonlySet<ToastCode> = new Set<ToastCode>(['saveFailed', 'bufferFailed', 'draftNotPersisted', 'deletedOutside', 'restoredDraftDeleted']);
+const DIALOG_ALERT: ReadonlySet<NoticeCode> = new Set<NoticeCode>(['saveFailed', 'bufferFailed', 'draftNotPersisted', 'deletedOutside', 'restoredDraftDeleted']);
 
 /**
  * Destinazione di ogni messaggio del registro del workspace. Il canale documento mostra solo gli esiti del
@@ -90,7 +90,7 @@ const DIALOG_ALERT: ReadonlySet<ToastCode> = new Set<ToastCode>(['saveFailed', '
  * si differiscono in un solo riepilogo alla chiusura. I messaggi senza «Chiudi» sono quelli a rischio dati.
  */
 export function noticeRoutes(
-  toasts: WorkspaceState['toasts'],
+  notices: WorkspaceState['notices'],
   docPath: string | null,
   t: (key: MessageKey, params?: Params) => string,
   locale: Locale,
@@ -99,47 +99,47 @@ export function noticeRoutes(
   context: NoticeContext,
 ): NoticeRoutes {
   const out: NoticeRoutes = { document: [], workspace: [], saveAll: [], sidebar: [], history: [], historyPanel: [], settings: [], dialog: [], announcedInDialog: [], deferred: [] };
-  for (const toast of toasts) {
-    const channel = NOTICE_CHANNEL[toast.code];
+  for (const notice of notices) {
+    const channel = NOTICE_CHANNEL[notice.code];
     if (channel === 'app') continue;
-    const text = t(noticeKey(toast.code, toast.params, locale) as MessageKey, toast.params);
-    const origin = toast.origin;
+    const text = t(noticeKey(notice.code, notice.params, locale) as MessageKey, notice.params);
+    const origin = notice.origin;
     // Un'immagine fallita appartiene al documento in cui la si inseriva, non al messaggio di workspace che la descrive.
     const documentBound = channel === 'document' || origin?.action === 'image';
-    const here = documentBound && toast.path === docPath;
+    const here = documentBound && notice.path === docPath;
     let slot: 'document' | 'workspace' | 'saveAll' | 'sidebar' | 'history' | 'historyPanel' | 'settings' = here ? 'document' : 'workspace';
-    if (toast.code === 'saveAllSkipped' || toast.code === 'saveAllDone' || (toast.code === 'bufferFailed' && toast.path === undefined)) slot = 'saveAll';
-    else if (context.sidebarOpen && (toast.code === 'openFolderFailed' || toast.code === 'alreadyExists' || toast.code === 'notFound')) slot = 'sidebar';
-    else if (toast.code === 'historyFailed' || toast.code === 'restoreCancelled') slot = 'history';
+    if (notice.code === 'saveAllSkipped' || notice.code === 'saveAllDone' || (notice.code === 'bufferFailed' && notice.path === undefined)) slot = 'saveAll';
+    else if (context.sidebarOpen && (notice.code === 'openFolderFailed' || notice.code === 'alreadyExists' || notice.code === 'notFound')) slot = 'sidebar';
+    else if (notice.code === 'historyFailed' || notice.code === 'restoreCancelled') slot = 'history';
     // L'azione di origine decide dove l'esito si legge: nel pannello cronologia aperto sul suo documento, accanto al Salva tutto delle impostazioni.
     if ((origin?.action === 'history' || origin?.action === 'restore') && origin.path === context.historyPath) slot = 'historyPanel';
     else if (origin?.action === 'saveAllSettings' && context.settingsOpen) slot = 'settings';
-    const shown = slot === 'workspace' && documentBound && toast.path ? `${toast.path}: ${text}` : text;
-    const known = context.known?.has(toast.id) ?? false;
-    const toDialog = context.dialogOpen && !known && DIALOG_ALERT.has(toast.code);
-    const deferred = context.dialogOpen && !known && !toDialog && !context.silenced.has(toast.id);
+    const shown = slot === 'workspace' && documentBound && notice.path ? `${notice.path}: ${text}` : text;
+    const known = context.known?.has(notice.id) ?? false;
+    const toDialog = context.dialogOpen && !known && DIALOG_ALERT.has(notice.code);
+    const deferred = context.dialogOpen && !known && !toDialog && !context.silenced.has(notice.id);
     if (toDialog) {
-      out.dialog.push({ key: `ws-${toast.id}`, kind: 'alert', text: shown });
-      out.announcedInDialog.push(toast.id);
+      out.dialog.push({ key: `ws-${notice.id}`, kind: 'alert', text: shown });
+      out.announcedInDialog.push(notice.id);
     }
-    if (deferred) out.deferred.push(toast.id);
+    if (deferred) out.deferred.push(notice.id);
     out[slot].push({
-      key: `ws-${toast.id}`,
-      kind: toast.kind === 'error' ? 'alert' : 'status',
+      key: `ws-${notice.id}`,
+      kind: notice.kind === 'error' ? 'alert' : 'status',
       text: shown,
-      closeLabel: isClosable(toast.code) ? t('toast.close') : undefined,
+      closeLabel: isClosable(notice.code) ? t('notice.close') : undefined,
       quiet:
         toDialog ||
         deferred ||
-        context.silenced.has(toast.id) ||
-        (here && indicatorSpeaks && (toast.code === 'saveFailed' || toast.code === 'deletedOutside')),
+        context.silenced.has(notice.id) ||
+        (here && indicatorSpeaks && (notice.code === 'saveFailed' || notice.code === 'deletedOutside')),
     });
   }
   return out;
 }
 
 /** Chiusura di un messaggio: l'errore AI si toglie dal controller, gli altri dallo workspace. */
-export function toastTarget(key: string): { kind: 'ai' } | { kind: 'workspace'; id: number } {
+export function noticeTarget(key: string): { kind: 'ai' } | { kind: 'workspace'; id: number } {
   return key.startsWith(AI_ERROR_PREFIX) ? { kind: 'ai' } : { kind: 'workspace', id: Number(key.slice('ws-'.length)) };
 }
 

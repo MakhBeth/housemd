@@ -52,7 +52,7 @@ test('no message until an update is available; the empty status container is alr
   const { el, set } = mount();
   assert.equal(el.querySelector('[role="status"]')!.textContent, '');
   set({ available: true, busy: false });
-  assert.equal(el.querySelector('[role="status"]')!.textContent, EN_MESSAGES['toast.newVersion']);
+  assert.equal(el.querySelector('[role="status"]')!.textContent, EN_MESSAGES['notice.newVersion']);
   assert.equal(el.querySelector('button.action')!.textContent, EN_MESSAGES['update.apply']);
   assert.equal(el.querySelector('button.close')!.textContent, EN_MESSAGES['update.dismiss']);
   set({ available: false, busy: false });
@@ -74,7 +74,7 @@ test('app banner: newVersion and update.applying are status rows with Update, re
   assert.ok(el.querySelector('[role="status"]'), 'container mounted before the first message');
   assert.equal(el.querySelector('[role="status"]')!.textContent, '');
   set({ available: true, busy: false });
-  assert.equal(el.querySelector('[role="status"]')!.textContent, EN_MESSAGES['toast.newVersion']);
+  assert.equal(el.querySelector('[role="status"]')!.textContent, EN_MESSAGES['notice.newVersion']);
   (el.querySelector('button.action') as HTMLButtonElement).click();
   (el.querySelector('button.close') as HTMLButtonElement).click();
   assert.deepEqual(calls, ['apply', 'dismiss']);
@@ -83,7 +83,7 @@ test('app banner: newVersion and update.applying are status rows with Update, re
   assert.equal(el.querySelectorAll('button.close:not([hidden])').length, 0, 'no Later while applying');
   el.dbBlocked = true;
   const rows = [...el.querySelectorAll('[role="status"] p')].map((p) => p.textContent);
-  assert.ok(rows.includes(EN_MESSAGES['toast.reloadOtherTabs']));
+  assert.ok(rows.includes(EN_MESSAGES['notice.reloadOtherTabs']));
   assert.equal(el.querySelector('[role="alert"]'), null);
   assert.equal(el.querySelectorAll('[role="status"] button').length, 0, 'buttons outside the live text');
 });

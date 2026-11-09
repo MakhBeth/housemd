@@ -224,7 +224,7 @@ test('with the AI session: four modes, AI mode shows the AI sidebar and the revi
   assert.ok(review);
   // Un doc nuovo a ogni notifica dello workspace: la revisione rilegge canAccept (conflitto, aggiornamento).
   const before = review.doc;
-  workspace.dismissToast(-1);
+  workspace.dismissNotice(-1);
   workspace.edit('# A!');
   assert.ok(review.doc !== before, 'a new doc object');
 });
@@ -471,14 +471,14 @@ test('[LAB-409] an AI error with a hidden origin and a dialog open is deferred a
   document.body.append(dialog);
   dialog.showModal();
   // Il dialog è già aperto quando l'errore arriva (altrimenti l'apertura lo fotografa come già annunciato).
-  workspace.dismissToast(-1);
+  workspace.dismissNotice(-1);
   ai.set({ error: 'server', errorOrigin: null } as never);
   await waitFor(() => rows(el).includes(text));
   // Con il dialog aperto la riga è visibile ma muta: nessuna regione live la dice.
   assert.ok(!liveTexts(el).includes(text), 'quiet while the dialog is open');
   dialog.close();
   dialog.remove();
-  workspace.dismissToast(-1);
+  workspace.dismissNotice(-1);
   await waitFor(() => [...el.querySelectorAll('p.visually-hidden[role="status"]')].some((n) => n.textContent === text));
   assert.equal([...el.querySelectorAll('[role="status"], [role="alert"]')].filter((n) => n.textContent === text).length, 1, 'said exactly once');
 });
@@ -495,11 +495,11 @@ test('[LAB-409] restoreCancelled describes Restore in the open history panel, no
   await waitFor(() => !!el.querySelector('button.restore'));
   await workspace.restoreVersion(1);
   const panelBanner = () => el.querySelector('section.pane > hmd-banner');
-  await waitFor(() => !!panelBanner()?.textContent?.includes(EN_MESSAGES['toast.restoreCancelled']));
+  await waitFor(() => !!panelBanner()?.textContent?.includes(EN_MESSAGES['notice.restoreCancelled']));
   const row = panelBanner()!;
   const message = row.querySelector('p.message')!;
   assert.equal(el.querySelector('button.restore')!.getAttribute('aria-describedby'), message.id);
-  assert.ok(!el.querySelector('main > hmd-banner.noteBanner')?.textContent?.includes(EN_MESSAGES['toast.restoreCancelled']));
+  assert.ok(!el.querySelector('main > hmd-banner.noteBanner')?.textContent?.includes(EN_MESSAGES['notice.restoreCancelled']));
 });
 
 test('[LAB-409] historyFailed enters the open history panel', async () => {
@@ -516,10 +516,10 @@ test('[LAB-409] Save all from the settings describes the settings button, not th
   win.setHash('#settings');
   await waitFor(() => !!el.querySelector('hmd-settings button.secondary'));
   el.querySelector<HTMLButtonElement>('hmd-settings button.secondary')!.click();
-  await waitFor(() => !!el.querySelector('hmd-settings hmd-banner')?.textContent?.includes(EN_MESSAGES['toast.saveAllDone']));
+  await waitFor(() => !!el.querySelector('hmd-settings hmd-banner')?.textContent?.includes(EN_MESSAGES['notice.saveAllDone']));
   const message = el.querySelector('hmd-settings hmd-banner p.message')!;
   assert.equal(el.querySelector('hmd-settings button.secondary')!.getAttribute('aria-describedby'), message.id);
-  assert.ok(![...el.querySelectorAll('main > hmd-banner')].some((b) => b.textContent?.includes(EN_MESSAGES['toast.saveAllDone'])), 'not under the toolbar button');
+  assert.ok(![...el.querySelectorAll('main > hmd-banner')].some((b) => b.textContent?.includes(EN_MESSAGES['notice.saveAllDone'])), 'not under the toolbar button');
 });
 
 test('[LAB-409] a failed image goes to the banner of the document it was pasted in, not the workspace banner', async () => {
@@ -606,7 +606,7 @@ test('[LAB-409] a dialog that closes while another opens in the same update: the
     return dialog;
   };
   const first = open();
-  workspace.dismissToast(-1);
+  workspace.dismissNotice(-1);
   ai.set({ error: 'server', errorOrigin: null } as never);
   await waitFor(() => rows(el).includes(text));
   assert.ok(!liveTexts(el).includes(text), 'deferred while the first dialog is open');
@@ -614,11 +614,11 @@ test('[LAB-409] a dialog that closes while another opens in the same update: the
   first.removeAttribute('open');
   first.remove();
   const second = open();
-  workspace.dismissToast(-1);
+  workspace.dismissNotice(-1);
   assert.ok(!liveTexts(el).includes(text), 'still deferred under the second dialog');
   second.close();
   second.remove();
-  workspace.dismissToast(-1);
+  workspace.dismissNotice(-1);
   await waitFor(() => [...el.querySelectorAll('p.visually-hidden[role="status"]')].some((n) => n.textContent === text));
   assert.equal([...el.querySelectorAll('[role="status"], [role="alert"]')].filter((n) => n.textContent === text).length, 1, 'summarized exactly once');
 });

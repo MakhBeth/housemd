@@ -67,13 +67,13 @@ export class HmdUpdateNotice extends HmdElement {
       items.push({
         key: 'newVersion',
         kind: 'status',
-        text: t(state.busy ? 'update.applying' : 'toast.newVersion'),
+        text: t(state.busy ? 'update.applying' : 'notice.newVersion'),
         actionLabel: t('update.apply'),
         busy: state.busy,
         closeLabel: state.busy ? undefined : t('update.dismiss'),
       });
     }
-    if (this.#dbBlocked) items.push({ key: 'reloadOtherTabs', kind: 'status', text: t('toast.reloadOtherTabs'), closeLabel: t('toast.close') });
+    if (this.#dbBlocked) items.push({ key: 'reloadOtherTabs', kind: 'status', text: t('notice.reloadOtherTabs'), closeLabel: t('notice.close') });
     // Se il pulsante che chiude sparisce col focus, il focus va al primo controllo del contenuto dell'app.
     banner.focusFallback = () => this.parentElement?.querySelector<HTMLElement>(':scope > :not(hmd-update-notice) button') ?? null;
     banner.items = items;

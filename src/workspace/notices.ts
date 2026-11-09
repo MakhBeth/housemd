@@ -2,10 +2,10 @@ import { pluralKey, type Locale } from '../i18n/i18n';
 
 /**
  * Messaggi del Workspace: un codice chiuso più eventuali parametri. L'interfaccia li traduce con
- * `t('toast.' + code, params)`; i dettagli tecnici (errore del browser o del parser) viaggiano come
+ * `t('notice.' + code, params)`; i dettagli tecnici (errore del browser o del parser) viaggiano come
  * `detail` e restano in lingua originale.
  */
-export const TOAST_CODES = [
+export const NOTICE_CODES = [
   'saveFailed',
   'configInvalidJson',
   'configInvalidSaveTo',
@@ -28,28 +28,28 @@ export const TOAST_CODES = [
   'openFolderFailed',
 ] as const;
 
-export type ToastCode = (typeof TOAST_CODES)[number];
-export type ToastParams = Readonly<Record<string, string | number>>;
+export type NoticeCode = (typeof NOTICE_CODES)[number];
+export type NoticeParams = Readonly<Record<string, string | number>>;
 
 /** Azione da cui nasce un messaggio, per metterlo dove l'utente l'ha avviata (pannello cronologia, impostazioni, documento). */
-export type ToastAction = 'restore' | 'history' | 'saveAll' | 'saveAllSettings' | 'image';
+export type NoticeAction = 'restore' | 'history' | 'saveAll' | 'saveAllSettings' | 'image';
 
-export interface Toast {
+export interface Notice {
   id: number;
   /** `error` → riga `alert`, `info` → riga `status`. */
   kind: 'error' | 'info';
-  code: ToastCode;
-  params?: ToastParams;
+  code: NoticeCode;
+  params?: NoticeParams;
   /** Documento di origine (solo i messaggi del canale documento): un altro documento attivo non se li prende. */
   path?: string;
   /** Azione di origine e documento su cui è partita (catturato prima di ogni `await`), se serve alla destinazione. */
-  origin?: { action: ToastAction; path?: string };
+  origin?: { action: NoticeAction; path?: string };
 }
 
 /** Dove compare un messaggio: sopra il documento, sotto la toolbar del workspace, in cima all'app. */
 export type NoticeChannel = 'document' | 'workspace' | 'app';
 
-export const NOTICE_CHANNEL: Readonly<Record<ToastCode, NoticeChannel>> = {
+export const NOTICE_CHANNEL: Readonly<Record<NoticeCode, NoticeChannel>> = {
   saveFailed: 'document',
   configInvalidJson: 'workspace',
   configInvalidSaveTo: 'workspace',
@@ -73,19 +73,19 @@ export const NOTICE_CHANNEL: Readonly<Record<ToastCode, NoticeChannel>> = {
 };
 
 /** Rischio dati: restano finché il flusso esistente non li risolve, senza «Chiudi». */
-const DATA_RISK: ReadonlySet<ToastCode> = new Set(['saveFailed', 'bufferFailed', 'draftNotPersisted', 'deletedOutside']);
+const DATA_RISK: ReadonlySet<NoticeCode> = new Set(['saveFailed', 'bufferFailed', 'draftNotPersisted', 'deletedOutside']);
 
-export function isClosable(code: ToastCode): boolean {
+export function isClosable(code: NoticeCode): boolean {
   return !DATA_RISK.has(code);
 }
 
 /** Chiave del catalogo: i messaggi con un conteggio hanno le forme `.one` e `.other`. */
-export function noticeKey(code: ToastCode, params: ToastParams | undefined, locale: Locale): string {
-  if (code === 'unreadableFiles' || code === 'saveAllSkipped') return pluralKey(locale, `toast.${code}`, Number(params?.count ?? 0));
-  return `toast.${code}`;
+export function noticeKey(code: NoticeCode, params: NoticeParams | undefined, locale: Locale): string {
+  if (code === 'unreadableFiles' || code === 'saveAllSkipped') return pluralKey(locale, `notice.${code}`, Number(params?.count ?? 0));
+  return `notice.${code}`;
 }
 
-export function sameToast(a: Omit<Toast, 'id'>, b: Omit<Toast, 'id'>): boolean {
+export function sameNotice(a: Omit<Notice, 'id'>, b: Omit<Notice, 'id'>): boolean {
   return a.kind === b.kind && a.code === b.code && JSON.stringify(a.params ?? {}) === JSON.stringify(b.params ?? {});
 }
 

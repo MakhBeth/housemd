@@ -8,7 +8,7 @@ Proposta LAB-404, base `main` al commit `17425536a5fddd637815b8c99a0bbc20f4f502f
 2. Tutti i messaggi in un unico banner: semplice, ma separa gli errori dai campi e mescola documenti, sync e salvataggi. Scartata.
 3. Centro notifiche con contatore: conserva uno storico, ma introduce navigazione e un nuovo componente per leggere informazioni necessarie all'azione corrente. Scartata perché fuori necessità.
 
-Riutilizzare note `role="status"`, `announce`, indicatore di salvataggio, barra conflitto e righe di errore delle impostazioni. I banner sono righe nel layout, non popover, overlay, toast rinominati o finestre modali. I pulsanti sono fuori dalla regione live del testo. Nessun nuovo centro notifiche.
+Riutilizzare note `role="status"`, `announce`, indicatore di salvataggio, barra conflitto e righe di errore delle impostazioni. I banner sono righe nel layout, non popover, overlay, notice rinominati o finestre modali. I pulsanti sono fuori dalla regione live del testo. Nessun nuovo centro notifiche.
 
 ## Struttura, stati e comportamento comune
 
@@ -17,7 +17,7 @@ Riutilizzare note `role="status"`, `announce`, indicatore di salvataggio, barra 
 - **Workspace:** righe sotto la toolbar, prima dell'area centrale, visibili in tutte le modalità. Nessun posizionamento fisso. Avvisi globali di avvio/aggiornamento nella stessa posizione logica dell'app anche senza cartella aperta.
 - **Vuoto:** le regioni live locali vengono montate vuote; nessun testo «Nessuna notifica». Anche ogni banner documento, workspace e app ha un contenitore live `role="status"` (polite) montato vuoto prima del primo messaggio e mantenuto nel DOM e nell’albero di accessibilità per la vita della relativa vista. Quando è vuoto non ha testo visibile, padding, margini o ingombro: mai `hidden`, `display:none`, `visibility:hidden` o `aria-hidden` sul contenitore live o sui suoi antenati. Le righe informative vengono aggiunte come figli del contenitore già presente, senza regioni live annidate. I pulsanti restano suoi fratelli, fuori dal testo live. Le righe `role="alert"` inserite dinamicamente sono l’unica eccezione al montaggio vuoto anticipato: collocarle in uno spazio fratello del contenitore polite, mai al suo interno, per evitare annunci duplicati. **Caricamento:** mantenere i progressi esistenti (`folder.opening`, `save.saving`, `update.applying`, stato sync), nessuna percentuale inventata. **Successo:** nota locale persistente fino alla prossima azione nello stesso contesto. **Errore:** testo e azione disponibili fino alla risoluzione o chiusura esplicita, mai timer.
 - Il nuovo tentativo elimina l'esito del tentativo precedente nello stesso contesto; il successo elimina il relativo errore. Un altro documento, comando o errore non cancella problemi ancora aperti. Configurazione/lettura si rivalutano al caricamento riuscito della cartella; cronologia alla successiva operazione riuscita; sync alla successiva sync riuscita. All'abbandono esplicito della cartella si eliminano gli esiti relativi a quella cartella, non gli avvisi globali dell'app.
-- Conferme e avvisi informativi possono avere **Chiudi** (`toast.close`, testo visibile). Ogni Chiudi usa `aria-describedby` con l’ID univoco del testo del proprio messaggio, così il contesto è disponibile senza nuove chiavi o modifiche al nome visibile; il riferimento viene rimosso insieme al messaggio. Errori di rischio dati (`saveFailed`, `bufferFailed`, `draftNotPersisted`, documento eliminato) non si nascondono manualmente: restano fino al salvataggio/recupero o abbandono esplicito già protetto dal flusso esistente. Non introdurre nuove azioni distruttive. Chiudere gli altri messaggi non risolve il problema e un nuovo tentativo fallito li ripresenta.
+- Conferme e avvisi informativi possono avere **Chiudi** (`notice.close`, testo visibile). Ogni Chiudi usa `aria-describedby` con l’ID univoco del testo del proprio messaggio, così il contesto è disponibile senza nuove chiavi o modifiche al nome visibile; il riferimento viene rimosso insieme al messaggio. Errori di rischio dati (`saveFailed`, `bufferFailed`, `draftNotPersisted`, documento eliminato) non si nascondono manualmente: restano fino al salvataggio/recupero o abbandono esplicito già protetto dal flusso esistente. Non introdurre nuove azioni distruttive. Chiudere gli altri messaggi non risolve il problema e un nuovo tentativo fallito li ripresenta.
 - Nessun focus automatico all'arrivo di un messaggio, né apertura automatica di pannelli. Tab segue l'ordine DOM; Invio/Spazio attivano i pulsanti; Esc conserva il comportamento del dialog/popover esistente, non svuota tutti gli errori. Se Chiudi rimuove il controllo che possiede il focus, restituirlo al controllo origine se presente, altrimenti alla toolbar persistente (o Apri cartella all'avvio). Non spostare focus quando è altrove.
 - Quando l'origine è nascosta (sidebar chiusa, modalità focus, impostazioni chiuse), mostrare il messaggio nel banner di workspace. Per un dialog modale aperto, gli esiti delle sue azioni devono essere al suo interno. Gli eventi esterni a rischio dati (`saveFailed`, `bufferFailed`, `draftNotPersisted`, `deletedOutside` e recupero di bozza senza file `restoredDraftDeleted`) compaiono subito come riga `alert` visibile nel dialog attivo, senza spostare il focus: riusare il testo specifico della rispettiva chiave, così non si presenta un errore di copia di emergenza come errore di salvataggio su disco. Durante il dialog questa riga è l’unico canale live dell’evento; il banner esterno conserva lo stato senza annunciarlo. Alla chiusura il messaggio persistente torna nella destinazione ordinaria senza un secondo annuncio. Gli altri eventi esterni sono registrati e differiti: prima si restituisce il focus, poi si pubblica il riepilogo polite tramite `announce`, in un aggiornamento successivo alla restituzione del focus, mai nello stesso aggiornamento DOM. Non usare un alert assertivo per tale riepilogo e non ripetere eventi già annunciati nel dialog. Verificare manualmente l’ordine con screen reader; il solo ritardo del DOM non certifica che la lettura del focus sia terminata. Alla riapertura del contesto il messaggio torna locale senza un secondo annuncio automatico. Un solo canale live per evento, mai banner e nota entrambi parlanti.
 - `announce` aggiorna una regione già montata, con `aria-atomic="true"` (salvo l’inserimento dinamico delle righe alert descritto sopra); un nuovo tentativo esplicito con lo stesso esito forza il riannuncio. Render, lingua, cambio vista e polling invariato non ripetono l'allarme. Eventi distinti non si sovrascrivono: restano righe leggibili; eventi automatici identici per codice e contesto si aggiornano una sola volta. Riassumere in un solo aggiornamento quelli dello stesso caricamento, mantenendo i dettagli visibili.
@@ -27,7 +27,7 @@ Riutilizzare note `role="status"`, `announce`, indicatore di salvataggio, barra 
 
 Nella tabella i file abbreviati sono `W = src/workspace/workspace.ts`, `U = src/elements/update-notice/update-notice.element.ts`, `A = src/elements/app/app.element.ts`. I testi esatti per tutte le lingue sono nell'appendice; la chiave è anche l'identificatore verificabile. Conservare le chiavi attuali salvo le due pluralizzazioni indicate sotto.
 
-| Chiave `toast.*` | Origine | Trigger e tipo | Destinazione / ruolo / motivo |
+| Chiave `notice.*` | Origine | Trigger e tipo | Destinazione / ruolo / motivo |
 | --- | --- | --- | --- |
 | saveFailed | W:776 | Scrittura documento fallita; errore | Estendere indicatore salvataggio con dettaglio visibile, `alert`; in focus banner documento. Unificare l'annuncio con `save.error`, non pronunciarli entrambi. |
 | configInvalidJson | W:318 | Parsing configurazione all'apertura; avviso | Banner workspace `status`, file e dettaglio: riguarda tutta la cartella. |
@@ -51,11 +51,11 @@ Nella tabella i file abbreviati sono `W = src/workspace/workspace.ts`, `U = src/
 | reloadOtherTabs | A:235 | DB bloccato da altra scheda; avviso | Banner app `status`, persistente fino allo sblocco o Chiudi. Non promettere che Chiudi sblocchi il DB. |
 | update.applying | U:54 | Aggiornamento in corso; progresso | Stessa nota `status` accanto ad Aggiorna. Clic ripetuto riannuncia, non avvia operazioni concorrenti. |
 
-`newVersion` e `reloadOtherTabs` appartengono al catalogo ToastCode ma oggi passano da `hmd-notice`, non dall'array workspace. Sono inclusi per rimuovere anche i messaggi flottanti. `toast.close` è un'etichetta, non un messaggio. Non esistono altri progressi nel flusso hmd-toasts.
+`newVersion` e `reloadOtherTabs` appartengono al catalogo NoticeCode ma oggi passano da `hmd-notice`, non dall'array workspace. Sono inclusi per rimuovere anche i messaggi flottanti. `notice.close` è un'etichetta, non un messaggio. Non esistono altri progressi nel flusso hmd-notices.
 
 ## Inventario AI: canale parallelo da non perdere
 
-`src/elements/workspace/workspaceView.ts:19–23` aggiunge `AiState.error` come toast `ai-error`. `src/ai/aiController.ts:45` accetta i codici `AiErrorCode` di `src/ai/types.ts:8`; tutti i 27 codici sono coperti dalla tabella dei testi nell'appendice. Non basta cercare `toast(`.
+`src/elements/workspace/workspaceView.ts:19–23` aggiunge `AiState.error` come notice `ai-error`. `src/ai/aiController.ts:45` accetta i codici `AiErrorCode` di `src/ai/types.ts:8`; tutti i 27 codici sono coperti dalla tabella dei testi nell'appendice. Non basta cercare `notice(`.
 
 La destinazione dipende dall'operazione origine, non soltanto dal codice (`server` può arrivare da più azioni):
 
@@ -86,7 +86,7 @@ Skill design-taste-frontend applicata alla critica del pattern, non alla produzi
 
 ## Verifica richiesta al Builder e ai revisori
 
-1. Ripetere ricerca sui produttori e sul collegamento UI, non solo sulle stringhe. Comandi: `git grep -n -E 'toast|Toast' -- src`; `git grep -n -E '\.report\(|error:' -- src/ai src/elements`. L'appendice fotografa tutte le chiavi `toast.*`, `ai.error.*` e `update.applying`; includere nei futuri diff eventuali nuovi produttori.
+1. Ripetere ricerca sui produttori e sul collegamento UI, non solo sulle stringhe. Comandi: `git grep -n -E 'notice|Notice' -- src`; `git grep -n -E '\.report\(|error:' -- src/ai src/elements`. L'appendice fotografa tutte le chiavi `notice.*`, `ai.error.*` e `update.applying`; includere nei futuri diff eventuali nuovi produttori.
 2. Ogni riga ha un contesto che sopravvive alla chiamata asincrona; verificare errore tardivo dopo cambio file, chiusura pannello e cambio modalità focus. Nessun risultato del vecchio documento appare come errore del nuovo.
 3. Tastiera: doppio clic identico annunciato; nessun focus rubato; Chiudi non manda sul body; dialog con messaggio al suo interno; pulsanti disponibili durante busy e motivo in status.
 4. Screen reader: una sola emissione per evento, persistenza leggibile, errori salvati e non cancellati da un render. Verificare due problemi distinti contemporanei, identico errore automatico ripetuto e successo che risolve solo il proprio errore.
@@ -95,13 +95,13 @@ Skill design-taste-frontend applicata alla critica del pattern, non alla produzi
 
 ## Testi e locali
 
-Conservare i testi correnti (appendice) senza rinominare in massa le chiavi solo perché contengono `toast`. `{detail}` resta il dettaglio originale di browser/parser, non HTML; percorsi e parametri restano testo. Etichette esistenti `toast.close`, `update.apply`, `update.dismiss`, `update.applying` coprono le azioni: non servono altre etichette.
+Conservare i testi correnti (appendice) senza rinominare in massa le chiavi solo perché contengono `notice`. `{detail}` resta il dettaglio originale di browser/parser, non HTML; percorsi e parametri restano testo. Etichette esistenti `notice.close`, `update.apply`, `update.dismiss`, `update.applying` coprono le azioni: non servono altre etichette.
 
-Le due chiavi con conteggio `toast.unreadableFiles` e `toast.saveAllSkipped` vanno sostituite da `.one`/`.other` in tutti i nove locali, scelte con `pluralKey`. La forma `.other` conserva il testo corrente; le forme `.one` sono riportate sotto. I valori giapponesi sono identici nelle due forme, conformemente alla selezione delle categorie del locale. Nessun conteggio hardcoded nell'interfaccia.
+Le due chiavi con conteggio `notice.unreadableFiles` e `notice.saveAllSkipped` vanno sostituite da `.one`/`.other` in tutti i nove locali, scelte con `pluralKey`. La forma `.other` conserva il testo corrente; le forme `.one` sono riportate sotto. I valori giapponesi sono identici nelle due forme, conformemente alla selezione delle categorie del locale. Nessun conteggio hardcoded nell'interfaccia.
 
 ### Forme singolari proposte
 
-| Locale | `toast.unreadableFiles.one` | `toast.saveAllSkipped.one` |
+| Locale | `notice.unreadableFiles.one` | `notice.saveAllSkipped.one` |
 | --- | --- | --- |
 | de | {count} Datei konnte nicht gelesen werden: {paths} | {count} Änderung nicht gespeichert: Die Datei wurde auf dem Datenträger geändert oder gelöscht oder konnte nicht geschrieben werden. Öffne sie, um das Problem zu beheben. |
 | en | Could not read {count} file: {paths} | {count} change not saved: its file changed or was deleted on disk, or could not be written. Open it to resolve. |
@@ -121,30 +121,30 @@ Per ogni locale: chiave e testo esatto, incluso il numero di riga del catalogo c
 
 | Chiave | Riga in `src/i18n/locales/de.json` | Testo |
 | --- | --- | --- |
-| `toast.close` | 65 | Schließen |
+| `notice.close` | 65 | Schließen |
 | `update.apply` | 116 | Aktualisieren |
 | `update.dismiss` | 117 | Später |
 | `update.applying` | 118 | HouseMD wird aktualisiert: Dein Dokument wird gespeichert, dann lädt die Seite neu |
-| `toast.saveFailed` | 119 | Speichern fehlgeschlagen: {detail} |
-| `toast.configInvalidJson` | 120 | {file} ist ungültig: {detail} |
-| `toast.configInvalidSaveTo` | 121 | {file}: images.saveTo muss ein Pfad sein |
-| `toast.configInvalidLinkPrefix` | 122 | {file}: images.linkPrefix muss mit "/" beginnen |
-| `toast.restoredDraft` | 123 | Nicht gespeicherte Änderungen von {path} wiederhergestellt |
-| `toast.restoredDraftDeleted` | 124 | Nicht gespeicherte Änderungen von {path} wiederhergestellt (die Datei existiert nicht mehr auf dem Datenträger) |
-| `toast.deletedOutside` | 125 | {path} wurde außerhalb von HouseMD gelöscht |
-| `toast.unreadableFiles` | 126 | {count} Dateien konnten nicht gelesen werden: {paths} |
-| `toast.alreadyExists` | 127 | Existiert bereits: {path} |
-| `toast.notFound` | 128 | Nicht gefunden: {path} |
-| `toast.operationFailed` | 129 | Vorgang fehlgeschlagen: {detail} |
-| `toast.saveAllSkipped` | 130 | {count} Änderungen nicht gespeichert: Die zugehörige Datei wurde auf dem Datenträger geändert oder gelöscht oder konnte nicht geschrieben werden. Öffne sie, um das zu klären. |
-| `toast.saveAllDone` | 131 | Alle Änderungen gespeichert |
-| `toast.draftNotPersisted` | 132 | Deine Änderungen konnten nicht gesichert werden: Speichere die Datei oder kopiere den Text |
-| `toast.bufferFailed` | 133 | Die Notfallkopie konnte nicht geschrieben werden: {detail} |
-| `toast.historyFailed` | 134 | Der lokale Verlauf ist nicht verfügbar: {detail} |
-| `toast.restoreCancelled` | 135 | Wiederherstellung abgebrochen: Das Dokument wurde inzwischen geändert |
-| `toast.newVersion` | 136 | Eine neue Version von HouseMD ist verfügbar |
-| `toast.reloadOtherTabs` | 137 | HouseMD ist in einem anderen Tab mit einer älteren Version geöffnet: Speichere und schließe diesen Tab, um fortzufahren |
-| `toast.openFolderFailed` | 138 | Der Ordner konnte nicht geöffnet werden: {detail} |
+| `notice.saveFailed` | 119 | Speichern fehlgeschlagen: {detail} |
+| `notice.configInvalidJson` | 120 | {file} ist ungültig: {detail} |
+| `notice.configInvalidSaveTo` | 121 | {file}: images.saveTo muss ein Pfad sein |
+| `notice.configInvalidLinkPrefix` | 122 | {file}: images.linkPrefix muss mit "/" beginnen |
+| `notice.restoredDraft` | 123 | Nicht gespeicherte Änderungen von {path} wiederhergestellt |
+| `notice.restoredDraftDeleted` | 124 | Nicht gespeicherte Änderungen von {path} wiederhergestellt (die Datei existiert nicht mehr auf dem Datenträger) |
+| `notice.deletedOutside` | 125 | {path} wurde außerhalb von HouseMD gelöscht |
+| `notice.unreadableFiles` | 126 | {count} Dateien konnten nicht gelesen werden: {paths} |
+| `notice.alreadyExists` | 127 | Existiert bereits: {path} |
+| `notice.notFound` | 128 | Nicht gefunden: {path} |
+| `notice.operationFailed` | 129 | Vorgang fehlgeschlagen: {detail} |
+| `notice.saveAllSkipped` | 130 | {count} Änderungen nicht gespeichert: Die zugehörige Datei wurde auf dem Datenträger geändert oder gelöscht oder konnte nicht geschrieben werden. Öffne sie, um das zu klären. |
+| `notice.saveAllDone` | 131 | Alle Änderungen gespeichert |
+| `notice.draftNotPersisted` | 132 | Deine Änderungen konnten nicht gesichert werden: Speichere die Datei oder kopiere den Text |
+| `notice.bufferFailed` | 133 | Die Notfallkopie konnte nicht geschrieben werden: {detail} |
+| `notice.historyFailed` | 134 | Der lokale Verlauf ist nicht verfügbar: {detail} |
+| `notice.restoreCancelled` | 135 | Wiederherstellung abgebrochen: Das Dokument wurde inzwischen geändert |
+| `notice.newVersion` | 136 | Eine neue Version von HouseMD ist verfügbar |
+| `notice.reloadOtherTabs` | 137 | HouseMD ist in einem anderen Tab mit einer älteren Version geöffnet: Speichere und schließe diesen Tab, um fortzufahren |
+| `notice.openFolderFailed` | 138 | Der Ordner konnte nicht geöffnet werden: {detail} |
 | `ai.error.unreachable` | 255 | Server nicht erreichbar. Prüfe CORS, die Verfügbarkeit des Servers und die Berechtigung für lokale Netzwerke in Chrome. |
 | `ai.error.bridgeDown` | 256 | Bridge nicht verfügbar. Starte npm run bridge. |
 | `ai.error.bridgeIncompatible` | 257 | Dies ist keine kompatible, geschützte HouseMD-Bridge. Es wurde kein Dokument gesendet. |
@@ -177,30 +177,30 @@ Per ogni locale: chiave e testo esatto, incluso il numero di riga del catalogo c
 
 | Chiave | Riga in `src/i18n/locales/en.json` | Testo |
 | --- | --- | --- |
-| `toast.close` | 65 | Close |
+| `notice.close` | 65 | Close |
 | `update.apply` | 116 | Update |
 | `update.dismiss` | 117 | Later |
 | `update.applying` | 118 | Updating HouseMD: saving your document, then the page reloads |
-| `toast.saveFailed` | 119 | Save failed: {detail} |
-| `toast.configInvalidJson` | 120 | {file} is not valid: {detail} |
-| `toast.configInvalidSaveTo` | 121 | {file}: images.saveTo must be a path |
-| `toast.configInvalidLinkPrefix` | 122 | {file}: images.linkPrefix must start with "/" |
-| `toast.restoredDraft` | 123 | Restored the unsaved changes of {path} |
-| `toast.restoredDraftDeleted` | 124 | Restored the unsaved changes of {path} (the file no longer exists on disk) |
-| `toast.deletedOutside` | 125 | {path} was deleted outside HouseMD |
-| `toast.unreadableFiles` | 126 | Could not read {count} files: {paths} |
-| `toast.alreadyExists` | 127 | Already exists: {path} |
-| `toast.notFound` | 128 | Not found: {path} |
-| `toast.operationFailed` | 129 | Operation failed: {detail} |
-| `toast.saveAllSkipped` | 130 | {count} changes not saved: their file changed or was deleted on disk, or could not be written. Open them to resolve. |
-| `toast.saveAllDone` | 131 | All changes saved |
-| `toast.draftNotPersisted` | 132 | Could not secure your changes: save the file or copy the text |
-| `toast.bufferFailed` | 133 | Could not write the emergency copy: {detail} |
-| `toast.historyFailed` | 134 | Local history is unavailable: {detail} |
-| `toast.restoreCancelled` | 135 | Restore cancelled: the document changed in the meantime |
-| `toast.newVersion` | 136 | A new version of HouseMD is available |
-| `toast.reloadOtherTabs` | 137 | HouseMD is open in another tab with an older version: save and close that tab to continue |
-| `toast.openFolderFailed` | 138 | Could not open the folder: {detail} |
+| `notice.saveFailed` | 119 | Save failed: {detail} |
+| `notice.configInvalidJson` | 120 | {file} is not valid: {detail} |
+| `notice.configInvalidSaveTo` | 121 | {file}: images.saveTo must be a path |
+| `notice.configInvalidLinkPrefix` | 122 | {file}: images.linkPrefix must start with "/" |
+| `notice.restoredDraft` | 123 | Restored the unsaved changes of {path} |
+| `notice.restoredDraftDeleted` | 124 | Restored the unsaved changes of {path} (the file no longer exists on disk) |
+| `notice.deletedOutside` | 125 | {path} was deleted outside HouseMD |
+| `notice.unreadableFiles` | 126 | Could not read {count} files: {paths} |
+| `notice.alreadyExists` | 127 | Already exists: {path} |
+| `notice.notFound` | 128 | Not found: {path} |
+| `notice.operationFailed` | 129 | Operation failed: {detail} |
+| `notice.saveAllSkipped` | 130 | {count} changes not saved: their file changed or was deleted on disk, or could not be written. Open them to resolve. |
+| `notice.saveAllDone` | 131 | All changes saved |
+| `notice.draftNotPersisted` | 132 | Could not secure your changes: save the file or copy the text |
+| `notice.bufferFailed` | 133 | Could not write the emergency copy: {detail} |
+| `notice.historyFailed` | 134 | Local history is unavailable: {detail} |
+| `notice.restoreCancelled` | 135 | Restore cancelled: the document changed in the meantime |
+| `notice.newVersion` | 136 | A new version of HouseMD is available |
+| `notice.reloadOtherTabs` | 137 | HouseMD is open in another tab with an older version: save and close that tab to continue |
+| `notice.openFolderFailed` | 138 | Could not open the folder: {detail} |
 | `ai.error.unreachable` | 255 | Cannot reach the server. Check CORS, server availability and Chrome local-network permission. |
 | `ai.error.bridgeDown` | 256 | Bridge unavailable. Start npm run bridge. |
 | `ai.error.bridgeIncompatible` | 257 | This is not a compatible, protected HouseMD bridge. No document was sent. |
@@ -233,30 +233,30 @@ Per ogni locale: chiave e testo esatto, incluso il numero di riga del catalogo c
 
 | Chiave | Riga in `src/i18n/locales/es.json` | Testo |
 | --- | --- | --- |
-| `toast.close` | 65 | Cerrar |
+| `notice.close` | 65 | Cerrar |
 | `update.apply` | 116 | Actualizar |
 | `update.dismiss` | 117 | Más tarde |
 | `update.applying` | 118 | Actualizando HouseMD: se guarda tu documento y luego la página se recarga |
-| `toast.saveFailed` | 119 | No se pudo guardar: {detail} |
-| `toast.configInvalidJson` | 120 | {file} no es válido: {detail} |
-| `toast.configInvalidSaveTo` | 121 | {file}: images.saveTo debe ser una ruta |
-| `toast.configInvalidLinkPrefix` | 122 | {file}: images.linkPrefix debe empezar por "/" |
-| `toast.restoredDraft` | 123 | Se restauraron los cambios sin guardar de {path} |
-| `toast.restoredDraftDeleted` | 124 | Se restauraron los cambios sin guardar de {path} (el archivo ya no existe en el disco) |
-| `toast.deletedOutside` | 125 | {path} se eliminó fuera de HouseMD |
-| `toast.unreadableFiles` | 126 | No se pudieron leer {count} archivos: {paths} |
-| `toast.alreadyExists` | 127 | Ya existe: {path} |
-| `toast.notFound` | 128 | No encontrado: {path} |
-| `toast.operationFailed` | 129 | La operación falló: {detail} |
-| `toast.saveAllSkipped` | 130 | {count} cambios sin guardar: su archivo cambió o se eliminó en el disco, o no se pudo escribir. Ábrelos para resolverlo. |
-| `toast.saveAllDone` | 131 | Todos los cambios guardados |
-| `toast.draftNotPersisted` | 132 | No se pudieron poner a salvo tus cambios: guarda el archivo o copia el texto |
-| `toast.bufferFailed` | 133 | No se pudo escribir la copia de emergencia: {detail} |
-| `toast.historyFailed` | 134 | El historial local no está disponible: {detail} |
-| `toast.restoreCancelled` | 135 | Restauración cancelada: el documento cambió mientras tanto |
-| `toast.newVersion` | 136 | Hay una nueva versión de HouseMD disponible |
-| `toast.reloadOtherTabs` | 137 | HouseMD está abierto en otra pestaña con una versión anterior: guarda y cierra esa pestaña para continuar |
-| `toast.openFolderFailed` | 138 | No se pudo abrir la carpeta: {detail} |
+| `notice.saveFailed` | 119 | No se pudo guardar: {detail} |
+| `notice.configInvalidJson` | 120 | {file} no es válido: {detail} |
+| `notice.configInvalidSaveTo` | 121 | {file}: images.saveTo debe ser una ruta |
+| `notice.configInvalidLinkPrefix` | 122 | {file}: images.linkPrefix debe empezar por "/" |
+| `notice.restoredDraft` | 123 | Se restauraron los cambios sin guardar de {path} |
+| `notice.restoredDraftDeleted` | 124 | Se restauraron los cambios sin guardar de {path} (el archivo ya no existe en el disco) |
+| `notice.deletedOutside` | 125 | {path} se eliminó fuera de HouseMD |
+| `notice.unreadableFiles` | 126 | No se pudieron leer {count} archivos: {paths} |
+| `notice.alreadyExists` | 127 | Ya existe: {path} |
+| `notice.notFound` | 128 | No encontrado: {path} |
+| `notice.operationFailed` | 129 | La operación falló: {detail} |
+| `notice.saveAllSkipped` | 130 | {count} cambios sin guardar: su archivo cambió o se eliminó en el disco, o no se pudo escribir. Ábrelos para resolverlo. |
+| `notice.saveAllDone` | 131 | Todos los cambios guardados |
+| `notice.draftNotPersisted` | 132 | No se pudieron poner a salvo tus cambios: guarda el archivo o copia el texto |
+| `notice.bufferFailed` | 133 | No se pudo escribir la copia de emergencia: {detail} |
+| `notice.historyFailed` | 134 | El historial local no está disponible: {detail} |
+| `notice.restoreCancelled` | 135 | Restauración cancelada: el documento cambió mientras tanto |
+| `notice.newVersion` | 136 | Hay una nueva versión de HouseMD disponible |
+| `notice.reloadOtherTabs` | 137 | HouseMD está abierto en otra pestaña con una versión anterior: guarda y cierra esa pestaña para continuar |
+| `notice.openFolderFailed` | 138 | No se pudo abrir la carpeta: {detail} |
 | `ai.error.unreachable` | 255 | No se puede contactar con el servidor. Comprueba CORS, la disponibilidad del servidor y el permiso de red local de Chrome. |
 | `ai.error.bridgeDown` | 256 | El puente no está disponible. Ejecuta npm run bridge. |
 | `ai.error.bridgeIncompatible` | 257 | Este no es un puente de HouseMD compatible y protegido. No se ha enviado ningún documento. |
@@ -289,30 +289,30 @@ Per ogni locale: chiave e testo esatto, incluso il numero di riga del catalogo c
 
 | Chiave | Riga in `src/i18n/locales/fr.json` | Testo |
 | --- | --- | --- |
-| `toast.close` | 65 | Fermer |
+| `notice.close` | 65 | Fermer |
 | `update.apply` | 116 | Mettre à jour |
 | `update.dismiss` | 117 | Plus tard |
 | `update.applying` | 118 | Mise à jour de HouseMD : votre document est enregistré, puis la page se recharge |
-| `toast.saveFailed` | 119 | Échec de l’enregistrement : {detail} |
-| `toast.configInvalidJson` | 120 | {file} n’est pas valide : {detail} |
-| `toast.configInvalidSaveTo` | 121 | {file} : images.saveTo doit être un chemin |
-| `toast.configInvalidLinkPrefix` | 122 | {file} : images.linkPrefix doit commencer par "/" |
-| `toast.restoredDraft` | 123 | Modifications non enregistrées de {path} restaurées |
-| `toast.restoredDraftDeleted` | 124 | Modifications non enregistrées de {path} restaurées (le fichier n’existe plus sur le disque) |
-| `toast.deletedOutside` | 125 | {path} a été supprimé en dehors de HouseMD |
-| `toast.unreadableFiles` | 126 | Impossible de lire {count} fichiers : {paths} |
-| `toast.alreadyExists` | 127 | Existe déjà : {path} |
-| `toast.notFound` | 128 | Introuvable : {path} |
-| `toast.operationFailed` | 129 | Échec de l’opération : {detail} |
-| `toast.saveAllSkipped` | 130 | {count} modifications non enregistrées : leur fichier a changé ou a été supprimé sur le disque, ou n’a pas pu être écrit. Ouvrez-les pour résoudre le problème. |
-| `toast.saveAllDone` | 131 | Toutes les modifications sont enregistrées |
-| `toast.draftNotPersisted` | 132 | Impossible de mettre vos modifications en sécurité : enregistrez le fichier ou copiez le texte |
-| `toast.bufferFailed` | 133 | Impossible d’écrire la copie de secours : {detail} |
-| `toast.historyFailed` | 134 | L’historique local n’est pas disponible : {detail} |
-| `toast.restoreCancelled` | 135 | Restauration annulée : le document a changé entre-temps |
-| `toast.newVersion` | 136 | Une nouvelle version de HouseMD est disponible |
-| `toast.reloadOtherTabs` | 137 | HouseMD est ouvert dans un autre onglet avec une version plus ancienne : enregistrez et fermez cet onglet pour continuer |
-| `toast.openFolderFailed` | 138 | Impossible d’ouvrir le dossier : {detail} |
+| `notice.saveFailed` | 119 | Échec de l’enregistrement : {detail} |
+| `notice.configInvalidJson` | 120 | {file} n’est pas valide : {detail} |
+| `notice.configInvalidSaveTo` | 121 | {file} : images.saveTo doit être un chemin |
+| `notice.configInvalidLinkPrefix` | 122 | {file} : images.linkPrefix doit commencer par "/" |
+| `notice.restoredDraft` | 123 | Modifications non enregistrées de {path} restaurées |
+| `notice.restoredDraftDeleted` | 124 | Modifications non enregistrées de {path} restaurées (le fichier n’existe plus sur le disque) |
+| `notice.deletedOutside` | 125 | {path} a été supprimé en dehors de HouseMD |
+| `notice.unreadableFiles` | 126 | Impossible de lire {count} fichiers : {paths} |
+| `notice.alreadyExists` | 127 | Existe déjà : {path} |
+| `notice.notFound` | 128 | Introuvable : {path} |
+| `notice.operationFailed` | 129 | Échec de l’opération : {detail} |
+| `notice.saveAllSkipped` | 130 | {count} modifications non enregistrées : leur fichier a changé ou a été supprimé sur le disque, ou n’a pas pu être écrit. Ouvrez-les pour résoudre le problème. |
+| `notice.saveAllDone` | 131 | Toutes les modifications sont enregistrées |
+| `notice.draftNotPersisted` | 132 | Impossible de mettre vos modifications en sécurité : enregistrez le fichier ou copiez le texte |
+| `notice.bufferFailed` | 133 | Impossible d’écrire la copie de secours : {detail} |
+| `notice.historyFailed` | 134 | L’historique local n’est pas disponible : {detail} |
+| `notice.restoreCancelled` | 135 | Restauration annulée : le document a changé entre-temps |
+| `notice.newVersion` | 136 | Une nouvelle version de HouseMD est disponible |
+| `notice.reloadOtherTabs` | 137 | HouseMD est ouvert dans un autre onglet avec une version plus ancienne : enregistrez et fermez cet onglet pour continuer |
+| `notice.openFolderFailed` | 138 | Impossible d’ouvrir le dossier : {detail} |
 | `ai.error.unreachable` | 255 | Impossible de joindre le serveur. Vérifiez CORS, la disponibilité du serveur et l'autorisation d'accès au réseau local de Chrome. |
 | `ai.error.bridgeDown` | 256 | Passerelle indisponible. Lancez npm run bridge. |
 | `ai.error.bridgeIncompatible` | 257 | Cette passerelle HouseMD n'est pas compatible et protégée. Aucun document n'a été envoyé. |
@@ -345,30 +345,30 @@ Per ogni locale: chiave e testo esatto, incluso il numero di riga del catalogo c
 
 | Chiave | Riga in `src/i18n/locales/it.json` | Testo |
 | --- | --- | --- |
-| `toast.close` | 65 | Chiudi |
+| `notice.close` | 65 | Chiudi |
 | `update.apply` | 116 | Aggiorna |
 | `update.dismiss` | 117 | Più tardi |
 | `update.applying` | 118 | Aggiornamento di HouseMD in corso: si salva il documento, poi la pagina si ricarica |
-| `toast.saveFailed` | 119 | Salvataggio non riuscito: {detail} |
-| `toast.configInvalidJson` | 120 | {file} non valido: {detail} |
-| `toast.configInvalidSaveTo` | 121 | {file}: images.saveTo deve essere un percorso |
-| `toast.configInvalidLinkPrefix` | 122 | {file}: images.linkPrefix deve iniziare con "/" |
-| `toast.restoredDraft` | 123 | Ripristinate le modifiche non salvate di {path} |
-| `toast.restoredDraftDeleted` | 124 | Ripristinate le modifiche non salvate di {path} (il file non esiste più su disco) |
-| `toast.deletedOutside` | 125 | {path} è stato eliminato fuori da HouseMD |
-| `toast.unreadableFiles` | 126 | Impossibile leggere {count} file: {paths} |
-| `toast.alreadyExists` | 127 | Esiste già: {path} |
-| `toast.notFound` | 128 | Non trovato: {path} |
-| `toast.operationFailed` | 129 | Operazione non riuscita: {detail} |
-| `toast.saveAllSkipped` | 130 | {count} modifiche non salvate: il loro file è cambiato o è stato eliminato su disco, oppure non si è potuto scrivere. Aprile per risolvere. |
-| `toast.saveAllDone` | 131 | Tutte le modifiche sono salvate |
-| `toast.draftNotPersisted` | 132 | Impossibile mettere al sicuro le modifiche: salva il file o copia il testo |
-| `toast.bufferFailed` | 133 | Impossibile scrivere la copia di emergenza: {detail} |
-| `toast.historyFailed` | 134 | Cronologia locale non disponibile: {detail} |
-| `toast.restoreCancelled` | 135 | Ripristino annullato: il documento è cambiato nel frattempo |
-| `toast.newVersion` | 136 | È disponibile una nuova versione di HouseMD |
-| `toast.reloadOtherTabs` | 137 | HouseMD è aperto in un'altra scheda con una versione precedente: salva e chiudi quella scheda per continuare |
-| `toast.openFolderFailed` | 138 | Impossibile aprire la cartella: {detail} |
+| `notice.saveFailed` | 119 | Salvataggio non riuscito: {detail} |
+| `notice.configInvalidJson` | 120 | {file} non valido: {detail} |
+| `notice.configInvalidSaveTo` | 121 | {file}: images.saveTo deve essere un percorso |
+| `notice.configInvalidLinkPrefix` | 122 | {file}: images.linkPrefix deve iniziare con "/" |
+| `notice.restoredDraft` | 123 | Ripristinate le modifiche non salvate di {path} |
+| `notice.restoredDraftDeleted` | 124 | Ripristinate le modifiche non salvate di {path} (il file non esiste più su disco) |
+| `notice.deletedOutside` | 125 | {path} è stato eliminato fuori da HouseMD |
+| `notice.unreadableFiles` | 126 | Impossibile leggere {count} file: {paths} |
+| `notice.alreadyExists` | 127 | Esiste già: {path} |
+| `notice.notFound` | 128 | Non trovato: {path} |
+| `notice.operationFailed` | 129 | Operazione non riuscita: {detail} |
+| `notice.saveAllSkipped` | 130 | {count} modifiche non salvate: il loro file è cambiato o è stato eliminato su disco, oppure non si è potuto scrivere. Aprile per risolvere. |
+| `notice.saveAllDone` | 131 | Tutte le modifiche sono salvate |
+| `notice.draftNotPersisted` | 132 | Impossibile mettere al sicuro le modifiche: salva il file o copia il testo |
+| `notice.bufferFailed` | 133 | Impossibile scrivere la copia di emergenza: {detail} |
+| `notice.historyFailed` | 134 | Cronologia locale non disponibile: {detail} |
+| `notice.restoreCancelled` | 135 | Ripristino annullato: il documento è cambiato nel frattempo |
+| `notice.newVersion` | 136 | È disponibile una nuova versione di HouseMD |
+| `notice.reloadOtherTabs` | 137 | HouseMD è aperto in un'altra scheda con una versione precedente: salva e chiudi quella scheda per continuare |
+| `notice.openFolderFailed` | 138 | Impossibile aprire la cartella: {detail} |
 | `ai.error.unreachable` | 255 | Impossibile raggiungere il server. Controlla CORS, disponibilità del server e permesso di accesso alla rete locale in Chrome. |
 | `ai.error.bridgeDown` | 256 | Bridge non disponibile. Avvia npm run bridge. |
 | `ai.error.bridgeIncompatible` | 257 | Questo non è un bridge HouseMD compatibile e protetto. Nessun documento è stato inviato. |
@@ -401,30 +401,30 @@ Per ogni locale: chiave e testo esatto, incluso il numero di riga del catalogo c
 
 | Chiave | Riga in `src/i18n/locales/ja.json` | Testo |
 | --- | --- | --- |
-| `toast.close` | 65 | 閉じる |
+| `notice.close` | 65 | 閉じる |
 | `update.apply` | 116 | 更新 |
 | `update.dismiss` | 117 | 後で |
 | `update.applying` | 118 | HouseMD を更新しています。ドキュメントを保存してからページを再読み込みします |
-| `toast.saveFailed` | 119 | 保存に失敗しました：{detail} |
-| `toast.configInvalidJson` | 120 | {file} が正しくありません：{detail} |
-| `toast.configInvalidSaveTo` | 121 | {file}：images.saveTo にはパスを指定してください |
-| `toast.configInvalidLinkPrefix` | 122 | {file}：images.linkPrefix は "/" で始めてください |
-| `toast.restoredDraft` | 123 | {path} の未保存の変更を復元しました |
-| `toast.restoredDraftDeleted` | 124 | {path} の未保存の変更を復元しました（ファイルはディスク上にもうありません） |
-| `toast.deletedOutside` | 125 | {path} は HouseMD の外で削除されました |
-| `toast.unreadableFiles` | 126 | {count} 個のファイルを読み込めませんでした：{paths} |
-| `toast.alreadyExists` | 127 | すでに存在します：{path} |
-| `toast.notFound` | 128 | 見つかりません：{path} |
-| `toast.operationFailed` | 129 | 操作に失敗しました：{detail} |
-| `toast.saveAllSkipped` | 130 | {count} 件の変更を保存できませんでした。ディスク上でファイルが変更・削除されたか、書き込めませんでした。開いて解決してください。 |
-| `toast.saveAllDone` | 131 | すべての変更を保存しました |
-| `toast.draftNotPersisted` | 132 | 変更を安全に保管できませんでした。ファイルを保存するか、テキストをコピーしてください |
-| `toast.bufferFailed` | 133 | 緊急用のコピーを書き込めませんでした：{detail} |
-| `toast.historyFailed` | 134 | ローカル履歴を利用できません：{detail} |
-| `toast.restoreCancelled` | 135 | ドキュメントが変更されたため、復元を中止しました |
-| `toast.newVersion` | 136 | HouseMD の新しいバージョンがあります |
-| `toast.reloadOtherTabs` | 137 | HouseMD が別のタブで古いバージョンのまま開かれています。続行するには、そのタブで保存してから閉じてください |
-| `toast.openFolderFailed` | 138 | フォルダーを開けませんでした：{detail} |
+| `notice.saveFailed` | 119 | 保存に失敗しました：{detail} |
+| `notice.configInvalidJson` | 120 | {file} が正しくありません：{detail} |
+| `notice.configInvalidSaveTo` | 121 | {file}：images.saveTo にはパスを指定してください |
+| `notice.configInvalidLinkPrefix` | 122 | {file}：images.linkPrefix は "/" で始めてください |
+| `notice.restoredDraft` | 123 | {path} の未保存の変更を復元しました |
+| `notice.restoredDraftDeleted` | 124 | {path} の未保存の変更を復元しました（ファイルはディスク上にもうありません） |
+| `notice.deletedOutside` | 125 | {path} は HouseMD の外で削除されました |
+| `notice.unreadableFiles` | 126 | {count} 個のファイルを読み込めませんでした：{paths} |
+| `notice.alreadyExists` | 127 | すでに存在します：{path} |
+| `notice.notFound` | 128 | 見つかりません：{path} |
+| `notice.operationFailed` | 129 | 操作に失敗しました：{detail} |
+| `notice.saveAllSkipped` | 130 | {count} 件の変更を保存できませんでした。ディスク上でファイルが変更・削除されたか、書き込めませんでした。開いて解決してください。 |
+| `notice.saveAllDone` | 131 | すべての変更を保存しました |
+| `notice.draftNotPersisted` | 132 | 変更を安全に保管できませんでした。ファイルを保存するか、テキストをコピーしてください |
+| `notice.bufferFailed` | 133 | 緊急用のコピーを書き込めませんでした：{detail} |
+| `notice.historyFailed` | 134 | ローカル履歴を利用できません：{detail} |
+| `notice.restoreCancelled` | 135 | ドキュメントが変更されたため、復元を中止しました |
+| `notice.newVersion` | 136 | HouseMD の新しいバージョンがあります |
+| `notice.reloadOtherTabs` | 137 | HouseMD が別のタブで古いバージョンのまま開かれています。続行するには、そのタブで保存してから閉じてください |
+| `notice.openFolderFailed` | 138 | フォルダーを開けませんでした：{detail} |
 | `ai.error.unreachable` | 255 | サーバーに接続できません。CORS、サーバーの稼働状況、Chrome のローカルネットワークのアクセス許可を確認してください。 |
 | `ai.error.bridgeDown` | 256 | ブリッジを利用できません。npm run bridge を実行してください。 |
 | `ai.error.bridgeIncompatible` | 257 | 互換性と保護機能を備えた HouseMD ブリッジではありません。ドキュメントは送信されていません。 |
@@ -457,30 +457,30 @@ Per ogni locale: chiave e testo esatto, incluso il numero di riga del catalogo c
 
 | Chiave | Riga in `src/i18n/locales/nl.json` | Testo |
 | --- | --- | --- |
-| `toast.close` | 65 | Sluiten |
+| `notice.close` | 65 | Sluiten |
 | `update.apply` | 116 | Bijwerken |
 | `update.dismiss` | 117 | Later |
 | `update.applying` | 118 | HouseMD wordt bijgewerkt: je document wordt opgeslagen, daarna wordt de pagina herladen |
-| `toast.saveFailed` | 119 | Opslaan mislukt: {detail} |
-| `toast.configInvalidJson` | 120 | {file} is ongeldig: {detail} |
-| `toast.configInvalidSaveTo` | 121 | {file}: images.saveTo moet een pad zijn |
-| `toast.configInvalidLinkPrefix` | 122 | {file}: images.linkPrefix moet met "/" beginnen |
-| `toast.restoredDraft` | 123 | Niet-opgeslagen wijzigingen van {path} hersteld |
-| `toast.restoredDraftDeleted` | 124 | Niet-opgeslagen wijzigingen van {path} hersteld (het bestand bestaat niet meer op schijf) |
-| `toast.deletedOutside` | 125 | {path} is buiten HouseMD verwijderd |
-| `toast.unreadableFiles` | 126 | Kan {count} bestanden niet lezen: {paths} |
-| `toast.alreadyExists` | 127 | Bestaat al: {path} |
-| `toast.notFound` | 128 | Niet gevonden: {path} |
-| `toast.operationFailed` | 129 | Bewerking mislukt: {detail} |
-| `toast.saveAllSkipped` | 130 | {count} wijzigingen niet opgeslagen: hun bestand is op schijf gewijzigd of verwijderd, of kon niet worden geschreven. Open ze om dit op te lossen. |
-| `toast.saveAllDone` | 131 | Alle wijzigingen opgeslagen |
-| `toast.draftNotPersisted` | 132 | Kan je wijzigingen niet veiligstellen: sla het bestand op of kopieer de tekst |
-| `toast.bufferFailed` | 133 | Kan de noodkopie niet schrijven: {detail} |
-| `toast.historyFailed` | 134 | Lokale geschiedenis is niet beschikbaar: {detail} |
-| `toast.restoreCancelled` | 135 | Herstel geannuleerd: het document is intussen gewijzigd |
-| `toast.newVersion` | 136 | Er is een nieuwe versie van HouseMD beschikbaar |
-| `toast.reloadOtherTabs` | 137 | HouseMD is geopend in een ander tabblad met een oudere versie: sla op en sluit dat tabblad om door te gaan |
-| `toast.openFolderFailed` | 138 | Kan de map niet openen: {detail} |
+| `notice.saveFailed` | 119 | Opslaan mislukt: {detail} |
+| `notice.configInvalidJson` | 120 | {file} is ongeldig: {detail} |
+| `notice.configInvalidSaveTo` | 121 | {file}: images.saveTo moet een pad zijn |
+| `notice.configInvalidLinkPrefix` | 122 | {file}: images.linkPrefix moet met "/" beginnen |
+| `notice.restoredDraft` | 123 | Niet-opgeslagen wijzigingen van {path} hersteld |
+| `notice.restoredDraftDeleted` | 124 | Niet-opgeslagen wijzigingen van {path} hersteld (het bestand bestaat niet meer op schijf) |
+| `notice.deletedOutside` | 125 | {path} is buiten HouseMD verwijderd |
+| `notice.unreadableFiles` | 126 | Kan {count} bestanden niet lezen: {paths} |
+| `notice.alreadyExists` | 127 | Bestaat al: {path} |
+| `notice.notFound` | 128 | Niet gevonden: {path} |
+| `notice.operationFailed` | 129 | Bewerking mislukt: {detail} |
+| `notice.saveAllSkipped` | 130 | {count} wijzigingen niet opgeslagen: hun bestand is op schijf gewijzigd of verwijderd, of kon niet worden geschreven. Open ze om dit op te lossen. |
+| `notice.saveAllDone` | 131 | Alle wijzigingen opgeslagen |
+| `notice.draftNotPersisted` | 132 | Kan je wijzigingen niet veiligstellen: sla het bestand op of kopieer de tekst |
+| `notice.bufferFailed` | 133 | Kan de noodkopie niet schrijven: {detail} |
+| `notice.historyFailed` | 134 | Lokale geschiedenis is niet beschikbaar: {detail} |
+| `notice.restoreCancelled` | 135 | Herstel geannuleerd: het document is intussen gewijzigd |
+| `notice.newVersion` | 136 | Er is een nieuwe versie van HouseMD beschikbaar |
+| `notice.reloadOtherTabs` | 137 | HouseMD is geopend in een ander tabblad met een oudere versie: sla op en sluit dat tabblad om door te gaan |
+| `notice.openFolderFailed` | 138 | Kan de map niet openen: {detail} |
 | `ai.error.unreachable` | 255 | De server is niet bereikbaar. Controleer CORS, de beschikbaarheid van de server en de toestemming voor het lokale netwerk in Chrome. |
 | `ai.error.bridgeDown` | 256 | Bridge niet beschikbaar. Start npm run bridge. |
 | `ai.error.bridgeIncompatible` | 257 | Dit is geen compatibele, beveiligde HouseMD-bridge. Er is geen document verzonden. |
@@ -513,30 +513,30 @@ Per ogni locale: chiave e testo esatto, incluso il numero di riga del catalogo c
 
 | Chiave | Riga in `src/i18n/locales/pl.json` | Testo |
 | --- | --- | --- |
-| `toast.close` | 65 | Zamknij |
+| `notice.close` | 65 | Zamknij |
 | `update.apply` | 116 | Aktualizuj |
 | `update.dismiss` | 117 | Później |
 | `update.applying` | 118 | Aktualizacja HouseMD: dokument jest zapisywany, a potem strona się przeładuje |
-| `toast.saveFailed` | 119 | Zapisywanie nie powiodło się: {detail} |
-| `toast.configInvalidJson` | 120 | Plik {file} jest nieprawidłowy: {detail} |
-| `toast.configInvalidSaveTo` | 121 | {file}: images.saveTo musi być ścieżką |
-| `toast.configInvalidLinkPrefix` | 122 | {file}: images.linkPrefix musi zaczynać się od "/" |
-| `toast.restoredDraft` | 123 | Przywrócono niezapisane zmiany pliku {path} |
-| `toast.restoredDraftDeleted` | 124 | Przywrócono niezapisane zmiany pliku {path} (plik nie istnieje już na dysku) |
-| `toast.deletedOutside` | 125 | Plik {path} został usunięty poza HouseMD |
-| `toast.unreadableFiles` | 126 | Nie można odczytać plików ({count}): {paths} |
-| `toast.alreadyExists` | 127 | Już istnieje: {path} |
-| `toast.notFound` | 128 | Nie znaleziono: {path} |
-| `toast.operationFailed` | 129 | Operacja nie powiodła się: {detail} |
-| `toast.saveAllSkipped` | 130 | Niezapisane zmiany ({count}): ich plik zmienił się lub został usunięty na dysku albo nie dało się go zapisać. Otwórz je, aby to rozwiązać. |
-| `toast.saveAllDone` | 131 | Wszystkie zmiany zapisane |
-| `toast.draftNotPersisted` | 132 | Nie udało się zabezpieczyć zmian: zapisz plik lub skopiuj tekst |
-| `toast.bufferFailed` | 133 | Nie można zapisać kopii awaryjnej: {detail} |
-| `toast.historyFailed` | 134 | Lokalna historia jest niedostępna: {detail} |
-| `toast.restoreCancelled` | 135 | Przywracanie anulowane: dokument zmienił się w międzyczasie |
-| `toast.newVersion` | 136 | Dostępna jest nowa wersja HouseMD |
-| `toast.reloadOtherTabs` | 137 | HouseMD jest otwarty w innej karcie ze starszą wersją: zapisz i zamknij tamtą kartę, aby kontynuować |
-| `toast.openFolderFailed` | 138 | Nie można otworzyć folderu: {detail} |
+| `notice.saveFailed` | 119 | Zapisywanie nie powiodło się: {detail} |
+| `notice.configInvalidJson` | 120 | Plik {file} jest nieprawidłowy: {detail} |
+| `notice.configInvalidSaveTo` | 121 | {file}: images.saveTo musi być ścieżką |
+| `notice.configInvalidLinkPrefix` | 122 | {file}: images.linkPrefix musi zaczynać się od "/" |
+| `notice.restoredDraft` | 123 | Przywrócono niezapisane zmiany pliku {path} |
+| `notice.restoredDraftDeleted` | 124 | Przywrócono niezapisane zmiany pliku {path} (plik nie istnieje już na dysku) |
+| `notice.deletedOutside` | 125 | Plik {path} został usunięty poza HouseMD |
+| `notice.unreadableFiles` | 126 | Nie można odczytać plików ({count}): {paths} |
+| `notice.alreadyExists` | 127 | Już istnieje: {path} |
+| `notice.notFound` | 128 | Nie znaleziono: {path} |
+| `notice.operationFailed` | 129 | Operacja nie powiodła się: {detail} |
+| `notice.saveAllSkipped` | 130 | Niezapisane zmiany ({count}): ich plik zmienił się lub został usunięty na dysku albo nie dało się go zapisać. Otwórz je, aby to rozwiązać. |
+| `notice.saveAllDone` | 131 | Wszystkie zmiany zapisane |
+| `notice.draftNotPersisted` | 132 | Nie udało się zabezpieczyć zmian: zapisz plik lub skopiuj tekst |
+| `notice.bufferFailed` | 133 | Nie można zapisać kopii awaryjnej: {detail} |
+| `notice.historyFailed` | 134 | Lokalna historia jest niedostępna: {detail} |
+| `notice.restoreCancelled` | 135 | Przywracanie anulowane: dokument zmienił się w międzyczasie |
+| `notice.newVersion` | 136 | Dostępna jest nowa wersja HouseMD |
+| `notice.reloadOtherTabs` | 137 | HouseMD jest otwarty w innej karcie ze starszą wersją: zapisz i zamknij tamtą kartę, aby kontynuować |
+| `notice.openFolderFailed` | 138 | Nie można otworzyć folderu: {detail} |
 | `ai.error.unreachable` | 255 | Nie można połączyć się z serwerem. Sprawdź CORS, dostępność serwera i uprawnienia Chrome do sieci lokalnej. |
 | `ai.error.bridgeDown` | 256 | Most jest niedostępny. Uruchom npm run bridge. |
 | `ai.error.bridgeIncompatible` | 257 | To nie jest zgodny, zabezpieczony most HouseMD. Nie wysłano żadnego dokumentu. |
@@ -569,30 +569,30 @@ Per ogni locale: chiave e testo esatto, incluso il numero di riga del catalogo c
 
 | Chiave | Riga in `src/i18n/locales/pt.json` | Testo |
 | --- | --- | --- |
-| `toast.close` | 65 | Fechar |
+| `notice.close` | 65 | Fechar |
 | `update.apply` | 116 | Atualizar |
 | `update.dismiss` | 117 | Mais tarde |
 | `update.applying` | 118 | A atualizar o HouseMD: o seu documento é guardado e depois a página recarrega |
-| `toast.saveFailed` | 119 | Falha ao guardar: {detail} |
-| `toast.configInvalidJson` | 120 | {file} não é válido: {detail} |
-| `toast.configInvalidSaveTo` | 121 | {file}: images.saveTo tem de ser um caminho |
-| `toast.configInvalidLinkPrefix` | 122 | {file}: images.linkPrefix tem de começar por "/" |
-| `toast.restoredDraft` | 123 | Alterações não guardadas de {path} restauradas |
-| `toast.restoredDraftDeleted` | 124 | Alterações não guardadas de {path} restauradas (o ficheiro já não existe no disco) |
-| `toast.deletedOutside` | 125 | {path} foi eliminado fora do HouseMD |
-| `toast.unreadableFiles` | 126 | Não foi possível ler {count} ficheiros: {paths} |
-| `toast.alreadyExists` | 127 | Já existe: {path} |
-| `toast.notFound` | 128 | Não encontrado: {path} |
-| `toast.operationFailed` | 129 | A operação falhou: {detail} |
-| `toast.saveAllSkipped` | 130 | {count} alterações não guardadas: o respetivo ficheiro foi alterado ou eliminado no disco, ou não foi possível escrevê-lo. Abra-as para resolver. |
-| `toast.saveAllDone` | 131 | Todas as alterações foram guardadas |
-| `toast.draftNotPersisted` | 132 | Não foi possível proteger as suas alterações: guarde o ficheiro ou copie o texto |
-| `toast.bufferFailed` | 133 | Não foi possível escrever a cópia de emergência: {detail} |
-| `toast.historyFailed` | 134 | O histórico local não está disponível: {detail} |
-| `toast.restoreCancelled` | 135 | Restauro cancelado: o documento foi alterado entretanto |
-| `toast.newVersion` | 136 | Está disponível uma nova versão do HouseMD |
-| `toast.reloadOtherTabs` | 137 | O HouseMD está aberto noutro separador com uma versão anterior: guarde e feche esse separador para continuar |
-| `toast.openFolderFailed` | 138 | Não foi possível abrir a pasta: {detail} |
+| `notice.saveFailed` | 119 | Falha ao guardar: {detail} |
+| `notice.configInvalidJson` | 120 | {file} não é válido: {detail} |
+| `notice.configInvalidSaveTo` | 121 | {file}: images.saveTo tem de ser um caminho |
+| `notice.configInvalidLinkPrefix` | 122 | {file}: images.linkPrefix tem de começar por "/" |
+| `notice.restoredDraft` | 123 | Alterações não guardadas de {path} restauradas |
+| `notice.restoredDraftDeleted` | 124 | Alterações não guardadas de {path} restauradas (o ficheiro já não existe no disco) |
+| `notice.deletedOutside` | 125 | {path} foi eliminado fora do HouseMD |
+| `notice.unreadableFiles` | 126 | Não foi possível ler {count} ficheiros: {paths} |
+| `notice.alreadyExists` | 127 | Já existe: {path} |
+| `notice.notFound` | 128 | Não encontrado: {path} |
+| `notice.operationFailed` | 129 | A operação falhou: {detail} |
+| `notice.saveAllSkipped` | 130 | {count} alterações não guardadas: o respetivo ficheiro foi alterado ou eliminado no disco, ou não foi possível escrevê-lo. Abra-as para resolver. |
+| `notice.saveAllDone` | 131 | Todas as alterações foram guardadas |
+| `notice.draftNotPersisted` | 132 | Não foi possível proteger as suas alterações: guarde o ficheiro ou copie o texto |
+| `notice.bufferFailed` | 133 | Não foi possível escrever a cópia de emergência: {detail} |
+| `notice.historyFailed` | 134 | O histórico local não está disponível: {detail} |
+| `notice.restoreCancelled` | 135 | Restauro cancelado: o documento foi alterado entretanto |
+| `notice.newVersion` | 136 | Está disponível uma nova versão do HouseMD |
+| `notice.reloadOtherTabs` | 137 | O HouseMD está aberto noutro separador com uma versão anterior: guarde e feche esse separador para continuar |
+| `notice.openFolderFailed` | 138 | Não foi possível abrir a pasta: {detail} |
 | `ai.error.unreachable` | 255 | Não é possível contactar o servidor. Verifique CORS, a disponibilidade do servidor e a permissão de rede local do Chrome. |
 | `ai.error.bridgeDown` | 256 | Ponte indisponível. Execute npm run bridge. |
 | `ai.error.bridgeIncompatible` | 257 | Esta não é uma ponte HouseMD compatível e protegida. Nenhum documento foi enviado. |

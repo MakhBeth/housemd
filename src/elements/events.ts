@@ -14,7 +14,7 @@ import type { TreeAction } from './workspace/dialogFor';
 
 /**
  * Eventi che gli elementi mandano verso chi li usa (spec WC §5.1): `bubbles: true`, nomi minuscoli con
- * trattino. In React 19 si ascoltano con la prop `on<nome>` (es. `onhmd-toast-dismiss`).
+ * trattino. In React 19 si ascoltano con la prop `on<nome>`.
  */
 export interface HmdEvents {
   /** Diff della revisione AI: rifiutato l'ultimo blocco rimasto (equivale a scartare la proposta). */
@@ -92,8 +92,6 @@ export interface HmdEvents {
   'hmd-banner-action': CustomEvent<{ key: string }>;
   /** Banner: «Chiudi» di una riga. */
   'hmd-banner-close': CustomEvent<{ key: string }>;
-  /** Chiusura di un toast (dal pulsante o dal timer dei toast informativi). */
-  'hmd-toast-dismiss': CustomEvent<{ key: string }>;
   /** Workspace: cambiare cartella (pulsante con il nome della cartella nella sidebar). */
   'hmd-workspace-change-folder': CustomEvent<null>;
 }

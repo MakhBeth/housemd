@@ -64,13 +64,13 @@ test('tree actions menu', async ({ app, page }) => {
   await shot(app, 'tree-menu.png');
 });
 
-test('toast', async ({ app }) => {
+test('notice', async ({ app }) => {
   await app.openFolder({ 'note.md': '# Note', '.housemd.json': '{ images: ' });
-  const prefix = app.t('toast.configInvalidJson', { file: '.housemd.json', detail: '' }).trim();
-  await expect(app.toast(prefix)).toBeVisible();
+  const prefix = app.t('notice.configInvalidJson', { file: '.housemd.json', detail: '' }).trim();
+  await expect(app.notice(prefix)).toBeVisible();
   await app.page.evaluate(() => document.fonts.ready);
-  // I toast informativi spariscono dopo 6 s: lo snapshot va preso subito.
-  await expect(app.page).toHaveScreenshot('toast.png', { timeout: 3000 });
+  // Gli avvisi informativi spariscono dopo 6 s: lo snapshot va preso subito.
+  await expect(app.page).toHaveScreenshot('notice.png', { timeout: 3000 });
 });
 
 test('conflict bar', async ({ app, page }) => {

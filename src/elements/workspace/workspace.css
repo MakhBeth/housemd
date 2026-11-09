@@ -4,7 +4,7 @@
    * contenuti: con i nomi di classe non più cifrati dai CSS Modules, `.iconButton` di questo foglio
    * prenderebbe anche quelli della sidebar AI, `.empty` e `.path` quelli di altri pannelli.
    */
-  @scope (hmd-workspace) to (hmd-ai-sidebar, hmd-search-panel, hmd-file-tree, hmd-theme-switcher, hmd-conflict-bar, hmd-ai-review, hmd-editor, hmd-history-panel, hmd-preview, hmd-settings, hmd-toasts) {
+  @scope (hmd-workspace) to (hmd-ai-sidebar, hmd-search-panel, hmd-file-tree, hmd-theme-switcher, hmd-conflict-bar, hmd-ai-review, hmd-editor, hmd-history-panel, hmd-preview, hmd-settings) {
     :scope {
       display: contents;
     }

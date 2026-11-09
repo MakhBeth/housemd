@@ -554,8 +554,8 @@ const STATES: State[] = [
       await app.removeExternal('note.md');
       await page.reload();
       await expect(page.getByRole('region', { name: app.t('orphans.title') }).getByRole('button', { name: 'note.md', exact: true })).toBeVisible();
-      // I toast del ripristino scadono: si chiudono, così le due build non dipendono dal tempo.
-      for (const close of await page.getByRole('button', { name: app.t('toast.close') }).all()) await close.click();
+      // I notice del ripristino scadono: si chiudono, così le due build non dipendono dal tempo.
+      for (const close of await page.getByRole('button', { name: app.t('notice.close') }).all()) await close.click();
     },
   },
   {
@@ -691,11 +691,11 @@ const STATES: State[] = [
     },
   },
   {
-    name: 'toast',
+    name: 'notice',
     async setup(app) {
       await app.openFolder({ 'note.md': '# Note', '.housemd.json': '{ images: ' });
-      const prefix = app.t('toast.configInvalidJson', { file: '.housemd.json', detail: '' }).trim();
-      await expect(app.toast(prefix)).toBeVisible();
+      const prefix = app.t('notice.configInvalidJson', { file: '.housemd.json', detail: '' }).trim();
+      await expect(app.notice(prefix)).toBeVisible();
     },
   },
   {

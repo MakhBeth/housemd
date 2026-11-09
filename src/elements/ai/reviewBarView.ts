@@ -72,7 +72,7 @@ export function statusLine(status: ReviewStatus, t: I18nStore['t']): StatusLine 
 
 /**
  * Quello che la regione nascosta dice quando la generazione finisce (LAB-42 P1, A11y): proposta pronta, parziale o
- * troncata. Null se non c'è una proposta (generazione fermata o fallita: lo dicono il registro e i toast) o se
+ * troncata. Null se non c'è una proposta (generazione fermata o fallita: lo dicono il registro e gli avvisi) o se
  * l'esito ha già la sua regione (`scopeLost` è un `role="alert"`).
  */
 export function generationOutcome(status: ReviewStatus, hasProposal: boolean, blocks: number, locale: Locale, t: I18nStore['t']): string | null {
