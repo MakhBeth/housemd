@@ -7,6 +7,7 @@ import { HmdElement } from '../../dom/element';
 import { el, setText } from '../../dom/el';
 import { RenderLoop } from '../../dom/renderLoop';
 import { cancelSwitch, confirmSwitch, editDraft, emptyDraft, isDirty, openDraft, selectDraft, type DraftState } from '../../state/draftState';
+import { OriginNote } from '../ai/originNote';
 import type { I18nStore } from '../../state/i18nStore';
 import type { HmdAiParameters } from '../ai/parameters.element';
 import { showConfirmDialog, showDiscardChangesDialog } from '../dialogs/confirmDialog';
@@ -16,7 +17,7 @@ import { renderItemList } from './itemList';
 import './sections.css';
 
 /** Quello che la sezione dei preset usa del controller. */
-export type PresetsController = Pick<AiController, 'subscribe' | 'getState' | 'report' | 'savePreset' | 'deletePreset'>;
+export type PresetsController = Pick<AiController, 'subscribe' | 'getState' | 'report' | 'clearError' | 'orphanError' | 'savePreset' | 'deletePreset'>;
 
 const STRATEGIES = ['whole', 'chunked'] as const;
 const FRONTMATTER = ['keep', 'include'] as const;
@@ -53,6 +54,8 @@ export class HmdSettingsPresets extends HmdElement {
   #detail: Detail | null = null;
   #draft: DraftState<PromptPreset> = emptyDraft();
   #dialogs: AbortController | null = null;
+  /** Esito di un'operazione sul dettaglio aperto: nota sotto le sue azioni; chiuso il dettaglio passa al banner workspace. */
+  #errorNote = new OriginNote(this, () => this.#controller);
   #loop = new RenderLoop(this, {
     ready: () => !!this.#list && !!this.#controller && !!this.#i18n && this.isConnected,
     render: () => this.#render(this.#list!, this.#controller!, this.#i18n!),
@@ -96,6 +99,7 @@ export class HmdSettingsPresets extends HmdElement {
     super.disconnectedCallback();
     this.#dialogs?.abort();
     this.#dialogs = null;
+    this.#errorNote.release();
   }
 
   /** Stato salvato e disegnato prima di dire fuori che la bozza è cambiata. */
@@ -112,7 +116,8 @@ export class HmdSettingsPresets extends HmdElement {
   }
 
   #run(job: Promise<unknown>): void {
-    void job.catch((error) => this.#controller?.report(error));
+    this.#errorNote.begin();
+    void job.catch(this.#errorNote.report('preset'));
   }
 
   #choose(preset: PromptPreset): void {
@@ -203,6 +208,7 @@ export class HmdSettingsPresets extends HmdElement {
     const split = list.parentElement!;
     if (!draft) {
       this.#detail?.root.remove();
+      this.#errorNote.update(state, t, null);
       return;
     }
     const d = (this.#detail ??= this.#createDetail());
@@ -235,6 +241,7 @@ export class HmdSettingsPresets extends HmdElement {
     if (second.parentNode !== d.save.parentNode) d.save.before(second);
     other.remove();
     if (d.root.parentNode !== split) split.append(d.root);
+    this.#errorNote.update(state, t, d.save.parentElement, d.save);
   }
 }
 

@@ -10,7 +10,7 @@ import { translate, type Params } from '../../i18n/i18n';
 import { EN_MESSAGES } from '../../i18n/messages';
 import { createI18nStore } from '../../state/i18nStore';
 import { countListeners } from '../../testing/countListeners';
-import { fakeAi } from '../../testing/fakeAi';
+import { fakeAi, withRealErrors } from '../../testing/fakeAi';
 import { installPopoverStub } from '../../testing/popoverStub';
 
 installPopoverStub();
@@ -247,4 +247,20 @@ test('language change relabels the chip and the popover; detached, no listener l
   el.remove();
   assert.equal(listeners(), 0);
   assert.equal(ai.listeners(), 0);
+});
+
+test('[LAB-409] a failed Save profile is an alert under the popover actions; closing the popover hands the error to the banner', async () => {
+  const { el, ai, button, toggle } = mount();
+  withRealErrors(ai);
+  (ai as unknown as { saveOverrides: () => Promise<void> }).saveOverrides = async () => Promise.reject({ code: 'server' });
+  toggle('open');
+  button('ai.saveProfile').click();
+  await tick();
+  const note = el.querySelector('.popoverActions small[role="alert"]')!;
+  assert.equal(note.textContent, EN_MESSAGES['ai.error.server']);
+  assert.ok(button('ai.saveProfile').getAttribute('aria-describedby')?.includes(note.id));
+  assert.equal(ai.getState().errorOrigin?.anchor, el);
+  toggle('closed');
+  assert.equal(ai.getState().errorOrigin, null);
+  assert.equal(ai.getState().error, 'server');
 });

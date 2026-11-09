@@ -11,7 +11,7 @@ import { EN_MESSAGES } from '../../i18n/messages';
 import { createI18nStore } from '../../state/i18nStore';
 import { countListeners } from '../../testing/countListeners';
 import { installDialogStub } from '../../testing/dialogStub';
-import { fakeAi } from '../../testing/fakeAi';
+import { fakeAi, withRealErrors } from '../../testing/fakeAi';
 import { waitFor } from '../../testing/waitFor';
 
 installDialogStub();
@@ -127,4 +127,24 @@ test('detached: the confirmation closes, the store and language listeners are go
   await waitFor(() => document.querySelector('dialog') === null);
   assert.equal(listeners(), 0);
   assert.equal(ai.listeners(), 0);
+});
+
+test('[LAB-409] a failed save is an alert under the actions of the open preset, with its origin; a retry clears it', async () => {
+  const { el, ai, items, button } = mount();
+  withRealErrors(ai);
+  Object.assign(ai, { savePreset: async () => Promise.reject({ code: 'server' }) });
+  items()[1].click();
+  button(EN_MESSAGES['ai.save']).click();
+  await waitFor(() => !!el.querySelector('small[role="alert"]'));
+  const note = el.querySelector('small[role="alert"]')!;
+  assert.equal(note.textContent, EN_MESSAGES['ai.error.server']);
+  assert.equal(note.previousElementSibling, el.querySelector('.actions'));
+  assert.equal(ai.getState().errorOrigin?.anchor, el);
+  assert.ok(button(EN_MESSAGES['ai.save']).getAttribute('aria-describedby')?.includes(note.id));
+  button(EN_MESSAGES['ai.save']).click();
+  assert.equal(el.querySelector('small[role="alert"]'), null, 'the previous outcome goes away at the retry');
+  await waitFor(() => !!el.querySelector('small[role="alert"]'));
+  el.remove();
+  assert.equal(ai.getState().errorOrigin, null, 'detached: the banner takes over');
+  assert.equal(ai.getState().error, 'server');
 });

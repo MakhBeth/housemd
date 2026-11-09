@@ -8,6 +8,7 @@ import { el, setText, toggleAttr } from '../../dom/el';
 import { RenderLoop } from '../../dom/renderLoop';
 import type { MessageKey } from '../../i18n/messages';
 import { cancelSwitch, confirmSwitch, editDraft, emptyDraft, isDirty, openDraft, selectDraft, type DraftState } from '../../state/draftState';
+import { OriginNote } from '../ai/originNote';
 import type { I18nStore } from '../../state/i18nStore';
 import type { HmdAiModelSelect } from '../ai/model-select.element';
 import type { HmdAiParameters } from '../ai/parameters.element';
@@ -80,6 +81,8 @@ export class HmdSettingsProfiles extends HmdElement {
   #needKey = false;
   #announceKey = false;
   #dialogs: AbortController | null = null;
+  /** Esito di un'operazione sul dettaglio aperto: nota sotto le sue azioni; chiuso il dettaglio passa al banner workspace. */
+  #errorNote = new OriginNote(this, () => this.#controller);
   readonly #helpId = `profile-help-${++helpCount}`;
   #loop = new RenderLoop(this, {
     ready: () => !!this.#list && !!this.#controller && !!this.#i18n && this.isConnected,
@@ -123,6 +126,7 @@ export class HmdSettingsProfiles extends HmdElement {
     super.disconnectedCallback();
     this.#dialogs?.abort();
     this.#dialogs = null;
+    this.#errorNote.release();
   }
 
   #setDraft(next: DraftState<ModelProfile>): void {
@@ -138,7 +142,8 @@ export class HmdSettingsProfiles extends HmdElement {
   }
 
   #run(job: Promise<unknown>): void {
-    void job.catch((error) => this.#controller?.report(error));
+    this.#errorNote.begin();
+    void job.catch(this.#errorNote.report('profile'));
   }
 
   /** Apre un profilo (o un profilo nuovo): la chiave scritta e «Connesso» si dimenticano subito. */
@@ -286,6 +291,7 @@ export class HmdSettingsProfiles extends HmdElement {
     const split = list.parentElement!;
     if (!draft) {
       this.#detail?.root.remove();
+      this.#errorNote.update(state, t, null);
       return;
     }
     const d = (this.#detail ??= this.#createDetail());
@@ -343,6 +349,7 @@ export class HmdSettingsProfiles extends HmdElement {
       [d.effortLabel, d.secretLabel, d.rememberLabel, d.secretNotice, d.saveSecret, d.saveSecretNote, d.connected],
     );
     if (d.root.parentNode !== split) split.append(d.root);
+    this.#errorNote.update(state, t, d.save.parentElement, d.save);
   }
 }
 

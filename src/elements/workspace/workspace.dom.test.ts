@@ -19,7 +19,7 @@ import { createI18nStore } from '../../state/i18nStore';
 import { createRouteStore, type RouteWindow } from '../../state/routeStore';
 import { createThemeStore } from '../../state/themeStore';
 import { installDialogStub } from '../../testing/dialogStub';
-import { fakeAi } from '../../testing/fakeAi';
+import { fakeAi, withRealErrors } from '../../testing/fakeAi';
 import { installPopoverStub } from '../../testing/popoverStub';
 import { waitFor } from '../../testing/waitFor';
 import { memoryBufferStore } from '../../workspace/buffers';
@@ -59,10 +59,10 @@ function routeWindow(): RouteWindow & { hashValue: string } {
   return win;
 }
 
-async function mount(options: { files?: Record<string, string>; ai?: boolean; lastFile?: string; failWrite?: (path: string) => boolean; history?: object } = {}) {
+async function mount(options: { files?: Record<string, string>; ai?: boolean; lastFile?: string; failWrite?: (path: string) => boolean; history?: object; buffers?: ReturnType<typeof memoryBufferStore> } = {}) {
   const ops = memoryOps({ failWrite: options.failWrite });
   for (const [path, text] of Object.entries(options.files ?? { 'a.md': '# A', 'b.md': '# B' })) ops.setFile(path, text);
-  const workspace = new Workspace({ fs: createWorkspaceFS(ops), workspaceId: 'ws', name: 'notes', buffers: memoryBufferStore(), history: options.history as never });
+  const workspace = new Workspace({ fs: createWorkspaceFS(ops), workspaceId: 'ws', name: 'notes', buffers: options.buffers ?? memoryBufferStore(), history: options.history as never });
   await workspace.load();
   if (options.lastFile) storage.set('housemd:lastFile:ws', JSON.stringify(options.lastFile));
   const counted = countListeners(createI18nStore({ locale: 'en', messages: EN_MESSAGES, load: async (locale) => ({ locale, messages: EN_MESSAGES }), persist() {} }));
@@ -431,20 +431,7 @@ test('Ctrl+Shift+F toggles the focus and announces it once in a hidden status re
 
 // --- [LAB-409] origine degli esiti: AI e note workspace -----------------------------------------------------
 
-/** Come AiController: l'errore porta la sua origine, `clearError(anchor)` e `orphanError(anchor)` la rispettano. */
-function realErrors(ai: Awaited<ReturnType<typeof mount>>['ai']) {
-  const origin = () => ai.getState().errorOrigin;
-  Object.assign(ai, {
-    report: (error: { code?: string }, o?: unknown) => ai.set({ error: (error.code ?? 'server') as never, errorOrigin: (o ?? null) as never }),
-    clearError: (anchor?: object) => {
-      if (anchor && origin()?.anchor !== anchor) return;
-      ai.set({ error: null, errorOrigin: null } as never);
-    },
-    orphanError: (anchor: object) => {
-      if (origin()?.anchor === anchor) ai.set({ errorOrigin: null } as never);
-    },
-  });
-}
+const realErrors = withRealErrors;
 
 const rows = (el: HTMLElement) => [...el.querySelectorAll('main hmd-banner')].map((b) => b.textContent).join('|');
 
@@ -576,4 +563,32 @@ test('[LAB-409] closing the Save all note in the settings, or the note in the hi
   close.focus();
   close.click();
   assert.equal(document.activeElement, el.querySelector('button.restore'));
+});
+
+test('[LAB-409] Save all from the settings keeps its origin when reading the drafts fails: the error describes the settings button', async () => {
+  const buffers = memoryBufferStore();
+  buffers.list = async () => Promise.reject(new Error('boom'));
+  const { el, win } = await mount({ buffers });
+  win.setHash('#settings');
+  await waitFor(() => !!el.querySelector('hmd-settings button.secondary'));
+  el.querySelector<HTMLButtonElement>('hmd-settings button.secondary')!.click();
+  await waitFor(() => !!el.querySelector('hmd-settings hmd-banner')?.textContent?.includes('boom'));
+  const message = el.querySelector('hmd-settings hmd-banner p.message')!;
+  assert.equal(el.querySelector('hmd-settings button.secondary')!.getAttribute('aria-describedby'), message.id);
+  assert.ok(![...el.querySelectorAll('main > hmd-banner')].some((b) => b.textContent?.includes('boom')), 'not under the toolbar button');
+});
+
+test('[LAB-409] a profile save that fails with the detail open stays under its actions; it reaches the workspace banner only when the detail is gone', async () => {
+  const { el, ai, win } = await mount({ ai: true });
+  realErrors(ai);
+  Object.assign(ai, { saveProfile: async () => Promise.reject({ code: 'server' }) });
+  win.setHash('#settings/ai-profiles');
+  await waitFor(() => !!el.querySelector('hmd-settings-profiles .list > button'));
+  el.querySelector<HTMLButtonElement>('hmd-settings-profiles .list > button')!.click();
+  const save = [...el.querySelectorAll<HTMLButtonElement>('hmd-settings-profiles button')].find((b) => b.textContent === EN_MESSAGES['ai.save'])!;
+  save.click();
+  await waitFor(() => !!el.querySelector('hmd-settings-profiles small[role="alert"]'));
+  assert.ok(!rows(el).includes(EN_MESSAGES['ai.error.server']), 'nothing in the workspace banner while the origin is visible');
+  win.setHash('');
+  await waitFor(() => rows(el).includes(EN_MESSAGES['ai.error.server']));
 });

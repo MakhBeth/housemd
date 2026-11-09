@@ -47,16 +47,34 @@ async function mount(saved: FileSystemDirectoryHandle | null, access = true, cou
   const meta = new Map<string, unknown>([['folderHandle', saved]]);
   const services: ReturnType<typeof service>[] = [];
   const reports: unknown[] = [];
+  let state: { error: string | null; errorOrigin: unknown } = { error: null, errorOrigin: null };
+  const listeners = new Set<() => void>();
+  let pickFailure: unknown = null;
   let reloads = 0;
   const controller = {
     store: { getMeta: async (key: string) => meta.get(key) ?? null, setMeta: async (key: string, value: unknown) => void meta.set(key, value) },
-    report: (error: unknown) => void reports.push(error),
+    report: (error: unknown, origin?: unknown) => {
+      reports.push(error);
+      state = { error: (error as { code?: string }).code ?? 'server', errorOrigin: origin ?? null };
+      listeners.forEach((fn) => fn());
+    },
+    getState: () => state,
+    subscribe: (fn: () => void) => (listeners.add(fn), () => void listeners.delete(fn)),
+    clearError: (anchor?: object) => {
+      if (anchor && (state.errorOrigin as { anchor?: object } | null)?.anchor !== anchor) return;
+      state = { error: null, errorOrigin: null };
+      listeners.forEach((fn) => fn());
+    },
+    orphanError: () => undefined,
     reload: async () => void reloads++,
   };
   const binding = new SyncBinding(controller as never, {
     hasAccess: async () => access,
     requestAccess: async () => true,
-    pickFolder: async () => ({ name: 'picked' }) as FileSystemDirectoryHandle,
+    pickFolder: async () => {
+      if (pickFailure) throw pickFailure;
+      return { name: 'picked' } as FileSystemDirectoryHandle;
+    },
     createSync: () => {
       const s = service([['a.json', 'b.json'], ['c.json']], counts);
       services.push(s);
@@ -70,7 +88,7 @@ async function mount(saved: FileSystemDirectoryHandle | null, access = true, cou
   el.i18n = i18n;
   document.body.append(el);
   const button = (label: string) => [...el.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent === label);
-  return { el, binding, services, reports, reloads: () => reloads, button };
+  return { el, binding, services, reports, reloads: () => reloads, button, failPick: (error: unknown) => (pickFailure = error) };
 }
 
 test('no folder: the notice and Choose only', async () => {
@@ -221,4 +239,18 @@ test('Sync now during a sync says why in a status after the actions, queues no s
   assert.equal(document.activeElement, now);
   now.click();
   assert.deepEqual(s.calls, ['syncNow']);
+});
+
+test('[LAB-409] a failed folder choice is an alert under the actions of the section, with its origin; a retry clears it', async () => {
+  const { el, button, failPick } = await mount(null);
+  failPick({ code: 'syncPermission' });
+  button(EN_MESSAGES['ai.syncChoose'])!.click();
+  await waitFor(() => !!el.querySelector('small[role="alert"]'));
+  const note = el.querySelector('small[role="alert"]')!;
+  assert.equal(note.textContent, EN_MESSAGES['ai.error.syncPermission']);
+  assert.equal(note.previousElementSibling, el.querySelector('.actions'));
+  assert.ok(button(EN_MESSAGES['ai.syncChoose'])!.getAttribute('aria-describedby')?.includes(note.id));
+  button(EN_MESSAGES['ai.syncChoose'])!.click();
+  assert.equal(el.querySelector('small[role="alert"]'), null);
+  await waitFor(() => !!el.querySelector('small[role="alert"]'));
 });

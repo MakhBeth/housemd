@@ -11,6 +11,7 @@ import type { I18nStore } from '../../state/i18nStore';
 import { emit } from '../events';
 import type { HmdAiParameters } from './parameters.element';
 import type { HmdAiModelSelect } from './model-select.element';
+import { OriginNote } from './originNote';
 import {
   chipLabel,
   groupRowKey,
@@ -68,6 +69,8 @@ export class HmdAiModelChip extends HmdElement {
   #rows = new WeakMap<Element, ProfileRow>();
   /** Il selettore del modello dell'apertura corrente (uno nuovo a ogni apertura del popover). */
   #modelSelect: HmdAiModelSelect | null = null;
+  /** Errore del salvataggio dei parametri: nota sotto le azioni del popover; a popover chiuso passa al banner workspace. */
+  #errorNote = new OriginNote(this, () => this.#controller);
   #loop = new RenderLoop(this, {
     ready: () => !!this.#parts && !!this.#controller && !!this.#i18n && this.isConnected,
     render: () => this.#render(this.#parts!, this.#controller!, this.#i18n!),
@@ -107,6 +110,7 @@ export class HmdAiModelChip extends HmdElement {
     // Staccato, il popover si chiude senza evento toggle: ricollegato, il selettore del modello non torna
     // (e non chiede l'elenco) finché il popover non si riapre.
     this.#open = false;
+    this.#errorNote.release();
   }
 
   #build(): Parts {
@@ -144,7 +148,9 @@ export class HmdAiModelChip extends HmdElement {
 
   #run(job: (controller: ModelChipController) => Promise<unknown>): void {
     const controller = this.#controller;
-    if (controller) void job(controller).catch((error: unknown) => controller.report(error));
+    if (!controller) return;
+    this.#errorNote.begin();
+    void job(controller).catch(this.#errorNote.report('chip-override'));
   }
 
   /**
@@ -156,6 +162,7 @@ export class HmdAiModelChip extends HmdElement {
     const open = this.#parts?.popover.matches(':popover-open') ?? false;
     if (open === this.#open) return;
     this.#open = open;
+    if (!open) this.#errorNote.release();
     this.#loop.update();
   }
 
@@ -169,6 +176,7 @@ export class HmdAiModelChip extends HmdElement {
       if (parts.manage.parentNode !== this) this.append(parts.manage);
       // Il popover tolto si chiude senza evento toggle: il selettore del modello non resta montato.
       this.#open = false;
+      this.#errorNote.update(state, t, null);
       return;
     }
     parts.manage.remove();
@@ -215,6 +223,7 @@ export class HmdAiModelChip extends HmdElement {
     // L'ancora si ricollega solo con il popover già riconciliato: un selettore rimasto dentro dalla volta
     // prima (popover aperto quando i profili sono spariti) è già fuori e non chiede l'elenco.
     if (parts.anchor.parentNode !== this) this.append(parts.anchor);
+    this.#errorNote.update(state, t, this.#open ? parts.manageLink : null, parts.save);
   }
 
   #createPart(parts: Parts, part: PopoverPart): Element {

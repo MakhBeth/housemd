@@ -661,7 +661,7 @@ export class Workspace {
     try {
       paths = (await this.draftPaths()).filter((path) => path !== openPath);
     } catch (err) {
-      this.toast('error', 'bufferFailed', { detail: errorDetail(err) }, undefined, true);
+      this.toast('error', 'bufferFailed', { detail: errorDetail(err) }, undefined, true, action);
       return;
     }
     let written = 0;

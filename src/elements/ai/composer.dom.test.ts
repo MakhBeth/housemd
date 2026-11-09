@@ -14,7 +14,7 @@ import { translate, type Params } from '../../i18n/i18n';
 import { EN_MESSAGES } from '../../i18n/messages';
 import { createI18nStore } from '../../state/i18nStore';
 import { countListeners } from '../../testing/countListeners';
-import { fakeAi } from '../../testing/fakeAi';
+import { fakeAi, withRealErrors } from '../../testing/fakeAi';
 import { installPopoverStub } from '../../testing/popoverStub';
 import { waitFor } from '../../testing/waitFor';
 
@@ -432,4 +432,19 @@ test('the draft: given before connecting it fills the box; typing and sending te
   // Dopo la costruzione la bozza non riscrive più la casella.
   el.draft = 'other';
   assert.equal(input.value, '');
+});
+
+test('[LAB-409] a rejected send is an alert under the composer note, with its origin; detached, the banner takes over', async () => {
+  const { el, ai, send, type } = mount();
+  withRealErrors(ai);
+  (ai as unknown as { send: () => Promise<void> }).send = async () => Promise.reject({ code: 'server' });
+  type('hello');
+  send().click();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const note = el.querySelector('small[role="alert"]')!;
+  assert.equal(note.textContent, EN_MESSAGES['ai.error.server']);
+  assert.equal(ai.getState().errorOrigin?.anchor, el);
+  assert.ok(send().getAttribute('aria-describedby')?.includes(note.id));
+  el.remove();
+  assert.equal(ai.getState().errorOrigin, null);
 });

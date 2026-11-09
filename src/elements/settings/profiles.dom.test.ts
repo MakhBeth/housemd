@@ -10,7 +10,7 @@ import type { ChatProvider, ModelProfile } from '../../ai/types';
 import { EN_MESSAGES } from '../../i18n/messages';
 import { createI18nStore } from '../../state/i18nStore';
 import { installDialogStub } from '../../testing/dialogStub';
-import { fakeAi } from '../../testing/fakeAi';
+import { fakeAi, withRealErrors } from '../../testing/fakeAi';
 import { installPopoverStub } from '../../testing/popoverStub';
 import { waitFor } from '../../testing/waitFor';
 
@@ -186,4 +186,20 @@ test('Delete asks first; once the profile is gone the focus goes to the first it
   remove.focus();
   await waitFor(() => el.querySelector('.detail') === null);
   assert.ok(document.activeElement === items()[0], `the first item, not ${document.activeElement?.localName}`);
+});
+
+test('[LAB-409] a failed save is an alert under the actions of the open profile, with its origin; a retry clears it', async () => {
+  const { el, ai, button } = mount();
+  withRealErrors(ai);
+  Object.assign(ai, { saveProfile: async () => Promise.reject({ code: 'server' }) });
+  button('Cloud')!.click();
+  button(EN_MESSAGES['ai.save'])!.click();
+  await waitFor(() => !!el.querySelector('small[role="alert"]'));
+  const note = el.querySelector('small[role="alert"]')!;
+  assert.equal(note.textContent, EN_MESSAGES['ai.error.server']);
+  assert.equal(ai.getState().errorOrigin?.anchor, el);
+  assert.ok(button(EN_MESSAGES['ai.save'])!.getAttribute('aria-describedby')?.includes(note.id));
+  button(EN_MESSAGES['ai.save'])!.click();
+  assert.equal(el.querySelector('small[role="alert"]'), null);
+  await waitFor(() => !!el.querySelector('small[role="alert"]'));
 });
