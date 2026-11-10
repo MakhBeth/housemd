@@ -99,7 +99,7 @@
   "settings.focus": "Focus mode (Ctrl+Shift+F)",
   "settings.focus.paragraph": "Highlight the paragraph",
   "settings.focus.sentence": "Highlight the sentence",
-  "settings.typewriter": "Typewriter: keep the cursor line centered",
+  "settings.typewriter": "Typewriter: keep the cursor line centered (always on in focus mode)",
   "settings.writing.hint": "They apply in the Editor and Split views.",
   "settings.saveAll": "Save all now",
   "settings.close": "Close",

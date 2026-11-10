@@ -33,6 +33,7 @@ export class HmdEditor extends HmdDocElement {
   #focusUnit: FocusUnit = 'paragraph';
   #appliedFocus = '';
   #typewriter = false;
+  #appliedTypewriter = false;
 
   /** Modalità focus (grigio fuori dall'unità del cursore) e sua unità: si riconfigurano a caldo. */
   get focusMode(): boolean { return this.#focus; }
@@ -40,6 +41,7 @@ export class HmdEditor extends HmdDocElement {
     if (!!value === this.#focus) return;
     this.#focus = !!value;
     this.#applyFocus();
+    this.#applyTypewriter();
     this.#recenter();
   }
   get focusUnit(): FocusUnit { return this.#focusUnit; }
@@ -50,29 +52,40 @@ export class HmdEditor extends HmdDocElement {
     this.#recenter();
   }
 
-  /** Typewriter: la riga del cursore resta al centro; si riconfigura a caldo e ricentra una volta. */
+  /** Typewriter: la riga del cursore resta al centro; si riconfigura a caldo e ricentra una volta. In modalità focus è sempre attivo. */
   get typewriter(): boolean { return this.#typewriter; }
   set typewriter(value: boolean) {
     if (!!value === this.#typewriter) return;
     this.#typewriter = !!value;
+    this.#applyTypewriter();
+  }
+
+  #typewriterOn(): boolean {
+    return this.#typewriter || this.#focus;
+  }
+
+  #applyTypewriter(): void {
     const view = this.#view;
-    if (!view) return;
+    const on = this.#typewriterOn();
+    if (!view || this.#appliedTypewriter === on) return;
+    this.#appliedTypewriter = on;
     queueMicrotask(() => {
       if (this.#view !== view) return;
-      view.dispatch({ effects: [typewriterCompartment.reconfigure(typewriterExtensions(this.#typewriter)), ...(this.#typewriter ? [centerEffect(view.state)] : [])] });
+      view.dispatch({ effects: [typewriterCompartment.reconfigure(typewriterExtensions(on)), ...(on ? [centerEffect(view.state)] : [])] });
     });
   }
 
   protected override initialTypewriter() {
-    return typewriterExtensions(this.#typewriter);
+    this.#appliedTypewriter = this.#typewriterOn();
+    return typewriterExtensions(this.#appliedTypewriter);
   }
 
   /** Una volta, senza animazione: apertura di un documento, cambio di unità o di modalità. */
   #recenter(): void {
     const view = this.#view;
-    if (!view || !this.#typewriter) return;
+    if (!view || !this.#typewriterOn()) return;
     queueMicrotask(() => {
-      if (this.#view === view && this.#typewriter) view.dispatch({ effects: centerEffect(view.state) });
+      if (this.#view === view && this.#typewriterOn()) view.dispatch({ effects: centerEffect(view.state) });
     });
   }
 

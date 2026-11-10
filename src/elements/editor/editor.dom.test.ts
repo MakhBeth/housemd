@@ -327,7 +327,7 @@ test('focus mode: search and selection matches keep the full text colour, whiche
     root.querySelector('.cm-line')!.append(a);
     return [window.getComputedStyle(a).color, window.getComputedStyle(b).color, window.getComputedStyle(c).color];
   };
-  assert.deepEqual(colorOf('cm-focusDim', 'x'), ['var(--c-muted)', 'var(--c-muted)', 'var(--c-muted)'], 'plain dimmed text is grey');
+  assert.deepEqual(colorOf('cm-focusDim', 'x'), ['var(--c-focus-dim)', 'var(--c-focus-dim)', 'var(--c-focus-dim)'], 'plain dimmed text is grey');
   for (const match of ['cm-searchMatch', 'cm-selectionMatch']) {
     const [, inner, deep] = colorOf('cm-focusDim', match);
     assert.deepEqual([inner, deep], ['var(--c-text)', 'var(--c-text)'], `${match} inside the grey`);
@@ -345,6 +345,7 @@ test('focus mode greys everything outside the cursor paragraph, follows the curs
   await tick();
   // La selezione di partenza è all'inizio: resta acceso il primo paragrafo.
   assert.equal(dimmed().replaceAll('\n', ''), 'duetre');
+  assert.ok(el.querySelector('.cm-editor.cm-focusMode'), 'focus on: the editor carries the class that drops the active-line tint');
   view().dispatch({ selection: { anchor: 5 } });
   assert.equal(dimmed().replaceAll('\n', ''), 'unotre');
   el.focusUnit = 'sentence';
