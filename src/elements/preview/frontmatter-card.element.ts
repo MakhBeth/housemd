@@ -25,6 +25,7 @@ export class HmdFrontmatterCard extends HmdElement {
   #image: { src: string | null; resolve: ResolveImage | null } | null = null;
   #imageUrl: string | null = null;
   #imageToken = 0;
+  #imagePending: Promise<unknown> = Promise.resolve();
   #parts: {
     error: HTMLDivElement;
     header: HTMLElement;
@@ -46,6 +47,18 @@ export class HmdFrontmatterCard extends HmdElement {
     if (value === this.#i18n) return;
     this.#i18n = value;
     this.reconnect();
+  }
+
+  /** Si risolve quando l'immagine della scheda è risolta, montata e decodificata (prima della stampa). */
+  async ready(): Promise<void> {
+    const microtask = () => new Promise<void>((resolve) => queueMicrotask(resolve));
+    await microtask();
+    await this.#imagePending;
+    // L'URL arrivato si monta nel render del microtask dopo.
+    await microtask();
+    await microtask();
+    const image = this.#parts?.image;
+    if (image?.isConnected && image.getAttribute('src')) await image.decode().catch(() => undefined);
   }
 
   protected connect(signal: AbortSignal): void {
@@ -87,7 +100,7 @@ export class HmdFrontmatterCard extends HmdElement {
     this.#imageUrl = null;
     const token = ++this.#imageToken;
     if (!src || !resolve) return;
-    void resolve(src).then((url) => {
+    this.#imagePending = resolve(src).then((url) => {
       if (token !== this.#imageToken) return;
       this.#imageUrl = url;
       this.#schedule();

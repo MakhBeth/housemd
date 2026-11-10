@@ -22,3 +22,6 @@ Object.defineProperty(globalThis, 'window', { configurable: true, writable: true
 for (const name of GLOBALS) {
   Object.defineProperty(globalThis, name, { configurable: true, writable: true, value: source[name] });
 }
+
+// jsdom non decodifica le immagini: `decode()` (Chromium) si risolve subito.
+(dom.window.HTMLImageElement.prototype as { decode?: () => Promise<void> }).decode ??= () => Promise.resolve();

@@ -23,6 +23,8 @@
   "toolbar.saveAll": "Save all (Ctrl+Alt+S)",
   "toolbar.history": "History",
   "toolbar.history.noDocument": "No document open: open one to see its history",
+  "toolbar.export": "Export PDF",
+  "toolbar.export.noDocument": "No document open: open one to export it to PDF",
   "toolbar.focus": "Focus mode (Ctrl+Shift+F)",
   "toolbar.focus.elsewhere": "Focus mode is on: it shows in the Editor and Split views",
   "focus.announce.on": "Focus mode on",

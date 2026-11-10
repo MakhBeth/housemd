@@ -23,6 +23,8 @@
   "toolbar.saveAll": "すべて保存 (Ctrl+Alt+S)",
   "toolbar.history": "履歴",
   "toolbar.history.noDocument": "開いているドキュメントがありません。履歴を見るにはドキュメントを開いてください",
+  "toolbar.export": "PDFにエクスポート",
+  "toolbar.export.noDocument": "ドキュメントが開かれていません。PDFにエクスポートするには、まず開いてください",
   "toolbar.focus": "フォーカスモード (Ctrl+Shift+F)",
   "toolbar.focus.elsewhere": "フォーカスモードはオンです。エディターと分割ビューで表示されます",
   "focus.announce.on": "フォーカスモードをオンにしました",

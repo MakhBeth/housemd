@@ -622,3 +622,29 @@ test('[LAB-409] a dialog that closes while another opens in the same update: the
   await waitFor(() => [...el.querySelectorAll('p.visually-hidden[role="status"]')].some((n) => n.textContent === text));
   assert.equal([...el.querySelectorAll('[role="status"], [role="alert"]')].filter((n) => n.textContent === text).length, 1, 'summarized exactly once');
 });
+
+test('Export PDF: the print sheet survives a render while the preview is getting ready, and goes away after printing', async () => {
+  const { el, workspace, button } = await mount();
+  await workspace.openFile('a.md');
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const proto = customElements.get('hmd-preview')!.prototype as { ready: () => Promise<void> };
+  const original = proto.ready;
+  proto.ready = () => gate;
+  let prints = 0;
+  window.print = () => void prints++;
+  try {
+    button(EN_MESSAGES['toolbar.export']).click();
+    assert.ok(el.querySelector(':scope > .printSheet'), 'il foglio è montato subito');
+    button(EN_MESSAGES['mode.editor']).click();
+    await waitFor(() => !!el.querySelector('.panes'));
+    assert.ok(el.querySelector(':scope > .printSheet'), 'un render durante l’attesa non lo toglie');
+    release();
+    await waitFor(() => prints === 1);
+    assert.ok(el.querySelector(':scope > .printSheet'), 'il foglio resta finché la stampa non finisce');
+    window.dispatchEvent(new Event('afterprint'));
+    assert.equal(el.querySelector(':scope > .printSheet'), null);
+  } finally {
+    proto.ready = original;
+  }
+});

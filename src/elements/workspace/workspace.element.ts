@@ -63,6 +63,9 @@ interface Parts {
   saveState: HTMLSpanElement;
   saveText: Text;
   history: HTMLButtonElement;
+  exportPdf: HTMLButtonElement;
+  /** Nota di Esporta PDF senza documento: stessa regola «mai disabled» di Cronologia. */
+  exportNote: HTMLParagraphElement;
   /** Nota di Cronologia senza documento: nel DOM solo con una ragione (vuota, il testo arriva dopo `ANNOUNCE_DELAY_MS`). */
   historyNote: HTMLParagraphElement;
   focus: HTMLButtonElement;
@@ -158,6 +161,9 @@ export class HmdWorkspace extends HmdElement {
   #historyPanelBanner: HmdBanner | null = null;
   /** Cronologia attivata senza documento / cartella attivata durante un cambio: la nota resta finché la causa c'è. */
   #historyNote = false;
+  #exportNote = false;
+  /** Foglio di stampa dell'esportazione in corso: resta tra i figli finché non finisce la stampa. */
+  #printSheet: HTMLElement | null = null;
   #focusMode = false;
   #focusUnit: FocusUnit = 'paragraph';
   #typewriter = false;
@@ -165,7 +171,7 @@ export class HmdWorkspace extends HmdElement {
   /** Testo dell'ultimo annuncio della scorciatoia (vuoto dopo un clic sul pulsante). */
   #focusSaid = '';
   #folderNote = false;
-  #announceAgain = { history: false, folder: false, focusNote: false, focusSaid: false };
+  #announceAgain = { history: false, export: false, folder: false, focusNote: false, focusSaid: false };
   #historyPath = '';
   #queuedRestore: { id: number; path: string } | null = null;
   #aiSelection: TextRange | null = null;
@@ -552,6 +558,8 @@ export class HmdWorkspace extends HmdElement {
         icon('history'),
       ),
       historyNote: el('p', { class: 'note toolbarNote', role: 'status' }),
+      exportPdf: el('button', { class: 'iconButton tooltip', on: { click: () => void this.#exportPdf() } }, icon('print')),
+      exportNote: el('p', { class: 'note toolbarNote', role: 'status' }),
       focus: el('button', { class: 'iconButton focusToggle tooltip', on: { click: () => this.#setFocus(!this.#focusMode) } }, icon('focus')),
       focusNote: el('p', { class: 'note toolbarNote', role: 'status' }),
       focusAnnounce: el('p', { class: 'visually-hidden', role: 'status' }),
@@ -570,7 +578,7 @@ export class HmdWorkspace extends HmdElement {
     parts.toolbar.append(
       el('div', { class: 'lead' }, parts.toggle, parts.path),
       parts.modes,
-      el('div', { class: 'actions' }, parts.saveState, parts.history, parts.saveAll, parts.focus, themeSwitcher, parts.settings),
+      el('div', { class: 'actions' }, parts.saveState, parts.history, parts.exportPdf, parts.saveAll, parts.focus, themeSwitcher, parts.settings),
     );
     parts.main.append(parts.toolbar);
     return parts;
@@ -583,6 +591,42 @@ export class HmdWorkspace extends HmdElement {
       return null;
     }
     return (this.#slots[name] ??= create());
+  }
+
+  /**
+   * Esporta in PDF: un foglio di stampa con un'anteprima propria (visibile solo in `@media print`) e la finestra di
+   * stampa di Chrome. Il foglio si toglie a stampa finita (`afterprint`), non subito: `print()` può tornare prima.
+   */
+  async #exportPdf(): Promise<void> {
+    const workspace = this.#workspace;
+    const i18n = this.#i18n;
+    const state = workspace?.getState();
+    if (!workspace || !i18n || !state) return;
+    const doc = state.doc;
+    if (!doc) {
+      this.#announceAgain.export = this.#exportNote;
+      this.#exportNote = true;
+      this.#loop.update();
+      return;
+    }
+    const preview = el('hmd-preview');
+    preview.i18n = i18n;
+    preview.text = doc.text;
+    preview.path = doc.path;
+    preview.files = this.#files(state);
+    preview.config = state.config;
+    preview.readBlob = this.#readBlob;
+    const sheet = el('div', { class: 'printSheet' }, preview);
+    this.#printSheet?.remove();
+    this.#printSheet = sheet;
+    this.append(sheet);
+    await preview.ready();
+    if (this.#printSheet !== sheet) return;
+    window.addEventListener('afterprint', () => {
+      sheet.remove();
+      if (this.#printSheet === sheet) this.#printSheet = null;
+    }, { once: true });
+    window.print();
   }
 
   #createReview(): HmdAiReview {
@@ -694,6 +738,11 @@ export class HmdWorkspace extends HmdElement {
     this.#announceAgain.history = false;
     toggleAttr(parts.history, 'aria-label', true, t('toolbar.history'));
     toggleAttr(parts.history, 'data-tooltip', true, t('toolbar.history'));
+    if (doc) this.#exportNote = false;
+    announce(parts.exportNote, this.#exportNote ? t('toolbar.export.noDocument') : '', this.#exportNote && (this.#announceAgain.export || !parts.exportNote.isConnected));
+    this.#announceAgain.export = false;
+    toggleAttr(parts.exportPdf, 'aria-label', true, t('toolbar.export'));
+    toggleAttr(parts.exportPdf, 'data-tooltip', true, t('toolbar.export'));
     toggleAttr(parts.focus, 'aria-pressed', true, String(this.#focusMode));
     toggleAttr(parts.focus, 'aria-label', true, t('toolbar.focus'));
     toggleAttr(parts.focus, 'data-tooltip', true, t('toolbar.focus'));
@@ -728,12 +777,12 @@ export class HmdWorkspace extends HmdElement {
       setText(empty.firstElementChild!, t('empty.hint'));
       setText(empty.lastElementChild!, t('file.new'));
     }
-    place(parts.main, [parts.toolbar, ...(this.#historyNote ? [parts.historyNote] : []), ...(this.#focusNote ? [parts.focusNote] : []), parts.saveAllBanner, parts.historyBanner, parts.wsBanner, parts.docBanner, ...(conflict ? [conflict] : []), (review ?? panes ?? empty)!]);
+    place(parts.main, [parts.toolbar, ...(this.#historyNote ? [parts.historyNote] : []), ...(this.#exportNote ? [parts.exportNote] : []), ...(this.#focusNote ? [parts.focusNote] : []), parts.saveAllBanner, parts.historyBanner, parts.wsBanner, parts.docBanner, ...(conflict ? [conflict] : []), (review ?? panes ?? empty)!]);
 
     // Impostazioni sopra l'area di lavoro, e gli avvisi.
     const settings = this.#slot('settings', settingsOpen, () => this.#createSettings());
     if (settings) this.#renderSettings(settings, state, i18n);
-    place(this, [parts.layout, ...(settings ? [settings] : []), parts.focusAnnounce, parts.deferredAnnounce]);
+    place(this, [parts.layout, ...(settings ? [settings] : []), parts.focusAnnounce, parts.deferredAnnounce, ...(this.#printSheet ? [this.#printSheet] : [])]);
     // Righe nuove solo quando cambiano messaggi, errore AI, lingua, sidebar o dialog (lo useMemo di React).
     const modal = activeModal();
     const sidebarBanner = this.#slots.sidebarBanner ?? null;
