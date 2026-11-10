@@ -658,6 +658,8 @@ test('a single file in memory: opened by itself, no New file or New folder, a no
   const header = el.querySelector('aside > .sidebarHeader')!;
   assert.ok([...header.querySelectorAll<HTMLButtonElement>('button')].filter((b) => !b.hidden).every((b) => b.getAttribute('aria-label') !== EN_MESSAGES['file.new'] && b.getAttribute('aria-label') !== EN_MESSAGES['folder.new']));
   assert.equal(header.querySelector('.folder')!.getAttribute('data-tooltip'), EN_MESSAGES['sidebar.openOtherFile']);
+  assert.equal(header.querySelector('.folder')!.getAttribute('aria-label'), EN_MESSAGES['sidebar.openOtherFileNamed'].replace('{file}', 'note.md'));
+  assert.equal(el.querySelector('hmd-file-tree')!.singleFile, true);
   assert.equal(el.querySelector('aside .singleFileNote')!.textContent, EN_MESSAGES['singleFile.noteDownload']);
   const download = button(EN_MESSAGES['toolbar.download']);
   assert.equal(download.hidden, false);
@@ -674,6 +676,7 @@ test('a single file in memory: opened by itself, no New file or New folder, a no
   download.click();
   await waitFor(() => urls.length === 1);
   assert.equal(await urls[0]!.text(), '# Changed');
+  await waitFor(() => el.querySelector(':scope > p.visually-hidden[role="status"]:last-of-type')?.textContent === EN_MESSAGES['toolbar.downloaded'].replace('{file}', 'note.md'));
   await waitFor(() => el.querySelector('.saveState')?.textContent === EN_MESSAGES['save.saved']);
 });
 
@@ -681,4 +684,5 @@ test('a folder: no Download button and no single file note', async () => {
   const { el, button } = await mount();
   assert.equal(button(EN_MESSAGES['toolbar.download']).hidden, true);
   assert.equal(el.querySelector('.singleFileNote'), null);
+  assert.equal(el.querySelector('aside .folder')!.hasAttribute('aria-label'), false);
 });

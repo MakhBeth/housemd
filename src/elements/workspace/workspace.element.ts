@@ -611,6 +611,8 @@ export class HmdWorkspace extends HmdElement {
     if (!isMemoryFile(file)) return;
     await this.#workspace?.saveAll();
     downloadFile(file.name, file.takeDownload());
+    // Conferma anche quando l'indicatore era già «Salvato» (secondo download): nessun cambio da sentire lì.
+    if (this.#parts && this.#i18n) announce(this.#parts.deferredAnnounce, this.#i18n.t('toolbar.downloaded', { file: file.name }), true);
   }
 
   /**
@@ -978,6 +980,8 @@ export class HmdWorkspace extends HmdElement {
     }
     this.#folderButton = folder;
     setText(folder, state.name);
+    // Con un file singolo il nome da solo sembra il file, non l'azione: il nome accessibile dice cosa fa.
+    toggleAttr(folder, 'aria-label', !!this.#singleFile, t('sidebar.openOtherFileNamed', { file: this.#singleFile?.name ?? '' }));
     toggleAttr(folder, 'data-busy', !!folderBlocker(this.#switchingFolder), '');
     if (!folderBlocker(this.#switchingFolder)) this.#folderNote = false;
     const folderNote = this.#slot('folderNote', this.#folderNote, () => el('p', { class: 'note sidebarNote', role: 'status' }));
@@ -1012,6 +1016,7 @@ export class HmdWorkspace extends HmdElement {
     assign(tree, 'nodes', memo.tree!);
     assign(tree, 'openPath', doc?.path ?? null);
     assign(tree, 'drafts', memo.draftSet!);
+    assign(tree, 'singleFile', single);
     assign(tree, 'i18n', i18n);
     const sidebarBanner = this.#slot('sidebarBanner', true, () => el('hmd-banner', { class: 'noteBanner', on: { 'hmd-banner-close': (event) => this.#closeBanner(event.detail.key) } }))!;
     place(aside, [header, ...(folderNote ? [folderNote] : []), ...(singleNote ? [singleNote] : []), sidebarBanner, search, ...(orphans ? [orphans] : []), tree]);
