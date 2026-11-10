@@ -103,7 +103,7 @@ export class HmdApp extends HmdElement {
       this.#launched = true;
       this.#chooseFile(async () => file);
     });
-    void deps.listRecoverable().then((copies) => {
+    const recoverable = deps.listRecoverable().then((copies) => {
       if (signal.aborted) return;
       this.#recoverable = copies.at(-1) ?? null;
       this.#loop.update();
@@ -111,11 +111,15 @@ export class HmdApp extends HmdElement {
     if (!deps.isSupported()) return this.#show({ kind: 'unsupported' });
     void (async () => {
       const stored = await deps.loadWorkspace().catch(() => null);
+      // La copia da riprendere si conosce prima di scegliere la schermata: con una copia la cartella salvata
+      // non si riapre da sola, altrimenti «Riprendi» (solo nella schermata iniziale) sarebbe irraggiungibile.
+      await recoverable;
       if (signal.aborted || this.#launched) return;
       if (!stored) return this.#show({ kind: 'start' });
       const access = await deps.hasAccess(stored.handle);
       if (signal.aborted || this.#launched) return;
-      if (!access) return this.#show({ kind: 'resume', stored });
+      // Con una copia da riprendere: la schermata di ripresa, che offre sia la copia sia la cartella (già autorizzata).
+      if (!access || this.#recoverable) return this.#show({ kind: 'resume', stored });
       const workspace = await deps.openWorkspace(stored);
       if (signal.aborted || this.#launched) return workspace.dispose();
       this.#show({ kind: 'open', stored, workspace });

@@ -373,3 +373,16 @@ test('a real file (File System Access) with autosave off: leaving it writes noth
   assert.equal(writes, 0);
   assert.equal(document.querySelector('dialog[open]'), null, 'no download question for a real file');
 });
+
+test('a saved, authorised folder and a copy to recover: the folder is not reopened by itself, both are offered', async () => {
+  const copy = { key: 'file:old/note.md', sessionId: 'file:old', name: 'note.md' };
+  const { deps: d, opened } = deps({ loadWorkspace: async () => ({ handle: handle('notes'), workspaceId: 'w' }), listRecoverable: async () => [copy] });
+  const el = mount(d);
+  await waitFor(() => el.screen === 'resume');
+  const labels = [...el.querySelectorAll('hmd-start-screen button')].map((b) => b.textContent);
+  assert.ok(labels.includes(EN_MESSAGES['start.recover'].replace('{file}', 'note.md')));
+  assert.ok(labels.includes(EN_MESSAGES['start.resume'].replace('{folder}', 'notes')));
+  assert.equal(opened.length, 0);
+  el.querySelector('hmd-start-screen')!.dispatchEvent(new CustomEvent('hmd-start-resume', { bubbles: true, detail: null }));
+  await waitFor(() => el.screen === 'open');
+});
