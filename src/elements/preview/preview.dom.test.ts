@@ -200,3 +200,20 @@ test('detached: the pending debounce does not render, no listener is left', asyn
   await sleep(250);
   assert.equal(h1(), 'One');
 });
+
+test('ready() waits for the frontmatter cover and for the body images, not only for the URL', async () => {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const { readBlob } = folder({ 'cover.png': 'x', 'a.png': 'y' }, { path: 'cover.png', release: gate });
+  URL.createObjectURL ??= () => 'blob:test';
+  const { el } = mount({ text: '---\ntitle: T\nimage: cover.png\n---\n![a](a.png)', readBlob });
+  let done = false;
+  const ready = el.ready().then(() => { done = true; });
+  await sleep(30);
+  assert.equal(done, false, 'la copertina è ancora in lettura');
+  release();
+  await ready;
+  assert.equal(el.querySelectorAll('img').length, 2);
+  assert.ok(el.querySelector('img.card-image')!.getAttribute('src'), 'la copertina ha già il suo URL');
+  el.remove();
+});

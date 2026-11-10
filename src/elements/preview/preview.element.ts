@@ -106,8 +106,9 @@ export class HmdPreview extends HmdElement {
     await new Promise<void>((resolve) => queueMicrotask(resolve));
     for (let settled = this.#settled; ; settled = this.#settled) {
       await settled;
-      if (settled === this.#settled) return;
+      if (settled === this.#settled) break;
     }
+    await this.#parts?.card.ready();
   }
 
   /** Porta in cima la riga sorgente `line` (0-based, frazionaria); lo scroll che ne segue non torna all'editor. */
@@ -234,7 +235,7 @@ export class HmdPreview extends HmdElement {
     if (run.cancelled) return;
     this.#anchors = null;
 
-    const loads: Promise<void>[] = [];
+    const loads: Promise<unknown>[] = [];
     const used: string[] = [];
     const cardLocal = cardImagePath(split, doc.path, config);
     if (cardLocal) used.push(cardLocal);
@@ -248,6 +249,7 @@ export class HmdPreview extends HmdElement {
         if (run.cancelled) return;
         if (url) {
           img.src = url;
+          return img.decode().catch(() => undefined);
         } else {
           img.classList.add('missing-image');
           // Title nativo voluto (niente ::after su <img>): eccezione di tooltips.test.ts, che vuole il nome `img`.

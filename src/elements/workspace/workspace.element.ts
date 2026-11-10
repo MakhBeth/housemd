@@ -162,6 +162,8 @@ export class HmdWorkspace extends HmdElement {
   /** Cronologia attivata senza documento / cartella attivata durante un cambio: la nota resta finché la causa c'è. */
   #historyNote = false;
   #exportNote = false;
+  /** Foglio di stampa dell'esportazione in corso: resta tra i figli finché non finisce la stampa. */
+  #printSheet: HTMLElement | null = null;
   #focusMode = false;
   #focusUnit: FocusUnit = 'paragraph';
   #typewriter = false;
@@ -607,7 +609,6 @@ export class HmdWorkspace extends HmdElement {
       this.#loop.update();
       return;
     }
-    this.querySelector(':scope > .printSheet')?.remove();
     const preview = el('hmd-preview');
     preview.i18n = i18n;
     preview.text = doc.text;
@@ -616,9 +617,15 @@ export class HmdWorkspace extends HmdElement {
     preview.config = state.config;
     preview.readBlob = this.#readBlob;
     const sheet = el('div', { class: 'printSheet' }, preview);
+    this.#printSheet?.remove();
+    this.#printSheet = sheet;
     this.append(sheet);
     await preview.ready();
-    window.addEventListener('afterprint', () => sheet.remove(), { once: true });
+    if (this.#printSheet !== sheet) return;
+    window.addEventListener('afterprint', () => {
+      sheet.remove();
+      if (this.#printSheet === sheet) this.#printSheet = null;
+    }, { once: true });
     window.print();
   }
 
@@ -775,7 +782,7 @@ export class HmdWorkspace extends HmdElement {
     // Impostazioni sopra l'area di lavoro, e gli avvisi.
     const settings = this.#slot('settings', settingsOpen, () => this.#createSettings());
     if (settings) this.#renderSettings(settings, state, i18n);
-    place(this, [parts.layout, ...(settings ? [settings] : []), parts.focusAnnounce, parts.deferredAnnounce]);
+    place(this, [parts.layout, ...(settings ? [settings] : []), parts.focusAnnounce, parts.deferredAnnounce, ...(this.#printSheet ? [this.#printSheet] : [])]);
     // Righe nuove solo quando cambiano messaggi, errore AI, lingua, sidebar o dialog (lo useMemo di React).
     const modal = activeModal();
     const sidebarBanner = this.#slots.sidebarBanner ?? null;
