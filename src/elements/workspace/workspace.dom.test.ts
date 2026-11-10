@@ -12,6 +12,7 @@ import '../define';
 import type { AiController } from '../../ai/aiController';
 import { defaultProfile } from '../../ai/profiles';
 import type { SyncBinding } from '../../ai/syncBinding';
+import { memoryFile, singleFileOps, type SingleFile } from '../../fs/singleFile';
 import { createWorkspaceFS } from '../../fs/workspaceFS';
 import { memoryOps } from '../../fs/testing/memoryOps';
 import { EN_MESSAGES } from '../../i18n/messages';
@@ -59,10 +60,10 @@ function routeWindow(): RouteWindow & { hashValue: string } {
   return win;
 }
 
-async function mount(options: { files?: Record<string, string>; ai?: boolean; lastFile?: string; failWrite?: (path: string) => boolean; history?: object; buffers?: ReturnType<typeof memoryBufferStore> } = {}) {
+async function mount(options: { files?: Record<string, string>; ai?: boolean; lastFile?: string; failWrite?: (path: string) => boolean; history?: object; buffers?: ReturnType<typeof memoryBufferStore>; singleFile?: SingleFile } = {}) {
   const ops = memoryOps({ failWrite: options.failWrite });
   for (const [path, text] of Object.entries(options.files ?? { 'a.md': '# A', 'b.md': '# B' })) ops.setFile(path, text);
-  const workspace = new Workspace({ fs: createWorkspaceFS(ops), workspaceId: 'ws', name: 'notes', buffers: options.buffers ?? memoryBufferStore(), history: options.history as never });
+  const workspace = new Workspace({ fs: createWorkspaceFS(options.singleFile ? singleFileOps(options.singleFile) : ops), workspaceId: 'ws', name: 'notes', buffers: options.buffers ?? memoryBufferStore(), history: options.history as never });
   await workspace.load();
   if (options.lastFile) storage.set('housemd:lastFile:ws', JSON.stringify(options.lastFile));
   const counted = countListeners(createI18nStore({ locale: 'en', messages: EN_MESSAGES, load: async (locale) => ({ locale, messages: EN_MESSAGES }), persist() {} }));
@@ -86,6 +87,7 @@ async function mount(options: { files?: Record<string, string>; ai?: boolean; la
   el.syncFor = () => ({ subscribe: () => () => {}, getState: () => ({ sync: null, handle: null, permission: false }), needsPermission: false, dispose() {} }) as unknown as SyncBinding;
   el.workspaceId = 'ws';
   el.handle = null;
+  el.singleFile = options.singleFile ?? null;
   el.i18n = i18n;
   el.theme = theme;
   el.route = route;
@@ -647,4 +649,40 @@ test('Export PDF: the print sheet survives a render while the preview is getting
   } finally {
     proto.ready = original;
   }
+});
+
+test('a single file in memory: opened by itself, no New file or New folder, a note on what is missing, Download in the toolbar', async () => {
+  const file = memoryFile({ name: 'note.md', blob: new Blob(['# Note']), lastModified: 1 });
+  const { el, workspace, button } = await mount({ singleFile: file });
+  await waitFor(() => workspace.getState().doc?.path === 'note.md');
+  const header = el.querySelector('aside > .sidebarHeader')!;
+  assert.ok([...header.querySelectorAll<HTMLButtonElement>('button')].filter((b) => !b.hidden).every((b) => b.getAttribute('aria-label') !== EN_MESSAGES['file.new'] && b.getAttribute('aria-label') !== EN_MESSAGES['folder.new']));
+  assert.equal(header.querySelector('.folder')!.getAttribute('data-tooltip'), EN_MESSAGES['sidebar.openOtherFile']);
+  assert.equal(header.querySelector('.folder')!.getAttribute('aria-label'), EN_MESSAGES['sidebar.openOtherFileNamed'].replace('{file}', 'note.md'));
+  assert.equal(el.querySelector('hmd-file-tree')!.singleFile, true);
+  assert.equal(el.querySelector('aside .singleFileNote')!.textContent, EN_MESSAGES['singleFile.noteDownload']);
+  const download = button(EN_MESSAGES['toolbar.download']);
+  assert.equal(download.hidden, false);
+
+  workspace.edit('# Changed');
+  await workspace.flush(true);
+  await waitFor(() => el.querySelector('.saveState')?.textContent === EN_MESSAGES['save.notDownloaded']);
+  const unload = new Event('beforeunload', { cancelable: true });
+  window.dispatchEvent(unload);
+  assert.equal(unload.defaultPrevented, true, 'not downloaded: the page asks before closing');
+
+  const urls: Blob[] = [];
+  Object.assign(URL, { createObjectURL: (blob: Blob) => (urls.push(blob), 'blob:x'), revokeObjectURL() {} });
+  download.click();
+  await waitFor(() => urls.length === 1);
+  assert.equal(await urls[0]!.text(), '# Changed');
+  await waitFor(() => el.querySelector(':scope > p.visually-hidden[role="status"]:last-of-type')?.textContent === EN_MESSAGES['toolbar.downloaded'].replace('{file}', 'note.md'));
+  await waitFor(() => el.querySelector('.saveState')?.textContent === EN_MESSAGES['save.saved']);
+});
+
+test('a folder: no Download button and no single file note', async () => {
+  const { el, button } = await mount();
+  assert.equal(button(EN_MESSAGES['toolbar.download']).hidden, true);
+  assert.equal(el.querySelector('.singleFileNote'), null);
+  assert.equal(el.querySelector('aside .folder')!.hasAttribute('aria-label'), false);
 });

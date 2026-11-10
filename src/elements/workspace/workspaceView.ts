@@ -146,9 +146,12 @@ export function noticeTarget(key: string): { kind: 'ai' } | { kind: 'workspace';
 /**
  * `beforeunload`: chiedere conferma (e intanto mettere al sicuro con `blur`) se il testo è solo in memoria.
  * Il reload protetto dell'aggiornamento PWA passa senza domanda quando tutto è già durevole: annullarlo
- * lascerebbe l'app in sola lettura; mentre il documento si mette ancora al sicuro l'avviso resta.
+ * lascerebbe l'app in sola lettura; mentre il documento si mette ancora al sicuro l'avviso resta. Una copia in
+ * memoria non ancora scaricata (file singolo senza File System Access API) chiede sempre.
  */
-export function unloadNeedsConfirm(state: Pick<WorkspaceState, 'doc' | 'drafts' | 'updateReady'>, aiPending: boolean): boolean {
+export function unloadNeedsConfirm(state: Pick<WorkspaceState, 'doc' | 'drafts' | 'updateReady'>, aiPending: boolean, pendingDownload = false): boolean {
+  // Un file singolo in memoria non scaricato si perde anche con il reload dell'aggiornamento: si chiede sempre.
+  if (pendingDownload) return true;
   if (state.updateReady && !aiPending) return false;
   return (!!state.doc && state.doc.saveState !== 'saved') || state.drafts.length > 0 || aiPending;
 }
