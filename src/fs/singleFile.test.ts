@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import { memoryBufferStore } from '../workspace/buffers';
 import { Workspace } from '../workspace/workspace';
-import { listPending, memoryFile, mirrorPending, pendingDownload, recoverPending, PENDING_WORKSPACE, singleFileOps, SingleFileUnsupportedError, type SingleFile } from './singleFile';
+import { listPending, memoryFile, mirrorPending, pendingDownload, recoverPending, registerSession, PENDING_WORKSPACE, singleFileOps, SingleFileUnsupportedError, type SingleFile } from './singleFile';
 import { createWorkspaceFS } from './workspaceFS';
 
 const note = (text = '# Note', now = () => 5_000) => memoryFile({ name: 'note.md', blob: new Blob([text]), lastModified: 1_000 }, now);
@@ -109,4 +109,43 @@ test('a recovered copy: same session, the saved text, still to download', async 
   assert.equal(recovered.sessionId, 'file:s1');
   assert.equal(recovered.pendingDownload, true);
   assert.equal(await (await recovered.read()).blob.text(), 'RECOVER ME');
+});
+
+test('drafts only (autosave off, nothing written to the file): the session is found again and recovered', async () => {
+  const store = memoryBufferStore();
+  const file = note('original');
+  await registerSession(file, store, 'file:s2');
+  mirrorPending(file, store, 'file:s2');
+  const ws = new Workspace({ fs: createWorkspaceFS(singleFileOps(file)), workspaceId: 'file:s2', name: 'note.md', buffers: store, autosave: { mode: 'off', delayMs: 1000 } });
+  await ws.load();
+  await ws.openFile('note.md');
+  ws.edit('RECOVER ME');
+  await ws.settle();
+  ws.dispose();
+  assert.equal(pendingDownload(file), false, 'nothing written to the memory file');
+  const [copy] = await listPending(store);
+  assert.deepEqual(copy, { key: 'file:s2/note.md', sessionId: 'file:s2', name: 'note.md' });
+  // Ripresa nella stessa sessione: lo Workspace ritrova la sua bozza.
+  const recovered = (await recoverPending(store, copy!))!;
+  const again = new Workspace({ fs: createWorkspaceFS(singleFileOps(recovered)), workspaceId: recovered.sessionId!, name: 'note.md', buffers: store });
+  await again.load();
+  await again.openFile('note.md');
+  assert.equal(again.getState().doc?.text, 'RECOVER ME');
+  again.dispose();
+});
+
+test('a session closed clean leaves nothing to recover, and its mark is removed', async () => {
+  const store = memoryBufferStore();
+  await registerSession(note(), store, 'file:s3');
+  assert.deepEqual(await listPending(store), []);
+  assert.deepEqual(await store.list(PENDING_WORKSPACE), []);
+});
+
+test('a real file registers its session too (recovered as a copy to download)', async () => {
+  const store = memoryBufferStore();
+  const disk: SingleFile = { name: 'real.md', writesToDisk: true, read: async () => ({ blob: new Blob(['disk']), lastModified: 1 }), write: async () => {} };
+  await registerSession(disk, store, 'file:s4');
+  await store.save('file:s4', 'real.md', 'DRAFT', 'disk');
+  const [copy] = await listPending(store);
+  assert.equal((await recoverPending(store, copy!))!.writesToDisk, false);
 });

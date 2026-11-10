@@ -5,7 +5,7 @@ import { HmdElement } from '../../dom/element';
 import { el } from '../../dom/el';
 import { RenderLoop } from '../../dom/renderLoop';
 import type { StoredWorkspace } from '../../fs/handleStore';
-import { pendingDownload, type PendingCopy, type SingleFile } from '../../fs/singleFile';
+import { isMemoryFile, pendingDownload, type PendingCopy, type SingleFile } from '../../fs/singleFile';
 import { showConfirmDialog } from '../dialogs/confirmDialog';
 import type { UpdateFlow } from '../../pwa/updateFlow';
 import type { I18nStore } from '../../state/i18nStore';
@@ -161,9 +161,11 @@ export class HmdApp extends HmdElement {
    */
   async #canLeave(signal: AbortSignal): Promise<boolean> {
     const screen = this.#screen;
-    if (screen.kind !== 'file') return true;
-    await screen.workspace.flush().catch(() => undefined);
-    if (signal.aborted || !pendingDownload(screen.file)) return !signal.aborted;
+    if (screen.kind !== 'file' || !isMemoryFile(screen.file)) return true;
+    // Niente flush qui: con autosave spento non si scrive nulla senza richiesta. Il testo ancora nell'editor
+    // conta come non scaricato quanto la copia in memoria.
+    const doc = screen.workspace.getState().doc;
+    if (!pendingDownload(screen.file) && (!doc || doc.saveState === 'saved')) return true;
     const t = this.#i18n!.t;
     return showConfirmDialog({
       title: t('singleFile.leaveTitle'),

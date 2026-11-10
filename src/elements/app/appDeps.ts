@@ -1,7 +1,7 @@
 import { canPickFileHandle, hasAccess, isSupported, onLaunchFile, pickFileHandle, pickFolder, requestAccess, unsupportedReason, type UnsupportedReason } from '../../fs/access';
 import { pickFileInput } from '../../fs/fileInput';
 import { fsaFile, fsaOps } from '../../fs/fsaOps';
-import { isMemoryFile, listPending, memoryFile, mirrorPending, recoverPending, singleFileOps, type PendingCopy, type SingleFile } from '../../fs/singleFile';
+import { isMemoryFile, listPending, memoryFile, mirrorPending, recoverPending, registerSession, singleFileOps, type PendingCopy, type SingleFile } from '../../fs/singleFile';
 import { findKnownWorkspaceId, loadWorkspace, saveWorkspace, type StoredWorkspace } from '../../fs/handleStore';
 import { createWorkspaceFS } from '../../fs/workspaceFS';
 import { indexedDbHistoryStore } from '../../history/historyStore';
@@ -72,6 +72,8 @@ export const browserAppDeps: AppDeps = {
   },
   async openFileWorkspace(file, workspaceId) {
     // La copia in memoria si tiene anche nel buffer di emergenza finché non si scarica (vive quanto il file).
+    // Ogni file singolo segna la sua sessione: le bozze non salvate (autosave spento, crash) si ritrovano.
+    await registerSession(file, buffers, workspaceId).catch(() => undefined);
     if (isMemoryFile(file)) mirrorPending(file, buffers, workspaceId);
     const workspace = new Workspace({
       fs: createWorkspaceFS(singleFileOps(file)),

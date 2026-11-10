@@ -128,12 +128,31 @@ export interface PendingCopy {
 
 const pendingKey = (sessionId: string, name: string) => `${sessionId}/${name}`;
 
+/**
+ * `base` di una voce che segna solo la sessione (testo = contenuto del file all'ultimo salvataggio noto, senza
+ * modifiche da scaricare): conta come recuperabile solo se lo Workspace ha bozze in quella sessione (autosave
+ * spento, crash prima del salvataggio). Senza bozze la si toglie alla lettura.
+ */
+const SESSION_MARK = '\u0000session';
+
+/**
+ * Segna la sessione di un file singolo appena aperto (copia in memoria o file vero): così una bozza dello
+ * Workspace mai arrivata al file si ritrova dopo un crash, anche senza nessuna scrittura.
+ */
+export async function registerSession(file: SingleFile, store: BufferStore, sessionId: string): Promise<void> {
+  const key = pendingKey(sessionId, file.name);
+  // Una copia recuperata ha già la sua voce (magari con modifiche da scaricare): non si sovrascrive.
+  if (await store.load(PENDING_WORKSPACE, key).catch(() => null)) return;
+  const text = await (await file.read()).blob.text();
+  await store.save(PENDING_WORKSPACE, key, text, SESSION_MARK);
+}
+
 function parseKey(key: string): PendingCopy | null {
   const slash = key.indexOf('/');
   return slash > 0 && slash < key.length - 1 ? { key, sessionId: key.slice(0, slash), name: key.slice(slash + 1) } : null;
 }
 
-/** Tiene la copia di emergenza allineata al file: scritta a ogni modifica, tolta al download. */
+/** Tiene la copia di emergenza allineata al file: scritta a ogni modifica, ridotta a segno di sessione al download. */
 export function mirrorPending(file: MemoryFile, store: BufferStore, sessionId: string): () => void {
   const key = pendingKey(sessionId, file.name);
   // In fila: una scrittura lenta non deve finire dopo un download e far risorgere la copia.
@@ -141,9 +160,8 @@ export function mirrorPending(file: MemoryFile, store: BufferStore, sessionId: s
   const sync = () => {
     chain = chain
       .then(async () => {
-        if (!file.pendingDownload) return store.clear(PENDING_WORKSPACE, key);
         const text = await (await file.read()).blob.text();
-        if (file.pendingDownload) await store.save(PENDING_WORKSPACE, key, text, '');
+        await store.save(PENDING_WORKSPACE, key, text, file.pendingDownload ? '' : SESSION_MARK);
       })
       .catch(() => undefined);
   };
@@ -151,12 +169,29 @@ export function mirrorPending(file: MemoryFile, store: BufferStore, sessionId: s
   return file.subscribe(sync);
 }
 
+/**
+ * Sessioni da riprendere: copie non scaricate, oppure sessioni con bozze dello Workspace. I segni di sessione
+ * senza bozze (file chiuso pulito, o già scaricato) si tolgono qui.
+ */
 export async function listPending(store: BufferStore): Promise<PendingCopy[]> {
   const keys = await store.list(PENDING_WORKSPACE).catch(() => [] as string[]);
-  return keys.map(parseKey).filter((copy): copy is PendingCopy => copy !== null);
+  const out: PendingCopy[] = [];
+  for (const copy of keys.map(parseKey)) {
+    if (!copy) continue;
+    const saved = await store.load(PENDING_WORKSPACE, copy.key).catch(() => null);
+    if (!saved) continue;
+    const drafts = saved.base === SESSION_MARK ? await store.list(copy.sessionId).catch(() => [] as string[]) : [];
+    if (saved.base !== SESSION_MARK || drafts.length > 0) out.push(copy);
+    else await store.clear(PENDING_WORKSPACE, copy.key).catch(() => undefined);
+  }
+  return out;
 }
 
-/** La copia ripresa: in memoria, ancora da scaricare, nella stessa sessione (stesse bozze e stessa chiave). */
+/**
+ * La copia ripresa: in memoria, da scaricare, nella stessa sessione. Il contenuto è l'ultimo scritto; la bozza
+ * dello Workspace (stesso id) la riapplica lui stesso aprendo il file. Vale anche per un file vero: senza il
+ * suo handle si riprende come copia da scaricare.
+ */
 export async function recoverPending(store: BufferStore, copy: PendingCopy, now: () => number = Date.now): Promise<MemoryFile | null> {
   const saved = await store.load(PENDING_WORKSPACE, copy.key);
   if (!saved) return null;

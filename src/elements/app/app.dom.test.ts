@@ -352,3 +352,24 @@ test('a copy not downloaded from an earlier session: offered on the start screen
   assert.equal(workspace.workspaceId, 'file:old');
   await waitFor(() => workspace.workspace?.getState().doc?.text === 'RECOVER ME');
 });
+
+test('a real file (File System Access) with autosave off: leaving it writes nothing nobody asked for', async () => {
+  let writes = 0;
+  const disk: SingleFile = { name: 'real.md', writesToDisk: true, read: async () => ({ blob: new Blob(['original']), lastModified: 1 }), write: async () => void writes++ };
+  const picks = [disk];
+  const { deps: d } = deps({ pickFile: async () => picks.shift() ?? null });
+  d.openFileWorkspace = async (file, workspaceId) => {
+    const workspace = new Workspace({ fs: createWorkspaceFS(singleFileOps(file)), workspaceId, name: file.name, buffers: memoryBufferStore(), autosave: { mode: 'off', delayMs: 1000 } });
+    await workspace.load();
+    return workspace;
+  };
+  const el = mount(d);
+  await waitFor(() => el.screen === 'start');
+  el.querySelector('hmd-start-screen')!.dispatchEvent(new CustomEvent('hmd-start-pick-file', { bubbles: true, detail: null }));
+  await waitFor(() => el.querySelector('hmd-workspace')?.workspace?.getState().doc?.path === 'real.md');
+  el.querySelector('hmd-workspace')!.workspace!.edit('UNREQUESTED WRITE');
+  el.querySelector('hmd-workspace')!.dispatchEvent(new CustomEvent('hmd-workspace-change-folder', { bubbles: true, detail: null }));
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.equal(writes, 0);
+  assert.equal(document.querySelector('dialog[open]'), null, 'no download question for a real file');
+});
