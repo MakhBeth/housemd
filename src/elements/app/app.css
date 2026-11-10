@@ -4,5 +4,11 @@
     :scope {
       display: contents;
     }
+
+    @media print {
+      hmd-update-notice {
+        display: none;
+      }
+    }
   }
 }

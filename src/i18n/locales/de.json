@@ -23,6 +23,8 @@
   "toolbar.saveAll": "Alle speichern (Strg+Alt+S)",
   "toolbar.history": "Verlauf",
   "toolbar.history.noDocument": "Kein Dokument geöffnet: öffne eines, um seinen Verlauf zu sehen",
+  "toolbar.export": "PDF exportieren",
+  "toolbar.export.noDocument": "Kein Dokument geöffnet: öffne eines, um es als PDF zu exportieren",
   "toolbar.focus": "Fokusmodus (Strg+Umschalt+F)",
   "toolbar.focus.elsewhere": "Fokusmodus ist an: sichtbar in den Ansichten Editor und Geteilt",
   "focus.announce.on": "Fokusmodus an",

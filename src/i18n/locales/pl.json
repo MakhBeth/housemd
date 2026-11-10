@@ -23,6 +23,8 @@
   "toolbar.saveAll": "Zapisz wszystko (Ctrl+Alt+S)",
   "toolbar.history": "Historia",
   "toolbar.history.noDocument": "Brak otwartego dokumentu: otwórz jakiś, aby zobaczyć jego historię",
+  "toolbar.export": "Eksportuj do PDF",
+  "toolbar.export.noDocument": "Brak otwartego dokumentu: otwórz jakiś, aby wyeksportować go do PDF",
   "toolbar.focus": "Tryb skupienia (Ctrl+Shift+F)",
   "toolbar.focus.elsewhere": "Tryb skupienia jest włączony: widać go w widokach Edytor i Podział",
   "focus.announce.on": "Tryb skupienia włączony",

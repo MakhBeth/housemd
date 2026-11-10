@@ -103,6 +103,44 @@
       margin: 2em 0;
     }
 
+    /* Foglio di stampa: tema chiaro (global.css), nessuno scroller, interruzioni di pagina sensate. */
+    @media print {
+      :scope > .scroller {
+        height: auto;
+        overflow: visible;
+        background: var(--c-surface);
+      }
+
+      :scope > .scroller > .prose {
+        max-width: none;
+        padding: 0;
+        font-size: 12pt;
+      }
+
+      .prose h1,
+      .prose h2,
+      .prose h3,
+      .prose h4 {
+        break-after: avoid;
+      }
+
+      .prose pre,
+      .prose blockquote,
+      .prose img,
+      .prose tr {
+        break-inside: avoid;
+      }
+
+      .prose pre {
+        white-space: pre-wrap;
+        overflow: visible;
+      }
+
+      .prose table {
+        display: table;
+      }
+    }
+
     .missing-image {
       display: inline-block;
       min-width: 120px;

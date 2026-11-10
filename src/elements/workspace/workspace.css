@@ -14,6 +14,25 @@
       height: 100%;
     }
 
+    /* Foglio di stampa dell'esportazione PDF: fuori dallo schermo, al suo posto dell'interfaccia in stampa. */
+    .printSheet {
+      display: none;
+    }
+
+    @media print {
+      .layout {
+        display: none;
+      }
+
+      /* Sempre tema chiaro, anche con il tema scuro attivo: i token light-dark() si risolvono qui. */
+      .printSheet {
+        display: block;
+        color-scheme: light;
+        color: var(--c-text);
+        background: var(--c-surface);
+      }
+    }
+
     .sidebar {
       display: flex;
       flex-direction: column;

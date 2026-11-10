@@ -45,6 +45,7 @@ export class HmdPreview extends HmdElement {
   #resolver: { path: string; config: HouseConfig; cache: ImageUrlCache; fn: ResolveImage } | null = null;
   #anchors: Anchor[] | null = null;
   #suppressUntil = 0;
+  #settled: Promise<unknown> = Promise.resolve();
 
   get text(): string { return this.#text; }
   set text(value: string) {
@@ -98,6 +99,15 @@ export class HmdPreview extends HmdElement {
     if (value === this.#i18n) return;
     this.#i18n = value;
     this.reconnect();
+  }
+
+  /** Si risolve quando il corpo e le immagini del render corrente sono pronti (prima della stampa). */
+  async ready(): Promise<void> {
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+    for (let settled = this.#settled; ; settled = this.#settled) {
+      await settled;
+      if (settled === this.#settled) return;
+    }
   }
 
   /** Porta in cima la riga sorgente `line` (0-based, frazionaria); lo scroll che ne segue non torna all'editor. */
@@ -213,7 +223,7 @@ export class HmdPreview extends HmdElement {
     card.frontmatter = doc.split.frontmatter;
     // La scheda si monta e smonta come in React: prima del corpo, solo con il frontmatter.
     reconcileList(article, doc.split.frontmatter ? ['card', 'body'] : ['body'], (k) => k, (k): HTMLElement => (k === 'card' ? card : body));
-    void this.#fill(run, doc, cache, config, i18n, this.#highlight);
+    this.#settled = this.#fill(run, doc, cache, config, i18n, this.#highlight);
   }
 
   /** Corpo del documento (era l'effetto di render di Preview.tsx): HTML sanificato, immagini, link, evidenziazione. */
@@ -224,6 +234,7 @@ export class HmdPreview extends HmdElement {
     if (run.cancelled) return;
     this.#anchors = null;
 
+    const loads: Promise<void>[] = [];
     const used: string[] = [];
     const cardLocal = cardImagePath(split, doc.path, config);
     if (cardLocal) used.push(cardLocal);
@@ -233,7 +244,7 @@ export class HmdPreview extends HmdElement {
       if (!local) continue;
       used.push(local);
       img.removeAttribute('src');
-      void cache.get(local).then((url) => {
+      loads.push(cache.get(local).then((url) => {
         if (run.cancelled) return;
         if (url) {
           img.src = url;
@@ -242,7 +253,7 @@ export class HmdPreview extends HmdElement {
           // Title nativo voluto (niente ::after su <img>): eccezione di tooltips.test.ts, che vuole il nome `img`.
           img.title = i18n.t('preview.imageMissing', { path: local });
         }
-      });
+      }));
     }
     void cache.retain(used);
 
@@ -253,6 +264,7 @@ export class HmdPreview extends HmdElement {
       }
     }
     highlightTerms(body, highlight);
+    await Promise.all(loads);
   }
 
   #getAnchors(): Anchor[] {

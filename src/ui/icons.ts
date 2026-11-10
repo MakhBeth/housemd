@@ -28,6 +28,7 @@ import invert from 'pixelarticons/svg/invert.svg?url';
 import moon from 'pixelarticons/svg/moon.svg?url';
 import moreHorizontal from 'pixelarticons/svg/more-horizontal.svg?url';
 import pencil from 'pixelarticons/svg/pencil.svg?url';
+import printer from 'pixelarticons/svg/printer.svg?url';
 import plus from 'pixelarticons/svg/plus.svg?url';
 import save from 'pixelarticons/svg/save.svg?url';
 import search from 'pixelarticons/svg/search.svg?url';
@@ -58,6 +59,7 @@ export const ICONS = {
   themeLight: sun,
   themeDark: moon,
   history: clock,
+  print: printer,
   focus: target,
   close,
   warning: warningDiamond,

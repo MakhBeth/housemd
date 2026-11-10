@@ -23,6 +23,8 @@
   "toolbar.saveAll": "Alles opslaan (Ctrl+Alt+S)",
   "toolbar.history": "Geschiedenis",
   "toolbar.history.noDocument": "Geen document geopend: open er een om de geschiedenis te zien",
+  "toolbar.export": "PDF exporteren",
+  "toolbar.export.noDocument": "Geen document geopend: open er een om het naar PDF te exporteren",
   "toolbar.focus": "Focusmodus (Ctrl+Shift+F)",
   "toolbar.focus.elsewhere": "Focusmodus staat aan: zichtbaar in de weergaven Editor en Gesplitst",
   "focus.announce.on": "Focusmodus aan",

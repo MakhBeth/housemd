@@ -23,6 +23,8 @@
   "toolbar.saveAll": "Salva tutto (Ctrl+Alt+S)",
   "toolbar.history": "Cronologia",
   "toolbar.history.noDocument": "Nessun documento aperto: aprine uno per vederne la cronologia",
+  "toolbar.export": "Esporta PDF",
+  "toolbar.export.noDocument": "Nessun documento aperto: aprine uno per esportarlo in PDF",
   "toolbar.focus": "Modalità focus (Ctrl+Shift+F)",
   "toolbar.focus.elsewhere": "Modalità focus attiva: si vede nelle viste Editor e Affiancati",
   "focus.announce.on": "Modalità focus attivata",

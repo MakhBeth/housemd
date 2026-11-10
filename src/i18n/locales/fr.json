@@ -23,6 +23,8 @@
   "toolbar.saveAll": "Tout enregistrer (Ctrl+Alt+S)",
   "toolbar.history": "Historique",
   "toolbar.history.noDocument": "Aucun document ouvert : ouvrez-en un pour voir son historique",
+  "toolbar.export": "Exporter en PDF",
+  "toolbar.export.noDocument": "Aucun document ouvert : ouvrez-en un pour l'exporter en PDF",
   "toolbar.focus": "Mode concentration (Ctrl+Maj+F)",
   "toolbar.focus.elsewhere": "Mode concentration activé : visible dans les vues Éditeur et Côte à côte",
   "focus.announce.on": "Mode concentration activé",
