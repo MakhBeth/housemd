@@ -345,6 +345,7 @@ test('focus mode greys everything outside the cursor paragraph, follows the curs
   await tick();
   // La selezione di partenza è all'inizio: resta acceso il primo paragrafo.
   assert.equal(dimmed().replaceAll('\n', ''), 'duetre');
+  assert.ok(el.querySelector('.cm-editor.cm-focusMode'), 'focus on: the editor carries the class that drops the active-line tint');
   view().dispatch({ selection: { anchor: 5 } });
   assert.equal(dimmed().replaceAll('\n', ''), 'unotre');
   el.focusUnit = 'sentence';

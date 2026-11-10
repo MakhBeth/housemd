@@ -14,3 +14,7 @@ Token `--c-focus-dim` (`src/styles/global.css`), calcolato sullo sfondo dell'edi
 | Scuro | `#1e1e24` | `#888680` | 4.56:1 |
 
 Prima si usava `--c-muted` (`#6b665c` / `#9a978f`), più contrastato. I temi sono solo chiaro e scuro (`light-dark()`).
+
+## Riga attiva
+
+Il velo della riga attiva (`--c-accent-soft` al 35%) porterebbe il grigio sotto 4.5:1 (4.38 chiaro, 3.86 scuro) sulle frasi attenuate della riga del cursore. In modalità focus la classe `cm-focusMode` sul root azzera quel velo, così il contrasto calcolato sulla superficie vale ovunque.

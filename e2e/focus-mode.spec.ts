@@ -88,3 +88,14 @@ test('focus mode always centers the cursor line, even with the typewriter settin
   ({ delta, line } = await offset());
   expect(Math.abs(delta)).toBeLessThanOrEqual(line / 2 + 1);
 });
+
+test('in focus mode the active line has no tint under the dimmed text', async ({ app, page }) => {
+  await page.getByRole('button', { name: app.t('toolbar.focus') }).click();
+  const content = page.getByRole('textbox', { name: app.t('editor.content') });
+  await content.click();
+  const bg = await content.evaluate((c) => {
+    const line = c.querySelector('.cm-activeLine');
+    return line ? getComputedStyle(line).backgroundColor : 'rgba(0, 0, 0, 0)';
+  });
+  expect(bg).toBe('rgba(0, 0, 0, 0)');
+});
