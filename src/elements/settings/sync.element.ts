@@ -5,6 +5,7 @@ import { el, setText } from '../../dom/el';
 import { RenderLoop } from '../../dom/renderLoop';
 import { uid } from '../../dom/uid';
 import type { MessageKey } from '../../i18n/messages';
+import { OriginNote } from '../ai/originNote';
 import type { I18nStore } from '../../state/i18nStore';
 import { showConfirmDialog } from '../dialogs/confirmDialog';
 import { syncNowBlocker } from './blockers';
@@ -13,7 +14,7 @@ import { announce } from '../../dom/announce';
 import './sections.css';
 
 /** Quello che la sezione della sync usa del controller. */
-export type SyncController = Pick<AiController, 'report' | 'reload'>;
+export type SyncController = Pick<AiController, 'subscribe' | 'getState' | 'report' | 'clearError' | 'orphanError' | 'reload'>;
 /** Il servizio di sync visto dalla sezione: stato, sincronizzazione e backup. */
 export type SyncDetailsService = SyncService & Pick<import('../../ai/aiSync').AiSync, 'syncNow' | 'listBackups' | 'backupCounts' | 'restore'>;
 
@@ -44,6 +45,8 @@ interface Parts {
  */
 export class HmdSettingsSync extends HmdElement {
   #controller: SyncController | null = null;
+  /** Errore di scelta, disattivazione, riattivazione, elenco o ripristino dei backup: nota sotto le azioni della sezione. */
+  #errorNote = new OriginNote(this, () => this.#controller);
   #binding: SyncBinding | null = null;
   #i18n: I18nStore | null = null;
 
@@ -90,15 +93,16 @@ export class HmdSettingsSync extends HmdElement {
 
   protected connect(signal: AbortSignal): void {
     if (!this.#parts) {
-      const report = (error: unknown) => this.#controller?.report(error);
+      const report = this.#errorNote.report('sync');
+      const begin = () => this.#errorNote.begin();
       const parts: Parts = {
         root: el('div', { class: 'detail' }),
         notice: el('p', { class: 'help' }),
         actions: el('div', { class: 'actions' }),
-        choose: el('button', { type: 'button', on: { click: () => void this.#binding?.choose().catch(report) } }),
+        choose: el('button', { type: 'button', on: { click: () => (begin(), void this.#binding?.choose().catch(report)) } }),
         folder: el('span'),
-        disable: el('button', { type: 'button', on: { click: () => void this.#binding?.disable().catch(report) } }),
-        reactivate: el('button', { type: 'button', on: { click: () => void this.#binding?.reactivate().catch(report) } }),
+        disable: el('button', { type: 'button', on: { click: () => (begin(), void this.#binding?.disable().catch(report)) } }),
+        reactivate: el('button', { type: 'button', on: { click: () => (begin(), void this.#binding?.reactivate().catch(report)) } }),
         // Lo stato cambia dopo ogni sync (LAB-42 P9): regione live; l'errore entra già scritto, come avviso.
         status: el('p', { class: 'help', role: 'status' }),
         error: el('p', { class: 'help', role: 'alert' }),
@@ -119,10 +123,12 @@ export class HmdSettingsSync extends HmdElement {
     if (!binding || !i18n) return;
     this.watch(binding, () => this.#follow(binding.getState().sync), signal);
     this.watch(i18n, () => this.#loop.update(), signal);
+    if (this.#controller) this.watch(this.#controller, () => this.#loop.update(), signal);
   }
 
   disconnectedCallback(): void {
     super.disconnectedCallback();
+    this.#errorNote.release();
     this.#follow(null);
     this.#dialogs?.abort();
     this.#dialogs = null;
@@ -156,7 +162,7 @@ export class HmdSettingsSync extends HmdElement {
             this.#backups = paths;
             this.#loop.update();
           })
-          .catch((error) => this.#controller?.report(error));
+          .catch(this.#errorNote.report('sync-backups'));
       }
     }
     this.#loop.update();
@@ -182,6 +188,7 @@ export class HmdSettingsSync extends HmdElement {
     const controller = this.#controller;
     // Una sola conferma di ripristino alla volta, anche durante backupCounts.
     if (!sync || !t || !dialogs || !controller || this.#restoreAbort) return;
+    this.#errorNote.begin();
     const abort = (this.#restoreAbort = new AbortController());
     const signal = AbortSignal.any([dialogs, abort.signal]);
     void sync
@@ -196,7 +203,7 @@ export class HmdSettingsSync extends HmdElement {
         }),
       )
       .then((ok) => (ok && !signal.aborted ? sync.restore(path).then(() => controller.reload()) : undefined))
-      .catch((error) => controller.report(error))
+      .catch(this.#errorNote.report('sync-restore'))
       .finally(() => {
         if (this.#restoreAbort === abort) this.#restoreAbort = null;
       });
@@ -229,6 +236,7 @@ export class HmdSettingsSync extends HmdElement {
       this.#syncNote = false;
     }
     showChildren(parts.root, wanted, [parts.status, parts.error, parts.conflicts, parts.syncActions, parts.syncNote, parts.backups]);
+    this.#errorNote.update(this.#controller!.getState(), t, parts.actions, parts.choose);
   }
 
   /** Un `p` per backup, figli diretti di `details` dopo il `summary` (come in React), riusati per percorso. */

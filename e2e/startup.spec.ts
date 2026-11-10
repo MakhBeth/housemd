@@ -71,10 +71,10 @@ test('switching folders A → B → A brings back the last file of A', async ({ 
   await app.expectOpen('a.md');
 });
 
-test('an invalid .housemd.json shows a toast and the app still opens', async ({ app }) => {
+test('an invalid .housemd.json shows a notice and the app still opens', async ({ app }) => {
   await app.openFolder({ 'a.md': 'alpha', '.housemd.json': '{ images: ' });
-  const prefix = app.t('toast.configInvalidJson', { file: '.housemd.json', detail: '' }).trim();
-  await expect(app.toast(prefix)).toBeVisible();
+  const prefix = app.t('notice.configInvalidJson', { file: '.housemd.json', detail: '' }).trim();
+  await expect(app.notice(prefix)).toBeVisible();
   await expect(app.treeFile('a.md')).toBeVisible();
 });
 

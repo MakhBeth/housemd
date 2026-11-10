@@ -15,6 +15,8 @@ import { APP_TITLE, pageTitle } from '../../lib/pageTitle';
 import { readLastFile, readPref, readValidPref, writeLastFile, writePref } from '../../lib/prefs';
 import type { SettingsSection } from '../../lib/route';
 import { parseTextWidth, textWidthVars, type TextWidth } from '../../lib/textWidth';
+import type { Locale } from '../../i18n/i18n';
+import type { MessageKey } from '../../i18n/messages';
 import type { I18nStore } from '../../state/i18nStore';
 import type { RouteStore } from '../../state/routeStore';
 import type { ThemeStore } from '../../state/themeStore';
@@ -26,6 +28,7 @@ import type { HmdAiReview } from '../ai/review.element';
 import type { HmdAiSidebar } from '../ai/sidebar.element';
 import type { HmdConflictBar } from '../conflict-bar/conflict-bar.element';
 import { showAccessLostDialog } from '../dialogs/accessLostDialog';
+import { activeModal } from '../dialogs/modal';
 import type { HmdEditor } from '../editor/editor.element';
 import { emit } from '../events';
 import type { HmdFileTree } from '../file-tree/file-tree.element';
@@ -33,15 +36,16 @@ import type { HmdHistoryPanel } from '../history-panel/history-panel.element';
 import type { HmdPreview } from '../preview/preview.element';
 import type { HmdSearchPanel } from '../search-panel/search-panel.element';
 import type { HmdSettings } from '../settings/settings.element';
-import type { HmdToasts } from '../toasts/toasts.element';
+import type { BannerItem, HmdBanner } from '../banner/banner.element';
 import { openAiSession, browserAiSessionDeps, type AiSessionWorkspace } from './aiSession';
 import { dialogFor, type TreeAction } from './dialogFor';
 import { allowedInSettings } from './keymap';
 import { clampWidth, gridColumns, MODES, nextPaneMode, PANE_MODES, panesMode, resizeByKey, sidePanel, WIDTH_LIMITS, type Mode, type PaneMode } from './layout';
 import { saveIndicator } from './saveIndicator';
 import { runTreeDialog } from './treeDialogs';
-import { docKey, folderBlocker, historyBlocker, reopenPlan, shownMode, toastItems, toastTarget, unloadNeedsConfirm } from './workspaceView';
-import { announce } from '../../dom/announce';
+import { AI_ERROR_PREFIX, aiErrorItems, docKey, folderBlocker, historyBlocker, noticeRoutes, reopenPlan, shownMode, noticeTarget, unloadNeedsConfirm } from './workspaceView';
+import { noticeKey } from '../../workspace/notices';
+import { announce, ANNOUNCE_DELAY_MS } from '../../dom/announce';
 import './workspace.css';
 
 /** Apre la sessione AI di una cartella (iniettabile nei test: IndexedDB in jsdom non c'è). */
@@ -69,7 +73,14 @@ interface Parts {
   saveAll: HTMLButtonElement;
   settings: HTMLButtonElement;
   toolbar: HTMLElement;
-  toasts: HmdToasts;
+  /** Banner di workspace (sotto la toolbar) e di documento (sopra l'editor): sempre montati, vuoti finché non c'è un messaggio. */
+  wsBanner: HmdBanner;
+  docBanner: HmdBanner;
+  /** Note locali (stesso componente dei banner) accanto a Salva tutto e a Cronologia: montate vuote, subito dopo la toolbar. */
+  saveAllBanner: HmdBanner;
+  historyBanner: HmdBanner;
+  /** Riepilogo polite degli eventi differiti da un dialog, pubblicato dopo il ritorno del focus. */
+  deferredAnnounce: HTMLParagraphElement;
 }
 
 /** Nodi che compaiono e spariscono con lo stato (come i rami condizionali di WorkspaceView.tsx): ricreati a ogni ricomparsa. */
@@ -78,6 +89,8 @@ interface Slots {
   resizer: HTMLDivElement;
   aiSidebar: HmdAiSidebar;
   treeHeader: HTMLDivElement;
+  /** Nota locale di Apri cartella e delle operazioni dell'albero, subito dopo la testata. */
+  sidebarBanner: HmdBanner;
   /** Nota del cambio di cartella, subito dopo la testata. */
   folderNote: HTMLParagraphElement;
   /** «Nuovo file» della testata: dove entra il focus con l'albero vuoto. */
@@ -114,7 +127,7 @@ function assign<T extends object, K extends keyof T>(target: T, key: K, value: T
 /**
  * Area di lavoro di una cartella (era WorkspaceView.tsx): griglia con il pannello a sinistra (albero, ricerca,
  * bozze orfane o, in modalità AI, la chat) e il separatore ridimensionabile, la barra degli strumenti, il
- * documento (editor, anteprima, cronologia o revisione AI), le impostazioni sopra (dalla rotta) e i toast.
+ * documento (editor, anteprima, cronologia o revisione AI), le impostazioni sopra (dalla rotta) e gli avvisi.
  * Crea la sessione AI della cartella e la sync, riapre l'ultimo file, elenca le bozze orfane, gestisce le
  * scorciatoie globali e i listener della finestra (tutti legati al `signal`), il dialog dell'accesso perso e
  * il titolo della scheda. Verso fuori manda solo `hmd-workspace-change-folder`.
@@ -142,6 +155,7 @@ export class HmdWorkspace extends HmdElement {
   #textWidth: TextWidth = { editor: null, preview: null };
   #highlight: string[] = NO_TERMS;
   #historyOpen = false;
+  #historyPanelBanner: HmdBanner | null = null;
   /** Cronologia attivata senza documento / cartella attivata durante un cambio: la nota resta finché la causa c'è. */
   #historyNote = false;
   #focusMode = false;
@@ -168,7 +182,30 @@ export class HmdWorkspace extends HmdElement {
   #settingsWasOpen = false;
   #focusBeforeSettings: HTMLElement | null = null;
   #memo: { treeEntries?: WorkspaceState['entries']; filesEntries?: WorkspaceState['entries']; locale?: string; tree?: TreeNode[]; files?: string[]; drafts?: readonly string[]; draftSet?: ReadonlySet<string> } = {};
-  #toastKey: unknown[] = [];
+  #noticeKeyState: unknown[] = [];
+
+  /** «Chiudi» di un messaggio: se il focus era sul suo pulsante, che sparisce, passa alla toolbar (mai al body). */
+  #closeBanner(key: string): void {
+    const active = document.activeElement;
+    const parts = this.#parts;
+    if (active && parts && [parts.docBanner, parts.wsBanner, parts.saveAllBanner, parts.historyBanner, this.#historyPanelBanner, this.#slots.sidebarBanner].some((banner) => banner?.contains(active))) {
+      parts.toolbar.querySelector('button')?.focus();
+    }
+    const target = noticeTarget(key);
+    if (target.kind === 'ai') this.#ai?.clearError();
+    else this.#workspace?.dismissNotice(target.id);
+  }
+  /** Eventi già annunciati nel dialog o riepilogati alla chiusura: le loro righe restano visibili ma mute. */
+  #folderButton: HTMLButtonElement | null = null;
+  #lastModal: HTMLDialogElement | null = null;
+  #known: ReadonlySet<number> = new Set();
+  #aiKnown: string | null = null;
+  #aiSilenced: string | null = null;
+  #aiDeferred = '';
+  #silenced = new Set<number>();
+  #deferred = new Set<number>();
+  #dialogBanner: HmdBanner | null = null;
+  #dialogWatch: MutationObserver | null = null;
   // Sessione AI e sync: vivono con l'elemento collegato.
   #ai: AiController | null = null;
   #aiSession: { close(): void } | null = null;
@@ -256,7 +293,7 @@ export class HmdWorkspace extends HmdElement {
       this.#textWidth = readValidPref('textWidth', parseTextWidth);
       this.#applyTextWidth();
       this.#parts = this.#build();
-      this.append(this.#parts.layout, this.#parts.toasts);
+      this.append(this.#parts.layout, this.#parts.deferredAnnounce);
     }
     this.#signal = signal;
     this.#dialogs ??= new AbortController();
@@ -268,6 +305,10 @@ export class HmdWorkspace extends HmdElement {
     this.watch(workspace, () => this.#loop.update(), signal);
     this.watch(i18n, () => this.#loop.update(), signal);
     this.watch(route, () => this.#loop.update(), signal);
+    // Un dialog modale che si apre o si chiude cambia dove va la riga degli eventi a rischio dati.
+    this.#dialogWatch ??= new MutationObserver(() => this.#loop.update());
+    this.#dialogWatch.observe(document.body, { childList: true });
+    signal.addEventListener('abort', () => this.#dialogWatch?.disconnect(), { once: true });
     if (this.#ai) this.watch(this.#ai, () => this.#loop.update(), signal);
     if (this.#sync) this.watch(this.#sync, () => this.#loop.update(), signal);
   }
@@ -517,15 +558,11 @@ export class HmdWorkspace extends HmdElement {
       saveAll: el('button', { class: 'iconButton tooltip', on: { click: () => void this.#workspace?.saveAll() } }, icon('save')),
       settings: el('button', { class: 'iconButton tooltip', on: { click: () => this.#openSettings() } }, icon('settings')),
       toolbar: el('header', { class: 'toolbar' }),
-      toasts: el('hmd-toasts', {
-        on: {
-          'hmd-toast-dismiss': (event) => {
-            const target = toastTarget(event.detail.key);
-            if (target.kind === 'ai') this.#ai?.clearError();
-            else this.#workspace?.dismissToast(target.id);
-          },
-        },
-      }),
+      wsBanner: el('hmd-banner', { class: 'wsBanner', on: { 'hmd-banner-close': (event) => this.#closeBanner(event.detail.key) } }),
+      docBanner: el('hmd-banner', { class: 'docBanner', on: { 'hmd-banner-close': (event) => this.#closeBanner(event.detail.key) } }),
+      saveAllBanner: el('hmd-banner', { class: 'noteBanner', on: { 'hmd-banner-close': (event) => this.#closeBanner(event.detail.key) } }),
+      historyBanner: el('hmd-banner', { class: 'noteBanner', on: { 'hmd-banner-close': (event) => this.#closeBanner(event.detail.key) } }),
+      deferredAnnounce: el('p', { class: 'visually-hidden', role: 'status' }),
     };
     const themeSwitcher = el('hmd-theme-switcher');
     themeSwitcher.store = this.#theme;
@@ -614,7 +651,7 @@ export class HmdWorkspace extends HmdElement {
       }),
     );
     if (aside) this.#renderSidebar(aside, workspace, state, i18n);
-    else for (const name of ['aiSidebar', 'treeHeader', 'folderNote', 'newFile', 'search', 'orphans', 'tree'] as const) delete this.#slots[name];
+    else for (const name of ['aiSidebar', 'treeHeader', 'folderNote', 'sidebarBanner', 'newFile', 'search', 'orphans', 'tree'] as const) delete this.#slots[name];
     if (resizer) {
       toggleAttr(resizer, 'aria-label', true, t('sidebar.resize'));
       toggleAttr(resizer, 'aria-valuenow', true, String(width));
@@ -691,18 +728,55 @@ export class HmdWorkspace extends HmdElement {
       setText(empty.firstElementChild!, t('empty.hint'));
       setText(empty.lastElementChild!, t('file.new'));
     }
-    place(parts.main, [parts.toolbar, ...(this.#historyNote ? [parts.historyNote] : []), ...(this.#focusNote ? [parts.focusNote] : []), ...(conflict ? [conflict] : []), (review ?? panes ?? empty)!]);
+    place(parts.main, [parts.toolbar, ...(this.#historyNote ? [parts.historyNote] : []), ...(this.#focusNote ? [parts.focusNote] : []), parts.saveAllBanner, parts.historyBanner, parts.wsBanner, parts.docBanner, ...(conflict ? [conflict] : []), (review ?? panes ?? empty)!]);
 
-    // Impostazioni sopra l'area di lavoro, e i toast.
+    // Impostazioni sopra l'area di lavoro, e gli avvisi.
     const settings = this.#slot('settings', settingsOpen, () => this.#createSettings());
     if (settings) this.#renderSettings(settings, state, i18n);
-    place(this, [parts.layout, ...(settings ? [settings] : []), parts.toasts, parts.focusAnnounce]);
-    assign(parts.toasts, 'i18n', i18n);
-    // Un array nuovo solo quando cambiano toast, errore AI o lingua (lo useMemo di React); i timer sono per chiave in hmd-toasts.
-    const toastKey = [state.toasts, aiState?.error, i18n.getState()];
-    if (!toastKey.every((v, i) => v === this.#toastKey[i])) {
-      this.#toastKey = toastKey;
-      parts.toasts.items = toastItems(state.toasts, aiState?.error, t);
+    place(this, [parts.layout, ...(settings ? [settings] : []), parts.focusAnnounce, parts.deferredAnnounce]);
+    // Righe nuove solo quando cambiano messaggi, errore AI, lingua, sidebar o dialog (lo useMemo di React).
+    const modal = activeModal();
+    const sidebarBanner = this.#slots.sidebarBanner ?? null;
+    // Il pannello cronologia aperto (non in modalità AI, dove la cronologia non si vede) e il suo documento.
+    const historyPath = this.#historyOpen && shown !== 'ai' && this.#slots.historyPane ? this.#historyPath : null;
+    const noticeKeyNow = [state.notices, state.doc?.path, aiState?.error, aiState?.errorOrigin, i18n.getState(), this.#sidebarOpen && !!sidebarBanner, modal, historyPath, !!settings];
+    if (!noticeKeyNow.every((v, i) => v === this.#noticeKeyState[i])) {
+      this.#noticeKeyState = noticeKeyNow;
+      const locale = i18n.getState().locale;
+      // All'apertura di un dialog si fotografa ciò che c'è già: è stato annunciato prima, non si ripete né si riepiloga.
+      // Vale anche quando un dialog si chiude e un altro si apre nello stesso aggiornamento; gli eventi già differiti
+      // restano da riepilogare alla chiusura (non diventano «già annunciati»).
+      if (modal && modal !== this.#lastModal) {
+        this.#known = new Set(state.notices.map((notice) => notice.id).filter((id) => !this.#deferred.has(id)));
+        this.#aiKnown = aiState?.error && !this.#aiDeferred ? `${AI_ERROR_PREFIX}${aiState.error}` : null;
+      }
+      this.#lastModal = modal;
+      const routes = noticeRoutes(state.notices, state.doc?.path ?? null, t, locale, true, { sidebarOpen: !!sidebarBanner, dialogOpen: !!modal, silenced: this.#silenced, known: this.#known, historyPath, settingsOpen: !!settings });
+      for (const id of routes.announcedInDialog) this.#silenced.add(id);
+      for (const id of routes.deferred) {
+        this.#silenced.add(id);
+        this.#deferred.add(id);
+      }
+      // Lo stesso insieme degli ID vivi: gli ID spariti dal registro non restano nei set.
+      const live = new Set(state.notices.map((notice) => notice.id));
+      for (const id of [...this.#silenced]) if (!live.has(id)) this.#silenced.delete(id);
+      for (const id of [...this.#deferred]) if (!live.has(id)) this.#deferred.delete(id);
+      const describe = (items: BannerItem[], control: HTMLElement | null | undefined) => items.map((item) => ({ ...item, describes: control ?? undefined }));
+      parts.docBanner.items = routes.document;
+      // Un errore AI arrivato col dialog aperto è differito come gli altri eventi non a rischio dati: muto, riepilogato alla chiusura.
+      const aiItems = aiErrorItems(aiState?.error, aiState?.errorOrigin, t);
+      if (modal && aiItems[0] && this.#aiSilenced !== aiItems[0].key && this.#aiKnown !== aiItems[0].key) {
+        this.#aiSilenced = aiItems[0].key;
+        this.#aiDeferred = aiItems[0].text;
+      } else if (!aiItems[0]) this.#aiSilenced = null;
+      parts.wsBanner.items = [...routes.workspace, ...aiItems.map((item) => ({ ...item, quiet: item.key === this.#aiSilenced }))];
+      parts.saveAllBanner.items = describe(routes.saveAll, parts.saveAll);
+      parts.historyBanner.items = describe(routes.history, parts.history);
+      this.#renderHistoryPanelBanner(routes.historyPanel);
+      if (settings) settings.saveAllNote = routes.settings;
+      if (sidebarBanner) sidebarBanner.items = describe(routes.sidebar, this.#folderButton);
+      this.#renderDialogBanner(modal, routes.dialog);
+      if (!modal && (this.#deferred.size > 0 || this.#aiDeferred)) this.#publishDeferred(state, t, locale);
     }
 
     // Chiuse le impostazioni, il focus torna dove era prima di aprirle.
@@ -720,6 +794,49 @@ export class HmdWorkspace extends HmdElement {
       // Nel frattempo si è passati a un altro file: quella versione non riguarda più il documento.
       if (doc?.path === queued.path) queueMicrotask(() => void workspace.restoreVersion(queued.id));
     }
+  }
+
+  /** Esiti della cronologia dentro il pannello aperto: sopra il pannello, «Ripristina» (se c'è) li descrive. */
+  #renderHistoryPanelBanner(items: BannerItem[]): void {
+    const pane = this.#slots.historyPane;
+    if (!pane || items.length === 0) {
+      this.#historyPanelBanner?.remove();
+      return;
+    }
+    if (!this.#historyPanelBanner) this.#historyPanelBanner = el('hmd-banner', { class: 'noteBanner', on: { 'hmd-banner-close': (event) => this.#closeBanner(event.detail.key) } });
+    if (this.#historyPanelBanner.parentElement !== pane) pane.prepend(this.#historyPanelBanner);
+    const restore = pane.querySelector<HTMLElement>('button.restore') ?? this.#parts?.history;
+    this.#historyPanelBanner.items = items.map((item) => ({ ...item, describes: restore ?? undefined }));
+  }
+
+  /** Riga `alert` dentro il dialog modale attivo: nessun focus spostato, è l'unico canale live dell'evento. */
+  #renderDialogBanner(modal: HTMLDialogElement | null, items: BannerItem[]): void {
+    if (!modal || items.length === 0) {
+      this.#dialogBanner?.remove();
+      this.#dialogBanner = null;
+      return;
+    }
+    if (!this.#dialogBanner) this.#dialogBanner = el('hmd-banner', { class: 'dialogBanner' });
+    if (this.#dialogBanner.parentElement !== modal) {
+      // Subito dopo il titolo, prima dei pulsanti: chi naviga col cursore virtuale la trova subito.
+      const title = modal.querySelector(`[id="${modal.getAttribute('aria-labelledby') ?? ''}"]`);
+      if (title) title.after(this.#dialogBanner);
+      else modal.prepend(this.#dialogBanner);
+    }
+    this.#dialogBanner.items = items;
+  }
+
+  /** Riepilogo polite degli eventi differiti: un tick dopo la chiusura, quando il focus è già tornato. */
+  #publishDeferred(state: WorkspaceState, t: I18nStore['t'], locale: Locale): void {
+    const text = state.notices
+      .filter((notice) => this.#deferred.has(notice.id))
+      .map((notice) => t(noticeKey(notice.code, notice.params, locale) as MessageKey, notice.params))
+      .concat(this.#aiDeferred ? [this.#aiDeferred] : [])
+      .join(' ');
+    this.#deferred.clear();
+    this.#aiDeferred = '';
+    const node = this.#parts?.deferredAnnounce;
+    if (text && node) setTimeout(() => announce(node, text, true), ANNOUNCE_DELAY_MS);
   }
 
   #renderSidebar(aside: HTMLElement, workspace: Workspace, state: WorkspaceState, i18n: I18nStore): void {
@@ -750,7 +867,7 @@ export class HmdWorkspace extends HmdElement {
       assign(aiSidebar, 'syncNeedsPermission', !!this.#sync?.needsPermission);
       assign(aiSidebar, 'i18n', i18n);
       place(aside, [aiSidebar]);
-      for (const name of ['treeHeader', 'folderNote', 'newFile', 'search', 'orphans', 'tree'] as const) delete this.#slots[name];
+      for (const name of ['treeHeader', 'folderNote', 'sidebarBanner', 'newFile', 'search', 'orphans', 'tree'] as const) delete this.#slots[name];
       return;
     }
     const header = this.#slot('treeHeader', true, () =>
@@ -781,6 +898,7 @@ export class HmdWorkspace extends HmdElement {
       toggleAttr(button, 'aria-label', true, label);
       toggleAttr(button, 'data-tooltip', true, label);
     }
+    this.#folderButton = folder;
     setText(folder, state.name);
     toggleAttr(folder, 'data-busy', !!folderBlocker(this.#switchingFolder), '');
     if (!folderBlocker(this.#switchingFolder)) this.#folderNote = false;
@@ -815,7 +933,8 @@ export class HmdWorkspace extends HmdElement {
     assign(tree, 'openPath', doc?.path ?? null);
     assign(tree, 'drafts', memo.draftSet!);
     assign(tree, 'i18n', i18n);
-    place(aside, [header, ...(folderNote ? [folderNote] : []), search, ...(orphans ? [orphans] : []), tree]);
+    const sidebarBanner = this.#slot('sidebarBanner', true, () => el('hmd-banner', { class: 'noteBanner', on: { 'hmd-banner-close': (event) => this.#closeBanner(event.detail.key) } }))!;
+    place(aside, [header, ...(folderNote ? [folderNote] : []), sidebarBanner, search, ...(orphans ? [orphans] : []), tree]);
     delete this.#slots.aiSidebar;
   }
 
@@ -915,7 +1034,7 @@ export class HmdWorkspace extends HmdElement {
     if (historyPane) {
       this.#historyPath = doc.path;
       toggleAttr(historyPane, 'aria-label', true, t('toolbar.history'));
-      const history = historyPane.firstElementChild as HmdHistoryPanel;
+      const history = historyPane.querySelector('hmd-history-panel') as HmdHistoryPanel;
       assign(history, 'workspace', workspace);
       assign(history, 'path', doc.path);
       assign(history, 'currentText', doc.text);
@@ -983,7 +1102,8 @@ export class HmdWorkspace extends HmdElement {
             this.#loop.update();
           }
         },
-        'hmd-settings-save-all': () => void this.#workspace?.saveAll(),
+        'hmd-settings-save-all': () => void this.#workspace?.saveAll('settings'),
+        'hmd-banner-close': (event) => this.#closeBanner(event.detail.key),
       },
     });
   }

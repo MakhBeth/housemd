@@ -76,7 +76,7 @@ const kinds = (el: Element) => [...el.children].map((c) => c.localName);
 test('an unsupported browser: the start screen in its unsupported mode, and the update notice', () => {
   const el = mount(deps({ isSupported: () => false }).deps);
   assert.equal(el.screen, 'unsupported');
-  assert.deepEqual(kinds(el), ['hmd-start-screen', 'hmd-update-notice']);
+  assert.deepEqual(kinds(el), ['hmd-update-notice', 'hmd-start-screen']);
   assert.equal(el.querySelector('hmd-start-screen')!.mode, 'unsupported');
 });
 
@@ -87,7 +87,7 @@ test('no saved folder: the start screen; picking a folder opens it, saves it and
   const start = el.querySelector('hmd-start-screen')!;
   start.dispatchEvent(new CustomEvent('hmd-start-pick', { bubbles: true, detail: null }));
   await waitFor(() => el.screen === 'open');
-  assert.deepEqual(kinds(el), ['hmd-workspace', 'hmd-update-notice']);
+  assert.deepEqual(kinds(el), ['hmd-update-notice', 'hmd-workspace']);
   assert.deepEqual(log, ['update none', 'save picked', 'update open']);
 });
 
@@ -110,16 +110,16 @@ test('changing folder from the workspace makes a new hmd-workspace (also for the
   assert.equal(first.isConnected, false);
 });
 
-test('a blocked database shows the dismissible notice at the top; dismissed, it goes', async () => {
+test('a blocked database shows a status row in the app banner, before the content; Close removes it', async () => {
   const { deps: d, block } = deps();
   const el = mount(d);
   await waitFor(() => el.screen === 'start');
   block();
-  const notice = el.querySelector('hmd-notice')!;
-  assert.equal(notice.message, EN_MESSAGES['toast.reloadOtherTabs']);
-  assert.equal(notice.placement, 'top');
-  notice.dispatchEvent(new CustomEvent('hmd-notice-dismiss', { bubbles: true, detail: null }));
-  assert.equal(el.querySelector('hmd-notice'), null);
+  const banner = el.querySelector('hmd-update-notice hmd-banner')!;
+  assert.equal(banner.querySelector('[role="status"]')!.textContent, EN_MESSAGES['notice.reloadOtherTabs']);
+  assert.ok(el.firstElementChild === el.querySelector('hmd-update-notice'), 'app banner first');
+  (banner.querySelector('button.close') as HTMLButtonElement).click();
+  assert.equal(banner.querySelector('[role="status"]')!.textContent, '');
 });
 
 test('detached while the folder is opening: the folder opened afterwards is disposed', async () => {

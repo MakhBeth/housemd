@@ -10,7 +10,6 @@ import type { I18nStore } from '../../state/i18nStore';
 import type { RouteStore } from '../../state/routeStore';
 import type { ThemeStore } from '../../state/themeStore';
 import type { Workspace } from '../../workspace/workspace';
-import type { HmdNotice } from '../notice/notice.element';
 import type { HmdStartScreen } from '../start-screen/start-screen.element';
 import type { HmdUpdateNotice } from '../update-notice/update-notice.element';
 import type { HmdWorkspace } from '../workspace/workspace.element';
@@ -49,7 +48,6 @@ export class HmdApp extends HmdElement {
   #start: HmdStartScreen | null = null;
   #workspace: HmdWorkspace | null = null;
   #updateNotice: HmdUpdateNotice | null = null;
-  #notice: HmdNotice | null = null;
   #loop = new RenderLoop(this, {
     ready: () => !!this.#updates && !!this.#i18n && !!this.#theme && !!this.#route && this.isConnected,
     render: () => this.#render(this.#i18n!),
@@ -187,7 +185,6 @@ export class HmdApp extends HmdElement {
   }
 
   #render(i18n: I18nStore): void {
-    const t = i18n.t;
     const screen = this.#screen;
     // La schermata iniziale resta lo stesso elemento tra le sue modalità (come il tag in App.tsx).
     const start = screen.kind === 'unsupported' || screen.kind === 'start' || screen.kind === 'resume';
@@ -226,19 +223,12 @@ export class HmdApp extends HmdElement {
         return w;
       })
       .exhaustive();
-    const update = (this.#updateNotice ??= el('hmd-update-notice'));
+    const update = (this.#updateNotice ??= el('hmd-update-notice', { on: { 'hmd-banner-close': (event) => { if (event.detail.key === 'reloadOtherTabs') this.#set({ dbBlocked: false }); } } }));
     if (update.flow !== this.#updates) update.flow = this.#updates;
     if (update.i18n !== i18n) update.i18n = i18n;
-    if (this.#dbBlocked) {
-      const notice = (this.#notice ??= el('hmd-notice', { on: { 'hmd-notice-dismiss': () => this.#set({ dbBlocked: false }) } }));
-      notice.placement = 'top';
-      notice.message = t('toast.reloadOtherTabs');
-      notice.dismissLabel = t('toast.close');
-      notice.dismissible = true;
-    } else {
-      this.#notice = null;
-    }
-    const wanted: Element[] = [...(content ? [content] : []), update, ...(this.#notice ? [this.#notice] : [])];
+    update.dbBlocked = this.#dbBlocked;
+    // Il banner dell'app sta prima del contenuto: stessa posizione con o senza cartella aperta.
+    const wanted: Element[] = [update, ...(content ? [content] : [])];
     for (const child of [...this.children]) if (!wanted.includes(child)) child.remove();
     let cursor: Element | null = this.firstElementChild;
     for (const node of wanted) {

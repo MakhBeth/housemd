@@ -48,42 +48,71 @@ function mount() {
   return { el, set, calls, i18n, listeners };
 }
 
-test('no notice until an update is available', () => {
+test('no message until an update is available; the empty status container is already there', () => {
   const { el, set } = mount();
-  assert.equal(el.querySelector('hmd-notice'), null);
+  assert.equal(el.querySelector('[role="status"]')!.textContent, '');
   set({ available: true, busy: false });
-  const notice = el.querySelector('hmd-notice')!;
-  assert.equal(notice.message, EN_MESSAGES['toast.newVersion']);
-  assert.equal(notice.actionLabel, EN_MESSAGES['update.apply']);
-  assert.equal(notice.dismissLabel, EN_MESSAGES['update.dismiss']);
-  assert.equal(notice.dismissible, true);
+  assert.equal(el.querySelector('[role="status"]')!.textContent, EN_MESSAGES['notice.newVersion']);
+  assert.equal(el.querySelector('button.action')!.textContent, EN_MESSAGES['update.apply']);
+  assert.equal(el.querySelector('button.close')!.textContent, EN_MESSAGES['update.dismiss']);
   set({ available: false, busy: false });
-  assert.equal(el.querySelector('hmd-notice'), null);
+  assert.equal(el.querySelector('[role="status"]')!.textContent, '');
   el.remove();
 });
 
-test('Update calls apply; Later calls dismiss; while busy it cannot be dismissed', () => {
-  const { el, set, calls } = mount();
-  set({ available: true, busy: false });
-  const notice = el.querySelector('hmd-notice')!;
-  notice.dispatchEvent(new CustomEvent('hmd-notice-action', { detail: null, bubbles: true }));
-  notice.dispatchEvent(new CustomEvent('hmd-notice-dismiss', { detail: null, bubbles: true }));
-  assert.deepEqual(calls, ['apply', 'dismiss']);
-  set({ available: true, busy: true });
-  assert.equal(el.querySelector('hmd-notice'), notice);
-  assert.equal(notice.busy, true);
-  assert.equal(notice.dismissible, false);
-  assert.equal(notice.message, EN_MESSAGES['update.applying']);
-  set({ available: true, busy: false });
-  assert.equal(notice.message, EN_MESSAGES['toast.newVersion']);
-  el.remove();
-});
-
-test('a language change relabels the notice; detached it unsubscribes', async () => {
+test('a language change relabels the banner; detached it unsubscribes', async () => {
   const { el, set, i18n, listeners } = mount();
   set({ available: true, busy: false });
   await i18n.setLocale('it');
-  assert.equal(el.querySelector('hmd-notice')!.actionLabel, 'AGGIORNA');
+  assert.equal(el.querySelector('button.action')!.textContent, 'AGGIORNA');
   el.remove();
   assert.equal(listeners.size, 0);
+});
+
+test('app banner: newVersion and update.applying are status rows with Update, reloadOtherTabs a status row with Close', () => {
+  const { el, set, calls } = mount();
+  assert.ok(el.querySelector('[role="status"]'), 'container mounted before the first message');
+  assert.equal(el.querySelector('[role="status"]')!.textContent, '');
+  set({ available: true, busy: false });
+  assert.equal(el.querySelector('[role="status"]')!.textContent, EN_MESSAGES['notice.newVersion']);
+  (el.querySelector('button.action') as HTMLButtonElement).click();
+  (el.querySelector('button.close') as HTMLButtonElement).click();
+  assert.deepEqual(calls, ['apply', 'dismiss']);
+  set({ available: true, busy: true });
+  assert.equal(el.querySelector('[role="status"]')!.textContent, EN_MESSAGES['update.applying']);
+  assert.equal(el.querySelectorAll('button.close:not([hidden])').length, 0, 'no Later while applying');
+  el.dbBlocked = true;
+  const rows = [...el.querySelectorAll('[role="status"] p')].map((p) => p.textContent);
+  assert.ok(rows.includes(EN_MESSAGES['notice.reloadOtherTabs']));
+  assert.equal(el.querySelector('[role="alert"]'), null);
+  assert.equal(el.querySelectorAll('[role="status"] button').length, 0, 'buttons outside the live text');
+});
+
+test('Later removes the focused button: the focus goes to the app content, not the body', () => {
+  const host = document.createElement('div');
+  const content = document.createElement('main');
+  const first = document.createElement('button');
+  content.append(first);
+  const { el, set } = mount();
+  host.append(el, content);
+  document.body.append(host);
+  set({ available: true, busy: false });
+  const later = el.querySelector('button.close') as HTMLButtonElement;
+  later.focus();
+  later.click();
+  assert.ok(document.activeElement === first, 'focus on the first control of the content');
+  host.remove();
+});
+
+test('with two messages each button row shows which message it belongs to', () => {
+  const banner = document.createElement('hmd-banner');
+  document.body.append(banner);
+  banner.items = [
+    { key: 'a', kind: 'status', text: 'First message', closeLabel: 'Close' },
+    { key: 'b', kind: 'status', text: 'Second message', closeLabel: 'Close' },
+  ];
+  assert.deepEqual([...banner.querySelectorAll('.context')].map((n) => n.textContent), ['First message', 'Second message']);
+  banner.items = [{ key: 'b', kind: 'status', text: 'Second message', closeLabel: 'Close' }];
+  assert.equal(banner.querySelector('.context')!.textContent, '');
+  banner.remove();
 });

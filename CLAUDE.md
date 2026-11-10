@@ -43,7 +43,7 @@ File System Access API) si usano **senza polyfill e senza fallback**. Unica ecce
   solo se cambiano; una chiave di memo per ogni vista derivata.
 - Nei test jsdom mai `assert.equal` tra due nodi (il messaggio non finisce più): `assert.ok(a === b, 'cosa')`.
 - **Mai `disabled` né `aria-disabled`** sui pulsanti. Se l'azione non è possibile il pulsante resta attivo e,
-  attivato, scrive perché in una nota `role="status"` accanto (mai in un toast né in un tooltip); il focus resta sul
+  attivato, scrive perché in una nota `role="status"` accanto (mai in un notice né in un tooltip); il focus resta sul
   pulsante. La nota entra vuota e si scrive con `announce` (`src/dom/announce.ts`: svuota, poi riscrive dopo
   `ANNOUNCE_DELAY_MS`, così un secondo clic la rilegge); una regione live che deve ri-annunciarsi non si scrive mai a mano.
 - Un testo con un numero ha due forme, `<chiave>.one` e `<chiave>.other`, scelte da `pluralKey` (`src/i18n/i18n.ts`,
@@ -59,6 +59,6 @@ File System Access API) si usano **senza polyfill e senza fallback**. Unica ecce
 ## AI
 
 - Solo `src/ai/providers/*` fanno richieste di rete verso i modelli.
-- Le chiavi API stanno solo nello store `aiSecrets` o in memoria: mai in localStorage, config, sync, log o toast. Sono legate a provider e origine.
+- Le chiavi API stanno solo nello store `aiSecrets` o in memoria: mai in localStorage, config, sync, log o notice. Sono legate a provider e origine.
 - Il file di sync si scrive solo dopo un backup verificato (§8.4 della spec AI).
 - Risposte e proposte sono non fidate: nessun HTML grezzo né nuove risorse remote caricate senza clic esplicito.

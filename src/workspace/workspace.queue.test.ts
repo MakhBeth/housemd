@@ -59,7 +59,7 @@ test('saveAll saves the open document from memory before the checkpoint', async 
   assert.equal(doc(ws).saveState, 'saved');
   assert.equal(await buffers.load('ws-1', 'a.md'), null);
   assert.deepEqual(ws.getState().drafts, []);
-  assert.equal(ws.getState().toasts.at(-1)?.code, 'saveAllDone');
+  assert.equal(ws.getState().notices.at(-1)?.code, 'saveAllDone');
 });
 
 test('edits typed while saveAll writes stay dirty', async () => {
@@ -81,7 +81,7 @@ test('edits typed while saveAll writes stay dirty', async () => {
   assert.equal(await ops.textOf('a.md'), 'due');
   assert.equal(doc(ws).text, 'tre');
   assert.equal(doc(ws).saveState, 'dirty');
-  assert.notEqual(ws.getState().toasts.at(-1)?.code, 'saveAllDone');
+  assert.notEqual(ws.getState().notices.at(-1)?.code, 'saveAllDone');
 });
 
 test('saveAll writes valid drafts and skips conflicting ones', async () => {
@@ -97,7 +97,7 @@ test('saveAll writes valid drafts and skips conflicting ones', async () => {
   assert.deepEqual(await buffers.load('ws-1', 'c.md'), { text: 'C2', base: 'vecchia' });
   assert.deepEqual(ws.getState().drafts, ['c.md']);
   assert.equal(ws.search.search('B2')[0]?.path, 'b.md');
-  const last = ws.getState().toasts.at(-1);
+  const last = ws.getState().notices.at(-1);
   assert.equal(last?.code, 'saveAllSkipped');
   assert.equal(last?.params?.count, 1);
 });
@@ -109,7 +109,7 @@ test('saveAll skips drafts of files deleted on disk and does not recreate them',
   await ws.saveAll();
   assert.equal(await ops.textOf('sparito.md'), null);
   assert.equal((await buffers.load('ws-1', 'sparito.md'))?.text, 'bozza');
-  assert.equal(ws.getState().toasts.at(-1)?.code, 'saveAllSkipped');
+  assert.equal(ws.getState().notices.at(-1)?.code, 'saveAllSkipped');
 });
 
 test('saveAll does not recreate a deleted file whose draft is open; Ctrl+S still does', async () => {
@@ -124,7 +124,7 @@ test('saveAll does not recreate a deleted file whose draft is open; Ctrl+S still
   await tick();
   assert.equal(await ops.textOf('sparito.md'), null, 'niente salvataggio automatico programmato da "Salva tutto"');
   assert.equal((await buffers.load('ws-1', 'sparito.md'))?.text, 'bozza');
-  const last = ws.getState().toasts.at(-1);
+  const last = ws.getState().notices.at(-1);
   assert.equal(last?.code, 'saveAllSkipped');
   assert.equal(last?.params?.count, 1);
   await ws.saveNow(); // recupero esplicito
@@ -155,7 +155,7 @@ test('saveAll reports an open document that could not be saved (conflict)', asyn
   assert.equal(doc(ws).conflict, true);
   await ws.saveAll();
   assert.equal(await ops.textOf('a.md'), 'loro');
-  const last = ws.getState().toasts.at(-1);
+  const last = ws.getState().notices.at(-1);
   assert.equal(last?.code, 'saveAllSkipped', 'niente "tutto salvato" con un conflitto aperto');
   assert.equal(last?.params?.count, 1);
 });
@@ -171,10 +171,10 @@ test('saveAll interrupted by lost access does not claim success and counts the u
   await ws.saveAll();
   assert.equal(ws.getState().status, 'access-lost');
   assert.equal(await ops.textOf('b.md'), 'B');
-  const last = ws.getState().toasts.at(-1);
+  const last = ws.getState().notices.at(-1);
   assert.equal(last?.code, 'saveAllSkipped');
   assert.equal(last?.params?.count, 2);
-  assert.ok(!ws.getState().toasts.some((t) => t.code === 'saveAllDone'));
+  assert.ok(!ws.getState().notices.some((t) => t.code === 'saveAllDone'));
 });
 
 test('the checkpoint maxWait keeps working while saveAll is stuck writing another draft', async () => {

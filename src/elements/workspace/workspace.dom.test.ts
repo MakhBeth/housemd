@@ -19,7 +19,7 @@ import { createI18nStore } from '../../state/i18nStore';
 import { createRouteStore, type RouteWindow } from '../../state/routeStore';
 import { createThemeStore } from '../../state/themeStore';
 import { installDialogStub } from '../../testing/dialogStub';
-import { fakeAi } from '../../testing/fakeAi';
+import { fakeAi, withRealErrors } from '../../testing/fakeAi';
 import { installPopoverStub } from '../../testing/popoverStub';
 import { waitFor } from '../../testing/waitFor';
 import { memoryBufferStore } from '../../workspace/buffers';
@@ -59,10 +59,10 @@ function routeWindow(): RouteWindow & { hashValue: string } {
   return win;
 }
 
-async function mount(options: { files?: Record<string, string>; ai?: boolean; lastFile?: string } = {}) {
-  const ops = memoryOps();
+async function mount(options: { files?: Record<string, string>; ai?: boolean; lastFile?: string; failWrite?: (path: string) => boolean; history?: object; buffers?: ReturnType<typeof memoryBufferStore> } = {}) {
+  const ops = memoryOps({ failWrite: options.failWrite });
   for (const [path, text] of Object.entries(options.files ?? { 'a.md': '# A', 'b.md': '# B' })) ops.setFile(path, text);
-  const workspace = new Workspace({ fs: createWorkspaceFS(ops), workspaceId: 'ws', name: 'notes', buffers: memoryBufferStore() });
+  const workspace = new Workspace({ fs: createWorkspaceFS(ops), workspaceId: 'ws', name: 'notes', buffers: options.buffers ?? memoryBufferStore(), history: options.history as never });
   await workspace.load();
   if (options.lastFile) storage.set('housemd:lastFile:ws', JSON.stringify(options.lastFile));
   const counted = countListeners(createI18nStore({ locale: 'en', messages: EN_MESSAGES, load: async (locale) => ({ locale, messages: EN_MESSAGES }), persist() {} }));
@@ -97,17 +97,17 @@ async function mount(options: { files?: Record<string, string>; ai?: boolean; la
   return { el, workspace, ops, ai, route, win, documents, button, listeners, closed: () => closed };
 }
 
-test('the same DOM as WorkspaceView.tsx with no file open: layout with sidebar, separator and main, then the toasts', async () => {
+test('the same DOM as WorkspaceView.tsx with no file open: layout with sidebar, separator and main, then the live announcers', async () => {
   const { el } = await mount();
-  assert.deepEqual([...el.children].map((c) => c.localName), ['div', 'hmd-toasts', 'p']);
+  assert.deepEqual([...el.children].map((c) => c.localName), ['div', 'p', 'p']);
   const layout = el.firstElementChild as HTMLElement;
   assert.equal(layout.className, 'layout');
   assert.equal(layout.style.gridTemplateColumns, '280px 5px minmax(0, 1fr)');
   assert.deepEqual([...layout.children].map((c) => `${c.localName}.${c.className}`), ['aside.sidebar', 'div.resizer', 'main.main']);
   const aside = layout.firstElementChild!;
-  assert.deepEqual([...aside.children].map((c) => c.localName), ['div', 'hmd-search-panel', 'hmd-file-tree']);
+  assert.deepEqual([...aside.children].map((c) => c.localName), ['div', 'hmd-banner', 'hmd-search-panel', 'hmd-file-tree']);
   const main = layout.lastElementChild!;
-  assert.deepEqual([...main.children].map((c) => `${c.localName}.${c.className}`), ['header.toolbar', 'div.empty']);
+  assert.deepEqual([...main.children].map((c) => `${c.localName}.${c.className}`), ['header.toolbar', 'hmd-banner.noteBanner', 'hmd-banner.noteBanner', 'hmd-banner.wsBanner', 'hmd-banner.docBanner', 'div.empty']);
   const toolbar = main.firstElementChild!;
   assert.deepEqual([...toolbar.children].map((c) => c.className), ['lead', 'modes', 'actions']);
   assert.deepEqual([...toolbar.querySelectorAll('.modes button')].map((b) => b.getAttribute('aria-label')), [EN_MESSAGES['mode.editor'], EN_MESSAGES['mode.split'], EN_MESSAGES['mode.preview']]);
@@ -142,7 +142,7 @@ test('the settings come from the route: on top of an inert layout, the title fol
   const settingsButton = button(EN_MESSAGES['toolbar.settings']);
   settingsButton.focus();
   settingsButton.click();
-  assert.deepEqual([...el.children].map((c) => c.localName), ['div', 'hmd-settings', 'hmd-toasts', 'p']);
+  assert.deepEqual([...el.children].map((c) => c.localName), ['div', 'hmd-settings', 'p', 'p']);
   assert.equal((el.firstElementChild as HTMLElement).inert, true);
   assert.equal(document.title, `HMD - ${EN_MESSAGES['settings.title']}`);
   el.querySelector<HTMLButtonElement>('hmd-settings .navHeader button')!.click();
@@ -224,7 +224,7 @@ test('with the AI session: four modes, AI mode shows the AI sidebar and the revi
   assert.ok(review);
   // Un doc nuovo a ogni notifica dello workspace: la revisione rilegge canAccept (conflitto, aggiornamento).
   const before = review.doc;
-  workspace.dismissToast(-1);
+  workspace.dismissNotice(-1);
   workspace.edit('# A!');
   assert.ok(review.doc !== before, 'a new doc object');
 });
@@ -426,4 +426,199 @@ test('Ctrl+Shift+F toggles the focus and announces it once in a hidden status re
   assert.equal(button(EN_MESSAGES['toolbar.focus']).getAttribute('aria-pressed'), 'true');
   await waitFor(() => el.querySelector('p.visually-hidden')!.textContent === EN_MESSAGES['focus.announce.on']);
   assert.equal(el.querySelector('p.visually-hidden')!.getAttribute('role'), 'status');
+});
+
+
+// --- [LAB-409] origine degli esiti: AI e note workspace -----------------------------------------------------
+
+const realErrors = withRealErrors;
+
+const rows = (el: HTMLElement) => [...el.querySelectorAll('main hmd-banner')].map((b) => b.textContent).join('|');
+
+test('[LAB-409] Refresh models fails: the error sits under the selector (alert), not in the workspace banner; the banner takes it only when the selector is gone', async () => {
+  const { el, workspace, ai, button } = await mount({ ai: true });
+  realErrors(ai);
+  Object.assign(ai, { provider: async () => ({ listModels: async () => Promise.reject({ code: 'rateLimited' }) }) });
+  await workspace.openFile('a.md');
+  button(EN_MESSAGES['mode.ai']).click();
+  const popover = el.querySelector<HTMLElement>('hmd-ai-model-chip [popover]')!;
+  popover.showPopover();
+  popover.dispatchEvent(Object.assign(new Event('toggle'), { newState: 'open' }));
+  await waitFor(() => !!popover.querySelector('hmd-ai-model-select small'));
+  // Caricamento automatico: stato, in locale; il banner tace.
+  assert.equal(popover.querySelector('hmd-ai-model-select small')!.getAttribute('role'), 'status');
+  popover.querySelector<HTMLButtonElement>('hmd-ai-model-select button.link')!.click();
+  await waitFor(() => popover.querySelector('hmd-ai-model-select small')?.getAttribute('role') === 'alert');
+  const note = popover.querySelector('hmd-ai-model-select small')!;
+  assert.equal(note.textContent, EN_MESSAGES['ai.error.rateLimited']);
+  assert.notEqual(note.textContent, EN_MESSAGES['ai.error.unreachable']);
+  assert.ok(!rows(el).includes(EN_MESSAGES['ai.error.rateLimited']), 'nothing in the workspace banner while the origin is visible');
+  // Popover chiuso: il selettore sparisce e l'errore ripiega sul banner.
+  popover.hidePopover();
+  popover.dispatchEvent(Object.assign(new Event('toggle'), { newState: 'closed' }));
+  await waitFor(() => rows(el).includes(EN_MESSAGES['ai.error.rateLimited']));
+});
+
+const liveTexts = (el: HTMLElement) => [...el.querySelectorAll('[role="alert"], [role="status"]')].map((n) => n.textContent);
+
+test('[LAB-409] an AI error with a hidden origin and a dialog open is deferred and announced once, after the dialog closes', async () => {
+  const { el, ai, workspace } = await mount({ ai: true });
+  realErrors(ai);
+  await workspace.openFile('a.md');
+  const text = EN_MESSAGES['ai.error.server'];
+  const dialog = document.createElement('dialog');
+  dialog.className = 'hmd-dialog';
+  document.body.append(dialog);
+  dialog.showModal();
+  // Il dialog è già aperto quando l'errore arriva (altrimenti l'apertura lo fotografa come già annunciato).
+  workspace.dismissNotice(-1);
+  ai.set({ error: 'server', errorOrigin: null } as never);
+  await waitFor(() => rows(el).includes(text));
+  // Con il dialog aperto la riga è visibile ma muta: nessuna regione live la dice.
+  assert.ok(!liveTexts(el).includes(text), 'quiet while the dialog is open');
+  dialog.close();
+  dialog.remove();
+  workspace.dismissNotice(-1);
+  await waitFor(() => [...el.querySelectorAll('p.visually-hidden[role="status"]')].some((n) => n.textContent === text));
+  assert.equal([...el.querySelectorAll('[role="status"], [role="alert"]')].filter((n) => n.textContent === text).length, 1, 'said exactly once');
+});
+
+const snapshot = { id: 1, workspaceId: 'ws', path: 'a.md', savedAt: 1, text: '# old', reason: 'manual' };
+const historyOf = (extra: object) => ({ list: async () => [snapshot], get: async () => null, add: async () => {}, prune: async () => {}, move: async () => {}, ...extra });
+
+test('[LAB-409] restoreCancelled describes Restore in the open history panel, not the toolbar', async () => {
+  const { el, workspace, button } = await mount({ history: historyOf({}) });
+  await workspace.openFile('a.md');
+  button(EN_MESSAGES['toolbar.history']).click();
+  await waitFor(() => !!el.querySelector('hmd-history-panel li button'));
+  el.querySelector<HTMLButtonElement>('hmd-history-panel li button')!.click();
+  await waitFor(() => !!el.querySelector('button.restore'));
+  await workspace.restoreVersion(1);
+  const panelBanner = () => el.querySelector('section.pane > hmd-banner');
+  await waitFor(() => !!panelBanner()?.textContent?.includes(EN_MESSAGES['notice.restoreCancelled']));
+  const row = panelBanner()!;
+  const message = row.querySelector('p.message')!;
+  assert.equal(el.querySelector('button.restore')!.getAttribute('aria-describedby'), message.id);
+  assert.ok(!el.querySelector('main > hmd-banner.noteBanner')?.textContent?.includes(EN_MESSAGES['notice.restoreCancelled']));
+});
+
+test('[LAB-409] historyFailed enters the open history panel', async () => {
+  const { el, workspace, button } = await mount({ history: historyOf({ list: async () => Promise.reject(new Error('idb')) }) });
+  await workspace.openFile('a.md');
+  button(EN_MESSAGES['toolbar.history']).click();
+  await waitFor(() => !!el.querySelector('section.pane > hmd-banner')?.textContent?.includes('idb'));
+  assert.ok(![...el.querySelectorAll('main > hmd-banner')].some((b) => b.textContent?.includes('idb')), 'not in the toolbar or workspace banners');
+  assert.equal(el.querySelector('section.pane > hmd-banner [role="alert"]')?.textContent?.includes('idb'), true);
+});
+
+test('[LAB-409] Save all from the settings describes the settings button, not the toolbar', async () => {
+  const { el, win } = await mount();
+  win.setHash('#settings');
+  await waitFor(() => !!el.querySelector('hmd-settings button.secondary'));
+  el.querySelector<HTMLButtonElement>('hmd-settings button.secondary')!.click();
+  await waitFor(() => !!el.querySelector('hmd-settings hmd-banner')?.textContent?.includes(EN_MESSAGES['notice.saveAllDone']));
+  const message = el.querySelector('hmd-settings hmd-banner p.message')!;
+  assert.equal(el.querySelector('hmd-settings button.secondary')!.getAttribute('aria-describedby'), message.id);
+  assert.ok(![...el.querySelectorAll('main > hmd-banner')].some((b) => b.textContent?.includes(EN_MESSAGES['notice.saveAllDone'])), 'not under the toolbar button');
+});
+
+test('[LAB-409] a failed image goes to the banner of the document it was pasted in, not the workspace banner', async () => {
+  let failing = false;
+  const { el, workspace } = await mount({ failWrite: () => failing });
+  await workspace.openFile('a.md');
+  failing = true;
+  await workspace.saveImage(new Blob(['x'], { type: 'image/png' }), 'p.png');
+  const documentBanner = () => [...el.querySelectorAll<HTMLElement>('main hmd-banner')].find((b) => b.textContent?.includes('ENOSPC'));
+  await waitFor(() => !!documentBanner());
+  assert.ok(!documentBanner()!.textContent!.includes('a.md: '), 'no path prefix: it is the document banner');
+  assert.equal(documentBanner()!.nextElementSibling?.localName === 'hmd-banner', false, 'the document banner is the last one before the panes');
+  await workspace.openFile('b.md');
+  // Altro documento attivo: l'esito resta, col suo percorso, nel banner workspace.
+  await waitFor(() => documentBanner()?.textContent?.includes('a.md: ') === true);
+});
+
+test('[LAB-409] closing the Save all note in the settings, or the note in the history panel, keeps the focus on the described control; there is one Restore button', async () => {
+  const settings = await mount();
+  settings.win.setHash('#settings');
+  await waitFor(() => !!settings.el.querySelector('hmd-settings button.secondary'));
+  const saveAll = settings.el.querySelector<HTMLButtonElement>('hmd-settings button.secondary')!;
+  saveAll.click();
+  await waitFor(() => !!settings.el.querySelector('hmd-settings hmd-banner button.close:not([hidden])'));
+  const noteClose = settings.el.querySelector<HTMLButtonElement>('hmd-settings hmd-banner button.close')!;
+  noteClose.focus();
+  noteClose.click();
+  assert.equal(document.activeElement, saveAll);
+  document.body.replaceChildren();
+
+  const { el, workspace, button } = await mount({ history: historyOf({ list: async () => [snapshot, { ...snapshot, id: 2, savedAt: 2 }] }) });
+  await workspace.openFile('a.md');
+  button(EN_MESSAGES['toolbar.history']).click();
+  await waitFor(() => el.querySelectorAll('hmd-history-panel li button').length === 2);
+  el.querySelector<HTMLButtonElement>('hmd-history-panel li button')!.click();
+  await waitFor(() => !!el.querySelector('button.restore'));
+  assert.equal(el.querySelectorAll('button.restore').length, 1);
+  await workspace.restoreVersion(1);
+  await waitFor(() => !!el.querySelector('section.pane > hmd-banner button.close:not([hidden])'));
+  const close = el.querySelector<HTMLButtonElement>('section.pane > hmd-banner button.close')!;
+  close.focus();
+  close.click();
+  assert.equal(document.activeElement, el.querySelector('button.restore'));
+});
+
+test('[LAB-409] Save all from the settings keeps its origin when reading the drafts fails: the error describes the settings button', async () => {
+  const buffers = memoryBufferStore();
+  buffers.list = async () => Promise.reject(new Error('boom'));
+  const { el, win } = await mount({ buffers });
+  win.setHash('#settings');
+  await waitFor(() => !!el.querySelector('hmd-settings button.secondary'));
+  el.querySelector<HTMLButtonElement>('hmd-settings button.secondary')!.click();
+  await waitFor(() => !!el.querySelector('hmd-settings hmd-banner')?.textContent?.includes('boom'));
+  const message = el.querySelector('hmd-settings hmd-banner p.message')!;
+  assert.equal(el.querySelector('hmd-settings button.secondary')!.getAttribute('aria-describedby'), message.id);
+  assert.ok(![...el.querySelectorAll('main > hmd-banner')].some((b) => b.textContent?.includes('boom')), 'not under the toolbar button');
+});
+
+test('[LAB-409] a profile save that fails with the detail open stays under its actions; it reaches the workspace banner only when the detail is gone', async () => {
+  const { el, ai, win } = await mount({ ai: true });
+  realErrors(ai);
+  Object.assign(ai, { saveProfile: async () => Promise.reject({ code: 'server' }) });
+  win.setHash('#settings/ai-profiles');
+  await waitFor(() => !!el.querySelector('hmd-settings-profiles .list > button'));
+  el.querySelector<HTMLButtonElement>('hmd-settings-profiles .list > button')!.click();
+  const save = [...el.querySelectorAll<HTMLButtonElement>('hmd-settings-profiles button')].find((b) => b.textContent === EN_MESSAGES['ai.save'])!;
+  save.click();
+  await waitFor(() => !!el.querySelector('hmd-settings-profiles small[role="alert"]'));
+  assert.ok(!rows(el).includes(EN_MESSAGES['ai.error.server']), 'nothing in the workspace banner while the origin is visible');
+  win.setHash('');
+  await waitFor(() => rows(el).includes(EN_MESSAGES['ai.error.server']));
+});
+
+test('[LAB-409] a dialog that closes while another opens in the same update: the photograph is retaken, the deferred events are still summarized once', async () => {
+  const { el, ai, workspace } = await mount({ ai: true });
+  realErrors(ai);
+  await workspace.openFile('a.md');
+  const text = EN_MESSAGES['ai.error.server'];
+  const open = () => {
+    const dialog = document.createElement('dialog');
+    dialog.className = 'hmd-dialog';
+    document.body.append(dialog);
+    dialog.showModal();
+    return dialog;
+  };
+  const first = open();
+  workspace.dismissNotice(-1);
+  ai.set({ error: 'server', errorOrigin: null } as never);
+  await waitFor(() => rows(el).includes(text));
+  assert.ok(!liveTexts(el).includes(text), 'deferred while the first dialog is open');
+  // Uno si chiude, l'altro si apre, nello stesso aggiornamento.
+  first.removeAttribute('open');
+  first.remove();
+  const second = open();
+  workspace.dismissNotice(-1);
+  assert.ok(!liveTexts(el).includes(text), 'still deferred under the second dialog');
+  second.close();
+  second.remove();
+  workspace.dismissNotice(-1);
+  await waitFor(() => [...el.querySelectorAll('p.visually-hidden[role="status"]')].some((n) => n.textContent === text));
+  assert.equal([...el.querySelectorAll('[role="status"], [role="alert"]')].filter((n) => n.textContent === text).length, 1, 'summarized exactly once');
 });

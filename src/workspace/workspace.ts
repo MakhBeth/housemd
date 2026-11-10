@@ -15,7 +15,7 @@ import {
   type AutosaveTrigger,
 } from './autosave';
 import { decideExternal, diffScan } from './external';
-import { errorDetail, sameToast, type Toast, type ToastCode, type ToastParams } from './toasts';
+import { errorDetail, NOTICE_CHANNEL, type Notice, type NoticeAction, type NoticeCode, type NoticeParams } from './notices';
 import type { HistoryStore, Snapshot, SnapshotReason } from '../history/historyStore';
 import { shouldSnapshot } from '../history/policy';
 
@@ -41,7 +41,7 @@ export interface OpenDoc {
   restore: { seq: number; textLf: string } | null;
 }
 
-export type { Toast } from './toasts';
+export type { Notice } from './notices';
 
 export interface WorkspaceState {
   status: 'loading' | 'ready' | 'access-lost';
@@ -49,7 +49,7 @@ export interface WorkspaceState {
   entries: Entry[];
   config: HouseConfig;
   doc: OpenDoc | null;
-  toasts: Toast[];
+  notices: Notice[];
   /** Aumenta a ogni modifica dell'indice di ricerca / lista dei file. */
   indexRevision: number;
   /** Modalità di salvataggio automatico corrente. */
@@ -116,7 +116,7 @@ export class Workspace {
   private bufferBase = '';
   private timer: unknown = null;
   private saving: Promise<void> | null = null;
-  private toastSeq = 0;
+  private noticeSeq = 0;
   /**
    * Contatore di sospensione dell'autosalvataggio (rinomina/eliminazione in corso): mentre è > 0,
    * `flush()` non scrive su disco, ma le modifiche continuano a essere segnalate come da salvare.
@@ -151,7 +151,7 @@ export class Workspace {
       entries: [],
       config: DEFAULT_CONFIG,
       doc: null,
-      toasts: [],
+      notices: [],
       indexRevision: 0,
       autosave: parseAutosave(deps.autosave ?? DEFAULT_AUTOSAVE),
       drafts: [],
@@ -180,43 +180,69 @@ export class Workspace {
   }
 
   private setDoc(patch: Partial<OpenDoc>): void {
-    if (this.state.doc) this.set({ doc: { ...this.state.doc, ...patch } });
+    const doc = this.state.doc;
+    if (!doc) return;
+    this.set({ doc: { ...doc, ...patch } });
+    // Gli esiti si risolvono per documento: il file è tornato, il testo è al sicuro; nuove modifiche invalidano «Salva tutto».
+    if (patch.deletedOnDisk === false) this.resolvePath(doc.path, 'deletedOutside');
+    if (patch.saveState === 'saved') this.resolvePath(doc.path, 'saveFailed', 'bufferFailed', 'draftNotPersisted');
+    if (patch.saveState === 'dirty') this.resolveNotices('saveAllDone');
   }
 
   private bumpIndex(): void {
     this.set({ indexRevision: this.state.indexRevision + 1 });
   }
 
-  private toast(kind: Toast['kind'], code: ToastCode, params?: ToastParams): void {
-    const next = { kind, code, params };
-    const last = this.state.toasts.at(-1);
-    if (last && sameToast(last, next)) return;
-    this.set({ toasts: [...this.state.toasts, { id: ++this.toastSeq, ...next }] });
+  /**
+   * `path` è il documento di origine, catturato dal produttore prima di ogni `await`: mai ricavato dal documento
+   * attivo al momento dell'errore. Un nuovo tentativo sostituisce l'esito dello stesso codice e dello stesso
+   * documento; i problemi di altri documenti restano.
+   */
+  private notice(kind: Notice['kind'], code: NoticeCode, params?: NoticeParams, origin?: string, manual = false, action?: NoticeAction): void {
+    // Un'immagine fallita è un problema del documento in cui la si inseriva, anche se `operationFailed` è un messaggio di workspace.
+    const path = NOTICE_CHANNEL[code] === 'document' || action === 'image' ? origin ?? (params?.path === undefined ? this.state.doc?.path : String(params.path)) : undefined;
+    const same = this.state.notices.find((t) => t.code === code && t.path === path);
+    // Evento automatico identico (stesso codice, contesto, tipo e dettagli): stesso nodo e stesso ID, nessun nuovo allarme.
+    if (!manual && same && same.kind === kind && JSON.stringify(same.params ?? {}) === JSON.stringify(params ?? {})) return;
+    this.set({ notices: [...this.state.notices.filter((t) => t !== same), { id: ++this.noticeSeq, kind, code, params, path, ...(action ? { origin: { action, path: origin } } : {}) }] });
   }
 
-  dismissToast(id: number): void {
-    this.set({ toasts: this.state.toasts.filter((t) => t.id !== id) });
+  /** Toglie gli esiti di un documento risolti (salvataggio riuscito, file tornato, bozza messa al sicuro). */
+  private resolvePath(path: string, ...codes: NoticeCode[]): void {
+    if (this.state.notices.some((t) => t.path === path && codes.includes(t.code))) {
+      this.set({ notices: this.state.notices.filter((t) => !(t.path === path && codes.includes(t.code))) });
+    }
   }
 
-  /** Errore nello scegliere o aprire un'altra cartella: si resta qui, con un toast. */
+  /** Il successo di un'operazione toglie solo gli esiti che la riguardano. */
+  private resolveNotices(...codes: NoticeCode[]): void {
+    if (this.state.notices.some((t) => codes.includes(t.code))) this.set({ notices: this.state.notices.filter((t) => !codes.includes(t.code)) });
+  }
+
+  dismissNotice(id: number): void {
+    this.set({ notices: this.state.notices.filter((t) => t.id !== id) });
+  }
+
+  /** Errore nello scegliere o aprire un'altra cartella: si resta qui, con un avviso. */
   reportFolderError(detail: string): void {
-    this.toast('error', 'openFolderFailed', { detail });
+    this.notice('error', 'openFolderFailed', { detail });
   }
 
   files(): string[] {
     return this.state.entries.filter((e) => e.kind === 'file').map((e) => e.path);
   }
 
-  /** Esegue un'operazione mostrando gli errori come toast; accesso revocato → schermata "Riprendi accesso". */
-  private async run(action: () => Promise<void>): Promise<void> {
+  /** Esegue un'operazione mostrando gli errori come notice; accesso revocato → schermata "Riprendi accesso". */
+  private async run(action: () => Promise<void>, manual = false, origin?: { action: NoticeAction; path: string }): Promise<void> {
     try {
       await action();
     } catch (err) {
-      await this.handleError(err);
+      await this.handleError(err, manual, origin);
     }
   }
 
-  private async handleError(err: unknown): Promise<void> {
+  /** `manual`: l'errore nasce da un comando dell'utente su file (crea, rinomina, elimina): un esito identico si riannuncia. */
+  private async handleError(err: unknown, manual = false, origin?: { action: NoticeAction; path: string }): Promise<void> {
     if (isAccessError(err)) {
       const doc = this.state.doc;
       if (doc && doc.saveState !== 'saved') {
@@ -225,9 +251,9 @@ export class Workspace {
       this.set({ status: 'access-lost' });
       return;
     }
-    if (err instanceof FsExistsError) this.toast('error', 'alreadyExists', { path: err.path });
-    else if (err instanceof FsNotFoundError) this.toast('error', 'notFound', { path: err.path });
-    else this.toast('error', 'operationFailed', { detail: errorDetail(err) });
+    if (err instanceof FsExistsError) this.notice('error', 'alreadyExists', { path: err.path }, undefined, manual);
+    else if (err instanceof FsNotFoundError) this.notice('error', 'notFound', { path: err.path }, undefined, manual);
+    else this.notice('error', 'operationFailed', { detail: errorDetail(err) }, origin?.path, manual, origin?.action);
   }
 
   /**
@@ -277,8 +303,9 @@ export class Workspace {
     return this.runExclusive(() => this.doResolveConflict(choice));
   }
 
-  saveAll(): Promise<void> {
-    return this.runExclusive(() => this.doSaveAll());
+  /** `source`: il pulsante da cui parte (toolbar o impostazioni); l'esito si descrive lì. */
+  saveAll(source: 'toolbar' | 'settings' = 'toolbar'): Promise<void> {
+    return this.runExclusive(() => this.doSaveAll(source === 'settings' ? 'saveAllSettings' : 'saveAll'));
   }
 
   restoreVersion(id: number): Promise<void> {
@@ -307,6 +334,7 @@ export class Workspace {
 
   async load(): Promise<void> {
     this.set({ status: 'loading' });
+    this.resolveNotices('configInvalidJson', 'configInvalidSaveTo', 'configInvalidLinkPrefix', 'unreadableFiles');
     await this.run(async () => {
       const entries = await this.deps.fs.list();
       const configText = await this.deps.fs.read(CONFIG_FILE).then((r) => r.text, (err) => {
@@ -315,8 +343,8 @@ export class Workspace {
       });
       const { config, problems } = parseConfig(configText);
       for (const problem of problems) {
-        if (problem.code === 'invalidJson') this.toast('info', 'configInvalidJson', { file: CONFIG_FILE, detail: problem.detail });
-        else this.toast('info', problem.code === 'invalidSaveTo' ? 'configInvalidSaveTo' : 'configInvalidLinkPrefix', { file: CONFIG_FILE });
+        if (problem.code === 'invalidJson') this.notice('info', 'configInvalidJson', { file: CONFIG_FILE, detail: problem.detail });
+        else this.notice('info', problem.code === 'invalidSaveTo' ? 'configInvalidSaveTo' : 'configInvalidLinkPrefix', { file: CONFIG_FILE });
       }
       const unreadable: string[] = [];
       for (const entry of entries) {
@@ -332,7 +360,7 @@ export class Workspace {
         }
       }
       if (unreadable.length > 0) {
-        this.toast('info', 'unreadableFiles', { count: unreadable.length, paths: unreadable.join(', ') });
+        this.notice('info', 'unreadableFiles', { count: unreadable.length, paths: unreadable.join(', ') });
       }
       const drafts = await this.deps.buffers.list(this.deps.workspaceId).catch(() => [] as string[]);
       this.set({ entries, config, drafts: [...drafts].sort(), status: 'ready', indexRevision: this.state.indexRevision + 1 });
@@ -398,7 +426,7 @@ export class Workspace {
             restore: null,
           },
         });
-        this.toast('info', 'restoredDraftDeleted', { path });
+        this.notice('info', 'restoredDraftDeleted', { path });
         return;
       }
       const { text, version } = disk;
@@ -435,10 +463,10 @@ export class Workspace {
         },
       });
       if (draft !== null) {
-        this.toast('info', 'restoredDraft', { path });
+        this.notice('info', 'restoredDraft', { path });
         this.schedule('restoredDraft');
       }
-    });
+    }, true);
   }
 
   /** Esiste una bozza nel buffer di emergenza per `path`? (anche se il file non è più su disco) */
@@ -555,19 +583,21 @@ export class Workspace {
     await this.flush();
   }
 
-  private async bufferCurrentDoc(): Promise<void> {
+  /** `manual`: lo chiede un tentativo esplicito dell'utente (Ctrl+S, Salva tutto): un esito identico si riannuncia. */
+  private async bufferCurrentDoc(manual = false): Promise<void> {
     const doc = this.state.doc;
     if (!doc || doc.saveState === 'saved') return;
     try {
       await this.saveBuffer(doc.path, doc.text, this.bufferBase);
     } catch (err) {
-      this.toast('error', 'bufferFailed', { detail: errorDetail(err) });
+      this.notice('error', 'bufferFailed', { detail: errorDetail(err) }, doc.path, manual);
     }
   }
 
   /** Scrive il buffer di emergenza e tiene aggiornato `drafts`. Gli errori risalgono a chi chiama. */
   private async saveBuffer(path: string, text: string, base: string): Promise<void> {
     await this.deps.buffers.save(this.deps.workspaceId, path, text, base);
+    this.resolvePath(path, 'bufferFailed', 'draftNotPersisted');
     if (!this.state.drafts.includes(path)) this.set({ drafts: [...this.state.drafts, path].sort() });
   }
 
@@ -586,12 +616,16 @@ export class Workspace {
    * da HouseMD (in quel caso `flush()` da solo sarebbe un no-op): usato da Ctrl+S per poter
    * ricreare il file.
    */
-  async saveNow(): Promise<void> {
+  saveNow(): Promise<void> {
+    return this.doSaveNow();
+  }
+
+  private async doSaveNow(): Promise<void> {
     const doc = this.state.doc;
     if (doc?.deletedOnDisk && doc.saveState === 'saved') {
       this.setDoc({ saveState: 'dirty' });
     }
-    await this.flush();
+    await this.flush(true);
   }
 
   /**
@@ -601,7 +635,7 @@ export class Workspace {
    * poi le bozze degli altri file, con l'autosalvataggio sospeso. Una bozza si scrive solo se il disco
    * coincide ancora con la sua base; altrimenti resta dov'è (è un conflitto da aprire a mano).
    */
-  private async doSaveAll(): Promise<void> {
+  private async doSaveAll(action: 'saveAll' | 'saveAllSettings'): Promise<void> {
     while (this.checking) await this.checking;
     /** Modifiche che dopo "Salva tutto" restano non salvate su disco (documento aperto compreso). */
     let left = 0;
@@ -611,12 +645,12 @@ export class Workspace {
       // tempo), come per le bozze orfane non aperte. Se ha modifiche restano nel buffer; lo ricrea
       // solo Ctrl+S (saveNow), esplicitamente. Documento pulito: nulla da salvare.
       if (open.saveState !== 'saved') {
-        await this.bufferCurrentDoc();
+        await this.bufferCurrentDoc(true);
         left++;
       }
     } else if (open) {
       // flush e non saveNow: saveNow ricreerebbe un file eliminato fuori da HouseMD.
-      await this.flush();
+      await this.flush(true);
       const after = this.state.doc;
       // Scrittura non riuscita (errore, conflitto, accesso perso): il testo è al sicuro nel buffer
       // ma non su disco. Battute arrivate durante la scrittura, invece, non sono un fallimento.
@@ -627,7 +661,7 @@ export class Workspace {
     try {
       paths = (await this.draftPaths()).filter((path) => path !== openPath);
     } catch (err) {
-      this.toast('error', 'bufferFailed', { detail: errorDetail(err) });
+      this.notice('error', 'bufferFailed', { detail: errorDetail(err) }, undefined, true, action);
       return;
     }
     let written = 0;
@@ -652,8 +686,9 @@ export class Workspace {
     // Ciclo interrotto (accesso perso, gestito da run()): le bozze non elaborate restano tutte.
     left += paths.length - processed;
     if (written > 0) this.bumpIndex();
-    if (left > 0) this.toast('info', 'saveAllSkipped', { count: left });
-    else if (!this.state.doc || this.state.doc.saveState === 'saved') this.toast('info', 'saveAllDone');
+    this.resolveNotices('saveAllSkipped', 'saveAllDone');
+    if (left > 0) this.notice('info', 'saveAllSkipped', { count: left }, undefined, true, action);
+    else if (!this.state.doc || this.state.doc.saveState === 'saved') this.notice('info', 'saveAllDone', undefined, undefined, true, action);
   }
 
   /** Scrive la bozza di un file non aperto se il disco coincide ancora con la sua base. */
@@ -683,7 +718,7 @@ export class Workspace {
     }
   }
 
-  async flush(): Promise<void> {
+  async flush(manual = false): Promise<void> {
     if (this.timer !== null) this.scheduler.clear(this.timer);
     this.timer = null;
     while (this.saving) await this.saving;
@@ -691,7 +726,7 @@ export class Workspace {
       // Scritture su disco sospese (controllo esterno, "Salva tutto"): il timer è appena stato
       // cancellato, quindi il testo va nel buffer. Non durante rinomina/eliminazione (`moving`): il
       // percorso è in transizione e sarà rename()/remove() a ripianificare.
-      if (this.moving === 0) await this.bufferCurrentDoc();
+      if (this.moving === 0) await this.bufferCurrentDoc(manual);
       return;
     }
     const doc = this.state.doc;
@@ -699,11 +734,11 @@ export class Workspace {
     if (doc.conflict || this.state.status === 'access-lost') {
       // Su disco non si può scrivere, ma il timer è appena stato cancellato: senza questo buffer le
       // modifiche fatte dall'ultimo salvataggio del buffer resterebbero solo in memoria.
-      await this.bufferCurrentDoc();
+      await this.bufferCurrentDoc(manual);
       return;
     }
     if (doc.saveState !== 'dirty' && doc.saveState !== 'error') return;
-    this.saving = this.writeDoc(doc.path, doc.text).finally(() => {
+    this.saving = this.writeDoc(doc.path, doc.text, manual).finally(() => {
       this.saving = null;
     });
     await this.saving;
@@ -724,7 +759,7 @@ export class Workspace {
       const doc = this.state.doc;
       if (!doc || doc.saveState === 'saved') return 'durable';
       // Scritture su disco sospese (controllo esterno, "Salva tutto"): flush() andrebbe comunque nel
-      // buffer, con un suo toast; si passa direttamente al buffer qui sotto (un solo toast se fallisce).
+      // buffer, con un suo notice; si passa direttamente al buffer qui sotto (un solo notice se fallisce).
       const toDisk =
         autosaveAllows(this.state.autosave.mode, 'switch') && !doc.conflict && this.state.status !== 'access-lost' && this.suspended === 0;
       if (toDisk) {
@@ -742,18 +777,18 @@ export class Workspace {
       try {
         await this.saveBuffer(current.path, text, this.bufferBase);
       } catch {
-        this.toast('error', 'draftNotPersisted');
+        this.notice('error', 'draftNotPersisted', undefined, current.path);
         return 'failed';
       }
       const after = this.state.doc;
       if (!after || (after.path === current.path && after.text === text)) return 'durable';
       // Modifiche arrivate mentre il buffer si scriveva: si ripete.
     }
-    this.toast('error', 'draftNotPersisted');
+    this.notice('error', 'draftNotPersisted', undefined, this.state.doc?.path);
     return 'failed';
   }
 
-  private async writeDoc(path: string, text: string): Promise<void> {
+  private async writeDoc(path: string, text: string, manual = false): Promise<void> {
     this.setDoc({ saveState: 'saving' });
     let version: Version;
     try {
@@ -773,7 +808,7 @@ export class Workspace {
         this.set({ status: 'access-lost' });
         return;
       }
-      this.toast('error', 'saveFailed', { detail: errorDetail(err) });
+      this.notice('error', 'saveFailed', { detail: errorDetail(err) }, path, manual);
       return;
     }
     // La scrittura è riuscita: quel che segue è manutenzione best-effort e non deve far
@@ -786,6 +821,7 @@ export class Workspace {
       this.bufferBase = text;
       this.knownVersion = version;
     }
+    this.resolvePath(path, 'saveFailed', 'bufferFailed', 'draftNotPersisted');
     this.versions.set(path, version);
     this.search.upsert(path, text);
     this.snapshot(path, text, 'save');
@@ -903,7 +939,7 @@ export class Workspace {
         case 'unchanged':
           return;
         case 'deleted':
-          if (!current.deletedOnDisk) this.toast('info', 'deletedOutside', { path: current.path });
+          if (!current.deletedOnDisk) this.notice('info', 'deletedOutside', { path: current.path });
           // Solo una modifica dell'utente (dirty) deve poter ricreare il file: niente 'dirty' forzato qui.
           this.setDoc({ deletedOnDisk: true });
           this.search.remove(current.path);
@@ -949,7 +985,7 @@ export class Workspace {
     const doc = this.state.doc;
     if (!doc?.conflict) return;
     if (choice === 'overwrite') {
-      await this.run(() => this.overwrite(doc.path));
+      await this.run(() => this.overwrite(doc.path), true);
       return;
     }
     await this.run(async () => {
@@ -971,7 +1007,7 @@ export class Workspace {
       this.bumpIndex();
       // Il buffer si scarta solo DOPO aver applicato la ricarica (nessuna await in mezzo al controllo).
       await this.clearBuffer(doc.path);
-    });
+    }, true);
   }
 
   /**
@@ -1012,7 +1048,7 @@ export class Workspace {
     try {
       version = await history.get(id);
     } catch (err) {
-      this.historyError(err);
+      this.historyError(err, true, path);
       return;
     }
     const current = this.state.doc;
@@ -1027,7 +1063,7 @@ export class Workspace {
       // comunque il testo del ripristino, che il modello non ha.
       this.state.updating
     ) {
-      this.toast('info', 'restoreCancelled');
+      this.notice('info', 'restoreCancelled', undefined, path, false, 'restore');
       return;
     }
     // Da qui niente await: snapshot del testo corrente (fire-and-forget) e sostituzione.
@@ -1058,6 +1094,7 @@ export class Workspace {
         const recent = await history.list(workspaceId, path);
         if (!shouldSnapshot(recent, { text, reason }, now)) return;
         await history.add({ workspaceId, path, savedAt: now, text, reason });
+        this.resolveHistory();
         // Subito dopo l'aggiunta, con lo stesso `now`: lo snapshot appena scritto è sempre il più fresco.
         await history.prune(workspaceId, path, now);
       } catch (err) {
@@ -1073,11 +1110,17 @@ export class Workspace {
     this.historyChain = this.historyChain.then(() => history.move(workspaceId, from, to).catch((err) => this.historyError(err)));
   }
 
-  /** Al massimo un toast: la cronologia è un di più, non deve disturbare a ogni salvataggio. */
-  private historyError(err: unknown): void {
-    if (this.historyErrorShown) return;
+  /** Un'operazione di cronologia riuscita toglie l'errore e riarma l'annuncio per il prossimo episodio. */
+  private resolveHistory(): void {
+    this.historyErrorShown = false;
+    this.resolveNotices('historyFailed');
+  }
+
+  /** Al massimo un avviso: la cronologia è un di più, non deve disturbare a ogni salvataggio. */
+  private historyError(err: unknown, manual = false, path?: string): void {
+    if (this.historyErrorShown && !manual) return;
     this.historyErrorShown = true;
-    this.toast('info', 'historyFailed', { detail: errorDetail(err) });
+    this.notice('error', 'historyFailed', { detail: errorDetail(err) }, path, manual, path === undefined ? undefined : 'history');
   }
 
   /** Si risolve quando le scritture della cronologia già lanciate sono finite. */
@@ -1086,14 +1129,17 @@ export class Workspace {
   }
 
   /** Versioni di un file, dalla più recente (vuoto senza cronologia o se non è leggibile). */
-  async listHistory(path: string): Promise<Snapshot[]> {
+  async listHistory(path: string, opts: { manual?: boolean } = {}): Promise<Snapshot[]> {
     const history = this.deps.history;
     if (!history) return [];
     await this.historyChain;
     try {
-      return await history.list(this.deps.workspaceId, path);
+      const list = await history.list(this.deps.workspaceId, path);
+      this.resolveHistory();
+      return list;
     } catch (err) {
-      this.historyError(err);
+      // Manuale solo se lo dice il chiamante (apertura del pannello, cambio di file); le riletture dopo un salvataggio no.
+      this.historyError(err, opts.manual === true, path);
       return [];
     }
   }
@@ -1117,7 +1163,7 @@ export class Workspace {
       await this.refreshEntries();
       this.bumpIndex();
       created = true;
-    });
+    }, true);
     if (created) await this.doOpenFile(path);
   }
 
@@ -1125,7 +1171,7 @@ export class Workspace {
     await this.run(async () => {
       await this.deps.fs.mkdir(path);
       await this.refreshEntries();
-    });
+    }, true);
   }
 
   private async doRename(from: string, to: string): Promise<void> {
@@ -1178,7 +1224,7 @@ export class Workspace {
           await this.refreshEntries();
           this.bumpIndex();
         }
-      });
+      }, true);
     } finally {
       this.suspended--;
       this.moving--;
@@ -1222,7 +1268,7 @@ export class Workspace {
         for (const p of this.state.drafts.filter((d) => inside(d, path))) await this.clearBuffer(p);
         await this.refreshEntries();
         this.bumpIndex();
-      });
+      }, true);
     } finally {
       if (closing) {
         this.suspended--;
@@ -1253,7 +1299,7 @@ export class Workspace {
       const path = await uniquePath(saveTo, name, async (p) => (await this.deps.fs.stat(p)) !== null);
       await this.deps.fs.write(path, data);
       link = imageLink(path, doc.path, this.state.config);
-    });
+    }, false, { action: 'image', path: doc.path });
     return link;
   }
 

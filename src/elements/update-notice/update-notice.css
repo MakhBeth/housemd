@@ -1,7 +1,7 @@
 @layer components {
-  @scope (hmd-update-notice) to (hmd-notice) {
+  @scope (hmd-update-notice) to (hmd-banner) {
     :scope {
-      display: contents;
+      display: block;
     }
   }
 }

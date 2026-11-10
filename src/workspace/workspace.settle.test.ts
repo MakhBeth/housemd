@@ -35,7 +35,7 @@ test('a buffer error while switching file keeps the document open', async () => 
   await ws.openFile('b.md');
   assert.equal(doc(ws).path, 'a.md', 'il documento resta aperto');
   assert.equal(doc(ws).text, 'importante');
-  assert.equal(ws.getState().toasts.at(-1)?.code, 'draftNotPersisted');
+  assert.equal(ws.getState().notices.at(-1)?.code, 'draftNotPersisted');
   assert.equal(await ops.textOf('a.md'), 'A');
 });
 
@@ -48,7 +48,7 @@ test('when both the disk write and the buffer fail, the document stays open', as
   ws.edit('importante');
   await ws.openFile('b.md');
   assert.equal(doc(ws).path, 'a.md');
-  const codes = ws.getState().toasts.map((t) => t.code);
+  const codes = ws.getState().notices.map((t) => t.code);
   assert.ok(codes.includes('saveFailed'));
   assert.equal(codes.at(-1), 'draftNotPersisted');
 });
@@ -82,7 +82,7 @@ test('settle gives up after 3 unstable attempts and the file switch does not hap
   await ws.openFile('b.md');
   assert.equal(doc(ws).path, 'a.md');
   assert.equal(calls, 3);
-  assert.equal(ws.getState().toasts.at(-1)?.code, 'draftNotPersisted');
+  assert.equal(ws.getState().notices.at(-1)?.code, 'draftNotPersisted');
 });
 
 test('keystrokes during the cleanup of the destination buffer are secured before switching', async () => {
@@ -173,7 +173,7 @@ for (const [name, leave] of [
   });
 }
 
-test('a buffer failure during a suspended scan shows a single toast when leaving the document', async () => {
+test('a buffer failure during a suspended scan shows a single notice when leaving the document', async () => {
   const { ops, buffers, ws } = await harness({ 'a.md': 'A', 'b.md': 'B' });
   await ws.openFile('a.md');
   const originalReadDir = ops.readDir.bind(ops);
@@ -188,10 +188,10 @@ test('a buffer failure during a suspended scan shows a single toast when leaving
     throw new Error('QuotaExceededError');
   };
   ws.edit('importante');
-  const before = ws.getState().toasts.length;
+  const before = ws.getState().notices.length;
   await ws.openFile('b.md');
   assert.equal(ws.getState().doc?.path, 'a.md');
-  assert.deepEqual(ws.getState().toasts.slice(before).map((t) => t.code), ['draftNotPersisted']);
+  assert.deepEqual(ws.getState().notices.slice(before).map((t) => t.code), ['draftNotPersisted']);
   slow.open();
   await checking;
   ops.readDir = originalReadDir;

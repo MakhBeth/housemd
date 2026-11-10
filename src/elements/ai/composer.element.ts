@@ -12,6 +12,7 @@ import { emit } from '../events';
 import type { HmdAiEffortChip } from './effort-chip.element';
 import type { HmdAiModelChip } from './model-chip.element';
 import { CONTROLLER_NOTES, outgoing, selectionChipText, sendBlocker, sendButton, type ComposerController, type SendBlocker } from './composerView';
+import { OriginNote } from './originNote';
 import './composer.css';
 
 interface Parts {
@@ -55,6 +56,8 @@ export class HmdAiComposer extends HmdElement {
   /** Selezione ignorata con ✕: il chip ricompare con una selezione diversa. */
   #ignored: TextRange | null = null;
   /** Nota mostrata e il profilo di quel momento: un cambio di profilo la toglie. */
+  /** Invio rifiutato (o selezione persa prima dell'invio): nota sotto la nota dell'invio. */
+  #errorNote = new OriginNote(this, () => this.#controller);
   #note: { key: SendBlocker; profileId: string | undefined } | null = null;
   /** Il prossimo render riscrive la nota anche se il testo è lo stesso (un altro invio bloccato). */
   #announceAgain = false;
@@ -224,10 +227,12 @@ export class HmdAiComposer extends HmdElement {
       // Una nota di prima (es. needText) non deve restare su questo percorso.
       this.#note = null;
       this.#loop.update();
-      controller.report({ code: 'scopeLost' });
+      this.#errorNote.begin();
+      this.#errorNote.report('send-scope')({ code: 'scopeLost' });
       return;
     }
-    void controller.send(message, preset, scope).catch((error: unknown) => controller.report(error));
+    this.#errorNote.begin();
+    void controller.send(message, preset, scope).catch(this.#errorNote.report('send'));
     this.#note = null;
     if (preset) {
       this.#loop.update();
@@ -237,6 +242,11 @@ export class HmdAiComposer extends HmdElement {
     parts.input.value = '';
     emit(this, 'hmd-ai-draft', { text: '' });
     this.#loop.update();
+  }
+
+  disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.#errorNote.release();
   }
 
   #render(parts: Parts, controller: ComposerController, i18n: I18nStore): void {
@@ -267,6 +277,7 @@ export class HmdAiComposer extends HmdElement {
     }
     announce(parts.note, this.#note ? t(this.#note.key) : '', this.#announceAgain);
     this.#announceAgain = false;
+    this.#errorNote.update(controller.getState(), t, parts.note, parts.send);
   }
 }
 

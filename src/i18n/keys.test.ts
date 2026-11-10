@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import en from './locales/en.json';
 import { NAME_ERRORS } from '../ui/names';
 import { THEME_PREFS } from '../theme/theme';
-import { TOAST_CODES } from '../workspace/toasts';
+import { NOTICE_CODES } from '../workspace/notices';
 import { UNSUPPORTED_REASONS } from '../fs/access';
 import { AUTOSAVE_MODES } from '../workspace/autosave';
 import { SNAPSHOT_REASONS } from '../history/historyStore';
@@ -12,8 +12,11 @@ import { FORMAT_ACTIONS } from '../editor/formatting';
 
 const keys = new Set(Object.keys(en));
 
-test('every toast code has a message in en.json', () => {
-  for (const code of TOAST_CODES) assert.ok(keys.has(`toast.${code}`), `manca toast.${code}`);
+test('every notice code has a message in en.json', () => {
+  for (const code of NOTICE_CODES) {
+    const counted = code === 'unreadableFiles' || code === 'saveAllSkipped';
+    for (const key of counted ? [`notice.${code}.one`, `notice.${code}.other`] : [`notice.${code}`]) assert.ok(keys.has(key), `manca ${key}`);
+  }
 });
 
 test('every name validation error has a message in en.json', () => {

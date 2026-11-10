@@ -21,7 +21,7 @@ export const UPDATE_TIMEOUT_MS = 10_000;
 export const RELOAD_TIMEOUT_MS = 3_000;
 
 export interface UpdateState {
-  /** C'è una nuova versione in attesa: toast persistente con "Aggiorna". */
+  /** C'è una nuova versione in attesa: notice persistente con "Aggiorna". */
   available: boolean;
   /** Aggiornamento in corso: documento in sola lettura, pulsante disabilitato. */
   busy: boolean;
@@ -125,7 +125,7 @@ export function createUpdateFlow(host: UpdateHost, updateSW: () => Promise<void>
       try {
         await updateSW();
         // Si resta "busy" (sola lettura) finché needReload non ricarica la pagina; se `controlling`
-        // non arriva (worker sparito, SKIP_WAITING perso) si restituisce il documento, toast compreso.
+        // non arriva (worker sparito, SKIP_WAITING perso) si restituisce il documento, notice compreso.
         if (!activated && !reloading) {
           cancelTimeout = host.setTimer(() => {
             cancelTimeout = null;

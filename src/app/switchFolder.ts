@@ -1,4 +1,4 @@
-import { errorDetail } from '../workspace/toasts';
+import { errorDetail } from '../workspace/notices';
 
 /** Lo workspace aperto, visto dal cambio cartella. */
 export interface ClosableWorkspace {
@@ -44,7 +44,7 @@ export async function switchFolder<H, T>(deps: {
   }
   if (handle === null || aborted()) return { kind: 'cancelled' };
   try {
-    // Documento non messo al sicuro: toast draftNotPersisted già mostrato dal Workspace.
+    // Documento non messo al sicuro: notice draftNotPersisted già mostrato dal Workspace.
     if (deps.current && !(await deps.current.closeFile())) return { kind: 'blocked' };
   } catch (err) {
     return { kind: 'error', detail: errorDetail(err) };

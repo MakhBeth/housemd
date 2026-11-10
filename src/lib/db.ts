@@ -44,7 +44,7 @@ export function openDb(name = DB_NAME, options: OpenDbOptions = {}): Promise<IDB
     req.onupgradeneeded = () => upgrade(req.result);
     req.onblocked = () => {
       // Un'altra scheda tiene aperta la versione precedente: si aspetta che la chiuda; se ci mette
-      // troppo, lo si dice (toast reloadOtherTabs).
+      // troppo, lo si dice (notice reloadOtherTabs).
       if (notice !== null) return;
       notice = setTimeout(() => {
         for (const listener of blockedListeners) listener();

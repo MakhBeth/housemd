@@ -32,6 +32,8 @@ export function fakeAi(initial: Partial<AiState> = {}, profile?: ModelProfile) {
     },
     saveOverrides: async (asNew = false) => void calls.push(['saveOverrides', asNew]),
     report: (error: unknown) => void reports.push(error),
+    clearError: () => undefined,
+    orphanError: () => undefined,
     models: null as ModelOption[] | null,
     provider: async () => ({ listModels: async () => controller.models }) as unknown as ChatProvider,
     send: async (...args: unknown[]) => void calls.push(['send', ...args]),
@@ -60,4 +62,19 @@ export function fakeAi(initial: Partial<AiState> = {}, profile?: ModelProfile) {
     listeners: () => listeners.size,
   };
   return controller as unknown as AiChipController & Omit<typeof controller, keyof AiChipController>;
+}
+
+/** Come AiController: `report` salva codice e origine nello stato, `clearError(anchor)` e `orphanError(anchor)` rispettano l'origine. */
+export function withRealErrors(ai: ReturnType<typeof fakeAi>): void {
+  const origin = () => ai.getState().errorOrigin;
+  Object.assign(ai, {
+    report: (error: { code?: string }, o?: unknown) => ai.set({ error: (error?.code ?? 'server') as never, errorOrigin: (o ?? null) as never }),
+    clearError: (anchor?: object) => {
+      if (anchor && origin()?.anchor !== anchor) return;
+      ai.set({ error: null, errorOrigin: null } as never);
+    },
+    orphanError: (anchor: object) => {
+      if (origin()?.anchor === anchor) ai.set({ errorOrigin: null } as never);
+    },
+  });
 }

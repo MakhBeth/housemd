@@ -38,7 +38,7 @@ function fakeWorkspace() {
     state = { indexRevision: state.indexRevision + 1 };
     notify();
   };
-  /** Una notifica che non cambia i salvataggi (una battuta, un toast). */
+  /** Una notifica che non cambia i salvataggi (una battuta, un avviso). */
   const poke = notify;
   return { workspace, requests, save, poke, listeners: () => listeners.size };
 }

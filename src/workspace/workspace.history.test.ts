@@ -172,7 +172,7 @@ test('restoreVersion is cancelled if the user types while the version is loading
   history.get = originalGet;
   assert.equal(doc(ws).text, 'v2 e altro', 'la digitazione non viene sovrascritta');
   assert.equal(doc(ws).restore, null);
-  assert.equal(ws.getState().toasts.at(-1)?.code, 'restoreCancelled');
+  assert.equal(ws.getState().notices.at(-1)?.code, 'restoreCancelled');
   await ws.historyIdle();
   assert.ok(!(await entries(history, 'a.md')).some(([reason]) => reason === 'before-restore'));
 });
@@ -226,7 +226,7 @@ test('renaming moves the history, deleting keeps it', async () => {
   assert.equal((await history.list('ws-1', 'new/a.md')).length, 1, "l'eliminazione non cancella la cronologia");
 });
 
-test('a failing history store does not block saving and shows one toast', async () => {
+test('a failing history store does not block saving and shows one notice', async () => {
   const history = memoryHistoryStore();
   history.add = async () => {
     throw new Error('QuotaExceededError');
@@ -241,7 +241,7 @@ test('a failing history store does not block saving and shows one toast', async 
   await ws.flush();
   await ws.historyIdle();
   assert.equal(await ops.textOf('a.md'), 'uno e due');
-  assert.equal(ws.getState().toasts.filter((t) => t.code === 'historyFailed').length, 1);
+  assert.equal(ws.getState().notices.filter((t) => t.code === 'historyFailed').length, 1);
 });
 
 test('a slow history store never delays saving, typing or switching files', async () => {

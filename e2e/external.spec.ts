@@ -46,10 +46,10 @@ test('conflict: overwrite writes the local text', async ({ app, page }) => {
   await expect.poll(() => app.disk('note.md')).toBe('# Note\nmine');
 });
 
-test('the open file deleted outside: toast and "deleted on disk" state', async ({ app }) => {
+test('the open file deleted outside: notice and "deleted on disk" state', async ({ app }) => {
   await app.removeExternal('note.md');
   await app.windowFocus();
-  await expect(app.toast(app.t('toast.deletedOutside', { path: 'note.md' }))).toBeVisible();
+  await expect(app.page.getByText(app.t('notice.deletedOutside', { path: 'note.md' }))).toBeVisible();
   await expect(app.saveState('save.deleted')).toBeVisible();
 });
 
@@ -89,7 +89,7 @@ test('draft survives a failed save and a reload', async ({ app, page }) => {
   await app.setFlags({ denyWrites: false, request: 'granted' });
   await page.reload();
   await expect(app.editor()).toContainText('draft');
-  await expect(app.toast(app.t('toast.restoredDraft', { path: 'note.md' }))).toBeVisible();
+  await expect(app.notice(app.t('notice.restoredDraft', { path: 'note.md' }))).toBeVisible();
 });
 
 test('a draft whose file vanished is listed under "drafts without a file"', async ({ app, page }) => {
@@ -102,6 +102,6 @@ test('a draft whose file vanished is listed under "drafts without a file"', asyn
   await page.reload();
   const orphans = page.getByRole('region', { name: app.t('orphans.title') });
   await expect(orphans.getByRole('button', { name: 'note.md', exact: true })).toBeVisible();
-  await expect(app.toast(app.t('toast.restoredDraftDeleted', { path: 'note.md' }))).toBeVisible();
+  await expect(app.notice(app.t('notice.restoredDraftDeleted', { path: 'note.md' }))).toBeVisible();
   await expect(app.editor()).toContainText('orphan text');
 });

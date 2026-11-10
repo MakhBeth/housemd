@@ -12,10 +12,15 @@ export interface AiWorkspace { getDoc(): { path: string; textLf: string; conflic
 export type SendBlocker='running'|'noDocument'|'updating';
 /** Perché una proposta non si può accettare (acceptBlocker), nell'ordine in cui la barra li mostra. */
 export type AcceptBlocker='generating'|'updating'|'notAcceptable'|'conflict'|'scopeLost'|'truncated';
-export interface AiState { chat: AiChat; proposals: Map<string,Proposal>; running: { messageId:string; path:string; startedAt:number } | null; profiles:ModelProfile[]; presets:PromptPreset[]; profileId:string; error:AiErrorCode|null; streamingPreview:string|null; }
+/**
+ * Da dove nasce un errore AI: l'azione (`trigger`, ne dipende il ruolo della nota) e, se l'azione ha una nota locale,
+ * l'elemento che la mostra (`anchor`). Finché l'anchor è nel documento il banner workspace tace: è solo il ripiego.
+ */
+export interface AiErrorOrigin { trigger:string; anchor?:{isConnected:boolean}; }
+export interface AiState { chat: AiChat; proposals: Map<string,Proposal>; running: { messageId:string; path:string; startedAt:number } | null; profiles:ModelProfile[]; presets:PromptPreset[]; profileId:string; error:AiErrorCode|null; errorOrigin:AiErrorOrigin|null; streamingPreview:string|null; }
 const uuid=()=>crypto.randomUUID();
 export class AiController {
-  private state:AiState={ chat:{id:uuid(),messages:[],overrides:{}},proposals:new Map(),running:null,profiles:[],presets:[],profileId:'',error:null,streamingPreview:null };
+  private state:AiState={ chat:{id:uuid(),messages:[],overrides:{}},proposals:new Map(),running:null,profiles:[],presets:[],profileId:'',error:null,errorOrigin:null,streamingPreview:null };
   private listeners=new Set<()=>void>();
   private abort:AbortController|null=null;
   private transient=new Map<string,StoredSecret>();
@@ -42,15 +47,17 @@ export class AiController {
   async secret(profile:ModelProfile){return profile.secretId?(this.transient.get(profile.secretId)||await this.store.getSecret(profile.secretId)):null;}
   async setSecret(profile:ModelProfile,value:string,remember:boolean){const id=profile.secretId||uuid();const secret={id,value,binding:{kind:profile.kind,origin:profileOrigin(profile)}};if(remember){await this.store.saveSecret(secret);this.transient.delete(id);}else{await this.store.deleteSecret(id);this.transient.set(id,secret);}await this.saveProfile({...profile,secretId:id});}
   async provider(profile:ModelProfile){return this.providerFactory(profile,await this.secret(profile));}
-  report(error:unknown){const code=error&&typeof error==='object'&&'code'in error?String(error.code):'server';this.set({error:code as AiErrorCode});}
-  clearError(){this.set({error:null});}
+  report(error:unknown,origin?:AiErrorOrigin){const code=error&&typeof error==='object'&&'code'in error?String(error.code):'server';this.set({error:code as AiErrorCode,errorOrigin:origin??null});}
+  clearError(anchor?:object){if(anchor&&this.state.errorOrigin?.anchor!==anchor)return;this.set({error:null,errorOrigin:null});}
+  /** L'elemento della nota locale sparisce: l'errore resta e passa al banner workspace. */
+  orphanError(anchor:object){if(this.state.errorOrigin?.anchor===anchor)this.set({errorOrigin:null});}
   stop(){this.abort?.abort();}
   dispose(){this.stop();this.transient.clear();this.listeners.clear();}
   newChat(){this.stop();this.retries.clear();this.set({chat:{id:uuid(),messages:[],overrides:this.state.chat.overrides}});}
   discard(path:string){if(this.state.running?.path===path)this.stop();const proposals=new Map(this.state.proposals);proposals.delete(path);this.resumeData.delete(path);this.set({proposals});}
   hasPendingWork(){return !!this.state.running||[...this.state.proposals.values()].some(p=>!this.appliedPaths.has(p.path)&&(p.path!==this.workspace.getDoc()?.path||this.proposalText(p)!==this.workspace.getDoc()?.textLf));}
   /** Inizio e fine di un aggiornamento: `set({})` notifica gli iscritti (le note «aggiornamento in corso» del composer e della barra si svuotano al render; per React cambia l'identità dello stato). */
-  prepare=async():Promise<'failed'|'durable'>=>{if(this.hasPendingWork()){this.set({error:'aiPendingUpdate'});return 'failed';}this.updating=true;this.set({});return 'durable';};
+  prepare=async():Promise<'failed'|'durable'>=>{if(this.hasPendingWork()){this.set({error:'aiPendingUpdate',errorOrigin:null});return 'failed';}this.updating=true;this.set({});return 'durable';};
   cancel=()=>{this.updating=false;this.set({});};
   proposalText(p:Proposal){const doc=this.workspace.getDoc();return p.scope?doc?.path===p.path?applyScope(doc.textLf,p.scope,p.text):null:p.text;}
   /** Perché la proposta non si può accettare adesso (o null), nell'ordine della barra: generazione, aggiornamento, altro documento, conflitto, selezione persa, troncata (solo «tutto»). */
@@ -129,7 +136,7 @@ export class AiController {
     const createdAt=Date.now(),messageId=uuid(),chatId=this.state.chat.id,previous=this.state.proposals.get(input.path),preserve=previous?.origin==='edited';
     this.retries.set(messageId,{input,baseText,scope});
     const assistant:ChatMessage={id:messageId,role:'assistant',text:'',docPath:input.path,profileName:input.profile.name,model:input.profile.model,status:'streaming',presetId:input.preset?.id};
-    this.set({running:{messageId,path:input.path,startedAt:Date.now()},error:null,chat:{...this.state.chat,messages:[...this.state.chat.messages,assistant]}});
+    this.set({running:{messageId,path:input.path,startedAt:Date.now()},error:null,errorOrigin:null,chat:{...this.state.chat,messages:[...this.state.chat.messages,assistant]}});
     const abort=new AbortController();this.abort=abort;
     let produced=false;
     const usage:{inputTokens?:number;outputTokens?:number}={};
