@@ -14,8 +14,12 @@ export interface SaveIndicator {
   draftIcon: boolean;
 }
 
-export function saveIndicator(doc: Pick<OpenDoc, 'saveState' | 'deletedOnDisk'> | null): SaveIndicator {
+/** `pendingDownload`: file singolo in memoria con modifiche non ancora scaricate («Salvato» sarebbe falso). */
+export function saveIndicator(doc: Pick<OpenDoc, 'saveState' | 'deletedOnDisk'> | null, pendingDownload = false): SaveIndicator {
   if (!doc) return { state: 'none', label: null, live: 'polite', role: undefined, draftIcon: false };
+  if (pendingDownload && doc.saveState === 'saved' && !doc.deletedOnDisk) {
+    return { state: 'dirty', label: 'save.notDownloaded', live: 'polite', role: undefined, draftIcon: true };
+  }
   const label: MessageKey = doc.deletedOnDisk
     ? 'save.deleted'
     : match(doc.saveState)

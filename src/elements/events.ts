@@ -84,6 +84,8 @@ export interface HmdEvents {
   'hmd-settings-text-width': CustomEvent<{ textWidth: TextWidth }>;
   /** Schermata iniziale: scegliere una cartella (anche «Apri un'altra cartella»). */
   'hmd-start-pick': CustomEvent<null>;
+  /** Schermata iniziale: aprire un file singolo (anche senza accesso alle cartelle). */
+  'hmd-start-pick-file': CustomEvent<null>;
   /** Schermata iniziale: riprendere l'accesso alla cartella ricordata. */
   'hmd-start-resume': CustomEvent<null>;
   /** Albero dei file: voce del menu ⋯ scelta (`node`: la riga del menu; null solo prima di aprirlo). */
@@ -92,7 +94,7 @@ export interface HmdEvents {
   'hmd-banner-action': CustomEvent<{ key: string }>;
   /** Banner: «Chiudi» di una riga. */
   'hmd-banner-close': CustomEvent<{ key: string }>;
-  /** Workspace: cambiare cartella (pulsante con il nome della cartella nella sidebar). */
+  /** Workspace: cambiare cartella (pulsante con il nome della cartella nella sidebar; con un file singolo, un altro file). */
   'hmd-workspace-change-folder': CustomEvent<null>;
 }
 

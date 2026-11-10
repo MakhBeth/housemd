@@ -51,6 +51,12 @@ test('beforeunload asks only when text is in memory, unless the protected update
   assert.equal(unloadNeedsConfirm({ doc: doc('dirty'), drafts: [], updateReady: true }, true), true);
 });
 
+test('beforeunload: a single file in memory not downloaded always asks, even before the protected update reload', () => {
+  const saved = { saveState: 'saved' } as NonNullable<WorkspaceState['doc']>;
+  assert.equal(unloadNeedsConfirm({ doc: saved, drafts: [], updateReady: false }, false, true), true);
+  assert.equal(unloadNeedsConfirm({ doc: saved, drafts: [], updateReady: true }, false, true), true);
+});
+
 test('reopening the last file: open it if it is still there, otherwise only through its draft', () => {
   assert.deepEqual(reopenPlan(null, ['a.md']), { kind: 'none' });
   assert.deepEqual(reopenPlan('a.md', ['a.md']), { kind: 'open', path: 'a.md' });

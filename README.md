@@ -14,7 +14,23 @@
 
 Editor markdown nel browser per le tue cartelle locali, stile HackMD: editor e anteprima affiancati,
 salvataggio automatico, ricerca, `[[wikilink]]`. Nessun server: i file restano sul tuo computer
-(File System Access API, quindi **solo Chrome o Edge su desktop**).
+(File System Access API, quindi le cartelle **solo con Chrome o Edge su desktop**).
+
+## File singolo
+
+Senza aprire una cartella si può lavorare su **un solo file `.md`**: «Apri un file» nella schermata iniziale
+oppure, con la PWA installata, «Apri con… HouseMD» dal sistema. Cosa funziona dove:
+
+| | Chrome / Edge desktop | Firefox, Safari, iOS, Brave con l'API spenta |
+|---|---|---|
+| Cartelle | sì | no |
+| Aprire un file | «Apri un file», «Apri con… HouseMD» (PWA installata) | «Apri un file» (`<input type="file">`) |
+| Salvare | sul file vero, con il salvataggio automatico | «Scarica il file» nella barra: il browser lo mette nei download, mai sopra l'originale |
+| Modifiche non salvate alla chiusura | copia di emergenza nel browser | copia di emergenza nel browser e conferma alla chiusura finché non si scarica |
+
+Con un file singolo non ci sono nuovi file e cartelle, rinomina ed eliminazione, link `[[wikilink]]` ad altre
+note, immagini relative alla cartella né la riapertura al prossimo avvio: lo dice una nota fissa sotto il nome
+del file. Ricerca e cronologia valgono solo per quel file e per la sessione.
 
 ## Sviluppo
 

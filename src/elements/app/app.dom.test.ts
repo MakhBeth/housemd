@@ -9,6 +9,7 @@ installMemoryStorage();
 
 import '../define';
 import type { StoredWorkspace } from '../../fs/handleStore';
+import { memoryFile, singleFileOps, type SingleFile } from '../../fs/singleFile';
 import { createWorkspaceFS } from '../../fs/workspaceFS';
 import { memoryOps } from '../../fs/testing/memoryOps';
 import { EN_MESSAGES } from '../../i18n/messages';
@@ -34,6 +35,7 @@ const handle = (name: string) => ({ name, isSameEntry: async () => false }) as u
 function deps(overrides: Partial<AppDeps> = {}) {
   const log: string[] = [];
   let blocked: (() => void) | null = null;
+  let launch: ((file: SingleFile) => void) | null = null;
   const opened: Workspace[] = [];
   const d: AppDeps = {
     isSupported: () => true,
@@ -52,12 +54,23 @@ function deps(overrides: Partial<AppDeps> = {}) {
       opened.push(workspace);
       return workspace;
     },
+    pickFile: async () => textFile('note.md', '# Note'),
+    async openFileWorkspace(file, workspaceId) {
+      log.push(`file ${file.name}`);
+      const workspace = new Workspace({ fs: createWorkspaceFS(singleFileOps(file)), workspaceId, name: file.name, buffers: memoryBufferStore() });
+      await workspace.load();
+      opened.push(workspace);
+      return workspace;
+    },
+    onLaunchFile: (listener) => void (launch = listener),
     onDbBlocked: (listener) => ((blocked = listener), () => void (blocked = null)),
     setUpdateWorkspace: (workspace) => void log.push(`update ${workspace ? 'open' : 'none'}`),
     ...overrides,
   };
-  return { deps: d, log, opened, block: () => blocked?.() };
+  return { deps: d, log, opened, block: () => blocked?.(), launch: (file: SingleFile) => launch?.(file) };
 }
+
+const textFile = (name: string, text: string) => memoryFile({ name, blob: new Blob([text]), lastModified: 1 });
 
 function mount(d: AppDeps) {
   const i18n = createI18nStore({ locale: 'en', messages: EN_MESSAGES, load: async (locale) => ({ locale, messages: EN_MESSAGES }), persist() {} });
@@ -246,4 +259,53 @@ test('the saved folder reopened by the boot: the focus is not moved (nothing tha
   await waitFor(() => el.screen === 'open');
   await new Promise((resolve) => setTimeout(resolve, 30));
   assert.ok(document.activeElement === document.body, `body, not ${document.activeElement?.localName}`);
+});
+
+test('an unsupported browser: Open a file opens the single file in the workspace, with its name and the file open', async () => {
+  const { deps: d, log } = deps({ isSupported: () => false });
+  const el = mount(d);
+  const button = [...el.querySelectorAll<HTMLButtonElement>('hmd-start-screen button')].find((b) => b.textContent === EN_MESSAGES['start.openFile']);
+  assert.ok(button, 'Open a file on the unsupported start screen');
+  button.click();
+  await waitFor(() => el.screen === 'file');
+  const workspace = el.querySelector('hmd-workspace')!;
+  assert.equal(workspace.singleFile?.name, 'note.md');
+  assert.match(workspace.workspaceId, /^file:/);
+  await waitFor(() => workspace.workspace?.getState().doc?.path === 'note.md');
+  assert.deepEqual(log.filter((line) => line !== 'update none'), ['file note.md', 'update open'], 'nothing saved as the current folder');
+});
+
+test('a file that fails to open on an unsupported browser: back to the unsupported screen with the error', async () => {
+  const el = mount(deps({ isSupported: () => false, pickFile: async () => { throw new Error('boom'); } }).deps);
+  el.querySelector('hmd-start-screen')!.dispatchEvent(new CustomEvent('hmd-start-pick-file', { bubbles: true, detail: null }));
+  await waitFor(() => el.querySelector('hmd-start-screen')!.error === 'boom');
+  assert.equal(el.screen, 'unsupported');
+});
+
+test('Open with HouseMD: the launched file wins over the saved folder, even while the boot is still loading it', async () => {
+  let release: () => void = () => {};
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const { deps: d, launch, opened } = deps({ loadWorkspace: async () => (await gate, { handle: handle('notes'), workspaceId: 'w' }) });
+  const el = mount(d);
+  launch(textFile('launched.md', 'x'));
+  await waitFor(() => el.screen === 'file');
+  release();
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.equal(el.screen, 'file');
+  assert.equal(opened.length, 1, 'the saved folder is never opened');
+});
+
+test('with a single file open, the name button in the sidebar opens another file, not a folder', async () => {
+  const { deps: d, opened } = deps();
+  let folders = 0;
+  d.pickFolder = async () => (folders++, null);
+  const el = mount(d);
+  await waitFor(() => el.screen === 'start');
+  el.querySelector('hmd-start-screen')!.dispatchEvent(new CustomEvent('hmd-start-pick-file', { bubbles: true, detail: null }));
+  await waitFor(() => el.screen === 'file');
+  const first = el.querySelector('hmd-workspace')!;
+  first.dispatchEvent(new CustomEvent('hmd-workspace-change-folder', { bubbles: true, detail: null }));
+  await waitFor(() => el.querySelector('hmd-workspace') !== first && !!el.querySelector('hmd-workspace'));
+  assert.equal(folders, 0);
+  assert.equal(opened.length, 2);
 });

@@ -5,6 +5,7 @@ import { HmdElement } from '../../dom/element';
 import { el } from '../../dom/el';
 import { RenderLoop } from '../../dom/renderLoop';
 import type { StoredWorkspace } from '../../fs/handleStore';
+import type { SingleFile } from '../../fs/singleFile';
 import type { UpdateFlow } from '../../pwa/updateFlow';
 import type { I18nStore } from '../../state/i18nStore';
 import type { RouteStore } from '../../state/routeStore';
@@ -14,10 +15,10 @@ import type { HmdStartScreen } from '../start-screen/start-screen.element';
 import type { HmdUpdateNotice } from '../update-notice/update-notice.element';
 import type { HmdWorkspace } from '../workspace/workspace.element';
 import { browserAppDeps, type AppDeps } from './appDeps';
-import { afterSwitch, type Screen as AppScreen } from './screens';
+import { afterFileOpen, afterSwitch, type Screen as AppScreen } from './screens';
 import './app.css';
 
-type Screen = AppScreen<StoredWorkspace, Workspace>;
+type Screen = AppScreen<StoredWorkspace, Workspace, SingleFile>;
 
 /**
  * Radice dell'app (era App.tsx): schermata iniziale (browser non supportato, prima apertura, ripresa
@@ -43,6 +44,8 @@ export class HmdApp extends HmdElement {
    * arrivato dopo il distacco si butta senza effetti (né schermata, né `setUpdateWorkspace`, né salvataggio).
    */
   #alive = new AbortController();
+  /** Un file è arrivato da «Apri con… HouseMD»: l'avvio non riapre più la cartella salvata sopra di lui. */
+  #launched = false;
   /** Scelta o ripresa partita con il focus nella schermata iniziale. */
   #focusOnOpen = false;
   #start: HmdStartScreen | null = null;
@@ -92,16 +95,21 @@ export class HmdApp extends HmdElement {
 
   /** Avvio: la cartella salvata, riaperta se c'è ancora il permesso. Uno workspace aperto dopo il distacco si butta. */
   #startBoot(deps: AppDeps, signal: AbortSignal): void {
+    deps.onLaunchFile((file) => {
+      if (signal.aborted) return;
+      this.#launched = true;
+      this.#chooseFile(async () => file);
+    });
     if (!deps.isSupported()) return this.#show({ kind: 'unsupported' });
     void (async () => {
       const stored = await deps.loadWorkspace().catch(() => null);
-      if (signal.aborted) return;
+      if (signal.aborted || this.#launched) return;
       if (!stored) return this.#show({ kind: 'start' });
       const access = await deps.hasAccess(stored.handle);
-      if (signal.aborted) return;
+      if (signal.aborted || this.#launched) return;
       if (!access) return this.#show({ kind: 'resume', stored });
       const workspace = await deps.openWorkspace(stored);
-      if (signal.aborted) return workspace.dispose();
+      if (signal.aborted || this.#launched) return workspace.dispose();
       this.#show({ kind: 'open', stored, workspace });
     })();
   }
@@ -114,12 +122,13 @@ export class HmdApp extends HmdElement {
 
   /** Una schermata nuova; un'apertura riuscita vuole un hmd-workspace nuovo. Lo stato si salva prima del render. */
   #show(screen: Screen): void {
-    if (screen.kind === 'open') this.#workspace = null;
+    const opened = screen.kind === 'open' || screen.kind === 'file';
+    if (opened) this.#workspace = null;
     this.#screen = screen;
-    this.#deps.setUpdateWorkspace(screen.kind === 'open' ? screen.workspace : null);
+    this.#deps.setUpdateWorkspace(opened ? screen.workspace : null);
     this.#loop.update();
     // Il pulsante della schermata iniziale, che aveva il focus, non c'è più: il focus va all'albero.
-    if (screen.kind === 'open' && this.#focusOnOpen) this.#workspace?.focusStart();
+    if (opened && this.#focusOnOpen) this.#workspace?.focusStart();
     this.#focusOnOpen = false;
   }
 
@@ -143,7 +152,7 @@ export class HmdApp extends HmdElement {
     const signal = this.#alive.signal;
     void this.#exclusive(async () => {
       const screen = this.#screen;
-      const current = screen.kind === 'open' ? screen.workspace : null;
+      const current = screen.kind === 'open' || screen.kind === 'file' ? screen.workspace : null;
       const result = await switchFolder({
         pick: () => deps.pickFolder(),
         current,
@@ -170,6 +179,42 @@ export class HmdApp extends HmdElement {
     });
   }
 
+  /**
+   * Apre un file singolo (da «Apri un file» o dal sistema) con lo stesso giro del cambio cartella: il documento aperto
+   * si mette al sicuro e si chiude prima, e un errore lascia tutto com'era.
+   */
+  #chooseFile(pick: () => Promise<SingleFile | null> = () => this.#deps.pickFile()): void {
+    const deps = this.#deps;
+    const signal = this.#alive.signal;
+    void this.#exclusive(async () => {
+      const screen = this.#screen;
+      const current = screen.kind === 'open' || screen.kind === 'file' ? screen.workspace : null;
+      const result = await switchFolder({
+        pick,
+        current,
+        signal,
+        open: async (file: SingleFile) => {
+          // Un'identità nuova a ogni apertura: bozze di emergenza e cronologia non si mescolano con altri file omonimi.
+          const workspaceId = `file:${crypto.randomUUID()}`;
+          return { file, workspaceId, workspace: await deps.openFileWorkspace(file, workspaceId) };
+        },
+        discard: ({ workspace }) => workspace.dispose(),
+      });
+      if (signal.aborted) return;
+      match(afterFileOpen<StoredWorkspace, Workspace, SingleFile>(result, current !== null, deps.isSupported()))
+        .with({ kind: 'show' }, ({ screen: next }) => this.#show(next))
+        .with({ kind: 'reportError' }, ({ detail }) => current?.reportFolderError(detail))
+        .with({ kind: 'stay' }, () => {})
+        .exhaustive();
+    });
+  }
+
+  /** Il pulsante con il nome nella sidebar: un'altra cartella, o un altro file se è aperto un file singolo. */
+  #changeFolder(): void {
+    if (this.#screen.kind === 'file') this.#chooseFile();
+    else this.#choose();
+  }
+
   #resume(): void {
     const deps = this.#deps;
     const signal = this.#alive.signal;
@@ -189,13 +234,13 @@ export class HmdApp extends HmdElement {
     // La schermata iniziale resta lo stesso elemento tra le sue modalità (come il tag in App.tsx).
     const start = screen.kind === 'unsupported' || screen.kind === 'start' || screen.kind === 'resume';
     if (!start) this.#start = null;
-    if (screen.kind !== 'open') this.#workspace = null;
+    if (screen.kind !== 'open' && screen.kind !== 'file') this.#workspace = null;
     const content = match(screen)
       .with({ kind: 'boot' }, () => null)
-      .with({ kind: 'unsupported' }, () => {
+      .with({ kind: 'unsupported' }, ({ error }) => {
         const s = this.#startScreen(i18n);
         // Le proprietà che il ramo non passa tornano al default (React 19 le azzerava sullo stesso elemento).
-        Object.assign(s, { mode: 'unsupported', reason: this.#deps.unsupportedReason(), error: undefined, folderName: '', busy: false });
+        Object.assign(s, { mode: 'unsupported', reason: this.#deps.unsupportedReason(), error, folderName: '', busy: this.#switching });
         return s;
       })
       .with({ kind: 'start' }, ({ error }) => {
@@ -208,12 +253,14 @@ export class HmdApp extends HmdElement {
         Object.assign(s, { mode: 'resume', reason: undefined, error: undefined, folderName: stored.handle.name, busy: this.#switching });
         return s;
       })
-      .with({ kind: 'open' }, ({ stored, workspace }) => {
-        const w = (this.#workspace ??= el('hmd-workspace', { on: { 'hmd-workspace-change-folder': () => this.#choose() } }));
+      .with({ kind: 'open' }, { kind: 'file' }, (opened) => {
+        const { workspace } = opened;
+        const w = (this.#workspace ??= el('hmd-workspace', { on: { 'hmd-workspace-change-folder': () => this.#changeFolder() } }));
         // Proprietà prima dell'inserimento (lo workspace legge le preferenze e apre la sessione AI collegandosi).
         if (w.workspace !== workspace) {
-          w.workspaceId = stored.workspaceId;
-          w.handle = stored.handle;
+          w.workspaceId = opened.kind === 'open' ? opened.stored.workspaceId : opened.workspaceId;
+          w.handle = opened.kind === 'open' ? opened.stored.handle : null;
+          w.singleFile = opened.kind === 'file' ? opened.file : null;
           w.i18n = i18n;
           w.theme = this.#theme;
           w.route = this.#route;
@@ -238,7 +285,7 @@ export class HmdApp extends HmdElement {
   }
 
   #startScreen(i18n: I18nStore): HmdStartScreen {
-    const s = (this.#start ??= el('hmd-start-screen', { on: { 'hmd-start-pick': () => this.#choose(), 'hmd-start-resume': () => this.#resume() } }));
+    const s = (this.#start ??= el('hmd-start-screen', { on: { 'hmd-start-pick': () => this.#choose(), 'hmd-start-pick-file': () => this.#chooseFile(), 'hmd-start-resume': () => this.#resume() } }));
     if (s.i18n !== i18n) s.i18n = i18n;
     return s;
   }

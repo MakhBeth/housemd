@@ -39,14 +39,19 @@ test('the same tree as StartScreen.tsx: main, panel, hidden title, three logos, 
   el.remove();
 });
 
-test('start: one primary button that sends hmd-start-pick; no message without an error', () => {
+test('start: open folder (primary, hmd-start-pick) then open a file (secondary, hmd-start-pick-file); no message without an error', () => {
   const { el, buttons } = mount();
-  let picks = 0;
-  el.addEventListener('hmd-start-pick', () => picks++);
-  assert.deepEqual(buttons().map((b) => [b.className, b.textContent]), [['primary', EN_MESSAGES['start.openFolder']]]);
+  const events: string[] = [];
+  el.addEventListener('hmd-start-pick', () => events.push('pick'));
+  el.addEventListener('hmd-start-pick-file', () => events.push('file'));
+  assert.deepEqual(buttons().map((b) => [b.className, b.textContent]), [
+    ['primary', EN_MESSAGES['start.openFolder']],
+    ['secondary', EN_MESSAGES['start.openFile']],
+  ]);
   assert.equal(el.querySelector('.message'), null);
   buttons()[0].click();
-  assert.equal(picks, 1);
+  buttons()[1].click();
+  assert.deepEqual(events, ['pick', 'file']);
   el.remove();
 });
 
@@ -61,7 +66,7 @@ test('start with an error: the message sits between the tagline and the button',
   el.remove();
 });
 
-test('resume: resume (primary) then open another (secondary), each with its event', () => {
+test('resume: resume (primary) then open another folder and open a file (secondary), each with its event', () => {
   const { el, buttons } = mount({ mode: 'resume', folderName: 'notes' });
   const events: string[] = [];
   el.addEventListener('hmd-start-resume', () => events.push('resume'));
@@ -69,6 +74,7 @@ test('resume: resume (primary) then open another (secondary), each with its even
   assert.deepEqual(buttons().map((b) => [b.className, b.textContent]), [
     ['primary', t('start.resume', { folder: 'notes' })],
     ['secondary', EN_MESSAGES['start.openOther']],
+    ['secondary', EN_MESSAGES['start.openFile']],
   ]);
   buttons()[0].click();
   buttons()[1].click();
@@ -76,10 +82,14 @@ test('resume: resume (primary) then open another (secondary), each with its even
   el.remove();
 });
 
-test('unsupported: the reason and no buttons', () => {
+test('unsupported: the reason and only open a file, as the primary button', () => {
   const { el, buttons } = mount({ mode: 'unsupported', reason: 'firefox' });
+  let files = 0;
+  el.addEventListener('hmd-start-pick-file', () => files++);
   assert.equal(el.querySelector('.message')!.textContent, EN_MESSAGES['unsupported.firefox']);
-  assert.deepEqual(buttons(), []);
+  assert.deepEqual(buttons().map((b) => [b.className, b.textContent]), [['primary', EN_MESSAGES['start.openFile']]]);
+  buttons()[0].click();
+  assert.equal(files, 1);
   el.remove();
 });
 
