@@ -5,7 +5,8 @@ import { HmdElement } from '../../dom/element';
 import { el } from '../../dom/el';
 import { RenderLoop } from '../../dom/renderLoop';
 import type { StoredWorkspace } from '../../fs/handleStore';
-import type { SingleFile } from '../../fs/singleFile';
+import { pendingDownload, type PendingCopy, type SingleFile } from '../../fs/singleFile';
+import { showConfirmDialog } from '../dialogs/confirmDialog';
 import type { UpdateFlow } from '../../pwa/updateFlow';
 import type { I18nStore } from '../../state/i18nStore';
 import type { RouteStore } from '../../state/routeStore';
@@ -46,6 +47,8 @@ export class HmdApp extends HmdElement {
   #alive = new AbortController();
   /** Un file è arrivato da «Apri con… HouseMD»: l'avvio non riapre più la cartella salvata sopra di lui. */
   #launched = false;
+  /** Copia non scaricata di una sessione precedente, offerta nella schermata iniziale (la più recente). */
+  #recoverable: PendingCopy | null = null;
   /** Scelta o ripresa partita con il focus nella schermata iniziale. */
   #focusOnOpen = false;
   #start: HmdStartScreen | null = null;
@@ -100,6 +103,11 @@ export class HmdApp extends HmdElement {
       this.#launched = true;
       this.#chooseFile(async () => file);
     });
+    void deps.listRecoverable().then((copies) => {
+      if (signal.aborted) return;
+      this.#recoverable = copies.at(-1) ?? null;
+      this.#loop.update();
+    }, () => undefined);
     if (!deps.isSupported()) return this.#show({ kind: 'unsupported' });
     void (async () => {
       const stored = await deps.loadWorkspace().catch(() => null);
@@ -147,10 +155,30 @@ export class HmdApp extends HmdElement {
     }
   }
 
+  /**
+   * Lasciare un file singolo in memoria con modifiche non scaricate: si chiede prima (Annulla resta sul file, dove
+   * c'è «Scarica il file»). Chi va avanti ritrova la copia nella schermata iniziale.
+   */
+  async #canLeave(signal: AbortSignal): Promise<boolean> {
+    const screen = this.#screen;
+    if (screen.kind !== 'file') return true;
+    await screen.workspace.flush().catch(() => undefined);
+    if (signal.aborted || !pendingDownload(screen.file)) return !signal.aborted;
+    const t = this.#i18n!.t;
+    return showConfirmDialog({
+      title: t('singleFile.leaveTitle'),
+      message: t('singleFile.leaveMessage', { file: screen.file.name }),
+      confirmLabel: t('singleFile.leaveConfirm'),
+      t,
+      signal,
+    });
+  }
+
   #choose(): void {
     const deps = this.#deps;
     const signal = this.#alive.signal;
     void this.#exclusive(async () => {
+      if (!(await this.#canLeave(signal))) return;
       const screen = this.#screen;
       const current = screen.kind === 'open' || screen.kind === 'file' ? screen.workspace : null;
       const result = await switchFolder({
@@ -187,6 +215,7 @@ export class HmdApp extends HmdElement {
     const deps = this.#deps;
     const signal = this.#alive.signal;
     void this.#exclusive(async () => {
+      if (!(await this.#canLeave(signal))) return;
       const screen = this.#screen;
       const current = screen.kind === 'open' || screen.kind === 'file' ? screen.workspace : null;
       const result = await switchFolder({
@@ -195,7 +224,8 @@ export class HmdApp extends HmdElement {
         signal,
         open: async (file: SingleFile) => {
           // Un'identità nuova a ogni apertura: bozze di emergenza e cronologia non si mescolano con altri file omonimi.
-          const workspaceId = `file:${crypto.randomUUID()}`;
+          // Una copia recuperata riprende la sua sessione (stesse bozze, stessa copia di emergenza).
+          const workspaceId = file.sessionId ?? `file:${crypto.randomUUID()}`;
           return { file, workspaceId, workspace: await deps.openFileWorkspace(file, workspaceId) };
         },
         discard: ({ workspace }) => workspace.dispose(),
@@ -206,6 +236,17 @@ export class HmdApp extends HmdElement {
         .with({ kind: 'reportError' }, ({ detail }) => current?.reportFolderError(detail))
         .with({ kind: 'stay' }, () => {})
         .exhaustive();
+    });
+  }
+
+  /** «Riprendi»: la copia non scaricata torna aperta, ancora da scaricare. */
+  #recover(): void {
+    const copy = this.#recoverable;
+    if (!copy) return;
+    this.#chooseFile(async () => {
+      const file = await this.#deps.recoverFile(copy);
+      if (this.#recoverable === copy) this.#recoverable = null;
+      return file;
     });
   }
 
@@ -240,17 +281,17 @@ export class HmdApp extends HmdElement {
       .with({ kind: 'unsupported' }, ({ error }) => {
         const s = this.#startScreen(i18n);
         // Le proprietà che il ramo non passa tornano al default (React 19 le azzerava sullo stesso elemento).
-        Object.assign(s, { mode: 'unsupported', reason: this.#deps.unsupportedReason(), error, folderName: '', busy: this.#switching });
+        Object.assign(s, { mode: 'unsupported', reason: this.#deps.unsupportedReason(), error, folderName: '', busy: this.#switching, recoverName: this.#recoverable?.name ?? '' });
         return s;
       })
       .with({ kind: 'start' }, ({ error }) => {
         const s = this.#startScreen(i18n);
-        Object.assign(s, { mode: 'start', reason: undefined, error, folderName: '', busy: this.#switching });
+        Object.assign(s, { mode: 'start', reason: undefined, error, folderName: '', busy: this.#switching, recoverName: this.#recoverable?.name ?? '' });
         return s;
       })
       .with({ kind: 'resume' }, ({ stored }) => {
         const s = this.#startScreen(i18n);
-        Object.assign(s, { mode: 'resume', reason: undefined, error: undefined, folderName: stored.handle.name, busy: this.#switching });
+        Object.assign(s, { mode: 'resume', reason: undefined, error: undefined, folderName: stored.handle.name, busy: this.#switching, recoverName: this.#recoverable?.name ?? '' });
         return s;
       })
       .with({ kind: 'open' }, { kind: 'file' }, (opened) => {
@@ -285,7 +326,7 @@ export class HmdApp extends HmdElement {
   }
 
   #startScreen(i18n: I18nStore): HmdStartScreen {
-    const s = (this.#start ??= el('hmd-start-screen', { on: { 'hmd-start-pick': () => this.#choose(), 'hmd-start-pick-file': () => this.#chooseFile(), 'hmd-start-resume': () => this.#resume() } }));
+    const s = (this.#start ??= el('hmd-start-screen', { on: { 'hmd-start-pick': () => this.#choose(), 'hmd-start-pick-file': () => this.#chooseFile(), 'hmd-start-recover': () => this.#recover(), 'hmd-start-resume': () => this.#resume() } }));
     if (s.i18n !== i18n) s.i18n = i18n;
     return s;
   }

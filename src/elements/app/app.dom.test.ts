@@ -62,6 +62,8 @@ function deps(overrides: Partial<AppDeps> = {}) {
       opened.push(workspace);
       return workspace;
     },
+    listRecoverable: async () => [],
+    recoverFile: async () => null,
     onLaunchFile: (listener) => void (launch = listener),
     onDbBlocked: (listener) => ((blocked = listener), () => void (blocked = null)),
     setUpdateWorkspace: (workspace) => void log.push(`update ${workspace ? 'open' : 'none'}`),
@@ -308,4 +310,45 @@ test('with a single file open, the name button in the sidebar opens another file
   await waitFor(() => el.querySelector('hmd-workspace') !== first && !!el.querySelector('hmd-workspace'));
   assert.equal(folders, 0);
   assert.equal(opened.length, 2);
+});
+
+test('leaving a single file with changes not downloaded asks first: Cancel stays, going on opens the other file', async () => {
+  const first = textFile('a.md', '# A');
+  const files = [first, textFile('b.md', '# B')];
+  const { deps: d } = deps({ isSupported: () => false, pickFile: async () => files.shift() ?? null });
+  const el = mount(d);
+  el.querySelector('hmd-start-screen')!.dispatchEvent(new CustomEvent('hmd-start-pick-file', { bubbles: true, detail: null }));
+  await waitFor(() => el.screen === 'file');
+  await first.write('# A changed');
+  const workspace = el.querySelector('hmd-workspace')!;
+  const change = () => workspace.dispatchEvent(new CustomEvent('hmd-workspace-change-folder', { bubbles: true, detail: null }));
+  change();
+  await waitFor(() => !!document.querySelector('dialog[open]'));
+  assert.equal(document.querySelector('dialog h2')!.textContent, EN_MESSAGES['singleFile.leaveTitle']);
+  (document.querySelector('dialog button.secondary') as HTMLButtonElement).click();
+  await waitFor(() => !document.querySelector('dialog[open]'));
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.ok(el.querySelector('hmd-workspace') === workspace, 'cancel: still on a.md');
+  assert.equal(files.length, 1, 'no file picked');
+  change();
+  await waitFor(() => !!document.querySelector('dialog[open]'));
+  (document.querySelector('dialog button.danger') as HTMLButtonElement).click();
+  await waitFor(() => el.querySelector('hmd-workspace')?.singleFile?.name === 'b.md');
+});
+
+test('a copy not downloaded from an earlier session: offered on the start screen and reopened in its session, still to download', async () => {
+  const copy = { key: 'file:old/note.md', sessionId: 'file:old', name: 'note.md' };
+  const { deps: d } = deps({
+    isSupported: () => false,
+    listRecoverable: async () => [copy],
+    recoverFile: async () => memoryFile({ name: 'note.md', blob: new Blob(['RECOVER ME']), lastModified: 1, pending: true, sessionId: 'file:old' }),
+  });
+  const el = mount(d);
+  const label = EN_MESSAGES['start.recover'].replace('{file}', 'note.md');
+  await waitFor(() => [...el.querySelectorAll('hmd-start-screen button')].some((b) => b.textContent === label));
+  [...el.querySelectorAll<HTMLButtonElement>('hmd-start-screen button')].find((b) => b.textContent === label)!.click();
+  await waitFor(() => el.screen === 'file');
+  const workspace = el.querySelector('hmd-workspace')!;
+  assert.equal(workspace.workspaceId, 'file:old');
+  await waitFor(() => workspace.workspace?.getState().doc?.text === 'RECOVER ME');
 });

@@ -15,12 +15,13 @@ export class HmdStartScreen extends HmdElement {
   #reason: UnsupportedReason | undefined;
   #error: string | undefined;
   #folderName = '';
+  #recoverName = '';
   #busy = false;
   #i18n: I18nStore | null = null;
   /** Un pulsante è stato attivato durante un cambio: la nota resta finché il cambio dura. */
   #note = false;
   #announceAgain = false;
-  #parts: { main: HTMLElement; panel: HTMLElement; note: HTMLParagraphElement; title: HTMLHeadingElement; tagline: HTMLParagraphElement; message: HTMLParagraphElement; pick: HTMLButtonElement; resume: HTMLButtonElement; other: HTMLButtonElement; file: HTMLButtonElement } | null = null;
+  #parts: { main: HTMLElement; panel: HTMLElement; note: HTMLParagraphElement; title: HTMLHeadingElement; tagline: HTMLParagraphElement; message: HTMLParagraphElement; pick: HTMLButtonElement; resume: HTMLButtonElement; other: HTMLButtonElement; file: HTMLButtonElement; recover: HTMLButtonElement } | null = null;
 
   get mode(): StartMode { return this.#mode; }
   set mode(value: StartMode) { this.#mode = value ?? 'start'; this.#render(); }
@@ -30,6 +31,9 @@ export class HmdStartScreen extends HmdElement {
   set error(value: string | undefined) { this.#error = value ?? undefined; this.#render(); }
   get folderName(): string { return this.#folderName; }
   set folderName(value: string) { this.#folderName = value ?? ''; this.#render(); }
+  /** Nome del file singolo con una copia non scaricata da riprendere ('' = nessuna). */
+  get recoverName(): string { return this.#recoverName; }
+  set recoverName(value: string) { this.#recoverName = value ?? ''; this.#render(); }
   get busy(): boolean { return this.#busy; }
   set busy(value: boolean) { this.#busy = !!value; this.#render(); }
   get i18n(): I18nStore | null { return this.#i18n; }
@@ -66,13 +70,14 @@ export class HmdStartScreen extends HmdElement {
         resume: el('button', { class: 'primary', on: { click: () => this.#activate('hmd-start-resume') } }),
         other: el('button', { class: 'secondary', on: { click: () => this.#activate('hmd-start-pick') } }),
         file: el('button', { class: 'secondary', on: { click: () => this.#activate('hmd-start-pick-file') } }),
+        recover: el('button', { class: 'secondary', on: { click: () => this.#activate('hmd-start-recover') } }),
       };
     }
     if (this.#i18n) this.watch(this.#i18n, () => this.#render(), signal);
   }
 
   /** Durante un cambio non se ne chiede un altro: solo la nota, e il focus resta sul pulsante (mai disabled). */
-  #activate(name: 'hmd-start-pick' | 'hmd-start-resume' | 'hmd-start-pick-file'): void {
+  #activate(name: 'hmd-start-pick' | 'hmd-start-resume' | 'hmd-start-pick-file' | 'hmd-start-recover'): void {
     if (folderBlocker(this.#busy)) {
       this.#announceAgain = this.#note;
       this.#note = true;
@@ -84,22 +89,23 @@ export class HmdStartScreen extends HmdElement {
     const parts = this.#parts;
     const i18n = this.#i18n;
     if (!parts || !i18n) return;
-    const view = startView({ mode: this.#mode, reason: this.#reason, error: this.#error });
+    const view = startView({ mode: this.#mode, reason: this.#reason, error: this.#error, recover: this.#recoverName !== '' });
     setText(parts.title, i18n.t('app.name'));
     setText(parts.tagline, i18n.t('start.tagline'));
     setText(parts.pick, i18n.t('start.openFolder'));
     setText(parts.resume, i18n.t('start.resume', { folder: this.#folderName }));
     setText(parts.other, i18n.t('start.openOther'));
     setText(parts.file, i18n.t('start.openFile'));
+    setText(parts.recover, i18n.t('start.recover', { file: this.#recoverName }));
     // Dove le cartelle non si aprono, «Apri un file» è l'azione principale.
     parts.file.className = this.#mode === 'unsupported' ? 'primary' : 'secondary';
     if (view.message) setText(parts.message, i18n.t(view.message.key, view.message.params));
     // Messaggio e pulsanti si montano e si smontano come in React: nodi assenti, non nascosti.
     const wanted: HTMLElement[] = [
       ...(view.message ? [parts.message] : []),
-      ...view.buttons.map((b) => ({ pick: parts.pick, resume: parts.resume, 'pick-other': parts.other, 'pick-file': parts.file })[b]),
+      ...view.buttons.map((b) => ({ pick: parts.pick, resume: parts.resume, 'pick-other': parts.other, 'pick-file': parts.file, recover: parts.recover })[b]),
     ];
-    for (const node of [parts.message, parts.pick, parts.resume, parts.other, parts.file]) if (!wanted.includes(node)) node.remove();
+    for (const node of [parts.message, parts.pick, parts.resume, parts.other, parts.file, parts.recover]) if (!wanted.includes(node)) node.remove();
     let anchor: Element = parts.tagline;
     for (const node of wanted) {
       if (anchor.nextElementSibling !== node) anchor.after(node);

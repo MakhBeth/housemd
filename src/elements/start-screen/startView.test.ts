@@ -22,3 +22,8 @@ test('start: the open button, with the error message only after a failed open', 
 test('resume: resume first, then open another folder or a single file', () => {
   assert.deepEqual(startView({ mode: 'resume' }), { message: null, buttons: ['resume', 'pick-other', 'pick-file'] });
 });
+
+test('a copy to recover: a last secondary button in every mode', () => {
+  assert.deepEqual(startView({ mode: 'start', recover: true }).buttons, ['pick', 'pick-file', 'recover']);
+  assert.deepEqual(startView({ mode: 'unsupported', recover: true }).buttons, ['pick-file', 'recover']);
+});

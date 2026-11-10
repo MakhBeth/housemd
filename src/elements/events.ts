@@ -86,6 +86,8 @@ export interface HmdEvents {
   'hmd-start-pick': CustomEvent<null>;
   /** Schermata iniziale: aprire un file singolo (anche senza accesso alle cartelle). */
   'hmd-start-pick-file': CustomEvent<null>;
+  /** Schermata iniziale: riprendere la copia non scaricata di un file singolo. */
+  'hmd-start-recover': CustomEvent<null>;
   /** Schermata iniziale: riprendere l'accesso alla cartella ricordata. */
   'hmd-start-resume': CustomEvent<null>;
   /** Albero dei file: voce del menu ⋯ scelta (`node`: la riga del menu; null solo prima di aprirlo). */

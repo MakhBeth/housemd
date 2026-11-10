@@ -1,7 +1,7 @@
 import { canPickFileHandle, hasAccess, isSupported, onLaunchFile, pickFileHandle, pickFolder, requestAccess, unsupportedReason, type UnsupportedReason } from '../../fs/access';
 import { pickFileInput } from '../../fs/fileInput';
 import { fsaFile, fsaOps } from '../../fs/fsaOps';
-import { memoryFile, singleFileOps, type SingleFile } from '../../fs/singleFile';
+import { isMemoryFile, listPending, memoryFile, mirrorPending, recoverPending, singleFileOps, type PendingCopy, type SingleFile } from '../../fs/singleFile';
 import { findKnownWorkspaceId, loadWorkspace, saveWorkspace, type StoredWorkspace } from '../../fs/handleStore';
 import { createWorkspaceFS } from '../../fs/workspaceFS';
 import { indexedDbHistoryStore } from '../../history/historyStore';
@@ -27,6 +27,9 @@ export interface AppDeps {
   /** «Apri un file»: il file vero dove c'è la File System Access API, altrimenti una copia da scaricare. */
   pickFile(): Promise<SingleFile | null>;
   openFileWorkspace(file: SingleFile, workspaceId: string): Promise<Workspace>;
+  /** Copie in memoria non scaricate di sessioni precedenti (crash, chiusura, cambio file). */
+  listRecoverable(): Promise<PendingCopy[]>;
+  recoverFile(copy: PendingCopy): Promise<SingleFile | null>;
   /** «Apri con… HouseMD» dal sistema (PWA installata). */
   onLaunchFile(listener: (file: SingleFile) => void): void;
   onDbBlocked(listener: () => void): () => void;
@@ -68,6 +71,8 @@ export const browserAppDeps: AppDeps = {
     return file && memoryFile({ name: file.name, blob: file, lastModified: file.lastModified });
   },
   async openFileWorkspace(file, workspaceId) {
+    // La copia in memoria si tiene anche nel buffer di emergenza finché non si scarica (vive quanto il file).
+    if (isMemoryFile(file)) mirrorPending(file, buffers, workspaceId);
     const workspace = new Workspace({
       fs: createWorkspaceFS(singleFileOps(file)),
       workspaceId,
@@ -79,6 +84,8 @@ export const browserAppDeps: AppDeps = {
     await workspace.load();
     return workspace;
   },
+  listRecoverable: () => listPending(buffers),
+  recoverFile: (copy) => recoverPending(buffers, copy),
   onLaunchFile(listener) {
     onLaunchFile((handle) => listener(fsaFile(handle, () => requestAccess(handle))));
   },

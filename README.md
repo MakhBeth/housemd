@@ -26,7 +26,7 @@ oppure, con la PWA installata, «Apri con… HouseMD» dal sistema. Cosa funzion
 | Cartelle | sì | no |
 | Aprire un file | «Apri un file», «Apri con… HouseMD» (PWA installata) | «Apri un file» (`<input type="file">`) |
 | Salvare | sul file vero, con il salvataggio automatico | «Scarica il file» nella barra: il browser lo mette nei download, mai sopra l'originale |
-| Modifiche non salvate alla chiusura | copia di emergenza nel browser | copia di emergenza nel browser e conferma alla chiusura finché non si scarica |
+| Modifiche non salvate alla chiusura | copia di emergenza nel browser | copia di emergenza nel browser finché non si scarica (si riprende con «Riprendi … (non scaricato)» nella schermata iniziale), conferma alla chiusura e prima di aprire un altro file |
 
 Con un file singolo non ci sono nuovi file e cartelle, rinomina ed eliminazione, link `[[wikilink]]` ad altre
 note, immagini relative alla cartella né la riapertura al prossimo avvio: lo dice una nota fissa sotto il nome
