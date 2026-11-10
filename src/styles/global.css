@@ -34,6 +34,8 @@
     --c-border: light-dark(#e2ded5, #2e2e36);
     --c-text: light-dark(#1f1d1a, #e7e5e0);
     --c-muted: light-dark(#6b665c, #9a978f);
+    /* Testo fuori fuoco: contrasto ≈ 4.55:1 su --c-surface (minimo AA 4.5:1), verificato da focusContrast.test.ts. */
+    --c-focus-dim: light-dark(#7a756c, #888680);
     --c-accent: light-dark(#0f766e, #2dd4bf);
     --c-accent-soft: light-dark(#ccfbf1, #134e4a);
     --c-danger: light-dark(#b91c1c, #f87171);
