@@ -12,6 +12,8 @@ export class FakeModel {
   comment = 'Fixed';
   /** Richieste di chat ricevute (non conta l'elenco dei modelli). */
   requests = 0;
+  /** Corpi JSON delle richieste di chat, nello stesso ordine di `requests`. */
+  bodies: unknown[] = [];
   /** Stato HTTP delle risposte di chat: diverso da 200 = errore del provider, con `errorBody` come corpo. */
   status = 200;
   errorBody = '';
@@ -41,6 +43,13 @@ export class FakeModel {
     await page.route(`${OLLAMA}/**`, (route) => this.#answer(route).catch(() => {}));
   }
 
+  /** Origine finta di un provider OpenAI-compatible remoto: stessa risposta, stesso registro di `requests`/`bodies`. */
+  static readonly REMOTE = 'https://models.example.test';
+
+  async remote(page: Page): Promise<void> {
+    await page.route(`${FakeModel.REMOTE}/**`, (route) => this.#answer(route).catch(() => {}));
+  }
+
   async #answer(route: Route): Promise<void> {
     const request = route.request();
     // L'app (localhost:4173) e il modello (localhost:11434) sono origini diverse: Chromium applica CORS
@@ -66,6 +75,7 @@ export class FakeModel {
       return;
     }
     this.requests++;
+    this.bodies.push(request.postDataJSON());
     const held = this.#held;
     if (held) await new Promise<void>((go) => held.push(go));
     if (this.status !== 200) {
