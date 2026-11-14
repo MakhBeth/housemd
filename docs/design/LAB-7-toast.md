@@ -620,3 +620,13 @@ Per ogni locale: chiave e testo esatto, incluso il numero di riga del catalogo c
 | `ai.error.syncLocked` | 279 | O ficheiro de sincronização está ocupado. Tente novamente mais tarde. |
 | `ai.error.syncStale` | 280 | Foram detetadas alterações simultâneas. Repita a sincronização. |
 | `ai.error.aiPendingUpdate` | 281 | Aceite ou descarte as propostas da IA, ou pare o pedido, antes de atualizar. |
+
+## Aggiornamento LAB-430: avvisi chiudibili e conferma «Nuovo file»
+
+Prove a mano di Davide dopo LAB-7: l'errore di salvataggio non si poteva chiudere e «Nuovo file» non confermava nulla. Queste regole sostituiscono quelle precedenti sui messaggi a rischio dati e sul focus.
+
+- **Tutti i messaggi persistenti si chiudono**, anche `saveFailed`, `bufferFailed`, `draftNotPersisted`, `deletedOutside`. Chiudere nasconde solo l'avviso: la bozza e il buffer restano, e un nuovo tentativo fallito lo ripresenta. Un salvataggio riuscito (anche su un percorso nuovo) lo toglie da solo, come prima.
+- **Nome accessibile completo**: il pulsante mostra «Chiudi» e ha `aria-label` `notice.closeNamed` («Chiudi avviso: {testo}»), che comincia col testo visibile (WCAG 2.5.3).
+- **Esc** con il focus sulla riga dell'avviso lo chiude (`stopPropagation`, non chiude altro).
+- **Focus dopo la chiusura**: se il focus era nel banner, va all'editor del documento aperto (altrimenti alla toolbar); le note locali con un controllo descritto lo restituiscono a quel controllo. Non si sposta il focus se era altrove.
+- **«Nuovo file»**: nuovo codice `fileCreated` («Creato {name}», `notice.fileCreated`), riga `status` nella sidebar (nel banner workspace se la sidebar è chiusa), un solo annuncio, chiudibile. Dopo la creazione il focus va all'editor del nuovo file. Prima non esisteva alcun messaggio di conferma: non era un canale non montato, mancava il codice.

@@ -65,6 +65,8 @@
   "conflict.reload": "Vom Datenträger neu laden",
   "conflict.overwrite": "Mit meinen Änderungen überschreiben",
   "notice.close": "Schließen",
+  "notice.closeNamed": "Hinweis schließen: {text}",
+  "notice.fileCreated": "{name} erstellt",
   "tree.label": "Dateien im Ordner",
   "tree.emptyFolder": "Leerer Ordner",
   "tree.noFiles": "Keine Markdown-Dateien",

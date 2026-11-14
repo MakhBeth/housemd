@@ -13,11 +13,13 @@ export interface TreeDialogDeps {
   signal?: AbortSignal;
   /** Percorsi della cartella, letti alla conferma: il disco può cambiare a dialog aperto. */
   paths: () => readonly string[];
+  /** Dopo «Nuovo file» riuscito: il focus va all'editor del nuovo file. */
+  created?: (path: string) => void;
   workspace: Pick<Workspace, 'createFile' | 'createFolder' | 'rename' | 'remove'>;
 }
 
 /** Apre il dialog chiesto da `dialogFor` e, se confermato, esegue l'operazione sul workspace. */
-export async function runTreeDialog(dialog: NonNullable<DialogState>, { t, signal, paths, workspace }: TreeDialogDeps): Promise<void> {
+export async function runTreeDialog(dialog: NonNullable<DialogState>, { t, signal, paths, workspace, created }: TreeDialogDeps): Promise<void> {
   const taken = t('name.error.taken');
   await match(dialog)
     .with({ kind: 'new-file' }, { kind: 'new-folder' }, async ({ kind, dir }) => {
@@ -33,7 +35,10 @@ export async function runTreeDialog(dialog: NonNullable<DialogState>, { t, signa
       });
       if (name === null) return;
       const path = joinPath(dir, name);
-      await (kind === 'new-file' ? workspace.createFile(path) : workspace.createFolder(path));
+      if (kind === 'new-file') {
+        await workspace.createFile(path);
+        created?.(path);
+      } else await workspace.createFolder(path);
     })
     .with({ kind: 'rename' }, async ({ node }) => {
       const to = (n: string) => joinPath(dirname(node.path), n);

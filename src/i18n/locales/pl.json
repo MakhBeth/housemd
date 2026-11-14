@@ -65,6 +65,8 @@
   "conflict.reload": "Wczytaj ponownie z dysku",
   "conflict.overwrite": "Nadpisz moimi zmianami",
   "notice.close": "Zamknij",
+  "notice.closeNamed": "Zamknij powiadomienie: {text}",
+  "notice.fileCreated": "Utworzono {name}",
   "tree.label": "Pliki w folderze",
   "tree.emptyFolder": "Pusty folder",
   "tree.noFiles": "Brak plików markdown",

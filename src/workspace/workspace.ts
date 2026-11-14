@@ -1164,7 +1164,10 @@ export class Workspace {
       this.bumpIndex();
       created = true;
     }, true);
-    if (created) await this.doOpenFile(path);
+    if (created) {
+      await this.doOpenFile(path);
+      this.notice('info', 'fileCreated', { name: path.split('/').pop() ?? path }, undefined, true);
+    }
   }
 
   private async doCreateFolder(path: string): Promise<void> {

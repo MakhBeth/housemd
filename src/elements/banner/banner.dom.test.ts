@@ -52,6 +52,17 @@ test('status rows live inside the polite container, alert rows beside it, button
   assert.equal(banner.querySelectorAll('button:not([hidden])').length, 0, 'describedby goes away with the message');
 });
 
+test('Escape on a row closes that message; the named Close carries the full accessible name', () => {
+  const banner = mount();
+  const seen: string[] = [];
+  banner.addEventListener('hmd-banner-close', (e) => seen.push((e as CustomEvent).detail.key));
+  banner.items = [{ key: 'k', kind: 'alert', text: 'Save failed', closeLabel: 'Close', closeName: 'Close notice: Save failed' }];
+  const close = banner.querySelector('button.close') as HTMLButtonElement;
+  assert.equal(close.getAttribute('aria-label'), 'Close notice: Save failed');
+  close.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+  assert.deepEqual(seen, ['k']);
+});
+
 test('Close and the action emit their events with the row key', () => {
   const banner = mount();
   const seen: string[] = [];
@@ -85,6 +96,7 @@ const CASES: Record<NoticeCode, { kind: 'error' | 'info'; role: 'alert' | 'statu
   newVersion: { kind: 'info', role: 'status' },
   reloadOtherTabs: { kind: 'info', role: 'status' },
   openFolderFailed: { kind: 'error', role: 'alert', params: { detail: 'denied' } },
+  fileCreated: { kind: 'info', role: 'status', params: { name: 'a.md' } },
 };
 
 const SLOTS = ['document', 'workspace', 'saveAll', 'sidebar', 'history'] as const;
@@ -106,7 +118,7 @@ for (const code of NOTICE_CODES.filter((c) => NOTICE_CHANNEL[c] !== 'app')) {
     assert.equal(node.textContent, expected);
     assert.ok(expected.length > 0 && !expected.includes('{'), 'every placeholder filled');
     const closable = banner.querySelector('button.close:not([hidden])');
-    assert.equal(!!closable, !['saveFailed', 'bufferFailed', 'draftNotPersisted', 'deletedOutside'].includes(code), 'data-risk errors have no Close');
+    assert.ok(closable, 'every message can be closed');
   });
 }
 

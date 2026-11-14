@@ -65,6 +65,8 @@
   "conflict.reload": "ディスクから再読み込み",
   "conflict.overwrite": "自分の変更で上書き",
   "notice.close": "閉じる",
+  "notice.closeNamed": "通知を閉じる：{text}",
+  "notice.fileCreated": "{name} を作成しました",
   "tree.label": "フォルダー内のファイル",
   "tree.emptyFolder": "空のフォルダー",
   "tree.noFiles": "markdown ファイルはありません",
