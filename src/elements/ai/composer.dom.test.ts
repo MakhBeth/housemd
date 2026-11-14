@@ -75,11 +75,11 @@ function focusoutOnRemove(node: Element): void {
 
 test('the same DOM as Composer.tsx: box, textarea, row with the two chips and Send; then the empty status note', () => {
   const { el, input, send, chip, note } = mount();
-  assert.deepEqual([...el.children].map((c) => `${c.localName}.${c.className}`), ['div.composer', 'p.note']);
+  assert.deepEqual([...el.children].map((c) => `${c.localName}.${c.className}`), ['div.composer', 'div.suggestions', 'p.note', 'p.note', 'p.visuallyHidden']);
   assert.equal(note().textContent, '');
   const box = el.firstElementChild!;
   assert.equal(box.className, 'composer');
-  assert.deepEqual([...box.children].map((c) => c.localName), ['textarea', 'div']);
+  assert.deepEqual([...box.children].map((c) => c.localName), ['textarea', 'ul', 'div']);
   assert.equal(input().className, 'input');
   assert.equal(input().getAttribute('aria-label'), EN_MESSAGES['ai.request']);
   assert.equal(input().getAttribute('placeholder'), EN_MESSAGES['ai.request']);
@@ -447,4 +447,147 @@ test('[LAB-409] a rejected send is an alert under the composer note, with its or
   assert.ok(send().getAttribute('aria-describedby')?.includes(note.id));
   el.remove();
   assert.equal(ai.getState().errorOrigin, null);
+});
+
+// --- contesto allegato (`@`) ---------------------------------------------------------------------
+
+const V = { lastModified: 1, size: 1 };
+const ENTRIES = [
+  { kind: 'directory', path: 'note' },
+  { kind: 'file', path: 'a.md', version: V },
+  { kind: 'file', path: 'note/idee.md', version: V },
+  { kind: 'file', path: 'note/altro.md', version: V },
+] as import('../../fs/types').Entry[];
+
+function mountContext(read?: (paths: string[]) => Promise<{ path: string; text: string }[] | { unreadable: string[] }>) {
+  const m = mount();
+  const reads: string[][] = [];
+  m.el.contextSource = { entries: ENTRIES, loading: false, read: async (paths) => (reads.push(paths), read ? read(paths) : paths.map((path) => ({ path, text: `testo di ${path}` }))) };
+  const drafts: { text: string; attachments: unknown }[] = [];
+  m.el.addEventListener('hmd-ai-draft', (event) => drafts.push((event as CustomEvent).detail));
+  const options = () => [...m.el.querySelectorAll<HTMLElement>('[role="option"]')];
+  const listbox = () => m.el.querySelector<HTMLElement>('[role="listbox"]')!;
+  const chips = () => [...m.el.querySelectorAll<HTMLElement>('.attachment')];
+  const typeAt = (value: string) => {
+    m.input().value = value;
+    m.input().setSelectionRange(value.length, value.length);
+    m.input().dispatchEvent(new Event('input', { bubbles: true }));
+  };
+  return { ...m, reads, drafts, options, listbox, chips, typeAt };
+}
+
+test('@ opens the list with the textbox semantics: aria-autocomplete, aria-controls, aria-activedescendant on the first option; mario@example.com does not', () => {
+  const c = mountContext();
+  assert.equal(c.input().getAttribute('aria-autocomplete'), 'list');
+  assert.equal(c.input().getAttribute('aria-haspopup'), 'listbox');
+  assert.equal(c.input().hasAttribute('aria-expanded'), false);
+  c.typeAt('mario@example.com');
+  assert.equal(c.options().length, 0);
+  assert.equal(c.input().hasAttribute('aria-controls'), false);
+  c.typeAt('@ide');
+  assert.equal(c.listbox().getAttribute('aria-label'), EN_MESSAGES['ai.context.suggestions']);
+  assert.ok(c.options().length > 0);
+  assert.equal(c.options()[0]!.textContent!.includes('idee.md'), true);
+  assert.equal(c.input().getAttribute('aria-controls'), c.listbox().id);
+  assert.equal(c.input().getAttribute('aria-activedescendant'), c.options()[0]!.id);
+  assert.equal(c.options()[0]!.getAttribute('aria-selected'), 'true');
+  assert.ok(c.options().every((o) => !o.querySelector('button')));
+});
+
+test('arrows move the active option, Enter picks it without sending, Esc closes without stopping', () => {
+  const c = mountContext();
+  c.typeAt('@note');
+  const first = c.input().getAttribute('aria-activedescendant');
+  assert.equal(c.key('ArrowDown').defaultPrevented, true);
+  assert.notEqual(c.input().getAttribute('aria-activedescendant'), first);
+  c.key('ArrowUp');
+  assert.equal(c.input().getAttribute('aria-activedescendant'), first);
+  c.running(true);
+  c.typeAt('@note');
+  c.key('Escape');
+  assert.equal(c.options().length, 0);
+  assert.equal(c.ai.calls.some((call) => call[0] === 'stop'), false, 'Esc con l\'elenco aperto non ferma');
+  c.running(false);
+  c.typeAt('@ide');
+  const event = c.key('Enter');
+  assert.equal(event.defaultPrevented, true);
+  assert.equal(c.input().value, '@note/idee.md ');
+  assert.equal(c.ai.calls.some((call) => call[0] === 'send'), false);
+  assert.deepEqual(c.drafts.at(-1), { text: '@note/idee.md ', attachments: [{ path: 'note/idee.md', kind: 'file' }] });
+  assert.equal(c.chips().length, 1);
+  assert.equal(c.options().length, 0);
+});
+
+test('chips: a folder shows its file count; the ✕ removes the reference from the text and focuses the box; editing the text drops the chip', () => {
+  const c = mountContext();
+  c.typeAt('@note');
+  c.key('Enter');
+  assert.equal(c.input().value, '@note/ ');
+  assert.equal(c.chips()[0]!.textContent, 'note/ · 2 files');
+  const remove = c.chips()[0]!.querySelector('button')!;
+  assert.equal(remove.getAttribute('aria-label'), 'Remove note/ from context');
+  remove.click();
+  assert.equal(c.input().value, '');
+  assert.equal(c.chips().length, 0);
+  assert.equal(document.activeElement, c.input());
+  assert.deepEqual(c.drafts.at(-1), { text: '', attachments: [] });
+  c.typeAt('@a');
+  c.key('Enter');
+  assert.equal(c.chips().length, 1);
+  c.typeAt('@x.md ');
+  assert.equal(c.chips().length, 0, 'il riferimento non c\'è più');
+});
+
+test('a hand-typed reference does not attach; a send with no chip goes straight through', () => {
+  const c = mountContext();
+  c.typeAt('leggi @a.md');
+  c.key('Escape');
+  assert.equal(c.chips().length, 0);
+  c.key('Enter');
+  const send = c.ai.calls.find((call) => call[0] === 'send')!;
+  assert.equal(send[1], 'leggi @a.md');
+  assert.equal(c.reads.length, 0);
+});
+
+test('send with a chip: reads the files, passes the same contents to send(), then empties box and chips', async () => {
+  const c = mountContext();
+  c.typeAt('@a');
+  c.key('Enter');
+  c.typeAt(`${c.input().value}riassumi`);
+  c.key('Enter');
+  await waitFor(() => c.ai.calls.some((call) => call[0] === 'send'));
+  assert.deepEqual(c.reads, [['a.md']]);
+  const send = c.ai.calls.find((call) => call[0] === 'send')!;
+  assert.deepEqual(send[4], [{ path: 'a.md', text: 'testo di a.md' }]);
+  assert.equal(c.input().value, '');
+  assert.equal(c.chips().length, 0);
+  assert.equal(c.send().hasAttribute('disabled'), false);
+  assert.equal(c.send().hasAttribute('aria-disabled'), false);
+});
+
+test('an unreadable file writes readError and keeps text and chips; nothing is sent', async () => {
+  const c = mountContext(async () => ({ unreadable: ['a.md'] }));
+  c.typeAt('@a');
+  c.key('Enter');
+  c.typeAt(`${c.input().value}ciao`);
+  c.key('Enter');
+  await waitFor(() => c.reads.length === 1);
+  await waitFor(() => (c.el.querySelectorAll('[role="status"]')[1]?.textContent ?? '').length > 0);
+  assert.match(c.el.querySelectorAll('[role="status"]')[1]!.textContent!, /a\.md/);
+  assert.equal(c.ai.calls.some((call) => call[0] === 'send'), false);
+  assert.equal(c.input().value, '@a.md ciao');
+  assert.equal(c.chips().length, 1);
+});
+
+test('over the limit: note with the totals, no send, text and chips intact', async () => {
+  const c = mountContext();
+  c.ai.contextCheckValue = { check: { kind: 'overLimit', totalTokens: 3000, limit: 1000, excess: 2000, top: [{ path: 'note/idee.md', tokens: 2500, via: 'note' }] }, profile: defaultProfile('ollama', 'o') };
+  c.typeAt('@note');
+  c.key('Enter');
+  c.typeAt(`${c.input().value}ciao`);
+  c.key('Enter');
+  await waitFor(() => /3,000/.test(c.el.querySelectorAll('[role="status"]')[1]?.textContent ?? ''));
+  assert.match(c.el.querySelectorAll('[role="status"]')[1]!.textContent!, /note\/idee\.md \(note\/\)/);
+  assert.equal(c.ai.calls.some((call) => call[0] === 'send'), false);
+  assert.equal(c.chips().length, 1);
 });

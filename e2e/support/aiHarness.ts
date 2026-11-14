@@ -74,6 +74,11 @@ export class FakeModel {
       await route.fulfill({ headers: cors, contentType: 'application/json', body: JSON.stringify({ models: this.models.map((name) => ({ name })) }) });
       return;
     }
+    // Elenco dei modelli di un provider OpenAI-compatible (origine finta): non è una richiesta di chat.
+    if (request.method() === 'GET' && request.url().includes('/models')) {
+      await route.fulfill({ headers: cors, contentType: 'application/json', body: JSON.stringify({ data: this.models.map((id) => ({ id })) }) });
+      return;
+    }
     this.requests++;
     this.bodies.push(request.postDataJSON());
     const held = this.#held;

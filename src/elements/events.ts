@@ -1,3 +1,4 @@
+import type { Attachment } from '../ai/contextRefs';
 import type { ChangeDesc } from '@codemirror/state';
 
 import type { AcceptBlocker } from '../ai/aiController';
@@ -22,7 +23,7 @@ export interface HmdEvents {
   /** Diff della revisione AI: «← accetta» o «→ rifiuta» di un blocco attivato quando non può, con la ragione (per la nota della barra). */
   'hmd-ai-block-blocked': CustomEvent<{ action: ControlAction; reason: AcceptBlocker }>;
   /** Composer AI: il testo scritto nella casella è cambiato (anche svuotata dopo l'invio), per conservarlo fuori. */
-  'hmd-ai-draft': CustomEvent<{ text: string }>;
+  'hmd-ai-draft': CustomEvent<{ text: string; attachments: Attachment[] }>;
   /** Chip del modello: aprire le impostazioni dei profili («Gestisci profili…», o il chip senza profili). */
   'hmd-ai-manage': CustomEvent<null>;
   /** Selettore del modello: modello scelto dall'elenco o scritto in «Altro…», con il suo contesto se noto. */

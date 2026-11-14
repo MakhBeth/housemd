@@ -7,6 +7,8 @@ import { builtInPresets, validatePreset } from './presets';
 import { mapScope, applyScope } from './scope';
 import { runRequest, createCursor, partialText, type RunInput, type RunCursor } from './runner';
 import type { AttachedFile } from './contextAttach';
+import { checkContext, type ContextCheck } from './contextCheck';
+import { buildPrompt } from './prompt';
 import { checkProposal } from './checks';
 export interface AiWorkspace { getDoc(): { path: string; textLf: string; conflict: unknown; updating: boolean } | null; snapshotBeforeAi(): void; openFile(path:string): unknown; }
 /** Perché un invio non può partire (sendBlocker): generazione in corso, nessun documento aperto, aggiornamento dell'app o del documento. */
@@ -112,12 +114,23 @@ export class AiController {
     if(this.updating||doc.updating)return 'updating';
     return null;
   }
+  private buildInput(doc:{path:string;textLf:string},profile:ModelProfile,request:string,preset?:PromptPreset,scope?:SelectionScope,attachments?:AttachedFile[]):RunInput{
+    const previous=this.state.proposals.get(doc.path);
+    const effective=effectiveProfile(profile,this.state.chat.overrides);
+    return {path:doc.path,document:scope?scope.originalText:doc.textLf,proposal:scope?undefined:previous?(previous.scope?applyScope(doc.textLf,previous.scope,previous.text)??undefined:previous.text):undefined,request,history:[...this.state.chat.messages],profile:effective,params:effectiveParams(effective,this.state.chat.overrides,preset),preset,attachments:attachments?.length?attachments:undefined};
+  }
+  /** Controllo prima dell'invio con file allegati: stesso input di send(), primo pezzo del documento (null senza documento o profilo). */
+  contextCheck(request:string,preset:PromptPreset|undefined,scope:SelectionScope|undefined,files:AttachedFile[],via:Map<string,string>):{check:ContextCheck;profile:ModelProfile}|null{
+    const doc=this.workspace.getDoc(),profile=this.profile();
+    if(!doc||!profile)return null;
+    const input=this.buildInput(doc,profile,request,preset,scope,files),cursor=createCursor(input);
+    const prompt=buildPrompt({...input,model:input.profile.model,document:cursor.chunks[0]??'',proposal:input.preset?undefined:input.proposal,part:input.preset?'Part 1':undefined});
+    return {check:checkContext(prompt,input.profile,input.params.maxOutputTokens||0,files,via),profile:input.profile};
+  }
   async send(request:string,preset?:PromptPreset,scope?:SelectionScope,attachments?:AttachedFile[]){
     const doc=this.workspace.getDoc(), profile=this.profile();
     if(!doc||!profile||this.state.running||this.updating||doc.updating)return;
-    const previous=this.state.proposals.get(doc.path);
-    const effective=effectiveProfile(profile,this.state.chat.overrides);
-    const input:RunInput={path:doc.path,document:scope?scope.originalText:doc.textLf,proposal:scope?undefined:previous?(previous.scope?applyScope(doc.textLf,previous.scope,previous.text)??undefined:previous.text):undefined,request,history:[...this.state.chat.messages],profile:effective,params:effectiveParams(effective,this.state.chat.overrides,preset),preset,attachments:attachments?.length?attachments:undefined};
+    const input=this.buildInput(doc,profile,request,preset,scope,attachments);
     this.appliedPaths.delete(doc.path);const cursor=createCursor(input);this.resumeData.set(doc.path,{input,cursor,scope});
     const user:ChatMessage={id:uuid(),role:'user',text:request,docPath:doc.path,presetId:preset?.id,status:'done'};
     this.set({chat:{...this.state.chat,messages:[...this.state.chat.messages,user]}});

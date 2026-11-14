@@ -51,6 +51,9 @@ export function fakeAi(initial: Partial<AiState> = {}, profile?: ModelProfile) {
     edited: (path: string, text: string) => void calls.push(['edited', path, text]),
     discard: (path: string) => void calls.push(['discard', path]),
     continue: async (path: string) => void calls.push(['continue', path]),
+    /** Esito del controllo del contesto (Task 8): di default tutto ok, profilo locale. */
+    contextCheckValue: null as unknown,
+    contextCheck: (...args: unknown[]) => (calls.push(['contextCheck', ...args]), (controller.contextCheckValue ?? { check: { kind: 'ok', totalTokens: 1, limit: 1000 }, profile: controller.profile() }) as never),
     stop: () => void calls.push(['stop']),
     newChat: () => void calls.push(['newChat']),
     retry: async (...args: unknown[]) => void calls.push(['retry', ...args]),
