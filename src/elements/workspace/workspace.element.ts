@@ -207,7 +207,9 @@ export class HmdWorkspace extends HmdElement {
   /** Il documento `path` è aperto: il focus va al suo editor (dopo aver aggiornato il layout). */
   #focusEditorOf(path: string): void {
     if (!this.isConnected || this.#workspace?.getState().doc?.path !== path) return;
-    this.#loop.update();
+    // In Anteprima l'editor non c'è: lo si rende visibile (Affiancato) prima di dargli il focus.
+    if (this.#shown === 'preview') this.#changeMode('split');
+    else this.#loop.update();
     (this.#slots.editorPane?.firstElementChild as HmdEditor | undefined)?.focus();
   }
 

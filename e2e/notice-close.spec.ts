@@ -36,3 +36,13 @@ test('new file: a visible confirmation in the sidebar, announced once, focus on 
   await expect(page.getByRole('alert').filter({ hasText: message })).toHaveCount(0);
   await expect(app.editor()).toBeFocused();
 });
+
+test('new file from Preview: the editor becomes visible and takes the focus', async ({ app, page }) => {
+  await page.getByRole('button', { name: app.t('mode.preview') }).click();
+  await expect(app.previewPane()).toBeVisible();
+  await page.getByRole('button', { name: app.t('file.new') }).first().click();
+  const dialog = page.getByRole('dialog', { name: app.t('file.new') });
+  await dialog.getByRole('textbox').fill('fresh');
+  await dialog.getByRole('button', { name: app.t('dialog.create') }).click();
+  await expect(app.editor()).toBeFocused();
+});
