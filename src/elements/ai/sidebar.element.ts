@@ -9,6 +9,8 @@ import { RenderLoop } from '../../dom/renderLoop';
 import type { I18nStore } from '../../state/i18nStore';
 import { emit } from '../events';
 import type { HmdAiChatLog } from './chat-log.element';
+import type { Attachment } from '../../ai/contextRefs';
+import type { ContextSource } from './contextView';
 import type { HmdAiComposer } from './composer.element';
 import type { ComposerController } from './composerView';
 import type { HmdAiSuggestions } from './suggestions.element';
@@ -71,10 +73,23 @@ export class HmdAiSidebar extends HmdElement {
     this.#text = value ?? '';
     this.#passDown();
   }
+  #attachments: Attachment[] = [];
+  #contextSource: ContextSource | null = null;
   /** Bozza del composer conservata dal workspace (il composer la legge solo nascendo). */
   get draft(): string { return this.#draft; }
   set draft(value: string) {
     this.#draft = value ?? '';
+    this.#passDown();
+  }
+  /** Allegati del composer conservati dal workspace (il composer li legge solo nascendo, come la bozza). */
+  get attachments(): Attachment[] { return this.#attachments; }
+  set attachments(value: Attachment[]) {
+    this.#attachments = value ?? [];
+    this.#passDown();
+  }
+  get contextSource(): ContextSource | null { return this.#contextSource; }
+  set contextSource(value: ContextSource | null) {
+    this.#contextSource = value ?? null;
     this.#passDown();
   }
   get selection(): TextRange | null { return this.#selection; }
@@ -143,6 +158,8 @@ export class HmdAiSidebar extends HmdElement {
     const messages = this.#controller?.getState().chat.messages;
     if (messages && parts.log.messages !== messages) parts.log.messages = messages;
     parts.composer.draft = this.#draft;
+    parts.composer.attachments = this.#attachments;
+    parts.composer.contextSource = this.#contextSource;
     parts.composer.controller = this.#controller;
     parts.composer.text = this.#text;
     parts.composer.selection = this.#selection;

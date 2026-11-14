@@ -6,7 +6,7 @@ import type { I18nStore } from '../../state/i18nStore';
 import type { ModelChipController } from './modelChipView';
 
 /** Quello che il composer usa del controller: quello del chip del modello, più invio e stop. */
-export type ComposerController = ModelChipController & Pick<AiController, 'send' | 'stop' | 'sendBlocker'>;
+export type ComposerController = ModelChipController & Pick<AiController, 'send' | 'stop' | 'sendBlocker' | 'contextCheck'>;
 
 /**
  * Testo del chip della selezione, o null se il chip non c'è: nessuna selezione, solo spazi, oppure la

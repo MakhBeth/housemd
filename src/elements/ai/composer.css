@@ -90,5 +90,152 @@
       background: none;
       cursor: pointer;
     }
+
+    /* Contesto allegato (`@`): l'elenco è un popover ancorato al composer, preferibilmente sopra. */
+    .composer {
+      anchor-name: --ai-composer;
+    }
+
+    .suggestions {
+      position: fixed;
+      position-anchor: --ai-composer;
+      inset: auto;
+      inset-inline-start: anchor(start);
+      inset-block-end: anchor(top);
+      inline-size: anchor-size(width);
+      position-try-fallbacks: flip-block;
+      max-block-size: min(40vh, 320px);
+      margin: 0;
+      padding: 4px;
+      overflow: auto;
+      border: 1px solid var(--c-border);
+      border-radius: 10px;
+      background: var(--c-surface);
+      color: var(--c-text);
+      box-shadow: 0 6px 24px light-dark(rgb(0 0 0 / 0.15), rgb(0 0 0 / 0.5));
+    }
+
+    .options {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .option {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding: 6px 8px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    .option.active {
+      background: var(--c-accent-soft);
+    }
+
+    .optionTop {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .optionName {
+      font-weight: 600;
+      overflow-wrap: anywhere;
+    }
+
+    .optionKind {
+      margin-inline-start: auto;
+      color: var(--c-muted);
+      font-size: 12px;
+    }
+
+    .optionPath,
+    .listNote {
+      color: var(--c-muted);
+      font-size: 12px;
+      overflow-wrap: anywhere;
+    }
+
+    .listNote {
+      margin: 0;
+      padding: 6px 8px;
+    }
+
+    .attachments {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .attachments[hidden],
+    .options[hidden],
+    .listNote[hidden] {
+      display: none;
+    }
+
+    .attachment {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      max-inline-size: 100%;
+      padding: 2px 2px 2px 8px;
+      border-radius: 999px;
+      background: var(--c-accent-soft);
+      font-size: 12px;
+    }
+
+    .attachmentText {
+      overflow-wrap: anywhere;
+    }
+
+    .attachmentRemove {
+      display: inline-grid;
+      place-items: center;
+      min-inline-size: 24px;
+      min-block-size: 24px;
+      border: none;
+      border-radius: 50%;
+      background: none;
+      cursor: pointer;
+    }
+
+    .visuallyHidden {
+      position: absolute;
+      inline-size: 1px;
+      block-size: 1px;
+      margin: -1px;
+      padding: 0;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+
+    @media (forced-colors: active) {
+      .suggestions {
+        border-color: CanvasText;
+        box-shadow: none;
+      }
+
+      .option.active {
+        forced-color-adjust: none;
+        background: Highlight;
+        color: HighlightText;
+        box-shadow: none;
+      }
+
+      .option.active .optionKind,
+      .option.active .optionPath {
+        color: HighlightText;
+      }
+
+      .attachment {
+        border: 1px solid CanvasText;
+      }
+    }
   }
 }

@@ -151,6 +151,50 @@ Preset non nascosti, ordinati per `order`, resi come chip leggeri sotto il compo
 come oggi. Visibili solo quando `state.chat.messages.length === 0` e nessuna generazione è in corso.
 Tornano con Nuova chat.
 
+### 4.8 Contesto allegato (`@`)
+
+Scrivendo `@` nel composer compare un elenco di file `.md` e cartelle della cartella aperta (sottocartelle incluse), filtrato
+mentre si scrive e navigabile da tastiera. La scelta lascia nel testo un riferimento (`@note/idee.md`, `@progetti/`, `@/` per
+l'intera cartella aperta, `@"a b.md"` con spazi) e un chip sotto la casella. All'invio i file taggati si leggono dal
+`Workspace` (documento aperto, poi bozza del buffer, poi disco), si delimitano in `<attached-context>` (un `<file path="…">`
+per file, percorso escapato, `</file>` nel testo neutralizzata) e vanno nella richiesta come dati in sola lettura: il system
+prompt dice che le proposte riguardano solo `<document>`.
+
+**Contratto**
+- Moduli puri: `src/ai/contextIndex.ts` (candidati, conteggi ricorsivi, ranking), `contextRefs.ts` (trigger, inserimento,
+  coerenza testo↔allegati), `contextAttach.ts` (espansione cartelle, blocco), `contextCheck.ts` (finestra del modello,
+  limite di 5 MiB del bridge, dimensioni). `Workspace.readForContext` legge nella coda `runExclusive`.
+- Un `@…` digitato o incollato senza scegliere il suggerimento **non** allega. Modificare il testo toglie gli allegati
+  senza occorrenze; il ✕ del chip toglie il riferimento dal testo e riporta il focus nella casella.
+- Prima dell'invio: stima dei token (system + messaggi + uscita massima) contro `contextTokens`; oltre il limite nessun
+  invio e nessun troncamento, la nota dà totale, limite, eccedenza e i file più grandi (con la cartella `via`). Limite
+  ignoto: nota informativa e l'invio prosegue. Oltre 5 MiB con il bridge `claude-code`: nota `bridgeLimit`.
+- Con almeno una cartella e un provider diverso da Ollama/LM Studio su localhost (`needsContextConfirmation`; il bridge e
+  un `openai-compatible` su localhost chiedono comunque) compare il dialog «Inviare i file a …?» (variante `primary`, focus
+  su Annulla). I contenuti letti per il controllo sono gli stessi che partono (e che «Riprova» riusa); la cronologia
+  conserva solo il testo della richiesta.
+- Invia non è mai `disabled`: durante la preparazione un secondo clic scrive `preparing`.
+
+**Decisioni**
+1. Il `<textarea>` resta `textbox` multilinea con `aria-autocomplete="list"`, `aria-haspopup="listbox"`, `aria-controls` e
+   `aria-activedescendant` (nessun `aria-expanded`, non valido su `textbox`); un `role="combobox"` su `textarea` non è ammesso.
+2. Ranking proprio: nome esatto > prefisso del nome > prefisso di un segmento > sottostringa > sottosequenza; a parità
+   percorsi più corti, poi ordine alfabetico.
+3. Il riferimento è testo; l'associazione «confermato» sta in un array `attachments` del composer (passa da
+   `hmd-ai-draft` alla sidebar ricreata, come la bozza).
+4. Gli allegati non entrano nella cronologia.
+5. `.housemdignore` fuori da questa fase: bastano le esclusioni di `fs.list()` (solo `.md`, niente cartelle che iniziano con
+   `.`, niente `node_modules`).
+6. Conferma verso ogni provider non locale (vedi sopra).
+
+**Tastiera con l'elenco aperto:** ↑/↓ muovono la voce attiva; Invio/Tab la scelgono (Invio senza voce non invia); Tab senza
+voce e Maiusc+Tab chiudono e lasciano proseguire; Esc chiude senza fermare una generazione (la scorciatoia globale ignora un
+Esc già consumato). Durante una composizione IME nessun tasto agisce.
+
+**Limiti noti:** `.housemdignore` assente; ranking proprio (non il fuzzy di CodeMirror); il pulsante «Riprova» per
+l'errore di caricamento dell'indice (`ai.context.loadError`/`retry`) non è collegato (l'indice viene dal workspace, che
+non espone un nuovo scan); allegati solo `.md`.
+
 ### 4.6 Messaggi
 
 - Utente: riquadro leggero allineato a destra, testo semplice.

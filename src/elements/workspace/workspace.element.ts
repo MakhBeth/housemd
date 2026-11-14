@@ -1,3 +1,5 @@
+import type { Attachment } from '../../ai/contextRefs';
+import type { ContextSource } from '../ai/contextView';
 import type { ChangeDesc } from '@codemirror/state';
 import { match } from 'ts-pattern';
 
@@ -177,6 +179,8 @@ export class HmdWorkspace extends HmdElement {
   #aiSelection: TextRange | null = null;
   /** Bozza del composer AI: la sidebar si ricrea a ogni ritorno alla modalità AI, il testo scritto resta (LAB-10). */
   #aiDraft = '';
+  #aiAttachments: Attachment[] = [];
+  #aiContext: ContextSource | null = null;
   #orphans: string[] = [];
   #orphanNodes = new Map<string, HTMLButtonElement>();
   #orphanKey: unknown[] = [];
@@ -335,6 +339,8 @@ export class HmdWorkspace extends HmdElement {
     this.#aiSession = null;
     this.#ai = null;
     this.#aiDraft = '';
+    this.#aiAttachments = [];
+    this.#aiContext = null;
     // Tornando alla schermata iniziale il titolo è quello dell'app.
     document.title = APP_TITLE;
   }
@@ -388,7 +394,8 @@ export class HmdWorkspace extends HmdElement {
   #onKey(event: KeyboardEvent, workspace: Workspace): void {
     const shown = this.#shown;
     const settingsOpen = this.#settingsOpen;
-    if (event.key === 'Escape' && shown === 'ai' && !settingsOpen) this.#ai?.stop();
+    // Esc già consumato (il composer ha chiuso l'elenco dei suggerimenti `@`) non ferma la generazione.
+    if (event.key === 'Escape' && shown === 'ai' && !settingsOpen && !event.defaultPrevented) this.#ai?.stop();
     // Già gestito dall'editor (Ctrl+B è il grassetto lì, la barra laterale altrove).
     if (event.defaultPrevented) return;
     const shortcut = shortcutFor(event);
@@ -898,11 +905,15 @@ export class HmdWorkspace extends HmdElement {
         on: {
           'hmd-ai-manage': () => this.#openSettings('ai-profiles'),
           'hmd-ai-sync-reactivate': () => this.#openSettings('ai-sync'),
-          'hmd-ai-draft': (event) => void (this.#aiDraft = event.detail.text),
+          'hmd-ai-draft': (event) => {
+            this.#aiDraft = event.detail.text;
+            this.#aiAttachments = event.detail.attachments;
+          },
         },
       });
       // Prima dell'inserimento: il composer legge la bozza solo nascendo.
       sidebar.draft = this.#aiDraft;
+      sidebar.attachments = this.#aiAttachments;
       sidebar.getSelection = () => {
         const selected = this.#session.selection?.main;
         return selected && !selected.empty ? { from: selected.from, to: selected.to, originalText: this.#session.textLf.slice(selected.from, selected.to), status: 'valid' } : undefined;
@@ -914,6 +925,12 @@ export class HmdWorkspace extends HmdElement {
       assign(aiSidebar, 'text', doc?.text ?? '');
       assign(aiSidebar, 'selection', this.#aiSelection);
       assign(aiSidebar, 'syncNeedsPermission', !!this.#sync?.needsPermission);
+      // Stessa identità finché non cambiano l'indice o lo stato di caricamento: il composer ricalcola i candidati solo allora.
+      const loading = state.status === 'loading';
+      if (this.#aiContext?.entries !== state.entries || this.#aiContext.loading !== loading) {
+        this.#aiContext = { entries: state.entries, loading, read: (paths) => workspace.readForContext(paths) };
+      }
+      assign(aiSidebar, 'contextSource', this.#aiContext);
       assign(aiSidebar, 'i18n', i18n);
       place(aside, [aiSidebar]);
       for (const name of ['treeHeader', 'folderNote', 'sidebarBanner', 'newFile', 'search', 'orphans', 'tree'] as const) delete this.#slots[name];

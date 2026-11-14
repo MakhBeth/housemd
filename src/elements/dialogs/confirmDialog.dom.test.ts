@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { installDialogStub } from '../../testing/dialogStub';
 import { translate } from '../../i18n/i18n';
 import { EN_MESSAGES } from '../../i18n/messages';
-import { showConfirmDialog, showDiscardChangesDialog } from './confirmDialog';
+import { showConfirmDialog, showDiscardChangesDialog, showSendContextDialog } from './confirmDialog';
 
 installDialogStub();
 const t = (key: string, params?: Record<string, string | number>) => translate(EN_MESSAGES, key, params);
@@ -86,4 +86,18 @@ test('the discard-changes confirmation uses the unsaved-changes texts', async ()
   assert.equal(buttons()[1].textContent, EN_MESSAGES['ai.discardChanges']);
   buttons()[1].click();
   assert.equal(await result, true);
+});
+
+test('tone primary: the confirm button is not danger; the send-context dialog focuses Cancel and Esc resolves false', async () => {
+  const result = showSendContextDialog({ provider: 'Anthropic', folders: ['note/'], count: 3, size: '2 kB', locale: 'en', t });
+  const d = dialog();
+  assert.equal(d.querySelector('h2')!.textContent, 'Send files to Anthropic?');
+  assert.ok(buttons()[1].classList.contains('primary'));
+  assert.ok(!buttons()[1].classList.contains('danger'));
+  assert.equal(buttons()[1].textContent, EN_MESSAGES['ai.context.confirmSend']);
+  assert.equal(document.activeElement, buttons()[0]);
+  assert.match(d.querySelector('p')!.textContent!, /3 files from note\//);
+  d.dispatchEvent(new Event('cancel'));
+  d.close();
+  assert.equal(await result, false);
 });

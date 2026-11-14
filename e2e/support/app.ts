@@ -72,7 +72,7 @@ export class App {
    * Crea e salva un profilo AI dalle impostazioni, poi le chiude. Il profilo non viene selezionato:
    * si sceglie dal chip del modello. Un profilo Anthropic senza chiave basta per i chip (niente rete).
    */
-  async createProfile(kind: 'anthropic' | 'ollama', name: string): Promise<void> {
+  async createProfile(kind: 'anthropic' | 'ollama' | 'openai-compatible', name: string, options: { url?: string; contextTokens?: number } = {}): Promise<void> {
     const settings = this.page.getByRole('region', { name: this.t('settings.title') });
     await this.page.getByRole('button', { name: this.t('toolbar.settings') }).click();
     await settings.getByRole('link', { name: this.t('settings.aiProfiles') }).click();
@@ -80,6 +80,8 @@ export class App {
     await profiles.getByRole('button', { name: `+ ${this.t('ai.create')}` }).click();
     await profiles.getByLabel(this.t('ai.name'), { exact: true }).fill(name);
     await profiles.getByRole('combobox', { name: this.t('ai.provider'), exact: true }).selectOption(kind);
+    if (options.url) await profiles.getByLabel(this.t('ai.url'), { exact: true }).fill(options.url);
+    if (options.contextTokens) await profiles.getByLabel(this.t('ai.contextTokens'), { exact: true }).fill(String(options.contextTokens));
     await profiles.getByRole('button', { name: this.t('ai.save'), exact: true }).click();
     await expect(settings.getByRole('button', { name, exact: true })).toBeVisible();
     await settings.getByRole('button', { name: this.t('settings.close') }).click();
