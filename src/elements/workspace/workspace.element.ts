@@ -195,12 +195,22 @@ export class HmdWorkspace extends HmdElement {
     const active = document.activeElement;
     const parts = this.#parts;
     if (active && parts && [parts.docBanner, parts.wsBanner, parts.saveAllBanner, parts.historyBanner, this.#historyPanelBanner, this.#slots.sidebarBanner].some((banner) => banner?.contains(active))) {
-      parts.toolbar.querySelector('button')?.focus();
+      // L'editor se c'è (il documento che ha generato l'avviso), altrimenti la toolbar: mai il body.
+      const editor = this.#slots.editorPane?.firstElementChild as HmdEditor | undefined;
+      if (editor && this.#workspace?.getState().doc) editor.focus();
+      else parts.toolbar.querySelector('button')?.focus();
     }
     const target = noticeTarget(key);
     if (target.kind === 'ai') this.#ai?.clearError();
     else this.#workspace?.dismissNotice(target.id);
   }
+  /** Il documento `path` è aperto: il focus va al suo editor (dopo aver aggiornato il layout). */
+  #focusEditorOf(path: string): void {
+    if (!this.isConnected || this.#workspace?.getState().doc?.path !== path) return;
+    this.#loop.update();
+    (this.#slots.editorPane?.firstElementChild as HmdEditor | undefined)?.focus();
+  }
+
   /** Eventi già annunciati nel dialog o riepilogati alla chiusura: le loro righe restano visibili ma mute. */
   #folderButton: HTMLButtonElement | null = null;
   #lastModal: HTMLDialogElement | null = null;
@@ -480,7 +490,7 @@ export class HmdWorkspace extends HmdElement {
       })
       .with({ kind: 'dialog' }, ({ dialog }) => {
         const signal = this.#dialogs?.signal;
-        if (signal) void runTreeDialog(dialog, { t, signal, paths: () => workspace.getState().entries.map((e) => e.path), workspace });
+        if (signal) void runTreeDialog(dialog, { t, signal, paths: () => workspace.getState().entries.map((e) => e.path), workspace, created: (path) => this.#focusEditorOf(path) });
       })
       .with({ kind: 'none' }, () => {})
       .exhaustive();

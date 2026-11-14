@@ -21,7 +21,7 @@ test('the document key follows path and revision (no document: undefined#undefin
 });
 
 test('the AI error is a closable workspace banner row; closing goes back to the right owner', () => {
-  assert.deepEqual(aiErrorItems('server', null, t), [{ key: 'ai-error-server', kind: 'alert', text: EN_MESSAGES['ai.error.server'], closeLabel: 'Close' }]);
+  assert.deepEqual(aiErrorItems('server', null, t), [{ key: 'ai-error-server', kind: 'alert', text: EN_MESSAGES['ai.error.server'], closeLabel: 'Close', closeName: 'Close notice: ' + EN_MESSAGES['ai.error.server'] }]);
   assert.deepEqual(aiErrorItems(null, null, t), []);
   assert.deepEqual(noticeTarget('ai-error-server'), { kind: 'ai' });
   assert.deepEqual(noticeTarget('ws-7'), { kind: 'workspace', id: 7 });
@@ -34,7 +34,7 @@ test('banners: document messages follow their document, the others go to the wor
     { id: 3, kind: 'info', code: 'restoredDraft', params: { path: 'a.md' }, path: 'a.md' },
   ] as unknown as WorkspaceState['notices'];
   const here = noticeRoutes(notices, 'a.md', t, 'en', false, CTX);
-  assert.deepEqual(here.document.map((i) => [i.key, i.kind, i.closeLabel]), [['ws-1', 'alert', undefined], ['ws-3', 'status', 'Close']]);
+  assert.deepEqual(here.document.map((i) => [i.key, i.kind, i.closeLabel]), [['ws-1', 'alert', 'Close'], ['ws-3', 'status', 'Close']]);
   assert.deepEqual(here.saveAll.map((i) => i.key), ['ws-2']);
   const other = noticeRoutes(notices, 'b.md', t, 'en', false, CTX);
   assert.deepEqual(other.document, []);

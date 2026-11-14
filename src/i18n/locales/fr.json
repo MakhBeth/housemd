@@ -65,6 +65,8 @@
   "conflict.reload": "Recharger depuis le disque",
   "conflict.overwrite": "Écraser avec mes modifications",
   "notice.close": "Fermer",
+  "notice.closeNamed": "Fermer l’avis : {text}",
+  "notice.fileCreated": "{name} créé",
   "tree.label": "Fichiers du dossier",
   "tree.emptyFolder": "Dossier vide",
   "tree.noFiles": "Aucun fichier markdown",

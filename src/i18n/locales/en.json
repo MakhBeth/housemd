@@ -65,6 +65,8 @@
   "conflict.reload": "Reload from disk",
   "conflict.overwrite": "Overwrite with my changes",
   "notice.close": "Close",
+  "notice.closeNamed": "Close notice: {text}",
+  "notice.fileCreated": "Created {name}",
   "tree.label": "Folder files",
   "tree.emptyFolder": "Empty folder",
   "tree.noFiles": "No markdown files",

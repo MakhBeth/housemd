@@ -26,6 +26,7 @@ export const NOTICE_CODES = [
   'newVersion',
   'reloadOtherTabs',
   'openFolderFailed',
+  'fileCreated',
 ] as const;
 
 export type NoticeCode = (typeof NOTICE_CODES)[number];
@@ -70,14 +71,8 @@ export const NOTICE_CHANNEL: Readonly<Record<NoticeCode, NoticeChannel>> = {
   newVersion: 'app',
   reloadOtherTabs: 'app',
   openFolderFailed: 'workspace',
+  fileCreated: 'workspace',
 };
-
-/** Rischio dati: restano finché il flusso esistente non li risolve, senza «Chiudi». */
-const DATA_RISK: ReadonlySet<NoticeCode> = new Set(['saveFailed', 'bufferFailed', 'draftNotPersisted', 'deletedOutside']);
-
-export function isClosable(code: NoticeCode): boolean {
-  return !DATA_RISK.has(code);
-}
 
 /** Chiave del catalogo: i messaggi con un conteggio hanno le forme `.one` e `.other`. */
 export function noticeKey(code: NoticeCode, params: NoticeParams | undefined, locale: Locale): string {

@@ -15,6 +15,8 @@ export interface HarnessFlags {
   request: PermissionState;
   /** createWritable fallisce con NotAllowedError: il browser ha revocato l'accesso. */
   denyWrites: boolean;
+  /** createWritable fallisce con un errore generico (disco pieno, file sparito): «Salvataggio non riuscito». */
+  failWrites: boolean;
 }
 
 export const FLAGS_KEY = 'hmd-e2e';
@@ -25,6 +27,7 @@ export const DEFAULT_FLAGS: HarnessFlags = {
   query: 'granted',
   request: 'granted',
   denyWrites: false,
+  failWrites: false,
 };
 
 /** Contenuto dei file di prova: testo, oppure byte in base64 (immagini). */
@@ -63,6 +66,7 @@ export function harnessScript({ defaults, key }: { defaults: HarnessFlags; key: 
     ...args: Parameters<typeof createWritable>
   ) {
     if (flags().denyWrites) return Promise.reject(new DOMException('Accesso revocato (e2e)', 'NotAllowedError'));
+    if (flags().failWrites) return Promise.reject(new DOMException('Disco non scrivibile (e2e)', 'InvalidStateError'));
     return createWritable.apply(this, args);
   };
 }

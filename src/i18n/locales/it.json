@@ -65,6 +65,8 @@
   "conflict.reload": "Ricarica dal disco",
   "conflict.overwrite": "Sovrascrivi con le mie modifiche",
   "notice.close": "Chiudi",
+  "notice.closeNamed": "Chiudi avviso: {text}",
+  "notice.fileCreated": "Creato {name}",
   "tree.label": "File della cartella",
   "tree.emptyFolder": "Cartella vuota",
   "tree.noFiles": "Nessun file markdown",

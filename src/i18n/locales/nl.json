@@ -65,6 +65,8 @@
   "conflict.reload": "Opnieuw laden van schijf",
   "conflict.overwrite": "Overschrijven met mijn wijzigingen",
   "notice.close": "Sluiten",
+  "notice.closeNamed": "Melding sluiten: {text}",
+  "notice.fileCreated": "{name} aangemaakt",
   "tree.label": "Bestanden in de map",
   "tree.emptyFolder": "Lege map",
   "tree.noFiles": "Geen markdownbestanden",

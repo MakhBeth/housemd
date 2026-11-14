@@ -21,6 +21,8 @@ export interface BannerItem {
   describes?: HTMLElement;
   /** Etichetta di «Chiudi»; senza, il messaggio non si chiude a mano. */
   closeLabel?: string;
+  /** Nome accessibile completo di «Chiudi» (es. «Chiudi avviso: …»); la prima parola è il testo visibile. */
+  closeName?: string;
 }
 
 let seq = 0;
@@ -57,6 +59,16 @@ export class HmdBanner extends HmdElement {
       this.#quiet = el('div', { class: 'quiet' });
       this.#actions = el('div', { class: 'actions' });
       this.append(this.#live, this.#alerts, this.#quiet, this.#actions);
+      // Esc con il focus in una riga chiude quel messaggio, se si può chiudere.
+      this.addEventListener('keydown', (event) => {
+        if (event.key !== 'Escape' || event.defaultPrevented) return;
+        const row = (event.target as Element).closest<HTMLElement>('.row');
+        const key = row?.dataset.key;
+        if (!key || !this.#items.find((item) => item.key === key)?.closeLabel) return;
+        event.preventDefault();
+        event.stopPropagation();
+        this.#close(key);
+      });
     }
     this.#render();
   }
@@ -100,6 +112,8 @@ export class HmdBanner extends HmdElement {
         close.hidden = item.closeLabel === undefined;
         setText(action, item.actionLabel ?? '');
         setText(close, item.closeLabel ?? '');
+        toggleAttr(close, 'aria-label', item.closeName !== undefined, item.closeName ?? '');
+        node.dataset.key = item.key;
         toggleAttr(action, 'data-busy', !!item.busy);
         // Con più messaggi il pulsante dice a vista a quale appartiene (il nome accessibile non cambia: aria-describedby).
         const context = node.querySelector('.context')!;

@@ -2,7 +2,7 @@ import type { AiErrorCode } from '../../ai/types';
 import type { AiErrorOrigin } from '../../ai/aiController';
 import type { MessageKey } from '../../i18n/messages';
 import type { Locale, Params } from '../../i18n/i18n';
-import { isClosable, NOTICE_CHANNEL, noticeKey, type NoticeCode } from '../../workspace/notices';
+import { NOTICE_CHANNEL, noticeKey, type NoticeCode } from '../../workspace/notices';
 import type { WorkspaceState } from '../../workspace/workspace';
 import type { BannerItem } from '../banner/banner.element';
 import type { Mode } from './layout';
@@ -40,7 +40,7 @@ export function aiErrorItems(
 ): BannerItem[] {
   // Con l'origine visibile l'errore sta nella sua nota locale: il banner è solo il ripiego per l'origine nascosta.
   return aiError && !origin?.anchor?.isConnected
-    ? [{ key: `${AI_ERROR_PREFIX}${aiError}`, kind: aiErrorKind(aiError), text: t(`ai.error.${aiError}` as MessageKey), closeLabel: t('notice.close') }]
+    ? [{ key: `${AI_ERROR_PREFIX}${aiError}`, kind: aiErrorKind(aiError), text: t(`ai.error.${aiError}` as MessageKey), closeLabel: t('notice.close'), closeName: t('notice.closeNamed', { text: t(`ai.error.${aiError}` as MessageKey) }) }]
     : [];
 }
 
@@ -109,7 +109,7 @@ export function noticeRoutes(
     const here = documentBound && notice.path === docPath;
     let slot: 'document' | 'workspace' | 'saveAll' | 'sidebar' | 'history' | 'historyPanel' | 'settings' = here ? 'document' : 'workspace';
     if (notice.code === 'saveAllSkipped' || notice.code === 'saveAllDone' || (notice.code === 'bufferFailed' && notice.path === undefined)) slot = 'saveAll';
-    else if (context.sidebarOpen && (notice.code === 'openFolderFailed' || notice.code === 'alreadyExists' || notice.code === 'notFound')) slot = 'sidebar';
+    else if (context.sidebarOpen && (notice.code === 'openFolderFailed' || notice.code === 'fileCreated' || notice.code === 'alreadyExists' || notice.code === 'notFound')) slot = 'sidebar';
     else if (notice.code === 'historyFailed' || notice.code === 'restoreCancelled') slot = 'history';
     // L'azione di origine decide dove l'esito si legge: nel pannello cronologia aperto sul suo documento, accanto al Salva tutto delle impostazioni.
     if ((origin?.action === 'history' || origin?.action === 'restore') && origin.path === context.historyPath) slot = 'historyPanel';
@@ -127,7 +127,8 @@ export function noticeRoutes(
       key: `ws-${notice.id}`,
       kind: notice.kind === 'error' ? 'alert' : 'status',
       text: shown,
-      closeLabel: isClosable(notice.code) ? t('notice.close') : undefined,
+      closeLabel: t('notice.close'),
+      closeName: t('notice.closeNamed', { text: shown }),
       quiet:
         toDialog ||
         deferred ||

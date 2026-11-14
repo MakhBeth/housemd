@@ -65,6 +65,8 @@
   "conflict.reload": "Recarregar do disco",
   "conflict.overwrite": "Substituir pelas minhas alterações",
   "notice.close": "Fechar",
+  "notice.closeNamed": "Fechar aviso: {text}",
+  "notice.fileCreated": "{name} criado",
   "tree.label": "Ficheiros da pasta",
   "tree.emptyFolder": "Pasta vazia",
   "tree.noFiles": "Nenhum ficheiro markdown",
