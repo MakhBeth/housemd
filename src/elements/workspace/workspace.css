@@ -99,6 +99,19 @@
       padding-block: 6px;
     }
 
+    /* File singolo: cosa manca rispetto a una cartella, sempre visibile sotto la testata (niente toast). */
+    .singleFileNote {
+      margin: 0;
+      padding: 6px 10px;
+      font-size: 0.8125rem;
+      color: var(--c-muted);
+    }
+
+    /* Pulsanti che non esistono in una modalità (Nuovo file con un file singolo, Scarica con una cartella). */
+    .iconButton[hidden] {
+      display: none;
+    }
+
     .iconButton {
       background: none;
       border: none;

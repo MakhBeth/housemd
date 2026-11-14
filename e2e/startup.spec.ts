@@ -1,5 +1,7 @@
 import { expect, test } from './support/app.ts';
-import { seedFolder } from './support/fsHarness.ts';
+import { readFile } from 'node:fs/promises';
+
+import { readText, seedFolder } from './support/fsHarness.ts';
 
 test('opening a folder lists markdown files and visible folders only', async ({ app, page }) => {
   await app.openFolder({
@@ -20,11 +22,41 @@ test.describe('browser without File System Access', () => {
     userAgent: 'Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0',
   });
 
-  test('explains why and offers no open button', async ({ app, page }) => {
+  test('explains why and offers only Open a file', async ({ app, page }) => {
     await app.start();
     await expect(page.getByText(app.t('unsupported.firefox'))).toBeVisible();
     await expect(page.getByRole('button', { name: app.t('start.openFolder') })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: app.t('start.openFile') })).toBeVisible();
   });
+
+  test('a single file: opened from the file input, edited, saved by downloading it', async ({ app, page }) => {
+    await app.start();
+    const chooser = page.waitForEvent('filechooser');
+    await page.getByRole('button', { name: app.t('start.openFile') }).click();
+    await (await chooser).setFiles({ name: 'note.md', mimeType: 'text/markdown', buffer: Buffer.from('# Note') });
+    await app.expectOpen('note.md');
+    await expect(page.getByText(app.t('singleFile.noteDownload'))).toBeVisible();
+    await expect(page.getByRole('button', { name: app.t('file.new') })).toHaveCount(0);
+    await app.typeAtEnd(' changed');
+    await expect(page.getByText(app.t('save.notDownloaded'), { exact: true })).toBeVisible();
+    const download = page.waitForEvent('download');
+    await page.getByRole('button', { name: app.t('toolbar.download') }).click();
+    const file = await download;
+    expect(file.suggestedFilename()).toBe('note.md');
+    expect(await readFile((await file.path())!, 'utf8')).toBe('# Note changed');
+    await expect(page.getByText(app.t('save.saved'), { exact: true })).toBeVisible();
+  });
+});
+
+test('Open a file with the File System Access API: saved on the real file, no Download button', async ({ app, page }) => {
+  await app.start();
+  await seedFolder(page, 'notes', { 'note.md': '# Note' });
+  await page.getByRole('button', { name: app.t('start.openFile') }).click();
+  await app.expectOpen('note.md');
+  await expect(page.getByText(app.t('singleFile.note'))).toBeVisible();
+  await expect(page.getByRole('button', { name: app.t('toolbar.download') })).toHaveCount(0);
+  await app.typeAtEnd(' changed');
+  await expect.poll(() => readText(page, 'notes', 'note.md')).toBe('# Note changed');
 });
 
 test('after a reload the folder and the last open file come back', async ({ app, page }) => {

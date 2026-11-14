@@ -5,10 +5,12 @@ import type { Page } from '@playwright/test';
  * i test lo cambiano al volo con App.setFlags, anche senza ricaricare la pagina.
  */
 export interface HarnessFlags {
-  /** false = browser senza File System Access (niente showDirectoryPicker). */
+  /** false = browser senza File System Access (niente showDirectoryPicker né showOpenFilePicker). */
   picker: boolean;
   /** Sottocartella dell'OPFS restituita dal selettore. */
   folder: string;
+  /** File della cartella `folder` restituito da showOpenFilePicker («Apri un file»). */
+  file: string;
   /** Risultato di queryPermission (avvio con cartella già nota). */
   query: PermissionState;
   /** Risultato di requestPermission (clic su "Riprendi accesso"). */
@@ -22,6 +24,7 @@ export const FLAGS_KEY = 'hmd-e2e';
 export const DEFAULT_FLAGS: HarnessFlags = {
   picker: true,
   folder: 'notes',
+  file: 'note.md',
   query: 'granted',
   request: 'granted',
   denyWrites: false,
@@ -48,12 +51,17 @@ export function harnessScript({ defaults, key }: { defaults: HarnessFlags; key: 
   };
   const win = window as unknown as Record<string, unknown>;
   if (!flags().picker) {
-    delete win.showDirectoryPicker;
-    delete (Window.prototype as unknown as Record<string, unknown>).showDirectoryPicker;
+    for (const name of ['showDirectoryPicker', 'showOpenFilePicker']) {
+      delete win[name];
+      delete (Window.prototype as unknown as Record<string, unknown>)[name];
+    }
     return;
   }
   win.showDirectoryPicker = async () =>
     (await navigator.storage.getDirectory()).getDirectoryHandle(flags().folder, { create: true });
+  win.showOpenFilePicker = async () => [
+    await (await (await navigator.storage.getDirectory()).getDirectoryHandle(flags().folder, { create: true })).getFileHandle(flags().file),
+  ];
   const handleProto = FileSystemHandle.prototype as unknown as Record<string, unknown>;
   handleProto.queryPermission = async () => flags().query;
   handleProto.requestPermission = async () => flags().request;

@@ -4,6 +4,7 @@
  */
 import { basename, dirname, splitPath } from '../lib/paths';
 import type { FsOps, OpsDirEntry } from './ops';
+import type { SingleFile } from './singleFile';
 
 interface MovableFileHandle extends FileSystemFileHandle {
   move(name: string): Promise<void>;
@@ -109,4 +110,31 @@ export function fsaOps(root: FileSystemDirectoryHandle): FsOps {
   }
 
   return ops;
+}
+
+/**
+ * Il file singolo sulla File System Access API («Apri un file», «Apri con… HouseMD»): si scrive sul file vero.
+ * Il permesso di scrittura si chiede alla scelta; un handle arrivato dal sistema (`launchQueue`) lo chiede
+ * alla prima scrittura, e un rifiuto (NotAllowedError) passa dal dialog dell'accesso perso.
+ */
+export function fsaFile(handle: FileSystemFileHandle, requestAccess: () => Promise<boolean>): SingleFile {
+  return {
+    name: handle.name,
+    writesToDisk: true,
+    async read() {
+      const file = await handle.getFile();
+      return { blob: file, lastModified: file.lastModified };
+    },
+    async write(data) {
+      const writable = await handle.createWritable();
+      try {
+        await writable.write(data);
+        await writable.close();
+      } catch (err) {
+        await writable.abort().catch(() => undefined);
+        throw err;
+      }
+    },
+    requestAccess,
+  };
 }
