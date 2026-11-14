@@ -88,7 +88,10 @@ main() {
   old=$(basename "$(readlink "$ROOT/current" 2>/dev/null || true)")
   switch_current "$sha"
   # keep the newest $KEEP releases, never the live one
-  ls -t "$ROOT/releases" | tail -n +"$((KEEP + 1))" | grep -vx "$sha" | while read -r r; do rm -rf "$ROOT/releases/$r"; done
+  local r
+  for r in $(ls -t "$ROOT/releases" | tail -n +"$((KEEP + 1))"); do
+    [ "$r" = "$sha" ] || rm -rf "$ROOT/releases/$r"
+  done
   echo "Installed $sha. Rollback: scripts/deploy.sh --rollback${old:+ $old}"
 }
 

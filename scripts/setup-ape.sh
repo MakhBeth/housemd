@@ -34,12 +34,12 @@ echo "== c. First deploy"
 
 echo "== d. Volume and Caddy block"
 if ! grep -q '/srv/housemd:/srv/housemd' "$CADDY_DIR/compose.yaml"; then
-  sudo sed -i "\#- /srv/calorie:/srv/calorie:ro#a\\$VOLUME" "$CADDY_DIR/compose.yaml"
+  sudo sed -i "\#- /srv/calorie:/srv/calorie:ro#a\\$VOLUME" "$CADDY_DIR/compose.yaml" || rollback
 fi
 grep -q '/srv/housemd:/srv/housemd' "$CADDY_DIR/compose.yaml" || rollback
 if ! grep -q ':8446' "$CADDY_DIR/Caddyfile"; then
   # same inode: the file is mounted in the container
-  sudo sh -c "printf '\n' >> '$CADDY_DIR/Caddyfile'; cat '$BLOCK' >> '$CADDY_DIR/Caddyfile'"
+  sudo sh -c "printf '\n' >> '$CADDY_DIR/Caddyfile'; cat '$BLOCK' >> '$CADDY_DIR/Caddyfile'" || rollback
 fi
 (cd "$CADDY_DIR" && docker compose up -d caddy) || rollback
 docker exec caddy caddy validate --config /etc/caddy/Caddyfile || rollback
