@@ -1,9 +1,10 @@
 import type { ChatProvider, ModelProfile, PromptPreset, ChatMessage, GenParams } from './types';
+import type { AttachedFile } from './contextAttach';
 import { AiError } from './errors';
 import { buildPrompt, estimateTokens } from './prompt';
 import { ProposalStream } from './proposalStream';
 import { keepFrontmatter, splitForModel, chunkLimit } from './chunking';
-export interface RunInput { path: string; document: string; proposal?: string; request: string; history: ChatMessage[]; profile: ModelProfile; params: GenParams; preset?: PromptPreset; }
+export interface RunInput { path: string; document: string; proposal?: string; request: string; history: ChatMessage[]; profile: ModelProfile; params: GenParams; preset?: PromptPreset; attachments?: AttachedFile[]; }
 export interface RunCursor { chunks: string[]; results: string[]; prefix: string; next: number; }
 export type RunEvent = { type: 'progress'; text: string | null; comment: string; done: number; total: number } | { type: 'usage'; inputTokens?: number; outputTokens?: number } | { type: 'done'; text: string | null; comment: string; truncated: boolean } | { type: 'thinking' };
 export function createCursor(input: RunInput): RunCursor {

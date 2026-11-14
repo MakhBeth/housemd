@@ -1114,3 +1114,17 @@ test('[LAB-408] a pending saveNow does not make concurrent automatic checkpoints
   releaseWrite();
   await pending;
 });
+
+test('readForContext: documento aperto non salvato, poi bozza del buffer, poi disco; file sparito = unreadable', async () => {
+  const { ws, buffers } = await setup({ 'a.md': 'disco a\r\nriga', 'b.md': 'disco b', 'c.md': 'disco c' });
+  await ws.openFile('a.md');
+  ws.edit('a modificato');
+  await buffers.save('ws-1', 'b.md', 'bozza b', 'disco b');
+  const res = await ws.readForContext(['a.md', 'b.md', 'c.md']);
+  assert.deepEqual(res, [
+    { path: 'a.md', text: 'a modificato' },
+    { path: 'b.md', text: 'bozza b' },
+    { path: 'c.md', text: 'disco c' },
+  ]);
+  assert.deepEqual(await ws.readForContext(['c.md', 'sparito.md', 'x.md']), { unreadable: ['sparito.md', 'x.md'] });
+});

@@ -6,6 +6,7 @@ import { defaultProfile, effectiveParams, effectiveProfile, profileOrigin, valid
 import { builtInPresets, validatePreset } from './presets';
 import { mapScope, applyScope } from './scope';
 import { runRequest, createCursor, partialText, type RunInput, type RunCursor } from './runner';
+import type { AttachedFile } from './contextAttach';
 import { checkProposal } from './checks';
 export interface AiWorkspace { getDoc(): { path: string; textLf: string; conflict: unknown; updating: boolean } | null; snapshotBeforeAi(): void; openFile(path:string): unknown; }
 /** Perché un invio non può partire (sendBlocker): generazione in corso, nessun documento aperto, aggiornamento dell'app o del documento. */
@@ -111,12 +112,12 @@ export class AiController {
     if(this.updating||doc.updating)return 'updating';
     return null;
   }
-  async send(request:string,preset?:PromptPreset,scope?:SelectionScope){
+  async send(request:string,preset?:PromptPreset,scope?:SelectionScope,attachments?:AttachedFile[]){
     const doc=this.workspace.getDoc(), profile=this.profile();
     if(!doc||!profile||this.state.running||this.updating||doc.updating)return;
     const previous=this.state.proposals.get(doc.path);
     const effective=effectiveProfile(profile,this.state.chat.overrides);
-    const input:RunInput={path:doc.path,document:scope?scope.originalText:doc.textLf,proposal:scope?undefined:previous?(previous.scope?applyScope(doc.textLf,previous.scope,previous.text)??undefined:previous.text):undefined,request,history:[...this.state.chat.messages],profile:effective,params:effectiveParams(effective,this.state.chat.overrides,preset),preset};
+    const input:RunInput={path:doc.path,document:scope?scope.originalText:doc.textLf,proposal:scope?undefined:previous?(previous.scope?applyScope(doc.textLf,previous.scope,previous.text)??undefined:previous.text):undefined,request,history:[...this.state.chat.messages],profile:effective,params:effectiveParams(effective,this.state.chat.overrides,preset),preset,attachments:attachments?.length?attachments:undefined};
     this.appliedPaths.delete(doc.path);const cursor=createCursor(input);this.resumeData.set(doc.path,{input,cursor,scope});
     const user:ChatMessage={id:uuid(),role:'user',text:request,docPath:doc.path,presetId:preset?.id,status:'done'};
     this.set({chat:{...this.state.chat,messages:[...this.state.chat.messages,user]}});

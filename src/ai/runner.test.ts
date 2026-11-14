@@ -73,3 +73,17 @@ test('abort prima dell’esecuzione non contatta il provider', async () => {
   const p = provider(async function* () { calls++; yield { type: 'done', stop: 'end' }; });
   await assert.rejects(collect(runRequest(i, p, abort.signal, createCursor(i))), { name: 'AbortError' }); assert.equal(calls, 0);
 });
+test('gli allegati stanno dopo <document>, riducono il budget dei pezzi e oltre la finestra scatta tooLong', async () => {
+  const attachments = [{ path: 'note/b.md', text: 'x'.repeat(4000) }];
+  const profile = { ...defaultProfile(), contextTokens: 1500 };
+  const plain = input({ preset: transform(), document: 'yyyyyyyy\n\n'.repeat(1000), profile });
+  const withAtt = input({ preset: transform(), document: 'yyyyyyyy\n\n'.repeat(1000), profile, attachments });
+  assert.ok(createCursor(withAtt).chunks[0].length < createCursor(plain).chunks[0].length);
+  const seen: string[] = [];
+  const small = input({ attachments: [{ path: 'b.md', text: 'ciao' }] });
+  const p = provider(async function* (req) { seen.push(req.messages.at(-1)!.text); yield { type: 'done', stop: 'end' }; });
+  await collect(runRequest(small, p, signal(), createCursor(small)));
+  assert.ok(seen[0].indexOf('</document>') < seen[0].indexOf('<attached-context>'));
+  const big = input({ profile, attachments: [{ path: 'b.md', text: 'x'.repeat(8000) }] });
+  await assert.rejects(collect(runRequest(big, p, signal(), createCursor(big))), (e: unknown) => e instanceof AiError && e.code === 'tooLong');
+});

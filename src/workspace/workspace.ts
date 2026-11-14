@@ -275,6 +275,33 @@ export class Workspace {
 
   // --- operazioni in coda ---------------------------------------------------------
 
+  /**
+   * Testi per il contesto AI: documento aperto (anche non salvato), poi bozza del buffer, poi disco, in LF.
+   * Nessun invio parziale: se anche un solo file non si legge l'esito è `unreadable`, con i percorsi.
+   */
+  readForContext(paths: string[]): Promise<{ path: string; text: string }[] | { unreadable: string[] }> {
+    return this.runExclusive(async () => {
+      const files: { path: string; text: string }[] = [];
+      const unreadable: string[] = [];
+      for (const path of paths) {
+        const open = this.state.doc;
+        if (open?.path === path) {
+          files.push({ path, text: open.text.replace(/\r\n/g, '\n') });
+          continue;
+        }
+        try {
+          const draft = await this.deps.buffers.load(this.deps.workspaceId, path).catch(() => null);
+          const text = draft ? draft.text : (await this.deps.fs.read(path)).text;
+          files.push({ path, text: text.replace(/\r\n/g, '\n') });
+        } catch (err) {
+          unreadable.push(path);
+          if (!(err instanceof FsNotFoundError)) await this.handleError(err);
+        }
+      }
+      return unreadable.length > 0 ? { unreadable } : files;
+    });
+  }
+
   openFile(path: string): Promise<void> {
     return this.runExclusive(() => this.doOpenFile(path));
   }
