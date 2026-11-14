@@ -26,3 +26,5 @@ export function effectiveProfile(profile: ModelProfile, overrides: ProfileOverri
 }
 export function effectiveParams(profile: ModelProfile, overrides: ProfileOverrides = {}, preset?: Pick<PromptPreset, 'params'>): GenParams { return filterParams(validateParams({ ...profile.params, ...preset?.params, ...overrides }), profile.kind, overrides.model ?? profile.model, { effort: !!profile.params.effort }); }
 export function isLocalProfile(profile: ModelProfile): boolean { if (profile.kind === 'anthropic') return false; try { return ['localhost', '127.0.0.1', '[::1]'].includes(new URL(profile.baseUrl).hostname); } catch { return false; } }
+/** I file allegati escono dal computer (anche verso il bridge, che li manda ad Anthropic): serve la conferma salvo Ollama/LM Studio su localhost. Un openai-compatible su localhost chiede comunque: nome e porta non provano la località. */
+export function needsContextConfirmation(profile: ModelProfile): boolean { return !((profile.kind === 'ollama' || profile.kind === 'lmstudio') && isLocalProfile(profile)); }
