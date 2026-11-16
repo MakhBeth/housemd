@@ -32,3 +32,10 @@ test('a file deleted on disk says so, without the draft icon', () => {
   assert.equal(deleted.draftIcon, false);
   assert.equal(deleted.state, 'dirty');
 });
+
+test('a single file in memory with changes not downloaded: «Not downloaded» with the draft icon instead of «Saved»', () => {
+  assert.deepEqual(saveIndicator({ saveState: 'saved', deletedOnDisk: false }, true), { state: 'dirty', label: 'save.notDownloaded', live: 'polite', role: undefined, draftIcon: true });
+  // Mentre salva o in errore vale lo stato del salvataggio.
+  assert.equal(saveIndicator({ saveState: 'error', deletedOnDisk: false }, true).label, 'save.error');
+  assert.equal(saveIndicator({ saveState: 'saved', deletedOnDisk: false }, false).label, 'save.saved');
+});

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { afterSwitch } from './screens';
+import { afterFileOpen, afterSwitch } from './screens';
 
 const value = { stored: 'S', workspace: 'W' };
 
@@ -17,4 +17,13 @@ test('an error stays in the open workspace as a notice, or goes back to the star
 test('cancelled or blocked: nothing changes', () => {
   assert.deepEqual(afterSwitch({ kind: 'cancelled' }, true), { kind: 'stay' });
   assert.deepEqual(afterSwitch({ kind: 'blocked' }, false), { kind: 'stay' });
+});
+
+test('a single file: opened shows the file screen, an error goes back to the start screen that fits the browser', () => {
+  const file = { file: 'F', workspaceId: 'id', workspace: 'W' };
+  assert.deepEqual(afterFileOpen({ kind: 'opened', value: file }, false, true), { kind: 'show', screen: { kind: 'file', file: 'F', workspaceId: 'id', workspace: 'W' } });
+  assert.deepEqual(afterFileOpen({ kind: 'error', detail: 'boom' }, true, false), { kind: 'reportError', detail: 'boom' });
+  assert.deepEqual(afterFileOpen({ kind: 'error', detail: 'boom' }, false, true), { kind: 'show', screen: { kind: 'start', error: 'boom' } });
+  assert.deepEqual(afterFileOpen({ kind: 'error', detail: 'boom' }, false, false), { kind: 'show', screen: { kind: 'unsupported', error: 'boom' } });
+  assert.deepEqual(afterFileOpen({ kind: 'cancelled' }, false, false), { kind: 'stay' });
 });

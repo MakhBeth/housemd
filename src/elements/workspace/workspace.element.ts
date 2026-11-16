@@ -11,6 +11,10 @@ import { RenderLoop } from '../../dom/renderLoop';
 import type { FocusUnit } from '../../editor/focusRange';
 import { createDocSession, type DocSession } from '../../editor/docSession';
 import { requestAccess } from '../../fs/access';
+import { downloadFile } from '../../fs/fileInput';
+import { isMemoryFile, pendingDownload, type SingleFile } from '../../fs/singleFile';
+import type { HmdOpenMenu } from '../open-menu/open-menu.element';
+import type { RecentItem } from '../open-menu/openView';
 import { APP_TITLE, pageTitle } from '../../lib/pageTitle';
 import { readLastFile, readPref, readValidPref, writeLastFile, writePref } from '../../lib/prefs';
 import type { SettingsSection } from '../../lib/route';
@@ -57,6 +61,8 @@ interface Parts {
   layout: HTMLDivElement;
   main: HTMLElement;
   toggle: HTMLButtonElement;
+  /** Menu «Apri»: sempre nella barra, con una cartella e con un file singolo. */
+  openMenu: HmdOpenMenu;
   path: HTMLSpanElement;
   modes: HTMLDivElement;
   modeButtons: Map<Mode, HTMLButtonElement>;
@@ -74,6 +80,8 @@ interface Parts {
   /** Annuncio della scorciatoia (il pulsante non ha il focus): visivamente nascosto. */
   focusAnnounce: HTMLParagraphElement;
   saveAll: HTMLButtonElement;
+  /** «Scarica il file»: solo con un file singolo in memoria (browser senza File System Access API). */
+  download: HTMLButtonElement;
   settings: HTMLButtonElement;
   toolbar: HTMLElement;
   /** Banner di workspace (sotto la toolbar) e di documento (sopra l'editor): sempre montati, vuoti finché non c'è un messaggio. */
@@ -96,6 +104,8 @@ interface Slots {
   sidebarBanner: HmdBanner;
   /** Nota del cambio di cartella, subito dopo la testata. */
   folderNote: HTMLParagraphElement;
+  /** File singolo: la riga sotto la barra («Apri la cartella di questo file», o che si salva scaricando). */
+  fileBar: HTMLDivElement;
   /** «Nuovo file» della testata: dove entra il focus con l'albero vuoto. */
   newFile: HTMLButtonElement;
   search: HmdSearchPanel;
@@ -139,6 +149,9 @@ export class HmdWorkspace extends HmdElement {
   #workspace: Workspace | null = null;
   #workspaceId = '';
   #handle: FileSystemDirectoryHandle | null = null;
+  /** File singolo aperto senza la sua cartella (null con una cartella). */
+  #singleFile: SingleFile | null = null;
+  #recents: readonly RecentItem[] = [];
   #switchingFolder = false;
   #i18n: I18nStore | null = null;
   #theme: ThemeStore | null = null;
@@ -228,7 +241,7 @@ export class HmdWorkspace extends HmdElement {
     // sidebar» se la sidebar non c'è più).
     focusScope: () => this.#slots.aside ?? null,
     refocus: () => {
-      if (this.#sidebarOpen && this.#shown === 'ai') this.#parts!.modeButtons.get('ai')!.focus();
+      if (this.#sidebarShown && this.#shown === 'ai') this.#parts!.modeButtons.get('ai')!.focus();
       else this.focusStart();
     },
   });
@@ -240,7 +253,8 @@ export class HmdWorkspace extends HmdElement {
    */
   focusStart(): void {
     if (this.#slots.tree?.focusTabStop()) return;
-    (this.#slots.newFile ?? this.#parts?.toggle)?.focus();
+    // File singolo: niente albero né sidebar (né «Mostra sidebar»): il focus va al menu «Apri» della barra.
+    (this.#slots.newFile ?? (this.#parts?.toggle.hidden ? this.#parts.openMenu.querySelector('button') : this.#parts?.toggle))?.focus();
   }
 
   get workspace(): Workspace | null { return this.#workspace; }
@@ -254,6 +268,14 @@ export class HmdWorkspace extends HmdElement {
   set workspaceId(value: string) { this.#workspaceId = value ?? ''; }
   get handle(): FileSystemDirectoryHandle | null { return this.#handle; }
   set handle(value: FileSystemDirectoryHandle | null) { this.#handle = value ?? null; }
+  /** Voci dei recenti per il menu «Apri» (le apre `hmd-app`). */
+  get recents(): readonly RecentItem[] { return this.#recents; }
+  set recents(value: readonly RecentItem[]) {
+    this.#recents = value ?? [];
+    this.#loop.update();
+  }
+  get singleFile(): SingleFile | null { return this.#singleFile; }
+  set singleFile(value: SingleFile | null) { this.#singleFile = value ?? null; }
   get switchingFolder(): boolean { return this.#switchingFolder; }
   set switchingFolder(value: boolean) {
     value = !!value;
@@ -317,6 +339,7 @@ export class HmdWorkspace extends HmdElement {
     signal.addEventListener('abort', () => this.#dialogWatch?.disconnect(), { once: true });
     if (this.#ai) this.watch(this.#ai, () => this.#loop.update(), signal);
     if (this.#sync) this.watch(this.#sync, () => this.#loop.update(), signal);
+    if (isMemoryFile(this.#singleFile)) this.watch(this.#singleFile, () => this.#loop.update(), signal);
   }
 
   disconnectedCallback(): void {
@@ -367,13 +390,21 @@ export class HmdWorkspace extends HmdElement {
     window.addEventListener(
       'beforeunload',
       (event) => {
-        if (!unloadNeedsConfirm(workspace.getState(), !!this.#ai?.hasPendingWork())) return;
+        if (!unloadNeedsConfirm(workspace.getState(), !!this.#ai?.hasPendingWork(), pendingDownload(this.#singleFile))) return;
         void workspace.blur();
         event.preventDefault();
       },
       { signal },
     );
     window.addEventListener('keydown', (event) => this.#onKey(event, workspace), { signal });
+  }
+
+  /**
+   * La sidebar c'è solo con una cartella: con un file singolo non c'è un albero da mostrare (resta solo la chat in
+   * modalità AI, che sta nello stesso pannello).
+   */
+  get #sidebarShown(): boolean {
+    return this.#sidebarOpen && (!this.#singleFile || this.#shown === 'ai');
   }
 
   get #settingsOpen(): boolean {
@@ -400,6 +431,8 @@ export class HmdWorkspace extends HmdElement {
       .with('save', () => void workspace.saveNow())
       .with('saveAll', () => void workspace.saveAll())
       .with('search', () => {
+        // Con un file singolo non c'è la ricerca nella cartella (Ctrl+F dell'editor resta).
+        if (this.#singleFile) return;
         if (shown === 'ai') this.#changeMode(this.#lastPane);
         this.#setSidebar(true);
         requestAnimationFrame(() => this.#slots.search?.focusInput());
@@ -407,7 +440,9 @@ export class HmdWorkspace extends HmdElement {
       .with('toggleAi', () => {
         if (this.#ai) this.#changeMode(shown === 'ai' ? this.#lastPane : 'ai');
       })
-      .with('toggleSidebar', () => this.#setSidebar(!this.#sidebarOpen))
+      .with('toggleSidebar', () => {
+        if (!this.#singleFile || shown === 'ai') this.#setSidebar(!this.#sidebarOpen);
+      })
       .with('cycleMode', () => this.#changeMode(nextPaneMode(shown)))
       .with('toggleFocus', () => this.#setFocus(!this.#focusMode, true))
       .exhaustive();
@@ -531,6 +566,7 @@ export class HmdWorkspace extends HmdElement {
       layout: el('div', { class: 'layout' }),
       main: el('main', { class: 'main' }),
       toggle: el('button', { class: 'iconButton tooltip', on: { click: () => this.#setSidebar(!this.#sidebarOpen) } }, icon('sidebarOpen')),
+      openMenu: el('hmd-open-menu'),
       path: el('span', { class: 'path' }),
       modes: el('div', { class: 'modes', role: 'group' }),
       modeButtons,
@@ -564,6 +600,7 @@ export class HmdWorkspace extends HmdElement {
       focusNote: el('p', { class: 'note toolbarNote', role: 'status' }),
       focusAnnounce: el('p', { class: 'visually-hidden', role: 'status' }),
       saveAll: el('button', { class: 'iconButton tooltip', on: { click: () => void this.#workspace?.saveAll() } }, icon('save')),
+      download: el('button', { class: 'iconButton tooltip', on: { click: () => void this.#download() } }, icon('download')),
       settings: el('button', { class: 'iconButton tooltip', on: { click: () => this.#openSettings() } }, icon('settings')),
       toolbar: el('header', { class: 'toolbar' }),
       wsBanner: el('hmd-banner', { class: 'wsBanner', on: { 'hmd-banner-close': (event) => this.#closeBanner(event.detail.key) } }),
@@ -576,9 +613,9 @@ export class HmdWorkspace extends HmdElement {
     themeSwitcher.store = this.#theme;
     themeSwitcher.i18n = this.#i18n;
     parts.toolbar.append(
-      el('div', { class: 'lead' }, parts.toggle, parts.path),
+      el('div', { class: 'lead' }, parts.toggle, parts.openMenu, parts.path),
       parts.modes,
-      el('div', { class: 'actions' }, parts.saveState, parts.history, parts.exportPdf, parts.saveAll, parts.focus, themeSwitcher, parts.settings),
+      el('div', { class: 'actions' }, parts.saveState, parts.history, parts.exportPdf, parts.download, parts.saveAll, parts.focus, themeSwitcher, parts.settings),
     );
     parts.main.append(parts.toolbar);
     return parts;
@@ -591,6 +628,34 @@ export class HmdWorkspace extends HmdElement {
       return null;
     }
     return (this.#slots[name] ??= create());
+  }
+
+  /**
+   * Riga sotto la barra con un file singolo: il file vero offre «Apri la cartella di questo file» (il selettore parte
+   * dalla sua cartella), la copia in memoria dice che si salva scaricando. Con una cartella non c'è.
+   */
+  #renderFileBar(t: I18nStore['t']): HTMLDivElement | null {
+    const file = this.#singleFile;
+    const bar = this.#slot('fileBar', !!file, () => el('div', { class: 'fileBar' }));
+    if (!bar || !file) return null;
+    if (isMemoryFile(file)) {
+      const note = (bar.querySelector('p') as HTMLParagraphElement | null) ?? bar.appendChild(el('p', { class: 'fileBarNote' }));
+      setText(note, t('singleFile.noteDownload'));
+    } else {
+      const button = (bar.querySelector('button') as HTMLButtonElement | null) ?? bar.appendChild(el('button', { class: 'fileBarButton', on: { click: () => emit(this, 'hmd-open-file-folder', null) } }, icon('folder', { size: 16 }), el('span')));
+      setText(button.lastElementChild!, t('open.fileFolder'));
+    }
+    return bar;
+  }
+
+  /** Scarica la copia in memoria del file singolo: prima si mette al sicuro quello che è ancora nell'editor. */
+  async #download(): Promise<void> {
+    const file = this.#singleFile;
+    if (!isMemoryFile(file)) return;
+    await this.#workspace?.saveAll();
+    downloadFile(file.name, file.takeDownload());
+    // Conferma anche quando l'indicatore era già «Salvato» (secondo download): nessun cambio da sentire lì.
+    if (this.#parts && this.#i18n) announce(this.#parts.deferredAnnounce, this.#i18n.t('toolbar.downloaded', { file: file.name }), true);
   }
 
   /**
@@ -671,7 +736,8 @@ export class HmdWorkspace extends HmdElement {
       if (doc) ai?.documentChanged(doc.path, { iterChangedRanges: () => {}, mapPos: (n: number) => n } as never, true);
     }
     if (!doc) this.#historyOpen = false;
-    if (doc && doc.path !== this.#lastFile) writeLastFile(this.#workspaceId, doc.path);
+    // Il file singolo non ha un «ultimo file» da ricordare: si riapre da solo (`#reopen`).
+    if (doc && doc.path !== this.#lastFile && !this.#singleFile) writeLastFile(this.#workspaceId, doc.path);
     this.#lastFile = doc?.path ?? this.#lastFile;
     this.#watchOrphans(workspace, state);
     this.#reopen(workspace, state);
@@ -682,10 +748,11 @@ export class HmdWorkspace extends HmdElement {
     const panel = sidePanel(shown);
     const width = shown === 'ai' ? this.#aiWidth : this.#sidebarWidth;
     parts.layout.inert = settingsOpen;
-    const columns = gridColumns(this.#sidebarOpen, width);
+    const sidebarShown = this.#sidebarShown;
+    const columns = gridColumns(sidebarShown, width);
     if (parts.layout.style.gridTemplateColumns !== columns) parts.layout.style.gridTemplateColumns = columns;
-    const aside = this.#slot('aside', this.#sidebarOpen, () => el('aside', { class: 'sidebar' }));
-    const resizer = this.#slot('resizer', this.#sidebarOpen, () =>
+    const aside = this.#slot('aside', sidebarShown, () => el('aside', { class: 'sidebar' }));
+    const resizer = this.#slot('resizer', sidebarShown, () =>
       el('div', {
         class: 'resizer',
         role: 'separator',
@@ -704,7 +771,10 @@ export class HmdWorkspace extends HmdElement {
     }
     place(parts.layout, [...(aside && resizer ? [aside, resizer] : []), parts.main]);
 
-    // Barra degli strumenti.
+    // Barra degli strumenti. Con un file singolo (fuori da AI) non c'è sidebar da mostrare: il pulsante non c'è.
+    parts.toggle.hidden = !!this.#singleFile && shown !== 'ai';
+    assign(parts.openMenu, 'i18n', i18n);
+    assign(parts.openMenu, 'recents', this.#recents);
     const sidebarLabel = this.#sidebarOpen ? t('sidebar.hide') : t('sidebar.show');
     toggleAttr(parts.toggle, 'aria-pressed', true, String(this.#sidebarOpen));
     toggleAttr(parts.toggle, 'aria-label', true, sidebarLabel);
@@ -724,7 +794,7 @@ export class HmdWorkspace extends HmdElement {
       toggleAttr(button, 'data-tooltip', true, t(m.label));
     }
     place(parts.modes, modes.map((m) => parts.modeButtons.get(m.id)!));
-    const indicator = saveIndicator(doc);
+    const indicator = saveIndicator(doc, pendingDownload(this.#singleFile));
     toggleAttr(parts.saveState, 'data-state', true, indicator.state);
     toggleAttr(parts.saveState, 'aria-live', true, indicator.live);
     toggleAttr(parts.saveState, 'role', !!indicator.role, indicator.role ?? '');
@@ -752,6 +822,10 @@ export class HmdWorkspace extends HmdElement {
     this.#announceAgain.focusNote = false;
     announce(parts.focusAnnounce, this.#focusSaid, this.#focusSaid !== '' && this.#announceAgain.focusSaid);
     this.#announceAgain.focusSaid = false;
+    // Il download sta nella barra solo con la copia in memoria: con il file vero il salvataggio è quello automatico.
+    parts.download.hidden = !isMemoryFile(this.#singleFile);
+    toggleAttr(parts.download, 'aria-label', true, t('toolbar.download'));
+    toggleAttr(parts.download, 'data-tooltip', true, t('toolbar.download'));
     toggleAttr(parts.saveAll, 'aria-label', true, t('toolbar.saveAll'));
     toggleAttr(parts.saveAll, 'data-tooltip', true, t('toolbar.saveAll'));
     toggleAttr(parts.settings, 'aria-label', true, t('toolbar.settings'));
@@ -777,7 +851,8 @@ export class HmdWorkspace extends HmdElement {
       setText(empty.firstElementChild!, t('empty.hint'));
       setText(empty.lastElementChild!, t('file.new'));
     }
-    place(parts.main, [parts.toolbar, ...(this.#historyNote ? [parts.historyNote] : []), ...(this.#exportNote ? [parts.exportNote] : []), ...(this.#focusNote ? [parts.focusNote] : []), parts.saveAllBanner, parts.historyBanner, parts.wsBanner, parts.docBanner, ...(conflict ? [conflict] : []), (review ?? panes ?? empty)!]);
+    const fileBar = this.#renderFileBar(t);
+    place(parts.main, [parts.toolbar, ...(fileBar ? [fileBar] : []), ...(this.#historyNote ? [parts.historyNote] : []), ...(this.#exportNote ? [parts.exportNote] : []), ...(this.#focusNote ? [parts.focusNote] : []), parts.saveAllBanner, parts.historyBanner, parts.wsBanner, parts.docBanner, ...(conflict ? [conflict] : []), (review ?? panes ?? empty)!]);
 
     // Impostazioni sopra l'area di lavoro, e gli avvisi.
     const settings = this.#slot('settings', settingsOpen, () => this.#createSettings());
@@ -1187,7 +1262,7 @@ export class HmdWorkspace extends HmdElement {
   #reopen(workspace: Workspace, state: WorkspaceState): void {
     if (this.#reopened || state.status !== 'ready') return;
     this.#reopened = true;
-    const plan = reopenPlan(readLastFile(this.#workspaceId), this.#files(state));
+    const plan = reopenPlan(this.#singleFile?.name ?? readLastFile(this.#workspaceId), this.#files(state));
     // Dopo il render: aprire un file notifica, e una notifica dentro il render chiede solo un'altra passata.
     if (plan.kind === 'open') queueMicrotask(() => void this.#openFile(plan.path));
     else if (plan.kind === 'draft') {
@@ -1209,6 +1284,7 @@ export class HmdWorkspace extends HmdElement {
     }
     const controller = (this.#accessLost = new AbortController());
     const handle = this.#handle;
+    const file = this.#singleFile;
     // Dopo il render (come l'effetto di React): il dialog modale sposta il focus.
     queueMicrotask(() => {
       if (controller.signal.aborted) return;
@@ -1217,7 +1293,7 @@ export class HmdWorkspace extends HmdElement {
         t: i18n.t,
         signal: controller.signal,
         onResume: async () => {
-          const granted = !!handle && (await requestAccess(handle));
+          const granted = file ? !!(await file.requestAccess?.()) : !!handle && (await requestAccess(handle));
           if (granted) await workspace.resume();
           return granted;
         },

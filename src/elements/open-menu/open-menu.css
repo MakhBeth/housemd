@@ -1,0 +1,90 @@
+@layer components {
+  @scope (hmd-open-menu) {
+    :scope {
+      display: contents;
+    }
+
+    .trigger {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 30px;
+      padding: 0 10px;
+      border: 1px solid var(--c-border);
+      border-radius: 6px;
+      background: none;
+      color: var(--c-text);
+      cursor: pointer;
+    }
+
+    .trigger:hover,
+    .trigger[aria-expanded='true'] {
+      background: var(--c-accent-soft);
+    }
+
+    .menu {
+      position-area: block-end span-inline-end;
+      position-try-fallbacks: flip-block, flip-inline;
+      inset: auto;
+      margin: 4px 0 0;
+      padding: 4px;
+      min-width: 200px;
+      max-width: 320px;
+      border: 1px solid var(--c-border);
+      border-radius: 8px;
+      background: var(--c-surface);
+      color: var(--c-text);
+      box-shadow: 0 8px 24px rgb(0 0 0 / 0.18);
+    }
+
+    .menu:popover-open {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      text-align: left;
+      background: none;
+      border: none;
+      border-radius: 6px;
+      padding: 6px 10px;
+      color: inherit;
+      cursor: pointer;
+    }
+
+    /* Nomi lunghi: i puntini sul testo (in un contenitore flex servono sullo span, con min-width 0). */
+    .item span {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .item:hover,
+    .item:focus-visible {
+      background: var(--c-accent-soft);
+    }
+
+    .recentTitle {
+      margin: 6px 10px 2px;
+      font-size: 0.75rem;
+      color: var(--c-muted);
+    }
+
+    .recent {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    @media (forced-colors: active) {
+      .item:focus-visible {
+        outline: 2px solid Highlight;
+      }
+    }
+  }
+}

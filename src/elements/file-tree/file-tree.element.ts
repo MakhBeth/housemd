@@ -107,6 +107,14 @@ export class HmdFileTree extends HmdElement {
     if (value) this.#expanded = revealPath(this.#expanded, value);
     this.#update();
   }
+  #singleFile = false;
+  /** File singolo: il menu ⋯ non offre rinomina né eliminazione. */
+  get singleFile(): boolean { return this.#singleFile; }
+  set singleFile(value: boolean) {
+    if (!!value === this.#singleFile) return;
+    this.#singleFile = !!value;
+    this.#update();
+  }
   get drafts(): ReadonlySet<string> { return this.#drafts; }
   set drafts(value: ReadonlySet<string>) {
     value ??= new Set();
@@ -264,7 +272,7 @@ export class HmdFileTree extends HmdElement {
     // Per chiave: i pulsanti restano (e con loro il focus) se il menu aperto si ridisegna.
     reconcileList(
       menu,
-      menuActions(this.#menuNode?.kind ?? null),
+      menuActions(this.#menuNode?.kind ?? null, this.#singleFile),
       (action) => action,
       (action) => el('button', { class: action === 'delete' ? 'danger' : undefined, on: { click: () => this.#act(action) } }),
       (button, action) => setText(button, i18n.t(MENU_LABELS[action])),

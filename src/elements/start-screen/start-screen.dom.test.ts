@@ -39,14 +39,19 @@ test('the same tree as StartScreen.tsx: main, panel, hidden title, three logos, 
   el.remove();
 });
 
-test('start: one primary button that sends hmd-start-pick; no message without an error', () => {
+test('start: open folder (primary, hmd-start-pick) then open a file (secondary, hmd-start-pick-file); no message without an error', () => {
   const { el, buttons } = mount();
-  let picks = 0;
-  el.addEventListener('hmd-start-pick', () => picks++);
-  assert.deepEqual(buttons().map((b) => [b.className, b.textContent]), [['primary', EN_MESSAGES['start.openFolder']]]);
+  const events: string[] = [];
+  el.addEventListener('hmd-start-pick', () => events.push('pick'));
+  el.addEventListener('hmd-start-pick-file', () => events.push('file'));
+  assert.deepEqual(buttons().map((b) => [b.className, b.textContent]), [
+    ['primary', EN_MESSAGES['start.openFolder']],
+    ['secondary', EN_MESSAGES['start.openFile']],
+  ]);
   assert.equal(el.querySelector('.message'), null);
   buttons()[0].click();
-  assert.equal(picks, 1);
+  buttons()[1].click();
+  assert.deepEqual(events, ['pick', 'file']);
   el.remove();
 });
 
@@ -61,7 +66,7 @@ test('start with an error: the message sits between the tagline and the button',
   el.remove();
 });
 
-test('resume: resume (primary) then open another (secondary), each with its event', () => {
+test('resume: resume (primary) then open another folder and open a file (secondary), each with its event', () => {
   const { el, buttons } = mount({ mode: 'resume', folderName: 'notes' });
   const events: string[] = [];
   el.addEventListener('hmd-start-resume', () => events.push('resume'));
@@ -69,6 +74,7 @@ test('resume: resume (primary) then open another (secondary), each with its even
   assert.deepEqual(buttons().map((b) => [b.className, b.textContent]), [
     ['primary', t('start.resume', { folder: 'notes' })],
     ['secondary', EN_MESSAGES['start.openOther']],
+    ['secondary', EN_MESSAGES['start.openFile']],
   ]);
   buttons()[0].click();
   buttons()[1].click();
@@ -76,10 +82,14 @@ test('resume: resume (primary) then open another (secondary), each with its even
   el.remove();
 });
 
-test('unsupported: the reason and no buttons', () => {
+test('unsupported: the reason and only open a file, as the primary button', () => {
   const { el, buttons } = mount({ mode: 'unsupported', reason: 'firefox' });
+  let files = 0;
+  el.addEventListener('hmd-start-pick-file', () => files++);
   assert.equal(el.querySelector('.message')!.textContent, EN_MESSAGES['unsupported.firefox']);
-  assert.deepEqual(buttons(), []);
+  assert.deepEqual(buttons().map((b) => [b.className, b.textContent]), [['primary', EN_MESSAGES['start.openFile']]]);
+  buttons()[0].click();
+  assert.equal(files, 1);
   el.remove();
 });
 
@@ -130,4 +140,33 @@ test('a language change relabels in place; detached, it no longer does', async (
   await other.i18n.setLocale('it');
   assert.equal(other.buttons()[0].textContent, EN_MESSAGES['start.openFolder']);
   el.remove();
+});
+
+test('recents: a titled section after the actions; a click sends the recent to open', () => {
+  const { el } = mount({ recents: [{ key: 'folder:1:notes', kind: 'folder', name: 'notes' }] });
+  const section = el.querySelector('section.recents')!;
+  assert.equal(section.querySelector('h2')!.textContent, EN_MESSAGES['open.recent']);
+  assert.equal(section.previousElementSibling!.localName, 'button', 'after the action buttons');
+  const recent = section.querySelector('button')!;
+  assert.equal(recent.getAttribute('aria-label'), 'Folder notes');
+  const events: unknown[] = [];
+  el.addEventListener('hmd-open-choose', (event) => events.push(event.detail));
+  recent.click();
+  assert.deepEqual(events, [{ action: 'recent', key: 'folder:1:notes' }]);
+  el.recents = [];
+  assert.equal(el.querySelector('section.recents'), null);
+});
+
+test('an open error is announced in a status region, again for each new error even with the same text', async () => {
+  const { el } = mount({ error: 'boom', errorSeq: 1 });
+  const status = el.querySelector('p.visually-hidden[role="status"]')!;
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  assert.equal(status.textContent, t('start.openError', { detail: 'boom' }));
+  status.textContent = '';
+  el.busy = false;
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  assert.equal(status.textContent, '', 'a render without a new error says nothing');
+  el.errorSeq = 2;
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  assert.equal(status.textContent, t('start.openError', { detail: 'boom' }));
 });

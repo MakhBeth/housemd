@@ -27,6 +27,10 @@ export default defineConfig({
         display: 'standalone',
         scope: '/',
         start_url: '/',
+        // «Apri con… HouseMD» dal sistema (PWA installata, Chromium): il file arriva da `launchQueue`
+        // (`onLaunchFile` in src/fs/access.ts). Una finestra già aperta riceve il file invece di aprirne un'altra.
+        file_handlers: [{ action: '/', accept: { 'text/markdown': ['.md'] } }],
+        launch_handler: { client_mode: 'focus-existing' },
         icons: [
           { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
           { src: 'pwa-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },

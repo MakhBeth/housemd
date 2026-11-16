@@ -12,6 +12,7 @@ test('menu entries by kind, in the order of the old menu', () => {
   assert.deepEqual(menuActions('file'), ['history', 'rename', 'delete']);
   assert.deepEqual(menuActions(null), ['rename', 'delete']);
   assert.deepEqual(menuActions('asset'), ['rename', 'delete']);
+  assert.deepEqual(menuActions('file', true), ['history']);
 });
 
 test('every menu entry has a label', () => {

@@ -99,6 +99,45 @@
       border: 1px solid var(--c-border);
     }
 
+    /* Recenti: una lista compatta sotto le azioni, a tutta larghezza del pannello. */
+    .recents {
+      width: 100%;
+      margin-top: 8px;
+      text-align: left;
+    }
+
+    .recentTitle {
+      margin: 0 0 4px;
+      font-size: 0.8125rem;
+      font-weight: 600;
+      color: var(--c-muted);
+    }
+
+    .recentList {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    .recentItem {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      padding: 6px 8px;
+      border: none;
+      border-radius: 6px;
+      background: none;
+      color: inherit;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .recentItem:hover,
+    .recentItem:focus-visible {
+      background: var(--c-accent-soft);
+    }
+
     /* Cambio in corso: stesso aspetto, solo il cursore; la ragione sta nella nota (mai disabled). */
     .start[data-busy],
     .start[data-busy] :is(.primary, .secondary) {

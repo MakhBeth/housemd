@@ -2,9 +2,12 @@ import type { MessageKey } from '../../i18n/messages';
 import type { TreeNode } from '../../ui/tree';
 import type { TreeAction } from '../workspace/dialogFor';
 
-/** Voci del menu ⋯ per il tipo di nodo, nell'ordine di FileTree.tsx; senza nodo (mai aperto) solo le comuni. */
-export function menuActions(kind: TreeNode['kind'] | null): TreeAction[] {
-  const common: TreeAction[] = ['rename', 'delete'];
+/**
+ * Voci del menu ⋯ per il tipo di nodo, nell'ordine di FileTree.tsx; senza nodo (mai aperto) solo le comuni.
+ * `singleFile`: niente rinomina né eliminazione, che con un file singolo non possono riuscire.
+ */
+export function menuActions(kind: TreeNode['kind'] | null, singleFile = false): TreeAction[] {
+  const common: TreeAction[] = singleFile ? [] : ['rename', 'delete'];
   if (kind === 'directory') return ['new-file', 'new-folder', ...common];
   if (kind === 'file') return ['history', ...common];
   return common;

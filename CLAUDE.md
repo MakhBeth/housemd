@@ -6,15 +6,21 @@ Editor markdown nel browser per cartelle locali (File System Access API), stile 
 
 **Policy:** solo Chromium desktop recente (Chrome, Edge). Le feature supportate da Chromium stabile
 (Popover, Anchor Positioning, `<dialog closedby>`, CSS Custom Highlight API, `light-dark()`,
-File System Access API) si usano **senza polyfill e senza fallback**. Unica eccezione:
-`Element.setHTML()` (Sanitizer API) va sempre usato con fallback a DOMPurify caricato dinamicamente.
+File System Access API) si usano **senza polyfill e senza fallback**. Eccezioni:
+
+- `Element.setHTML()` (Sanitizer API) va sempre usato con fallback a DOMPurify caricato dinamicamente.
+- **File singolo** (LAB-22): dove manca la File System Access API (Firefox, Safari, Brave con l'API spenta) si può
+  aprire un solo file `.md` con `<input type="file">` (`src/fs/fileInput.ts`) e salvarlo scaricandolo
+  (`memoryFile` in `src/fs/singleFile.ts`). È l'unico fallback: il resto dell'app (cartelle e le feature sopra)
+  resta solo Chromium, e chi aggiunge una funzione non deve farla funzionare anche lì.
 
 ## Regole
 
 - Mai `innerHTML` con HTML non sanitizzato (vedi `src/preview/sanitize.ts`).
 - Mai `alert()` / `confirm()` / `prompt()`: i dialog sono le funzioni di `src/elements/dialogs/`
   (`showConfirmDialog`, `showNameDialog`, `showAccessLostDialog`), che usano `<dialog>` con `showModal()` e `closedby`.
-- Solo `src/fs/fsaOps.ts` e `src/fs/access.ts` toccano la File System Access API.
+- Solo `src/fs/fsaOps.ts` e `src/fs/access.ts` toccano la File System Access API. Il file singolo passa dallo stesso
+  `Workspace`, su una cartella finta che contiene solo quel file (`singleFileOps`).
 - La logica va in moduli puri testati con `npm test` (`tsx --import ./src/testing/assetHooks.ts --test`: hook di Node per gli import `?url` delle icone e `.css`, serve Node ≥ 22.15 per `module.registerHooks`); gli elementi restano sottili.
 - Nessun testo UI scritto a mano negli elementi: tutto passa da `t()` (`src/i18n`). Una chiave nuova va in
   **tutti** i `src/i18n/locales/*.json` (lo controlla `locales.test.ts`); `en.json` è il riferimento.

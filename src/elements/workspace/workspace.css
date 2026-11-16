@@ -99,6 +99,42 @@
       padding-block: 6px;
     }
 
+    /* File singolo: una riga discreta sotto la barra («Apri la cartella di questo file», o che si salva scaricando). */
+    .fileBar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 12px;
+      border-bottom: 1px solid var(--c-border);
+      font-size: 0.8125rem;
+      color: var(--c-muted);
+    }
+
+    .fileBarNote {
+      margin: 0;
+    }
+
+    .fileBarButton {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 2px 6px;
+      border: none;
+      border-radius: 6px;
+      background: none;
+      color: var(--c-text);
+      cursor: pointer;
+    }
+
+    .fileBarButton:hover {
+      background: var(--c-accent-soft);
+    }
+
+    /* Pulsanti che non esistono in una modalità (Nuovo file con un file singolo, Scarica con una cartella). */
+    .iconButton[hidden] {
+      display: none;
+    }
+
     .iconButton {
       background: none;
       border: none;

@@ -31,6 +31,7 @@ import pencil from 'pixelarticons/svg/pencil.svg?url';
 import printer from 'pixelarticons/svg/printer.svg?url';
 import plus from 'pixelarticons/svg/plus.svg?url';
 import save from 'pixelarticons/svg/save.svg?url';
+import download from 'pixelarticons/svg/download.svg?url';
 import search from 'pixelarticons/svg/search.svg?url';
 import settingsCog from 'pixelarticons/svg/settings-cog.svg?url';
 import sparkles from 'pixelarticons/svg/sparkles.svg?url';
@@ -64,6 +65,7 @@ export const ICONS = {
   close,
   warning: warningDiamond,
   save,
+  download,
   modeEditor: pencil,
   modeSplit: textColumns,
   modePreview: eye,
