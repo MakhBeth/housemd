@@ -42,7 +42,7 @@ export class HmdOpenMenu extends HmdElement {
       const list = el('ul', { class: 'recent', 'aria-labelledby': titleId });
       const folder = el('button', { class: 'item', on: { click: () => this.#choose({ action: 'folder' }) } });
       const file = el('button', { class: 'item', on: { click: () => this.#choose({ action: 'file' }) } });
-      const menu = el('div', { id, class: 'menu', popover: 'auto', on: { toggle: (event) => this.#onToggle(event as ToggleEvent), keydown: (event) => this.#onKey(event) } }, folder, file);
+      const menu = el('div', { id, class: 'menu', popover: 'auto', on: { toggle: (event) => this.#onToggle(event as ToggleEvent), keydown: (event) => this.#onKey(event), focusout: (event) => this.#onFocusOut(event as FocusEvent) } }, folder, file);
       menu.style.setProperty('position-anchor', anchor);
       this.append(trigger, menu);
       this.#parts = { trigger, menu, folder, file, title, list };
@@ -79,6 +79,14 @@ export class HmdOpenMenu extends HmdElement {
     if (next === null) return;
     event.preventDefault();
     items[next]!.focus();
+  }
+
+  /** Tab (o Maiusc+Tab) fuori dal menu: si chiude, senza spostare il focus che se ne va da solo. */
+  #onFocusOut(event: FocusEvent): void {
+    const parts = this.#parts;
+    const next = event.relatedTarget as Node | null;
+    if (!parts || !next || parts.menu.contains(next)) return;
+    parts.menu.hidePopover();
   }
 
   /** Chiuso (Esc, clic fuori) con il focus perso o rimasto nel menu: torna al pulsante. */

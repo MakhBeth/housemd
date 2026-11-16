@@ -461,3 +461,16 @@ test('Open this file\'s folder: the picker starts at the file, and the folder re
   assert.ok(near[0] === fileHandle, 'startIn: the file');
   assert.deepEqual(remembered, ['sub/b.md']);
 });
+
+test('a recent denied from the start screen says so in the start screen message', async () => {
+  const { deps: d } = deps({
+    listRecents: async () => [{ kind: 'file', name: 'a.md', handle: handle('a.md'), openedAt: 1 }],
+    hasAccess: async () => false,
+    requestAccess: async () => false,
+  });
+  const el = mount(d);
+  await waitFor(() => el.querySelector('hmd-start-screen')?.recents.length === 1);
+  choose(el.querySelector('hmd-start-screen')!, { action: 'recent', key: 'file:1:a.md' });
+  await waitFor(() => !!el.querySelector('hmd-start-screen')?.error);
+  assert.equal(el.querySelector('hmd-start-screen')!.error, EN_MESSAGES['open.accessDenied'].replace('{name}', 'a.md'));
+});

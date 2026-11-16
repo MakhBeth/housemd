@@ -299,12 +299,18 @@ export class HmdApp extends HmdElement {
     });
   }
 
-  /** Un recente: il permesso si chiede adesso (il clic è dell'utente); negato, non si apre niente. */
+  /**
+   * Un recente: il permesso si chiede adesso (il clic è dell'utente). Negato, non si apre niente e lo si dice: come
+   * errore di apertura, cioè un avviso nello workspace aperto o il messaggio della schermata iniziale.
+   */
   #openRecent(key: string): void {
     const deps = this.#deps;
     const recent = this.#recents.find((entry) => recentKey(entry) === key);
     if (!recent) return;
-    const granted = async () => (await deps.hasAccess(recent.handle)) || (await deps.requestAccess(recent.handle).catch(() => false));
+    const granted = async () => {
+      if ((await deps.hasAccess(recent.handle)) || (await deps.requestAccess(recent.handle).catch(() => false))) return true;
+      throw new Error(this.#i18n!.t('open.accessDenied', { name: recent.name }));
+    };
     if (recent.kind === 'folder') this.#choose(async () => ((await granted()) ? (recent.handle as FileSystemDirectoryHandle) : null));
     else this.#chooseFile(async () => ((await granted()) ? deps.fileFromHandle(recent.handle as FileSystemFileHandle) : null));
   }

@@ -54,6 +54,11 @@
       padding: 6px 10px;
       color: inherit;
       cursor: pointer;
+    }
+
+    /* Nomi lunghi: i puntini sul testo (in un contenitore flex servono sullo span, con min-width 0). */
+    .item span {
+      min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;

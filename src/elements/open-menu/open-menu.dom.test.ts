@@ -78,3 +78,13 @@ test('arrows move between the items, round the ends', () => {
   menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
   assert.ok(document.activeElement === items()[0]);
 });
+
+test('Tab out of the menu closes it without moving the focus; moving inside keeps it open', () => {
+  const { trigger, menu, items } = mount();
+  const after = document.body.appendChild(document.createElement('button'));
+  trigger.click();
+  items()[0]!.dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: items()[1]! }));
+  assert.ok(isPopoverOpen(menu), 'still open inside');
+  items()[1]!.dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: after }));
+  assert.equal(isPopoverOpen(menu), false);
+});
