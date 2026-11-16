@@ -40,26 +40,36 @@ Cosa funziona dove:
 
 ### «Apri con… HouseMD» su Linux
 
-Verificato su Linux con Chromium 156, dal file manager, con la PWA installata. Chromium registra da solo l'app
-come gestore dei file `.md`, grazie a `file_handlers` nel manifest. Crea `~/.local/share/applications/chrome-<id>-Default.desktop`
-con `MimeType=text/markdown` ed `Exec=… --app-id=<id> %U`, e aggiunge il tipo in `~/.local/share/mime/packages`.
-Il file aperto così arriva all'app (`launchQueue`). Con HouseMD già aperto, il secondo file sostituisce quello
-nella stessa finestra (`launch_handler: focus-existing`), dopo aver salvato il precedente. Non serve un `.desktop`
-scritto a mano.
+**Cosa è verificato** (16/11, Chromium 156 su Debian, schermo virtuale Xvfb, con `scripts/linux/open-with-check.mjs`):
+
+- Installando la PWA, Chromium registra da solo l'app come gestore dei `.md`, grazie a `file_handlers` nel manifest.
+  Crea `~/.local/share/applications/chrome-<id>-Default.desktop` con `MimeType=text/markdown` ed
+  `Exec=… --app-id=<id> %U`, e aggiunge il tipo in `~/.local/share/mime/packages`. `xdg-mime default` lo accetta.
+  Non serve un `.desktop` scritto a mano.
+- Si lancia la riga `Exec` di quel `.desktop` con un file, cioè quello che fa il file manager con «Apri con».
+  Chromium mostra il suo dialog **«Open and edit uno.md in this web app?»**. Con «Open» il file si apre in HouseMD.
+- Alla prima modifica Chromium chiede anche **«Save changes to uno.md?»**: un file aperto così ha solo la lettura,
+  e il salvataggio automatico aspetta la risposta. Con «Save changes» il file su disco si aggiorna.
+- Un secondo file, con HouseMD già aperto, arriva nella stessa finestra al posto del primo, che resta salvato.
+  Con «Remember my choice» nel dialog, dal file successivo il dialog non torna.
+
+**Cosa non è verificato:** il clic vero nel file manager (Nautilus, Thunar) e un desktop reale come Omarchy/Hyprland.
+Lì cambia solo chi lancia la riga `Exec` del `.desktop`.
+
+Passi:
 
 1. Apri HouseMD in Chromium o Chrome (da sviluppo: `npm run build && npm run preview`, poi `http://localhost:4173`)
-   e installalo: icona «Installa» nella barra degli indirizzi.
-2. Controlla che il gestore ci sia: `ls ~/.local/share/applications | grep -i chrome-` e poi
-   `grep -l HouseMD ~/.local/share/applications/chrome-*.desktop`. Nel file deve esserci `MimeType=text/markdown`.
+   e installalo con l'icona «Installa» nella barra degli indirizzi.
+2. Controlla che il gestore ci sia: `grep -l HouseMD ~/.local/share/applications/chrome-*.desktop`. Nel file deve
+   esserci `MimeType=text/markdown`.
 3. Per aprire i `.md` con HouseMD con un doppio clic: `xdg-mime default <file trovato>.desktop text/markdown`.
    Puoi controllare con `xdg-mime query default text/markdown`.
-4. Nel file manager (Nautilus, Thunar…) fai tasto destro su un `.md`, poi **Apri con → HouseMD**.
-   La prima volta Chromium chiede se aprire il file con HouseMD. Con «Ricorda la scelta» non lo chiede più.
+4. Nel file manager fai tasto destro su un `.md`, poi **Apri con → HouseMD**. Rispondi «Open» al primo dialog,
+   eventualmente con «Remember my choice», e «Save changes» alla prima modifica.
 
-`scripts/linux-file-handler-check.mjs` ripete la verifica in una HOME temporanea:
-`npm run build && xvfb-run -a node scripts/linux-file-handler-check.mjs /usr/bin/chromium`.
-Il dialog di conferma della prima apertura dal file manager non lo può superare in automatico: lo script
-consegna il file all'app con il comando di DevTools `PWA.launchFilesInApp`.
+La prova si ripete con
+`npm run build && mkdir -p /tmp/hmd-fb && FBDIR=/tmp/hmd-fb xvfb-run -a -s "-screen 0 1280x900x24 -fbdir /tmp/hmd-fb" node scripts/linux/open-with-check.mjs`.
+Lo script fotografa i dialog (`scripts/linux/*.png`) e li conferma con un mouse finto (XTest).
 
 **macOS e Windows** (non verificati): Chrome ed Edge registrano la PWA installata in Finder → Apri con e in Esplora
 risorse → Apri con, sempre dal manifest. Su macOS l'app compare dopo l'installazione da `localhost` o da HTTPS.

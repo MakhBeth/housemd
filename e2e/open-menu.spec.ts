@@ -59,3 +59,31 @@ test('Open with HouseMD: a second launched file replaces the open one, which is 
   await expect(app.editor()).toHaveText('two');
   await expect.poll(() => readText(page, 'notes', 'one.md')).toBe('one edited');
 });
+
+test('the Open button toggles: a second real click closes the menu', async ({ app, page }) => {
+  await app.openFolder({ 'a.md': 'alpha' });
+  const trigger = page.getByRole('button', { name: app.t('open.menu'), exact: true });
+  const folder = page.getByRole('button', { name: app.t('open.folder'), exact: true });
+  await trigger.click();
+  await expect(folder).toBeVisible();
+  await expect(folder).toBeFocused();
+  await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  await trigger.click();
+  await expect(folder).toBeHidden();
+  await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  await trigger.click();
+  await expect(folder).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(folder).toBeHidden();
+  await expect(trigger).toBeFocused();
+});
+
+test('Shift+Tab from the first item back to Open closes the menu', async ({ app, page }) => {
+  await app.openFolder({ 'a.md': 'alpha' });
+  const trigger = page.getByRole('button', { name: app.t('open.menu'), exact: true });
+  await trigger.click();
+  await page.keyboard.press('Shift+Tab');
+  await expect(trigger).toBeFocused();
+  await expect(page.getByRole('button', { name: app.t('open.folder'), exact: true })).toBeHidden();
+  await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+});

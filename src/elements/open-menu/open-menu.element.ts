@@ -16,6 +16,8 @@ import './open-menu.css';
 export class HmdOpenMenu extends HmdElement {
   #i18n: I18nStore | null = null;
   #recents: readonly RecentItem[] = [];
+  /** Clic in corso sul pulsante: il focus che ci arriva non chiude il menu (lo chiude il clic dell'invocatore). */
+  #pressing = false;
   #parts: { trigger: HTMLButtonElement; menu: HTMLDivElement; folder: HTMLButtonElement; file: HTMLButtonElement; title: HTMLParagraphElement; list: HTMLUListElement } | null = null;
 
   get i18n(): I18nStore | null { return this.#i18n; }
@@ -35,7 +37,9 @@ export class HmdOpenMenu extends HmdElement {
     if (!this.#parts) {
       const id = uid('open-menu');
       const anchor = `--${id}`;
-      const trigger = el('button', { class: 'trigger', 'aria-expanded': 'false', 'aria-controls': id, on: { click: () => this.#toggle() } }, icon('folder'), el('span', { class: 'label' }));
+      // Invocatore nativo del popover (`popovertarget`): il secondo clic chiude, perché il light-dismiss non conta il
+      // clic sul proprio invocatore. Dove manca (jsdom) il clic fa lo stesso a mano.
+      const trigger = el('button', { class: 'trigger', 'aria-expanded': 'false', 'aria-controls': id, popovertarget: id, on: { pointerdown: () => void (this.#pressing = true), click: () => this.#toggleFallback() } }, icon('folder'), el('span', { class: 'label' }));
       trigger.style.setProperty('anchor-name', anchor);
       const titleId = `${id}-recent`;
       const title = el('p', { class: 'recentTitle', id: titleId });
@@ -57,14 +61,20 @@ export class HmdOpenMenu extends HmdElement {
     emit(this, 'hmd-open-choose', detail);
   }
 
-  #toggle(): void {
+  #toggleFallback(): void {
+    this.#pressing = false;
     const parts = this.#parts;
-    if (!parts) return;
-    if (parts.menu.matches(':popover-open')) {
-      parts.menu.hidePopover();
-      return;
+    if (!parts || 'popoverTargetElement' in parts.trigger) return;
+    if (parts.menu.matches(':popover-open')) parts.menu.hidePopover();
+    else {
+      parts.menu.showPopover();
+      this.#opened();
     }
-    parts.menu.showPopover();
+  }
+
+  /** Menu aperto: il pulsante dice «espanso» e il focus va su «Apri cartella…». */
+  #opened(): void {
+    const parts = this.#parts!;
     toggleAttr(parts.trigger, 'aria-expanded', true, 'true');
     parts.folder.focus();
   }
@@ -85,7 +95,11 @@ export class HmdOpenMenu extends HmdElement {
   #onFocusOut(event: FocusEvent): void {
     const parts = this.#parts;
     const next = event.relatedTarget as Node | null;
-    if (!parts || !next || parts.menu.contains(next)) return;
+    // Verso il pulsante con un clic no: il clic dell'invocatore chiude già, chiudere qui lo farebbe riaprire.
+    // Con Maiusc+Tab sì: il focus torna al pulsante a menu chiuso.
+    const pressing = this.#pressing;
+    this.#pressing = false;
+    if (!parts || !next || parts.menu.contains(next) || (next === parts.trigger && pressing)) return;
     parts.menu.hidePopover();
   }
 
@@ -93,8 +107,8 @@ export class HmdOpenMenu extends HmdElement {
   #onToggle(event: ToggleEvent): void {
     const parts = this.#parts;
     if (!parts) return;
-    toggleAttr(parts.trigger, 'aria-expanded', true, String(event.newState === 'open'));
-    if (event.newState !== 'closed') return;
+    if (event.newState === 'open') return this.#opened();
+    toggleAttr(parts.trigger, 'aria-expanded', true, 'false');
     const active = document.activeElement;
     if (active === document.body || parts.menu.contains(active)) parts.trigger.focus();
   }
