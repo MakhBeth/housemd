@@ -156,3 +156,17 @@ test('recents: a titled section after the actions; a click sends the recent to o
   el.recents = [];
   assert.equal(el.querySelector('section.recents'), null);
 });
+
+test('an open error is announced in a status region, again for each new error even with the same text', async () => {
+  const { el } = mount({ error: 'boom', errorSeq: 1 });
+  const status = el.querySelector('p.visually-hidden[role="status"]')!;
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  assert.equal(status.textContent, t('start.openError', { detail: 'boom' }));
+  status.textContent = '';
+  el.busy = false;
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  assert.equal(status.textContent, '', 'a render without a new error says nothing');
+  el.errorSeq = 2;
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  assert.equal(status.textContent, t('start.openError', { detail: 'boom' }));
+});

@@ -51,6 +51,8 @@ export class HmdApp extends HmdElement {
   #launched = false;
   /** Cartelle e file aperti di recente (con l'handle), per il menu «Apri» e la schermata iniziale. */
   #recents: Recent[] = [];
+  /** Conta gli errori mostrati nella schermata iniziale, così uno uguale al precedente si riannuncia. */
+  #errorSeq = 0;
   #recentItems: readonly RecentItem[] = [];
   /** Copia non scaricata di una sessione precedente, offerta nella schermata iniziale (la più recente). */
   #recoverable: PendingCopy | null = null;
@@ -177,6 +179,7 @@ export class HmdApp extends HmdElement {
   /** Una schermata nuova; un'apertura riuscita vuole un hmd-workspace nuovo. Lo stato si salva prima del render. */
   #show(screen: Screen): void {
     const opened = screen.kind === 'open' || screen.kind === 'file';
+    if ((screen.kind === 'start' || screen.kind === 'unsupported') && screen.error !== undefined) this.#errorSeq++;
     if (opened) this.#workspace = null;
     this.#screen = screen;
     this.#deps.setUpdateWorkspace(opened ? screen.workspace : null);
@@ -366,12 +369,12 @@ export class HmdApp extends HmdElement {
       .with({ kind: 'unsupported' }, ({ error }) => {
         const s = this.#startScreen(i18n);
         // Le proprietà che il ramo non passa tornano al default (React 19 le azzerava sullo stesso elemento).
-        Object.assign(s, { mode: 'unsupported', reason: this.#deps.unsupportedReason(), error, folderName: '', busy: this.#switching, recoverName: this.#recoverable?.name ?? '', recents: this.#recentItems });
+        Object.assign(s, { mode: 'unsupported', reason: this.#deps.unsupportedReason(), error, errorSeq: this.#errorSeq, folderName: '', busy: this.#switching, recoverName: this.#recoverable?.name ?? '', recents: this.#recentItems });
         return s;
       })
       .with({ kind: 'start' }, ({ error }) => {
         const s = this.#startScreen(i18n);
-        Object.assign(s, { mode: 'start', reason: undefined, error, folderName: '', busy: this.#switching, recoverName: this.#recoverable?.name ?? '', recents: this.#recentItems });
+        Object.assign(s, { mode: 'start', reason: undefined, error, errorSeq: this.#errorSeq, folderName: '', busy: this.#switching, recoverName: this.#recoverable?.name ?? '', recents: this.#recentItems });
         return s;
       })
       .with({ kind: 'resume' }, ({ stored }) => {

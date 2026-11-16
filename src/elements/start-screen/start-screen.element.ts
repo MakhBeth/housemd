@@ -18,6 +18,9 @@ export class HmdStartScreen extends HmdElement {
   #mode: StartMode = 'start';
   #reason: UnsupportedReason | undefined;
   #error: string | undefined;
+  /** Numero dell'errore mostrato: cambia a ogni apertura fallita, anche con lo stesso testo (si riannuncia). */
+  #errorSeq = 0;
+  #announcedSeq = 0;
   #folderName = '';
   #recoverName = '';
   #recents: readonly RecentItem[] = [];
@@ -26,12 +29,14 @@ export class HmdStartScreen extends HmdElement {
   /** Un pulsante è stato attivato durante un cambio: la nota resta finché il cambio dura. */
   #note = false;
   #announceAgain = false;
-  #parts: { main: HTMLElement; panel: HTMLElement; note: HTMLParagraphElement; title: HTMLHeadingElement; tagline: HTMLParagraphElement; message: HTMLParagraphElement; pick: HTMLButtonElement; resume: HTMLButtonElement; other: HTMLButtonElement; file: HTMLButtonElement; recover: HTMLButtonElement; recentSection: HTMLElement; recentTitle: HTMLHeadingElement; recentList: HTMLUListElement } | null = null;
+  #parts: { main: HTMLElement; panel: HTMLElement; note: HTMLParagraphElement; errorStatus: HTMLParagraphElement; title: HTMLHeadingElement; tagline: HTMLParagraphElement; message: HTMLParagraphElement; pick: HTMLButtonElement; resume: HTMLButtonElement; other: HTMLButtonElement; file: HTMLButtonElement; recover: HTMLButtonElement; recentSection: HTMLElement; recentTitle: HTMLHeadingElement; recentList: HTMLUListElement } | null = null;
 
   get mode(): StartMode { return this.#mode; }
   set mode(value: StartMode) { this.#mode = value ?? 'start'; this.#render(); }
   get reason(): UnsupportedReason | undefined { return this.#reason; }
   set reason(value: UnsupportedReason | undefined) { this.#reason = value ?? undefined; this.#render(); }
+  get errorSeq(): number { return this.#errorSeq; }
+  set errorSeq(value: number) { this.#errorSeq = value ?? 0; this.#render(); }
   get error(): string | undefined { return this.#error; }
   set error(value: string | undefined) { this.#error = value ?? undefined; this.#render(); }
   get folderName(): string { return this.#folderName; }
@@ -71,6 +76,7 @@ export class HmdStartScreen extends HmdElement {
         main,
         panel,
         note: el('p', { class: 'note', role: 'status' }),
+        errorStatus: el('p', { class: 'visually-hidden', role: 'status' }),
         title,
         tagline,
         message: el('p', { class: 'message' }),
@@ -117,6 +123,13 @@ export class HmdStartScreen extends HmdElement {
     // Dove le cartelle non si aprono, «Apri un file» è l'azione principale.
     parts.file.className = this.#mode === 'unsupported' ? 'primary' : 'secondary';
     if (view.message) setText(parts.message, i18n.t(view.message.key, view.message.params));
+    // L'errore di un'apertura (anche un recente negato) si annuncia: il focus resta sul pulsante e il messaggio da
+    // solo non si sente. Una regione sempre presente, riscritta con `announce` a ogni errore nuovo, anche uguale.
+    if (parts.errorStatus.parentNode !== parts.main) parts.main.append(parts.errorStatus);
+    if (this.#error !== undefined && view.message && this.#errorSeq !== this.#announcedSeq) {
+      this.#announcedSeq = this.#errorSeq;
+      announce(parts.errorStatus, i18n.t(view.message.key, view.message.params), true);
+    }
     // Messaggio e pulsanti si montano e si smontano come in React: nodi assenti, non nascosti.
     const wanted: HTMLElement[] = [
       ...(view.message ? [parts.message] : []),
