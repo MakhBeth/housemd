@@ -11,6 +11,8 @@ export interface SingleFile {
   readonly name: string;
   /** Vero se le scritture finiscono sul file del disco; falso se restano in memoria finché non si scarica. */
   readonly writesToDisk: boolean;
+  /** Handle del file vero (File System Access API): per i recenti e per aprirne la cartella. Assente in memoria. */
+  readonly handle?: FileSystemFileHandle;
   /** Sessione da riprendere (copia recuperata): lo workspace riusa questo id, con le sue bozze. */
   readonly sessionId?: string;
   read(): Promise<StoredFile>;

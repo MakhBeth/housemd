@@ -15,6 +15,7 @@ import { HmdEditor } from './editor/editor.element';
 import { HmdFileTree } from './file-tree/file-tree.element';
 import { HmdHistoryPanel } from './history-panel/history-panel.element';
 import { HmdNotice } from './notice/notice.element';
+import { HmdOpenMenu } from './open-menu/open-menu.element';
 import { HmdFrontmatterCard } from './preview/frontmatter-card.element';
 import { HmdPreview } from './preview/preview.element';
 import { HmdSearchPanel } from './search-panel/search-panel.element';
@@ -54,6 +55,7 @@ const ELEMENTS: Definitions = [
   ['hmd-frontmatter-card', HmdFrontmatterCard],
   ['hmd-history-panel', HmdHistoryPanel],
   ['hmd-notice', HmdNotice],
+  ['hmd-open-menu', HmdOpenMenu],
   ['hmd-preview', HmdPreview],
   ['hmd-search-panel', HmdSearchPanel],
   ['hmd-settings', HmdSettings],

@@ -13,6 +13,8 @@ import { createDocSession, type DocSession } from '../../editor/docSession';
 import { requestAccess } from '../../fs/access';
 import { downloadFile } from '../../fs/fileInput';
 import { isMemoryFile, pendingDownload, type SingleFile } from '../../fs/singleFile';
+import type { HmdOpenMenu } from '../open-menu/open-menu.element';
+import type { RecentItem } from '../open-menu/openView';
 import { APP_TITLE, pageTitle } from '../../lib/pageTitle';
 import { readLastFile, readPref, readValidPref, writeLastFile, writePref } from '../../lib/prefs';
 import type { SettingsSection } from '../../lib/route';
@@ -59,6 +61,8 @@ interface Parts {
   layout: HTMLDivElement;
   main: HTMLElement;
   toggle: HTMLButtonElement;
+  /** Menu «Apri»: sempre nella barra, con una cartella e con un file singolo. */
+  openMenu: HmdOpenMenu;
   path: HTMLSpanElement;
   modes: HTMLDivElement;
   modeButtons: Map<Mode, HTMLButtonElement>;
@@ -100,8 +104,8 @@ interface Slots {
   sidebarBanner: HmdBanner;
   /** Nota del cambio di cartella, subito dopo la testata. */
   folderNote: HTMLParagraphElement;
-  /** Con un file singolo: cosa manca rispetto a una cartella (e, in memoria, che si salva scaricando). */
-  singleFileNote: HTMLParagraphElement;
+  /** File singolo: la riga sotto la barra («Apri la cartella di questo file», o che si salva scaricando). */
+  fileBar: HTMLDivElement;
   /** «Nuovo file» della testata: dove entra il focus con l'albero vuoto. */
   newFile: HTMLButtonElement;
   search: HmdSearchPanel;
@@ -147,6 +151,7 @@ export class HmdWorkspace extends HmdElement {
   #handle: FileSystemDirectoryHandle | null = null;
   /** File singolo aperto senza la sua cartella (null con una cartella). */
   #singleFile: SingleFile | null = null;
+  #recents: readonly RecentItem[] = [];
   #switchingFolder = false;
   #i18n: I18nStore | null = null;
   #theme: ThemeStore | null = null;
@@ -236,7 +241,7 @@ export class HmdWorkspace extends HmdElement {
     // sidebar» se la sidebar non c'è più).
     focusScope: () => this.#slots.aside ?? null,
     refocus: () => {
-      if (this.#sidebarOpen && this.#shown === 'ai') this.#parts!.modeButtons.get('ai')!.focus();
+      if (this.#sidebarShown && this.#shown === 'ai') this.#parts!.modeButtons.get('ai')!.focus();
       else this.focusStart();
     },
   });
@@ -248,7 +253,8 @@ export class HmdWorkspace extends HmdElement {
    */
   focusStart(): void {
     if (this.#slots.tree?.focusTabStop()) return;
-    (this.#slots.newFile ?? this.#parts?.toggle)?.focus();
+    // File singolo: niente albero né sidebar (né «Mostra sidebar»): il focus va al menu «Apri» della barra.
+    (this.#slots.newFile ?? (this.#parts?.toggle.hidden ? this.#parts.openMenu.querySelector('button') : this.#parts?.toggle))?.focus();
   }
 
   get workspace(): Workspace | null { return this.#workspace; }
@@ -262,6 +268,12 @@ export class HmdWorkspace extends HmdElement {
   set workspaceId(value: string) { this.#workspaceId = value ?? ''; }
   get handle(): FileSystemDirectoryHandle | null { return this.#handle; }
   set handle(value: FileSystemDirectoryHandle | null) { this.#handle = value ?? null; }
+  /** Voci dei recenti per il menu «Apri» (le apre `hmd-app`). */
+  get recents(): readonly RecentItem[] { return this.#recents; }
+  set recents(value: readonly RecentItem[]) {
+    this.#recents = value ?? [];
+    this.#loop.update();
+  }
   get singleFile(): SingleFile | null { return this.#singleFile; }
   set singleFile(value: SingleFile | null) { this.#singleFile = value ?? null; }
   get switchingFolder(): boolean { return this.#switchingFolder; }
@@ -387,6 +399,14 @@ export class HmdWorkspace extends HmdElement {
     window.addEventListener('keydown', (event) => this.#onKey(event, workspace), { signal });
   }
 
+  /**
+   * La sidebar c'è solo con una cartella: con un file singolo non c'è un albero da mostrare (resta solo la chat in
+   * modalità AI, che sta nello stesso pannello).
+   */
+  get #sidebarShown(): boolean {
+    return this.#sidebarOpen && (!this.#singleFile || this.#shown === 'ai');
+  }
+
   get #settingsOpen(): boolean {
     return this.#route?.getState().view === 'settings';
   }
@@ -411,6 +431,8 @@ export class HmdWorkspace extends HmdElement {
       .with('save', () => void workspace.saveNow())
       .with('saveAll', () => void workspace.saveAll())
       .with('search', () => {
+        // Con un file singolo non c'è la ricerca nella cartella (Ctrl+F dell'editor resta).
+        if (this.#singleFile) return;
         if (shown === 'ai') this.#changeMode(this.#lastPane);
         this.#setSidebar(true);
         requestAnimationFrame(() => this.#slots.search?.focusInput());
@@ -418,7 +440,9 @@ export class HmdWorkspace extends HmdElement {
       .with('toggleAi', () => {
         if (this.#ai) this.#changeMode(shown === 'ai' ? this.#lastPane : 'ai');
       })
-      .with('toggleSidebar', () => this.#setSidebar(!this.#sidebarOpen))
+      .with('toggleSidebar', () => {
+        if (!this.#singleFile || shown === 'ai') this.#setSidebar(!this.#sidebarOpen);
+      })
       .with('cycleMode', () => this.#changeMode(nextPaneMode(shown)))
       .with('toggleFocus', () => this.#setFocus(!this.#focusMode, true))
       .exhaustive();
@@ -542,6 +566,7 @@ export class HmdWorkspace extends HmdElement {
       layout: el('div', { class: 'layout' }),
       main: el('main', { class: 'main' }),
       toggle: el('button', { class: 'iconButton tooltip', on: { click: () => this.#setSidebar(!this.#sidebarOpen) } }, icon('sidebarOpen')),
+      openMenu: el('hmd-open-menu'),
       path: el('span', { class: 'path' }),
       modes: el('div', { class: 'modes', role: 'group' }),
       modeButtons,
@@ -588,7 +613,7 @@ export class HmdWorkspace extends HmdElement {
     themeSwitcher.store = this.#theme;
     themeSwitcher.i18n = this.#i18n;
     parts.toolbar.append(
-      el('div', { class: 'lead' }, parts.toggle, parts.path),
+      el('div', { class: 'lead' }, parts.toggle, parts.openMenu, parts.path),
       parts.modes,
       el('div', { class: 'actions' }, parts.saveState, parts.history, parts.exportPdf, parts.download, parts.saveAll, parts.focus, themeSwitcher, parts.settings),
     );
@@ -603,6 +628,24 @@ export class HmdWorkspace extends HmdElement {
       return null;
     }
     return (this.#slots[name] ??= create());
+  }
+
+  /**
+   * Riga sotto la barra con un file singolo: il file vero offre «Apri la cartella di questo file» (il selettore parte
+   * dalla sua cartella), la copia in memoria dice che si salva scaricando. Con una cartella non c'è.
+   */
+  #renderFileBar(t: I18nStore['t']): HTMLDivElement | null {
+    const file = this.#singleFile;
+    const bar = this.#slot('fileBar', !!file, () => el('div', { class: 'fileBar' }));
+    if (!bar || !file) return null;
+    if (isMemoryFile(file)) {
+      const note = (bar.querySelector('p') as HTMLParagraphElement | null) ?? bar.appendChild(el('p', { class: 'fileBarNote' }));
+      setText(note, t('singleFile.noteDownload'));
+    } else {
+      const button = (bar.querySelector('button') as HTMLButtonElement | null) ?? bar.appendChild(el('button', { class: 'fileBarButton', on: { click: () => emit(this, 'hmd-open-file-folder', null) } }, icon('folder', { size: 16 }), el('span')));
+      setText(button.lastElementChild!, t('open.fileFolder'));
+    }
+    return bar;
   }
 
   /** Scarica la copia in memoria del file singolo: prima si mette al sicuro quello che è ancora nell'editor. */
@@ -705,10 +748,11 @@ export class HmdWorkspace extends HmdElement {
     const panel = sidePanel(shown);
     const width = shown === 'ai' ? this.#aiWidth : this.#sidebarWidth;
     parts.layout.inert = settingsOpen;
-    const columns = gridColumns(this.#sidebarOpen, width);
+    const sidebarShown = this.#sidebarShown;
+    const columns = gridColumns(sidebarShown, width);
     if (parts.layout.style.gridTemplateColumns !== columns) parts.layout.style.gridTemplateColumns = columns;
-    const aside = this.#slot('aside', this.#sidebarOpen, () => el('aside', { class: 'sidebar' }));
-    const resizer = this.#slot('resizer', this.#sidebarOpen, () =>
+    const aside = this.#slot('aside', sidebarShown, () => el('aside', { class: 'sidebar' }));
+    const resizer = this.#slot('resizer', sidebarShown, () =>
       el('div', {
         class: 'resizer',
         role: 'separator',
@@ -727,7 +771,10 @@ export class HmdWorkspace extends HmdElement {
     }
     place(parts.layout, [...(aside && resizer ? [aside, resizer] : []), parts.main]);
 
-    // Barra degli strumenti.
+    // Barra degli strumenti. Con un file singolo (fuori da AI) non c'è sidebar da mostrare: il pulsante non c'è.
+    parts.toggle.hidden = !!this.#singleFile && shown !== 'ai';
+    assign(parts.openMenu, 'i18n', i18n);
+    assign(parts.openMenu, 'recents', this.#recents);
     const sidebarLabel = this.#sidebarOpen ? t('sidebar.hide') : t('sidebar.show');
     toggleAttr(parts.toggle, 'aria-pressed', true, String(this.#sidebarOpen));
     toggleAttr(parts.toggle, 'aria-label', true, sidebarLabel);
@@ -804,7 +851,8 @@ export class HmdWorkspace extends HmdElement {
       setText(empty.firstElementChild!, t('empty.hint'));
       setText(empty.lastElementChild!, t('file.new'));
     }
-    place(parts.main, [parts.toolbar, ...(this.#historyNote ? [parts.historyNote] : []), ...(this.#exportNote ? [parts.exportNote] : []), ...(this.#focusNote ? [parts.focusNote] : []), parts.saveAllBanner, parts.historyBanner, parts.wsBanner, parts.docBanner, ...(conflict ? [conflict] : []), (review ?? panes ?? empty)!]);
+    const fileBar = this.#renderFileBar(t);
+    place(parts.main, [parts.toolbar, ...(fileBar ? [fileBar] : []), ...(this.#historyNote ? [parts.historyNote] : []), ...(this.#exportNote ? [parts.exportNote] : []), ...(this.#focusNote ? [parts.focusNote] : []), parts.saveAllBanner, parts.historyBanner, parts.wsBanner, parts.docBanner, ...(conflict ? [conflict] : []), (review ?? panes ?? empty)!]);
 
     // Impostazioni sopra l'area di lavoro, e gli avvisi.
     const settings = this.#slot('settings', settingsOpen, () => this.#createSettings());
@@ -943,7 +991,7 @@ export class HmdWorkspace extends HmdElement {
       assign(aiSidebar, 'syncNeedsPermission', !!this.#sync?.needsPermission);
       assign(aiSidebar, 'i18n', i18n);
       place(aside, [aiSidebar]);
-      for (const name of ['treeHeader', 'folderNote', 'singleFileNote', 'sidebarBanner', 'newFile', 'search', 'orphans', 'tree'] as const) delete this.#slots[name];
+      for (const name of ['treeHeader', 'folderNote', 'sidebarBanner', 'newFile', 'search', 'orphans', 'tree'] as const) delete this.#slots[name];
       return;
     }
     const header = this.#slot('treeHeader', true, () =>
@@ -969,27 +1017,19 @@ export class HmdWorkspace extends HmdElement {
       ),
     )!;
     const [hide, folder, newFile, newFolder] = [...header.children] as HTMLButtonElement[];
-    // Con un file singolo non c'è una cartella in cui creare: i pulsanti non ci sono (la nota dice perché).
-    const single = !!this.#singleFile;
-    newFile.hidden = single;
-    newFolder.hidden = single;
-    this.#slots.newFile = single ? undefined : newFile;
+    this.#slots.newFile = newFile;
     for (const [button, label] of [[hide, t('sidebar.hide')], [newFile, t('file.new')], [newFolder, t('folder.new')]] as const) {
       toggleAttr(button, 'aria-label', true, label);
       toggleAttr(button, 'data-tooltip', true, label);
     }
     this.#folderButton = folder;
     setText(folder, state.name);
-    // Con un file singolo il nome da solo sembra il file, non l'azione: il nome accessibile dice cosa fa.
-    toggleAttr(folder, 'aria-label', !!this.#singleFile, t('sidebar.openOtherFileNamed', { file: this.#singleFile?.name ?? '' }));
     toggleAttr(folder, 'data-busy', !!folderBlocker(this.#switchingFolder), '');
     if (!folderBlocker(this.#switchingFolder)) this.#folderNote = false;
     const folderNote = this.#slot('folderNote', this.#folderNote, () => el('p', { class: 'note sidebarNote', role: 'status' }));
     if (folderNote) announce(folderNote, t('folder.opening'), this.#announceAgain.folder || !folderNote.isConnected);
     this.#announceAgain.folder = false;
-    toggleAttr(folder, 'data-tooltip', true, t(single ? 'sidebar.openOtherFile' : 'sidebar.changeFolder'));
-    const singleNote = this.#slot('singleFileNote', single, () => el('p', { class: 'singleFileNote' }));
-    if (singleNote) setText(singleNote, t(isMemoryFile(this.#singleFile) ? 'singleFile.noteDownload' : 'singleFile.note'));
+    toggleAttr(folder, 'data-tooltip', true, t('sidebar.changeFolder'));
     const search = this.#slot('search', true, () => el('hmd-search-panel', { on: { 'hmd-search-open': (event) => void this.#openFile(event.detail.path, event.detail.terms) } }))!;
     assign(search, 'index', workspace.search);
     assign(search, 'indexRevision', state.indexRevision);
@@ -1016,10 +1056,9 @@ export class HmdWorkspace extends HmdElement {
     assign(tree, 'nodes', memo.tree!);
     assign(tree, 'openPath', doc?.path ?? null);
     assign(tree, 'drafts', memo.draftSet!);
-    assign(tree, 'singleFile', single);
     assign(tree, 'i18n', i18n);
     const sidebarBanner = this.#slot('sidebarBanner', true, () => el('hmd-banner', { class: 'noteBanner', on: { 'hmd-banner-close': (event) => this.#closeBanner(event.detail.key) } }))!;
-    place(aside, [header, ...(folderNote ? [folderNote] : []), ...(singleNote ? [singleNote] : []), sidebarBanner, search, ...(orphans ? [orphans] : []), tree]);
+    place(aside, [header, ...(folderNote ? [folderNote] : []), sidebarBanner, search, ...(orphans ? [orphans] : []), tree]);
     delete this.#slots.aiSidebar;
   }
 

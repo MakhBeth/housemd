@@ -63,6 +63,11 @@ function deps(overrides: Partial<AppDeps> = {}) {
       return workspace;
     },
     listRecoverable: async () => [],
+    pathIn: async () => null,
+    rememberLastFile: () => {},
+    listRecents: async () => [],
+    addRecent: async (entry) => [entry],
+    fileFromHandle: () => { throw new Error('no handles in jsdom'); },
     recoverFile: async () => null,
     onLaunchFile: (listener) => void (launch = listener),
     onDbBlocked: (listener) => ((blocked = listener), () => void (blocked = null)),
@@ -385,4 +390,74 @@ test('a saved, authorised folder and a copy to recover: the folder is not reopen
   assert.equal(opened.length, 0);
   el.querySelector('hmd-start-screen')!.dispatchEvent(new CustomEvent('hmd-start-resume', { bubbles: true, detail: null }));
   await waitFor(() => el.screen === 'open');
+});
+
+const choose = (from: Element, detail: { action: 'folder' | 'file' } | { action: 'recent'; key: string }) =>
+  from.dispatchEvent(new CustomEvent('hmd-open-choose', { bubbles: true, detail }));
+
+test('free switch from the Open menu: folder → file → folder, without going back to the start screen', async () => {
+  const { deps: d } = deps({ loadWorkspace: async () => ({ handle: handle('notes'), workspaceId: 'w' }) });
+  const el = mount(d);
+  await waitFor(() => el.screen === 'open');
+  choose(el.querySelector('hmd-workspace')!, { action: 'file' });
+  await waitFor(() => el.screen === 'file');
+  assert.equal(el.querySelector('hmd-workspace')!.singleFile?.name, 'note.md');
+  choose(el.querySelector('hmd-workspace')!, { action: 'folder' });
+  await waitFor(() => el.screen === 'open');
+  assert.equal(el.querySelector('hmd-start-screen'), null);
+});
+
+test('recents: every folder or file with a handle goes in, reaches the menu, and a recent asks for permission when clicked', async () => {
+  const added: string[] = [];
+  const asked: string[] = [];
+  const notes = handle('notes');
+  const { deps: d } = deps({
+    listRecents: async () => [{ kind: 'folder', name: 'notes', handle: notes, workspaceId: 'w', openedAt: 1 }],
+    addRecent: async (entry) => (added.push(`${entry.kind} ${entry.name}`), [entry]),
+    hasAccess: async () => false,
+    requestAccess: async (h) => (asked.push(h.name), true),
+  });
+  const el = mount(d);
+  await waitFor(() => el.querySelector('hmd-start-screen')?.recents.length === 1);
+  choose(el.querySelector('hmd-start-screen')!, { action: 'recent', key: 'folder:1:notes' });
+  await waitFor(() => el.screen === 'open');
+  assert.deepEqual(asked, ['notes']);
+  await waitFor(() => added.length === 1);
+  assert.deepEqual(added, ['folder notes']);
+  await waitFor(() => el.querySelector('hmd-workspace')!.recents.length === 1);
+});
+
+test('a recent whose permission is denied opens nothing', async () => {
+  const { deps: d, opened } = deps({
+    listRecents: async () => [{ kind: 'folder', name: 'notes', handle: handle('notes'), openedAt: 1 }],
+    hasAccess: async () => false,
+    requestAccess: async () => false,
+  });
+  const el = mount(d);
+  await waitFor(() => el.querySelector('hmd-start-screen')?.recents.length === 1);
+  choose(el.querySelector('hmd-start-screen')!, { action: 'recent', key: 'folder:1:notes' });
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.equal(el.screen, 'start');
+  assert.equal(opened.length, 0);
+});
+
+test('Open this file\'s folder: the picker starts at the file, and the folder reopens that file', async () => {
+  const fileHandle = { name: 'b.md', kind: 'file' } as unknown as FileSystemFileHandle;
+  const real: SingleFile = { name: 'b.md', writesToDisk: true, handle: fileHandle, read: async () => ({ blob: new Blob(['B']), lastModified: 1 }), write: async () => {} };
+  const near: unknown[] = [];
+  const remembered: string[] = [];
+  const { deps: d } = deps({
+    pickFile: async () => real,
+    pickFolder: async (from) => (near.push(from), handle('docs')),
+    pathIn: async () => 'sub/b.md',
+    rememberLastFile: (_id, path) => void remembered.push(path),
+  });
+  const el = mount(d);
+  await waitFor(() => el.screen === 'start');
+  el.querySelector('hmd-start-screen')!.dispatchEvent(new CustomEvent('hmd-start-pick-file', { bubbles: true, detail: null }));
+  await waitFor(() => el.screen === 'file');
+  el.querySelector('hmd-workspace')!.dispatchEvent(new CustomEvent('hmd-open-file-folder', { bubbles: true, detail: null }));
+  await waitFor(() => el.screen === 'open');
+  assert.ok(near[0] === fileHandle, 'startIn: the file');
+  assert.deepEqual(remembered, ['sub/b.md']);
 });

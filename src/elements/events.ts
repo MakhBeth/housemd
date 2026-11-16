@@ -82,6 +82,10 @@ export interface HmdEvents {
   'hmd-settings-section': CustomEvent<{ section: SettingsSection }>;
   /** Impostazioni: larghezze del testo confermate (da salvare e applicare). */
   'hmd-settings-text-width': CustomEvent<{ textWidth: TextWidth }>;
+  /** Menu «Apri» (e schermata iniziale): una cartella, un file o una voce dei recenti (per chiave). */
+  'hmd-open-choose': CustomEvent<{ action: 'folder' | 'file' } | { action: 'recent'; key: string }>;
+  /** File singolo: aprire la cartella che lo contiene (il selettore parte da lì). */
+  'hmd-open-file-folder': CustomEvent<null>;
   /** Schermata iniziale: scegliere una cartella (anche «Apri un'altra cartella»). */
   'hmd-start-pick': CustomEvent<null>;
   /** Schermata iniziale: aprire un file singolo (anche senza accesso alle cartelle). */

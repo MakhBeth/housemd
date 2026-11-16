@@ -6,7 +6,7 @@ type PermissionHandle = FileSystemHandle & {
   requestPermission(options: PermissionMode): Promise<PermissionState>;
 };
 type PickerWindow = Window & {
-  showDirectoryPicker(options?: { id?: string; mode?: 'read' | 'readwrite' }): Promise<FileSystemDirectoryHandle>;
+  showDirectoryPicker(options?: { id?: string; mode?: 'read' | 'readwrite'; startIn?: FileSystemHandle }): Promise<FileSystemDirectoryHandle>;
   showOpenFilePicker(options?: {
     id?: string;
     multiple?: false;
@@ -69,9 +69,11 @@ export function onLaunchFile(consumer: (handle: FileSystemFileHandle) => void): 
   });
 }
 
-export async function pickFolder(): Promise<FileSystemDirectoryHandle | null> {
+/** `near`: il selettore parte dalla cartella che contiene questo file (`startIn`). */
+export async function pickFolder(near?: FileSystemFileHandle): Promise<FileSystemDirectoryHandle | null> {
   try {
-    return await (window as unknown as PickerWindow).showDirectoryPicker({ id: 'housemd', mode: 'readwrite' });
+    const picker = window as unknown as PickerWindow;
+    return await picker.showDirectoryPicker(near ? { startIn: near, mode: 'readwrite' } : { id: 'housemd', mode: 'readwrite' });
   } catch (err) {
     if ((err as DOMException).name === 'AbortError') return null;
     throw err;
@@ -84,4 +86,15 @@ export async function hasAccess(handle: FileSystemHandle): Promise<boolean> {
 
 export async function requestAccess(handle: FileSystemHandle): Promise<boolean> {
   return (await (handle as PermissionHandle).requestPermission(READ_WRITE)) === 'granted';
+}
+
+/** Percorso (con '/') del file dentro la cartella, o null se il file non ci sta. */
+export async function pathIn(dir: FileSystemDirectoryHandle, file: FileSystemFileHandle): Promise<string | null> {
+  const parts = await dir.resolve(file);
+  return parts && parts.length > 0 ? parts.join('/') : null;
+}
+
+/** Stesso file o cartella (per i recenti). */
+export function sameEntry(a: FileSystemHandle, b: FileSystemHandle): Promise<boolean> {
+  return a.isSameEntry(b);
 }

@@ -1,4 +1,5 @@
-import { canPickFileHandle, hasAccess, isSupported, onLaunchFile, pickFileHandle, pickFolder, requestAccess, unsupportedReason, type UnsupportedReason } from '../../fs/access';
+import { canPickFileHandle, hasAccess, isSupported, onLaunchFile, pathIn, pickFileHandle, pickFolder, requestAccess, sameEntry, unsupportedReason, type UnsupportedReason } from '../../fs/access';
+import { addRecent, loadRecents, type Recent } from '../../fs/recents';
 import { pickFileInput } from '../../fs/fileInput';
 import { fsaFile, fsaOps } from '../../fs/fsaOps';
 import { isMemoryFile, listPending, memoryFile, mirrorPending, recoverPending, registerSession, singleFileOps, type PendingCopy, type SingleFile } from '../../fs/singleFile';
@@ -6,7 +7,7 @@ import { findKnownWorkspaceId, loadWorkspace, saveWorkspace, type StoredWorkspac
 import { createWorkspaceFS } from '../../fs/workspaceFS';
 import { indexedDbHistoryStore } from '../../history/historyStore';
 import { onDbBlocked } from '../../lib/db';
-import { readValidPref } from '../../lib/prefs';
+import { readValidPref, writeLastFile } from '../../lib/prefs';
 import { setUpdateWorkspace } from '../../pwa/updateHost';
 import { parseAutosave } from '../../workspace/autosave';
 import { indexedDbBufferStore } from '../../workspace/buffers';
@@ -17,9 +18,17 @@ export interface AppDeps {
   isSupported(): boolean;
   unsupportedReason(): UnsupportedReason;
   loadWorkspace(): Promise<StoredWorkspace | null>;
-  hasAccess(handle: FileSystemDirectoryHandle): Promise<boolean>;
-  requestAccess(handle: FileSystemDirectoryHandle): Promise<boolean>;
-  pickFolder(): Promise<FileSystemDirectoryHandle | null>;
+  hasAccess(handle: FileSystemHandle): Promise<boolean>;
+  requestAccess(handle: FileSystemHandle): Promise<boolean>;
+  /** `near`: il selettore parte dalla cartella di questo file («Apri la cartella di questo file»). */
+  pickFolder(near?: FileSystemFileHandle): Promise<FileSystemDirectoryHandle | null>;
+  /** Percorso del file dentro la cartella, o null se non ci sta. */
+  pathIn(dir: FileSystemDirectoryHandle, file: FileSystemFileHandle): Promise<string | null>;
+  rememberLastFile(workspaceId: string, path: string): void;
+  listRecents(): Promise<Recent[]>;
+  addRecent(entry: Recent): Promise<Recent[]>;
+  /** Il file vero di un recente (permesso già concesso). */
+  fileFromHandle(handle: FileSystemFileHandle): SingleFile;
   /** Id di una cartella già aperta in passato (anche A → B → A), o null. */
   knownWorkspaceId(handle: FileSystemDirectoryHandle): Promise<string | null>;
   saveWorkspace(stored: StoredWorkspace): Promise<unknown>;
@@ -48,6 +57,11 @@ export const browserAppDeps: AppDeps = {
   hasAccess,
   requestAccess,
   pickFolder,
+  pathIn,
+  rememberLastFile: writeLastFile,
+  listRecents: () => loadRecents(),
+  addRecent: (entry) => addRecent(entry, sameEntry),
+  fileFromHandle: (handle) => fsaFile(handle, () => requestAccess(handle)),
   knownWorkspaceId: (handle) => findKnownWorkspaceId(handle),
   saveWorkspace: (stored) => saveWorkspace(stored.handle, undefined, stored.workspaceId),
   async openWorkspace(stored) {

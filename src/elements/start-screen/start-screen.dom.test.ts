@@ -141,3 +141,18 @@ test('a language change relabels in place; detached, it no longer does', async (
   assert.equal(other.buttons()[0].textContent, EN_MESSAGES['start.openFolder']);
   el.remove();
 });
+
+test('recents: a titled section after the actions; a click sends the recent to open', () => {
+  const { el } = mount({ recents: [{ key: 'folder:1:notes', kind: 'folder', name: 'notes' }] });
+  const section = el.querySelector('section.recents')!;
+  assert.equal(section.querySelector('h2')!.textContent, EN_MESSAGES['open.recent']);
+  assert.equal(section.previousElementSibling!.localName, 'button', 'after the action buttons');
+  const recent = section.querySelector('button')!;
+  assert.equal(recent.getAttribute('aria-label'), 'Folder notes');
+  const events: unknown[] = [];
+  el.addEventListener('hmd-open-choose', (event) => events.push(event.detail));
+  recent.click();
+  assert.deepEqual(events, [{ action: 'recent', key: 'folder:1:notes' }]);
+  el.recents = [];
+  assert.equal(el.querySelector('section.recents'), null);
+});

@@ -59,6 +59,13 @@ export function harnessScript({ defaults, key }: { defaults: HarnessFlags; key: 
   }
   win.showDirectoryPicker = async () =>
     (await navigator.storage.getDirectory()).getDirectoryHandle(flags().folder, { create: true });
+  // «Apri con… HouseMD»: un launchQueue finto, che il test fa scattare con `__hmdLaunch(nome)` (file della cartella).
+  let consumer: ((params: { files: FileSystemHandle[] }) => void) | null = null;
+  Object.defineProperty(window, 'launchQueue', { configurable: true, value: { setConsumer: (fn: typeof consumer) => void (consumer = fn) } });
+  win.__hmdLaunch = async (name: string) => {
+    const dir = await (await navigator.storage.getDirectory()).getDirectoryHandle(flags().folder, { create: true });
+    consumer?.({ files: [await dir.getFileHandle(name)] });
+  };
   win.showOpenFilePicker = async () => [
     await (await (await navigator.storage.getDirectory()).getDirectoryHandle(flags().folder, { create: true })).getFileHandle(flags().file),
   ];

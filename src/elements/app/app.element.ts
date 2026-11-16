@@ -5,6 +5,8 @@ import { HmdElement } from '../../dom/element';
 import { el } from '../../dom/el';
 import { RenderLoop } from '../../dom/renderLoop';
 import type { StoredWorkspace } from '../../fs/handleStore';
+import { recentKey, type Recent } from '../../fs/recents';
+import type { RecentItem } from '../open-menu/openView';
 import { isMemoryFile, pendingDownload, type PendingCopy, type SingleFile } from '../../fs/singleFile';
 import { showConfirmDialog } from '../dialogs/confirmDialog';
 import type { UpdateFlow } from '../../pwa/updateFlow';
@@ -47,6 +49,9 @@ export class HmdApp extends HmdElement {
   #alive = new AbortController();
   /** Un file è arrivato da «Apri con… HouseMD»: l'avvio non riapre più la cartella salvata sopra di lui. */
   #launched = false;
+  /** Cartelle e file aperti di recente (con l'handle), per il menu «Apri» e la schermata iniziale. */
+  #recents: Recent[] = [];
+  #recentItems: readonly RecentItem[] = [];
   /** Copia non scaricata di una sessione precedente, offerta nella schermata iniziale (la più recente). */
   #recoverable: PendingCopy | null = null;
   /** Scelta o ripresa partita con il focus nella schermata iniziale. */
@@ -88,6 +93,18 @@ export class HmdApp extends HmdElement {
   protected connect(signal: AbortSignal): void {
     const deps = this.#deps;
     signal.addEventListener('abort', deps.onDbBlocked(() => this.#set({ dbBlocked: true })), { once: true });
+    // Menu «Apri» (barra o schermata iniziale): cartella, file o recente; e la cartella del file singolo.
+    this.addEventListener(
+      'hmd-open-choose',
+      (event) => {
+        const detail = event.detail;
+        if ('key' in detail) this.#openRecent(detail.key);
+        else if (detail.action === 'folder') this.#choose();
+        else this.#chooseFile();
+      },
+      { signal },
+    );
+    this.addEventListener('hmd-open-file-folder', () => this.#openFileFolder(), { signal });
     if (this.#i18n) this.watch(this.#i18n, () => this.#loop.update(), signal);
   }
 
@@ -98,6 +115,9 @@ export class HmdApp extends HmdElement {
 
   /** Avvio: la cartella salvata, riaperta se c'è ancora il permesso. Uno workspace aperto dopo il distacco si butta. */
   #startBoot(deps: AppDeps, signal: AbortSignal): void {
+    void deps.listRecents().then((list) => {
+      if (!signal.aborted) this.#setRecents(list);
+    }, () => undefined);
     deps.onLaunchFile((file) => {
       if (signal.aborted) return;
       this.#launched = true;
@@ -126,6 +146,28 @@ export class HmdApp extends HmdElement {
     })();
   }
 
+  #setRecents(list: Recent[]): void {
+    this.#recents = list;
+    this.#recentItems = list.map((recent) => ({ key: recentKey(recent), kind: recent.kind, name: recent.name }));
+    this.#loop.update();
+  }
+
+  /** Un'apertura riuscita va in cima ai recenti (solo ciò che ha un handle: la copia in memoria no). */
+  #remember(screen: Screen): void {
+    const deps = this.#deps;
+    const signal = this.#alive.signal;
+    const entry: Recent | null =
+      screen.kind === 'open'
+        ? { kind: 'folder', name: screen.stored.handle.name, handle: screen.stored.handle, workspaceId: screen.stored.workspaceId, openedAt: Date.now() }
+        : screen.kind === 'file' && screen.file.handle
+          ? { kind: 'file', name: screen.file.name, handle: screen.file.handle, openedAt: Date.now() }
+          : null;
+    if (!entry) return;
+    void deps.addRecent(entry).then((list) => {
+      if (!signal.aborted) this.#setRecents(list);
+    }, () => undefined);
+  }
+
   #set(patch: { dbBlocked?: boolean; switching?: boolean }): void {
     if (patch.dbBlocked !== undefined) this.#dbBlocked = patch.dbBlocked;
     if (patch.switching !== undefined) this.#switching = patch.switching;
@@ -138,6 +180,7 @@ export class HmdApp extends HmdElement {
     if (opened) this.#workspace = null;
     this.#screen = screen;
     this.#deps.setUpdateWorkspace(opened ? screen.workspace : null);
+    this.#remember(screen);
     this.#loop.update();
     // Il pulsante della schermata iniziale, che aveva il focus, non c'è più: il focus va all'albero.
     if (opened && this.#focusOnOpen) this.#workspace?.focusStart();
@@ -149,7 +192,8 @@ export class HmdApp extends HmdElement {
     if (this.#guard.active) return;
     // Il focus sta nella schermata iniziale adesso, prima che `busy` spenga i suoi pulsanti (Chrome toglie il
     // focus a un pulsante che diventa `disabled`): a cartella aperta va nello workspace nuovo (A2).
-    this.#focusOnOpen = !!this.#start?.contains(document.activeElement);
+    // Vale anche dal menu «Apri» della barra: lo workspace che aveva il focus sparisce con il cambio.
+    this.#focusOnOpen = !!this.#start?.contains(document.activeElement) || !!this.#workspace?.contains(document.activeElement);
     this.#set({ switching: true });
     try {
       await this.#guard.run(task);
@@ -180,7 +224,14 @@ export class HmdApp extends HmdElement {
     });
   }
 
-  #choose(): void {
+  /**
+   * Apre una cartella: dal selettore, da un recente (`pick`) o dalla cartella del file singolo, che poi ne riapre il
+   * file (`selectFile`: il suo percorso nella cartella scelta, se c'è).
+   */
+  #choose(
+    pick: () => Promise<FileSystemDirectoryHandle | null> = () => this.#deps.pickFolder(),
+    selectFile?: (dir: FileSystemDirectoryHandle) => Promise<string | null>,
+  ): void {
     const deps = this.#deps;
     const signal = this.#alive.signal;
     void this.#exclusive(async () => {
@@ -188,7 +239,7 @@ export class HmdApp extends HmdElement {
       const screen = this.#screen;
       const current = screen.kind === 'open' || screen.kind === 'file' ? screen.workspace : null;
       const result = await switchFolder({
-        pick: () => deps.pickFolder(),
+        pick,
         current,
         signal,
         open: async (handle: FileSystemDirectoryHandle) => {
@@ -197,6 +248,9 @@ export class HmdApp extends HmdElement {
           // Staccata nel frattempo: niente apertura (l'errore finisce in switchFolder, che lo ignora dopo il distacco).
           if (signal.aborted) throw new DOMException('hmd-app staccato', 'AbortError');
           const stored: StoredWorkspace = { handle, workspaceId };
+          const path = selectFile ? await selectFile(handle).catch(() => null) : null;
+          // Lo workspace riapre «l'ultimo file»: qui quello che era aperto da solo.
+          if (path) deps.rememberLastFile(workspaceId, path);
           return { stored, workspace: await deps.openWorkspace(stored) };
         },
         // Diventa la cartella salvata solo a cambio riuscito; se il salvataggio fallisce resta aperta lo stesso.
@@ -245,6 +299,25 @@ export class HmdApp extends HmdElement {
     });
   }
 
+  /** Un recente: il permesso si chiede adesso (il clic è dell'utente); negato, non si apre niente. */
+  #openRecent(key: string): void {
+    const deps = this.#deps;
+    const recent = this.#recents.find((entry) => recentKey(entry) === key);
+    if (!recent) return;
+    const granted = async () => (await deps.hasAccess(recent.handle)) || (await deps.requestAccess(recent.handle).catch(() => false));
+    if (recent.kind === 'folder') this.#choose(async () => ((await granted()) ? (recent.handle as FileSystemDirectoryHandle) : null));
+    else this.#chooseFile(async () => ((await granted()) ? deps.fileFromHandle(recent.handle as FileSystemFileHandle) : null));
+  }
+
+  /** «Apri la cartella di questo file»: il selettore parte dalla cartella del file, che poi resta aperto. */
+  #openFileFolder(): void {
+    const screen = this.#screen;
+    const handle = screen.kind === 'file' ? screen.file.handle : undefined;
+    if (!handle) return;
+    const deps = this.#deps;
+    this.#choose(() => deps.pickFolder(handle), (dir) => deps.pathIn(dir, handle));
+  }
+
   /** «Riprendi»: la copia non scaricata torna aperta, ancora da scaricare. */
   #recover(): void {
     const copy = this.#recoverable;
@@ -287,17 +360,17 @@ export class HmdApp extends HmdElement {
       .with({ kind: 'unsupported' }, ({ error }) => {
         const s = this.#startScreen(i18n);
         // Le proprietà che il ramo non passa tornano al default (React 19 le azzerava sullo stesso elemento).
-        Object.assign(s, { mode: 'unsupported', reason: this.#deps.unsupportedReason(), error, folderName: '', busy: this.#switching, recoverName: this.#recoverable?.name ?? '' });
+        Object.assign(s, { mode: 'unsupported', reason: this.#deps.unsupportedReason(), error, folderName: '', busy: this.#switching, recoverName: this.#recoverable?.name ?? '', recents: this.#recentItems });
         return s;
       })
       .with({ kind: 'start' }, ({ error }) => {
         const s = this.#startScreen(i18n);
-        Object.assign(s, { mode: 'start', reason: undefined, error, folderName: '', busy: this.#switching, recoverName: this.#recoverable?.name ?? '' });
+        Object.assign(s, { mode: 'start', reason: undefined, error, folderName: '', busy: this.#switching, recoverName: this.#recoverable?.name ?? '', recents: this.#recentItems });
         return s;
       })
       .with({ kind: 'resume' }, ({ stored }) => {
         const s = this.#startScreen(i18n);
-        Object.assign(s, { mode: 'resume', reason: undefined, error: undefined, folderName: stored.handle.name, busy: this.#switching, recoverName: this.#recoverable?.name ?? '' });
+        Object.assign(s, { mode: 'resume', reason: undefined, error: undefined, folderName: stored.handle.name, busy: this.#switching, recoverName: this.#recoverable?.name ?? '', recents: this.#recentItems });
         return s;
       })
       .with({ kind: 'open' }, { kind: 'file' }, (opened) => {
@@ -314,6 +387,7 @@ export class HmdApp extends HmdElement {
           w.workspace = workspace;
         }
         w.switchingFolder = this.#switching;
+        if (w.recents !== this.#recentItems) w.recents = this.#recentItems;
         return w;
       })
       .exhaustive();

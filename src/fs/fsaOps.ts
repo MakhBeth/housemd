@@ -121,6 +121,7 @@ export function fsaFile(handle: FileSystemFileHandle, requestAccess: () => Promi
   return {
     name: handle.name,
     writesToDisk: true,
+    handle,
     async read() {
       const file = await handle.getFile();
       return { blob: file, lastModified: file.lastModified };

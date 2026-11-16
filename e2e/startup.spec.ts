@@ -34,7 +34,8 @@ test.describe('browser without File System Access', () => {
     const chooser = page.waitForEvent('filechooser');
     await page.getByRole('button', { name: app.t('start.openFile') }).click();
     await (await chooser).setFiles({ name: 'note.md', mimeType: 'text/markdown', buffer: Buffer.from('# Note') });
-    await app.expectOpen('note.md');
+    await expect(app.editor()).toHaveText('# Note');
+    await expect(app.tree()).toHaveCount(0);
     await expect(page.getByText(app.t('singleFile.noteDownload'))).toBeVisible();
     await expect(page.getByRole('button', { name: app.t('file.new') })).toHaveCount(0);
     await app.typeAtEnd(' changed');
@@ -52,8 +53,8 @@ test('Open a file with the File System Access API: saved on the real file, no Do
   await app.start();
   await seedFolder(page, 'notes', { 'note.md': '# Note' });
   await page.getByRole('button', { name: app.t('start.openFile') }).click();
-  await app.expectOpen('note.md');
-  await expect(page.getByText(app.t('singleFile.note'))).toBeVisible();
+  await expect(app.editor()).toHaveText('# Note');
+  await expect(page.getByRole('button', { name: app.t('open.fileFolder') })).toBeVisible();
   await expect(page.getByRole('button', { name: app.t('toolbar.download') })).toHaveCount(0);
   await app.typeAtEnd(' changed');
   await expect.poll(() => readText(page, 'notes', 'note.md')).toBe('# Note changed');

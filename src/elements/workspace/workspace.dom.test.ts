@@ -651,18 +651,21 @@ test('Export PDF: the print sheet survives a render while the preview is getting
   }
 });
 
-test('a single file in memory: opened by itself, no New file or New folder, a note on what is missing, Download in the toolbar', async () => {
+test('a single file in memory: opened by itself, no sidebar or sidebar toggle, the Open menu and a one-line note, Download in the toolbar', async () => {
   const file = memoryFile({ name: 'note.md', blob: new Blob(['# Note']), lastModified: 1 });
   const { el, workspace, button } = await mount({ singleFile: file });
   await waitFor(() => workspace.getState().doc?.path === 'note.md');
-  const header = el.querySelector('aside > .sidebarHeader')!;
-  assert.ok([...header.querySelectorAll<HTMLButtonElement>('button')].filter((b) => !b.hidden).every((b) => b.getAttribute('aria-label') !== EN_MESSAGES['file.new'] && b.getAttribute('aria-label') !== EN_MESSAGES['folder.new']));
-  assert.equal(header.querySelector('.folder')!.getAttribute('data-tooltip'), EN_MESSAGES['sidebar.openOtherFile']);
-  assert.equal(header.querySelector('.folder')!.getAttribute('aria-label'), EN_MESSAGES['sidebar.openOtherFileNamed'].replace('{file}', 'note.md'));
-  assert.equal(el.querySelector('hmd-file-tree')!.singleFile, true);
-  assert.equal(el.querySelector('aside .singleFileNote')!.textContent, EN_MESSAGES['singleFile.noteDownload']);
+  assert.equal(el.querySelector('aside'), null, 'no sidebar with a single file');
+  assert.equal(el.querySelector('[role="separator"]'), null);
+  assert.equal(el.querySelector<HTMLButtonElement>('header.toolbar .lead > button')!.hidden, true, 'no sidebar toggle either');
+  assert.ok(el.querySelector('header.toolbar hmd-open-menu'), 'the Open menu is in the toolbar');
+  assert.equal(el.querySelector('.fileBar')!.textContent, EN_MESSAGES['singleFile.noteDownload']);
   const download = button(EN_MESSAGES['toolbar.download']);
   assert.equal(download.hidden, false);
+  // Ctrl+B non fa ricomparire una sidebar che con un file singolo non c'è.
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', code: 'KeyB', ctrlKey: true }));
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(el.querySelector('aside'), null);
 
   workspace.edit('# Changed');
   await workspace.flush(true);
@@ -683,6 +686,19 @@ test('a single file in memory: opened by itself, no New file or New folder, a no
 test('a folder: no Download button and no single file note', async () => {
   const { el, button } = await mount();
   assert.equal(button(EN_MESSAGES['toolbar.download']).hidden, true);
-  assert.equal(el.querySelector('.singleFileNote'), null);
-  assert.equal(el.querySelector('aside .folder')!.hasAttribute('aria-label'), false);
+  assert.equal(el.querySelector('.fileBar'), null);
+  assert.ok(el.querySelector('aside'), 'a folder keeps its sidebar');
+  assert.ok(el.querySelector('header.toolbar hmd-open-menu'), 'and the Open menu too');
+});
+
+test('a real single file: the bar offers Open this file\'s folder, which asks hmd-app', async () => {
+  const file: SingleFile = { name: 'real.md', writesToDisk: true, read: async () => ({ blob: new Blob(['# R']), lastModified: 1 }), write: async () => {} };
+  const { el, workspace } = await mount({ singleFile: file });
+  await waitFor(() => workspace.getState().doc?.path === 'real.md');
+  const open = el.querySelector<HTMLButtonElement>('.fileBar button')!;
+  assert.equal(open.textContent, EN_MESSAGES['open.fileFolder']);
+  let asked = 0;
+  el.addEventListener('hmd-open-file-folder', () => asked++);
+  open.click();
+  assert.equal(asked, 1);
 });

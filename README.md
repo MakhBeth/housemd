@@ -16,21 +16,53 @@ Editor markdown nel browser per le tue cartelle locali, stile HackMD: editor e a
 salvataggio automatico, ricerca, `[[wikilink]]`. Nessun server: i file restano sul tuo computer
 (File System Access API, quindi le cartelle **solo con Chrome o Edge su desktop**).
 
-## File singolo
+## Aprire cartelle e file
 
-Senza aprire una cartella si può lavorare su **un solo file `.md`**: «Apri un file» nella schermata iniziale
-oppure, con la PWA installata, «Apri con… HouseMD» dal sistema. Cosa funziona dove:
+Il menu **Apri**, sempre nella barra in alto, apre in ogni momento:
 
-| | Chrome / Edge desktop | Firefox, Safari, iOS, Brave con l'API spenta |
+- **Apri cartella…**: la cartella con l'albero, la ricerca e i `[[wikilink]]`;
+- **Apri file…**: un solo file `.md`, a tutta larghezza, senza sidebar;
+- **Recenti**: le ultime cartelle e gli ultimi file aperti. Il browser ricorda l'accesso, ma dopo un riavvio
+  può chiedere di nuovo il permesso al clic.
+
+Si passa da una cartella a un file e viceversa senza ricaricare la pagina. Il documento aperto si salva prima,
+come a ogni cambio di file. Con un file singolo aperto, **Apri la cartella di questo file** apre il selettore
+nella sua cartella e poi la riapre con quel file.
+
+Cosa funziona dove:
+
+| | Chrome / Edge / Chromium desktop | Firefox, Safari, iOS, Brave con l'API spenta |
 |---|---|---|
-| Cartelle | sì | no |
-| Aprire un file | «Apri un file», «Apri con… HouseMD» (PWA installata) | «Apri un file» (`<input type="file">`) |
+| Cartelle e recenti | sì | no |
+| Aprire un file | menu Apri, schermata iniziale, «Apri con… HouseMD» (PWA installata) | «Apri un file» (`<input type="file">`) |
 | Salvare | sul file vero, con il salvataggio automatico | «Scarica il file» nella barra: il browser lo mette nei download, mai sopra l'originale |
-| Modifiche non salvate alla chiusura | copia di emergenza nel browser | copia di emergenza nel browser finché non si scarica (si riprende con «Riprendi … (non scaricato)» nella schermata iniziale), conferma alla chiusura e prima di aprire un altro file |
+| Modifiche non salvate alla chiusura | copia di emergenza nel browser | copia di emergenza finché non si scarica, ripresa dalla schermata iniziale |
 
-Con un file singolo non ci sono nuovi file e cartelle, rinomina ed eliminazione, link `[[wikilink]]` ad altre
-note, immagini relative alla cartella né la riapertura al prossimo avvio: lo dice una nota fissa sotto il nome
-del file. Ricerca e cronologia valgono solo per quel file e per la sessione.
+### «Apri con… HouseMD» su Linux
+
+Verificato su Linux con Chromium 156, dal file manager, con la PWA installata. Chromium registra da solo l'app
+come gestore dei file `.md`, grazie a `file_handlers` nel manifest. Crea `~/.local/share/applications/chrome-<id>-Default.desktop`
+con `MimeType=text/markdown` ed `Exec=… --app-id=<id> %U`, e aggiunge il tipo in `~/.local/share/mime/packages`.
+Il file aperto così arriva all'app (`launchQueue`). Con HouseMD già aperto, il secondo file sostituisce quello
+nella stessa finestra (`launch_handler: focus-existing`), dopo aver salvato il precedente. Non serve un `.desktop`
+scritto a mano.
+
+1. Apri HouseMD in Chromium o Chrome (da sviluppo: `npm run build && npm run preview`, poi `http://localhost:4173`)
+   e installalo: icona «Installa» nella barra degli indirizzi.
+2. Controlla che il gestore ci sia: `ls ~/.local/share/applications | grep -i chrome-` e poi
+   `grep -l HouseMD ~/.local/share/applications/chrome-*.desktop`. Nel file deve esserci `MimeType=text/markdown`.
+3. Per aprire i `.md` con HouseMD con un doppio clic: `xdg-mime default <file trovato>.desktop text/markdown`.
+   Puoi controllare con `xdg-mime query default text/markdown`.
+4. Nel file manager (Nautilus, Thunar…) fai tasto destro su un `.md`, poi **Apri con → HouseMD**.
+   La prima volta Chromium chiede se aprire il file con HouseMD. Con «Ricorda la scelta» non lo chiede più.
+
+`scripts/linux-file-handler-check.mjs` ripete la verifica in una HOME temporanea:
+`npm run build && xvfb-run -a node scripts/linux-file-handler-check.mjs /usr/bin/chromium`.
+Il dialog di conferma della prima apertura dal file manager non lo può superare in automatico: lo script
+consegna il file all'app con il comando di DevTools `PWA.launchFilesInApp`.
+
+**macOS e Windows** (non verificati): Chrome ed Edge registrano la PWA installata in Finder → Apri con e in Esplora
+risorse → Apri con, sempre dal manifest. Su macOS l'app compare dopo l'installazione da `localhost` o da HTTPS.
 
 ## Sviluppo
 
